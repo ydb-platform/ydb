@@ -164,8 +164,6 @@ const id = new Uint64(1n)
 const resultSets = await sql`SELECT * FROM series WHERE series_id = $id`.parameter('id', id)
 ```
 
-{% include [scan-query.md](steps/08_scan_query.md) %}
-
 Queries are executed with streaming data transfer by default. For working with large volumes of data, use standard queries:
 
 ```ts

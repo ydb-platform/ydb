@@ -185,6 +185,7 @@ TPartitionResult PartitionInputTablesIntoTasksOrdered(
     auto [tasks, status] = partitioner.PartitionTablesIntoTasksOrdered(inputTables, ytCoordinatorService, clusterConnections);
 
     if (!status) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: failed to partition input tables into tasks (ordered), max parts exceeded";
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
             .Reason = EFmrErrorReason::FallbackOperation,

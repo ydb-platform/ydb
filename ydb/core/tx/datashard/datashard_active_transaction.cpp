@@ -19,15 +19,14 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TInstant receivedAt,
                                    const TString &txBody,
                                    bool usesMvccSnapshot,
-                                   const TString& userSID,
-                                   bool isPropose)
+                                   NACLib::TUserContext::TPtr userCtx,
+                                   bool)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
-    , EngineBay(self, txc, ctx, stepTxId, userSID)
+    , EngineBay(self, txc, ctx, stepTxId, userCtx)
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , IsReleased(false)
-    , BuiltTaskRunner(false)
     , IsReadOnly(true)
     , AllowCancelROwithReadsets(self->AllowCancelROwithReadsets())
     , Cancelled(false)
@@ -41,8 +40,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         ErrStr = "Failed to parse TxBody";
         return;
     }
-
-    auto& typeRegistry = *AppData()->TypeRegistry;
 
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
@@ -77,114 +74,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         } else {
             ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
             ErrStr = "Trying to read from table that doesn't exist";
-        }
-    } else if (IsKqpTx()) {
-        if (Y_UNLIKELY(!IsKqpDataTx())) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KQP transaction type, shard: " << tabletId
-                << ", txid: " << StepTxId_.TxId << ", tx: " << Tx.DebugString());
-            ErrCode = NKikimrTxDataShard::TError::BAD_TX_KIND;
-            ErrStr = TStringBuilder() << "Unexpected KQP transaction type: "
-                << NKikimrTxDataShard::EKqpTransactionType_Name(Tx.GetKqpTransaction().GetType()) << ".";
-            return;
-        }
-
-        auto& computeCtx = EngineBay.GetKqpComputeCtx();
-
-        try {
-            bool hasPersistentChannels = false;
-            if (!KqpValidateTransaction(GetTasks(), Immediate(), StepTxId_.TxId, ctx, hasPersistentChannels)) {
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed, datashard: "
-                    << tabletId << ", txid: " << StepTxId_.TxId);
-                ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-                ErrStr = "Transaction validation failed.";
-                return;
-            }
-            computeCtx.SetHasPersistentChannels(hasPersistentChannels);
-
-            for (auto& task : GetTasks()) {
-                NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
-                if (!task.GetMeta().UnpackTo(&meta)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed"
-                        << ", datashard: " << tabletId
-                        << ", txid: " << StepTxId_.TxId
-                        << ", failed to load task meta: " << task.GetMeta().value());
-                    ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-                    ErrStr = "Transaction validation failed: invalid task metadata.";
-                    return;
-                }
-
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TxId: " << StepTxId_.TxId << ", shard " << tabletId
-                    << ", task: " << task.GetId() << ", meta: " << meta.ShortDebugString());
-
-                auto& tableMeta = meta.GetTable();
-
-                auto tableInfoPtr = self->TableInfos.FindPtr(tableMeta.GetTableId().GetTableId());
-                if (!tableInfoPtr) {
-                    ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-                    ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' doesn't exist";
-                    return;
-                }
-                auto tableInfo = tableInfoPtr->Get();
-                YQL_ENSURE(tableInfo);
-
-                if (tableInfo->GetTableSchemaVersion() != 0 &&
-                    tableMeta.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())
-                {
-                    ErrCode = NKikimrTxDataShard::TError::SCHEME_CHANGED;
-                    ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' scheme changed.";
-                    return;
-                }
-
-                for (auto& read : meta.GetReads()) {
-                    for (auto& column : read.GetColumns()) {
-                        if (tableInfo->Columns.contains(column.GetId()) || IsSystemColumn(column.GetName())) {
-                            // ok
-                        } else {
-                            ErrCode = NKikimrTxDataShard::TError::SCHEME_CHANGED;
-                            ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' scheme changed:"
-                                << " column '" << column.GetName() << "' not found.";
-                            return;
-                        }
-                    }
-                }
-
-                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay.GetKeyValidator());
-
-                for (auto& output : task.GetOutputs()) {
-                    for (auto& channel : output.GetChannels()) {
-                        computeCtx.SetTaskOutputChannel(task.GetId(), channel.GetId(),
-                            ActorIdFromProto(channel.GetDstEndpoint().GetActorId()));
-                    }
-                }
-            }
-
-            if (Tx.HasPerShardKeysSizeLimitBytes()) {
-                PerShardKeysSizeLimitBytes_ = Tx.GetPerShardKeysSizeLimitBytes();
-            }
-
-            IsReadOnly = IsReadOnly && Tx.GetReadOnly();
-
-            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay.GetKeyValidator());
-            EngineBay.MarkTxLoaded();
-
-            auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
-
-            auto allocGuard = tasksRunner.BindAllocator(isPropose ? 100_MB : 1_GB); // set big enough limit, decrease/correct later
-
-            auto execCtx = DefaultKqpExecutionContext();
-            tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
-        } catch (const TMemoryLimitExceededException&) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Not enough memory to create tasks runner, datashard: "
-                << tabletId << ", txid: " << StepTxId_.TxId);
-            ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-            ErrStr = TStringBuilder() << "Transaction validation failed: not enough memory.";
-            return;
-        } catch (const yexception& e) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while validating KQP transaction, datashard: "
-                << tabletId << ", txid: " << StepTxId_.TxId << ", error: " << e.what());
-            ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-            ErrStr = TStringBuilder() << "Transaction validation failed: " << e.what() << ".";
-            return;
         }
     } else {
         Y_ENSURE(Tx.HasMiniKQL());
@@ -240,23 +129,13 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
 bool TValidatedDataTx::ReValidateKeys(const NTable::TScheme& scheme)
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
+    Y_UNUSED(scheme);
 
-    if (IsKqpTx()) {
-        const auto& userDb = EngineBay.GetUserDb();
-        TKeyValidator::TValidateOptions options(userDb.GetLockTxId(), userDb.GetLockNodeId(), userDb.GetUsesMvccSnapshot(), userDb.GetIsImmediateTx(), userDb.GetIsWriteTx(), scheme);
-        auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
-        if (result != EResult::Ok) {
-            ErrStr = std::move(error);
-            ErrCode = ConvertErrCode(result);
-            return false;
-        }
-    } else {
-        EResult result = EngineBay.ReValidateKeys();
-        if (result != EResult::Ok) {
-            ErrStr = EngineBay.GetEngine()->GetErrors();
-            ErrCode = ConvertErrCode(result);
-            return false;
-        }
+    EResult result = EngineBay.ReValidateKeys();
+    if (result != EResult::Ok) {
+        ErrStr = EngineBay.GetEngine()->GetErrors();
+        ErrCode = ConvertErrCode(result);
+        return false;
     }
 
     return true;
@@ -353,14 +232,14 @@ void TActiveTransaction::FillTxData(TDataShard *self,
                                     const TString &txBody,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags,
-                                    const TString& userSID)
+                                    NACLib::TUserContext::TPtr userCtx)
 {
     UntrackMemory();
 
     Y_ENSURE(!DataTx);
     Y_ENSURE(TxBody.empty());
 
-    UserSID = userSID;
+    UserCtx = userCtx;
     Target = target;
     TxBody = txBody;
     if (locks.size()) {
@@ -370,7 +249,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
     ArtifactFlags = artifactFlags;
     if (IsDataTx() || IsReadTable()) {
         Y_ENSURE(!DataTx);
-        BuildDataTx(self, txc, ctx, userSID);
+        BuildDataTx(self, txc, ctx, userCtx);
         Y_ENSURE(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
@@ -391,17 +270,17 @@ void TActiveTransaction::FillTxData(TDataShard *self,
 void TActiveTransaction::FillVolatileTxData(TDataShard *self,
                                             TTransactionContext &txc,
                                             const TActorContext &ctx,
-                                            const TString& userSID)
+                                            NACLib::TUserContext::TPtr userCtx)
 {
     UntrackMemory();
 
     Y_ENSURE(!DataTx);
     Y_ENSURE(!TxBody.empty());
 
-    UserSID = userSID;
-    
+    UserCtx = userCtx;
+
     if (IsDataTx() || IsReadTable()) {
-        BuildDataTx(self, txc, ctx, userSID);
+        BuildDataTx(self, txc, ctx, UserCtx);
         Y_ENSURE(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
@@ -413,20 +292,20 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
     }
 
     TrackMemory();
-    UserSID = userSID;
+    UserCtx = userCtx;
 }
 
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx,
-                                                       const TString& userSID,
+                                                       NACLib::TUserContext::TPtr userCtx,
                                                        bool isPropose)
 {
     Y_ENSURE(IsDataTx() || IsReadTable());
     if (!DataTx) {
         Y_ENSURE(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userSID, isPropose);
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userCtx, isPropose);
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -449,102 +328,102 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeCreate;
         count++;
     }
-    
+
     if (SchemeTx->HasDropTable()) {
         SchemeTxType = TSchemaOperation::ETypeDrop;
         count++;
     }
-    
+
     if (SchemeTx->HasAlterTable()) {
         SchemeTxType = TSchemaOperation::ETypeAlter;
         count++;
     }
-    
+
     if (SchemeTx->HasBackup()) {
         SchemeTxType = TSchemaOperation::ETypeBackup;
         count++;
     }
-    
+
     if (SchemeTx->HasRestore()) {
         SchemeTxType = TSchemaOperation::ETypeRestore;
         count++;
     }
-    
+
     if (SchemeTx->HasSendSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeCopy;
         count++;
     }
-    
+
     if (SchemeTx->HasCreatePersistentSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeCreatePersistentSnapshot;
         count++;
     }
-    
+
     if (SchemeTx->HasDropPersistentSnapshot()) {
         SchemeTxType = TSchemaOperation::ETypeDropPersistentSnapshot;
         count++;
     }
-    
+
     if (SchemeTx->HasInitiateBuildIndex()) {
         SchemeTxType = TSchemaOperation::ETypeInitiateBuildIndex;
         count++;
     }
-    
+
     if (SchemeTx->HasPrepareIndexValidation()) {
         SchemeTxType = TSchemaOperation::ETypePrepareIndexValidation;
         count++;
     }
-    
+
     if (SchemeTx->HasFinalizeBuildIndex()) {
         SchemeTxType = TSchemaOperation::ETypeFinalizeBuildIndex;
         count++;
     }
-    
+
     if (SchemeTx->HasDropIndexNotice()) {
         SchemeTxType = TSchemaOperation::ETypeDropIndexNotice;
         count++;
     }
-    
+
     if (SchemeTx->HasMoveTable()) {
         SchemeTxType = TSchemaOperation::ETypeMoveTable;
         count++;
     }
-    
+
     if (SchemeTx->HasCreateCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeCreateCdcStream;
         count++;
     }
-    
+
     if (SchemeTx->HasAlterCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeAlterCdcStream;
         count++;
     }
-    
+
     if (SchemeTx->HasDropCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
         count++;
     }
-    
+
     if (SchemeTx->HasRotateCdcStreamNotice()) {
         SchemeTxType = TSchemaOperation::ETypeRotateCdcStream;
         count++;
     }
-    
+
     if (SchemeTx->HasMoveIndex()) {
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
         count++;
     }
-    
+
     if (SchemeTx->HasCreateIncrementalRestoreSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
         count++;
     }
-    
+
     if (SchemeTx->HasCreateIncrementalBackupSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
         count++;
     }
-    
+
     if (SchemeTx->HasTruncateTable()) {
         SchemeTxType = TSchemaOperation::ETypeTruncate;
         count++;
@@ -678,9 +557,9 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         TDataShard *self,
         TTransactionContext &txc,
         const TActorContext &ctx,
-        const TString& userSID)
+        NACLib::TUserContext::TPtr userCtx)
 {
-    UserSID = userSID;
+    UserCtx = userCtx;
     if (!DataTx) {
         ReleasedTxDataSize = 0;
         return ERestoreDataStatus::Ok;
@@ -712,7 +591,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userSID);
+                                                GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userCtx);
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }

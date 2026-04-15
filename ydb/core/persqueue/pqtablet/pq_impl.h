@@ -104,6 +104,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
     void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
+    void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
@@ -201,6 +202,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
+    void ProcessCheckMessageDeduplicationRequests(const TPartitionId& partitionId);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
@@ -524,6 +526,7 @@ private:
     void ProcessStatusRequests(const TActorContext &ctx);
 
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
+    THashMap<ui32, TVector<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr>> CheckMessageDeduplicationRequests;
     TMaybe<ui64> TabletGeneration;
 
     TMaybe<TPartitionId> FindPartitionId(const NKikimrPQ::TDataTransaction& txBody) const;

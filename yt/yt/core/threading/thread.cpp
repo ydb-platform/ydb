@@ -33,7 +33,7 @@ namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId) ;
+YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId);
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
 constinit const auto Logger = ThreadingLogger;

@@ -1,6 +1,6 @@
 #include "run_ydb.h"
 
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
@@ -245,7 +245,7 @@ public:
             return;
         }
 
-        using namespace NKikimr;
+        using namespace NKikimr::NCertTestUtils;
         const TCertAndKey ca = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
         const TCertAndKey clientCert = GenerateSignedCert(ca, TProps::AsClient());

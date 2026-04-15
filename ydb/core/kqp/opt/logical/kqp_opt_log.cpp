@@ -149,7 +149,7 @@ protected:
         return node;
     }
 
-    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
+    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
         auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
@@ -161,6 +161,7 @@ protected:
             output = NHopping::RewriteAsHoppingWindow(
                 node,
                 ctx,
+                getParents,
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
@@ -201,7 +202,8 @@ protected:
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         TCBOSettings settings{
-            .MaxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize),
+            .CBOTimeout = Config->CBOTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOTimeout),
+            .CBOHardTimeout = Config->CBOHardTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOHardTimeout),
             .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
         };
 

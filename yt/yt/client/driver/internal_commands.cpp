@@ -238,6 +238,20 @@ void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TRemoveChaosCellMailbox::Register(TRegistrar registrar)
+{
+    registrar.Parameter("chaos_cell_id", &TThis::ChaosCellId_);
+    registrar.Parameter("destination_cell_id", &TThis::DestinationCellId_);
+}
+
+void TRemoveChaosCellMailbox::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetInternalClientOrThrow()->RemoveChaosCellMailbox(ChaosCellId_, DestinationCellId_))
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TGetOrderedTabletSafeTrimRowCount::Register(TRegistrar registrar)
 {
     registrar.Parameter("requests", &TThis::Requests_);

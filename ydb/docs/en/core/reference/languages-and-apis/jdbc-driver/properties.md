@@ -12,10 +12,10 @@ The JDBC driver for {{ ydb-short-name }} supports the following configuration pr
 
 * `useMetadata` — indicates whether to use metadata authentication. Valid values are: {#useMetadata}
 
-    - `true` — use metadata authentication.
-    - `false` — do not use metadata authentication.
+  * `true` — use metadata authentication.
+  * `false` — do not use metadata authentication.
 
-    Default value: `false`.
+  Default value: `false`.
 
 * `metadataURL` — custom metadata endpoint.
 

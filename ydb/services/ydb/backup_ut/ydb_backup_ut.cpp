@@ -33,6 +33,7 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
@@ -1325,6 +1326,128 @@ GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::
     });
 
     return {changefeedsStr, topicsStr};
+}
+
+TString ChangefeedAndTopicDescriptionsStableText(
+    const std::pair<std::vector<TString>, std::vector<TString>>& descriptions)
+{
+    const auto& changefeedTexts = descriptions.first;
+    const auto& topicTexts = descriptions.second;
+    TStringBuilder out;
+    out << "changefeed_descriptions_count: " << changefeedTexts.size() << '\n';
+    for (size_t i = 0; i < changefeedTexts.size(); ++i) {
+        out << "--- changefeed [" << i << "] ---\n" << changefeedTexts[i] << '\n';
+    }
+    out << "topic_descriptions_count: " << topicTexts.size() << '\n';
+    for (size_t i = 0; i < topicTexts.size(); ++i) {
+        out << "--- topic_description [" << i << "] ---\n" << topicTexts[i] << '\n';
+    }
+    return TString{out};
+}
+
+void TestChangefeedSharedConsumersPreservedThroughBackupRestore(
+    TSession& session,
+    NTopic::TTopicClient& topicClient,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    constexpr const char* dlqTopic = "/Root/cf_shared_br_dlq";
+    constexpr const char* table = "/Root/cf_shared_br_table";
+    constexpr const char* changefeed = "scf";
+    const TString changefeedTopicPath = TStringBuilder() << table << "/" << changefeed;
+
+    {
+        const auto st = topicClient.CreateTopic(dlqTopic,
+            NTopic::TCreateTopicSettings().PartitioningSettings(NTopic::TPartitioningSettings(1, 1))
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            CREATE TABLE `{}` (
+                Key Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+        )",
+        table
+    ));
+
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            ALTER TABLE `{}` ADD CHANGEFEED `{}` WITH (
+                FORMAT = 'JSON',
+                MODE = 'UPDATES'
+            );
+        )",
+        table,
+        changefeed
+    ));
+
+    {
+        const auto st = topicClient.AlterTopic(changefeedTopicPath,
+            NTopic::TAlterTopicSettings()
+                .BeginAddSharedConsumer("shared_sqs_del")
+                    .SetAvailiabilityPeriod(TDuration::Hours(2))
+                    .AddAttribute("marker", "v1")
+                    .KeepMessagesOrder(true)
+                    .DefaultProcessingTimeout(TDuration::Seconds(33))
+                    .ReceiveMessageWaitTime(TDuration::Seconds(4))
+                    .ReceiveMessageDelay(TDuration::Seconds(1))
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .BeginCondition()
+                            .MaxProcessingAttempts(9)
+                        .EndCondition()
+                        .DeleteAction()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer()
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    {
+        const auto st = topicClient.AlterTopic(changefeedTopicPath,
+            NTopic::TAlterTopicSettings()
+                .BeginAddSharedConsumer("shared_sqs_move")
+                    .SetImportant(false)
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(11))
+                    .ReceiveMessageWaitTime(TDuration::Seconds(20))
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .BeginCondition()
+                            .MaxProcessingAttempts(4)
+                        .EndCondition()
+                        .MoveAction(dlqTopic)
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer()
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    auto changefeedsAndTopicsBefore = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+    backup();
+
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            DROP TABLE `{}`;
+        )",
+        table
+    ));
+    {
+        const auto st = topicClient.DropTopic(dlqTopic).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    restore();
+
+    auto changefeedsAndTopicsAfter = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+    const TString snapshotBefore = ChangefeedAndTopicDescriptionsStableText(changefeedsAndTopicsBefore);
+    const TString snapshotAfter = ChangefeedAndTopicDescriptionsStableText(changefeedsAndTopicsAfter);
+    UNIT_ASSERT_STRINGS_EQUAL_C(
+        snapshotAfter,
+        snapshotBefore,
+        "changefeed ToString() + topic DescribeTopic textproto after restore must match pre-backup snapshot"
+    );
 }
 
 void TestChangefeedAndTopicDescriptionsIsPreserved(
@@ -2710,6 +2833,23 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             kesus,
             nodeClient,
             rateLimiterClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreChangefeedSharedConsumersThroughDump) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        TestChangefeedSharedConsumersPreservedThroughBackupRestore(
+            session,
+            topicClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );

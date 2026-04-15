@@ -514,6 +514,8 @@ namespace {
     const char PATH_DELIM2 = 0;
 #endif
 
+} // namespace
+
 bool IsAbsolutePath(const std::string& path)
 {
     if (path.empty())
@@ -528,8 +530,6 @@ bool IsAbsolutePath(const std::string& path)
 #endif
     return false;
 }
-
-} // namespace
 
 std::string CombinePaths(const std::string& path1, const std::string& path2)
 {

@@ -11,12 +11,6 @@ namespace NKikimr::NDDisk {
         HandleChunkReserved();
     }
 
-    void TDDiskActor::IssuePersistentBufferChunkAllocation() {
-        Y_ABORT_UNLESS(IsPersistentBufferActor);
-        auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
-        Send(ddiskActorId, new TEvPrivate::TEvIssuePersistentBufferChunkAllocation());
-    }
-
     void TDDiskActor::Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev) {
         if (!CanHandleQuery(ev)) {
             return;

@@ -445,9 +445,11 @@ private:
         const bool nl = TIsSigned::value && lhs.Hi_ < 0;
         const bool nr = TIsSigned::value && rhs.Hi_ < 0;
 
-        const TUnsigned l = nl ? -lhs : +lhs, r = nr ? -rhs : +rhs;
+        const TUnsigned l = nl ? -lhs : +lhs;
+        const TUnsigned r = nr ? -rhs : +rhs;
 
-        TUnsigned div = 0, mod = 0;
+        TUnsigned div = 0;
+        TUnsigned mod = 0;
 
         for (auto x = l.GetBits(); x;) {
             mod <<= 1;

@@ -52,12 +52,23 @@ Y_UNIT_TEST(Date16vs32) {
 
 Y_UNIT_TEST(SplitDate16vs32) {
     for (ui16 date = 0; date < NUdf::MAX_DATE; ++date) {
-        ui32 year16, month16, day16, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16;
+        ui32 year16;
+        ui32 month16;
+        ui32 day16;
+        ui32 dayOfYear16;
+        ui32 weekOfYear16;
+        ui32 weekOfYearIso8601_16;
+        ui32 dayOfWeek16;
         SplitDate(date, year16, month16, day16);
         EnrichDate(date, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16);
 
         i32 year;
-        ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 month;
+        ui32 day;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
 
         SplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
         UNIT_ASSERT_VALUES_EQUAL(year16, year);
@@ -92,11 +103,21 @@ void TestSplitMakeTzDate16vs32(ui16 tzId, ui32 beginDate, size_t step) {
     // Narrow date components.
     ui16 date_n;
     ui32 year_n;
-    ui32 month_n, day_n, dayOfYear_n, weekOfYear_n, weekOfYearIso8601_n, dayOfWeek_n;
+    ui32 month_n;
+    ui32 day_n;
+    ui32 dayOfYear_n;
+    ui32 weekOfYear_n;
+    ui32 weekOfYearIso8601_n;
+    ui32 dayOfWeek_n;
     // Wide date components.
     i32 date_w;
     i32 year_w;
-    ui32 month_w, day_w, dayOfYear_w, weekOfYear_w, weekOfYearIso8601_w, dayOfWeek_w;
+    ui32 month_w;
+    ui32 day_w;
+    ui32 dayOfYear_w;
+    ui32 weekOfYear_w;
+    ui32 weekOfYearIso8601_w;
+    ui32 dayOfWeek_w;
 
     for (ui16 date = beginDate; date < NUdf::MAX_DATE; date += step) {
         UNIT_ASSERT(SplitTzDate(date, year_n, month_n, day_n, dayOfYear_n,
@@ -129,13 +150,27 @@ void TestSplitMakeTzDatetime32vs64(ui16 tzId, ui32 beginDatetime, size_t step) {
     // Narrow datetime components.
     ui32 datetime_n;
     ui32 year_n;
-    ui32 month_n, day_n, hour_n, minute_n, second_n;
-    ui32 dayOfYear_n, weekOfYear_n, weekOfYearIso8601_n, dayOfWeek_n;
+    ui32 month_n;
+    ui32 day_n;
+    ui32 hour_n;
+    ui32 minute_n;
+    ui32 second_n;
+    ui32 dayOfYear_n;
+    ui32 weekOfYear_n;
+    ui32 weekOfYearIso8601_n;
+    ui32 dayOfWeek_n;
     // Wide datetime components.
     i64 datetime_w;
     i32 year_w;
-    ui32 month_w, day_w, hour_w, minute_w, second_w;
-    ui32 dayOfYear_w, weekOfYear_w, weekOfYearIso8601_w, dayOfWeek_w;
+    ui32 month_w;
+    ui32 day_w;
+    ui32 hour_w;
+    ui32 minute_w;
+    ui32 second_w;
+    ui32 dayOfYear_w;
+    ui32 weekOfYear_w;
+    ui32 weekOfYearIso8601_w;
+    ui32 dayOfWeek_w;
 
     for (ui32 datetime = beginDatetime; datetime < NUdf::MAX_DATETIME; datetime += step) {
         UNIT_ASSERT(SplitTzDatetime(datetime, year_n, month_n, day_n, hour_n,
@@ -171,7 +206,13 @@ Y_UNIT_TEST(SplitMakeTzDatetime32vs64) {
 }
 
 Y_UNIT_TEST(SplitMakeTzDateSingle) {
-    ui32 y, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+    ui32 y;
+    ui32 month;
+    ui32 day;
+    ui32 dayOfYear;
+    ui32 weekOfYear;
+    ui32 weekOfYearIso8601;
+    ui32 dayOfWeek;
     ui16 tzId = 1;
     i32 value = 0;
 
@@ -187,7 +228,12 @@ Y_UNIT_TEST(SplitMakeTzDateSingle) {
 
 Y_UNIT_TEST(SplitMakeTzDate32Single) {
     i32 y;
-    ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+    ui32 month;
+    ui32 day;
+    ui32 dayOfYear;
+    ui32 weekOfYear;
+    ui32 weekOfYearIso8601;
+    ui32 dayOfWeek;
     ui16 tzId = 1;
     i32 value = 0;
 
@@ -203,7 +249,12 @@ Y_UNIT_TEST(SplitMakeTzDate32Single) {
 
 Y_UNIT_TEST(SplitDate32CornerCases) {
     i32 year;
-    ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+    ui32 month;
+    ui32 day;
+    ui32 dayOfYear;
+    ui32 weekOfYear;
+    ui32 weekOfYearIso8601;
+    ui32 dayOfWeek;
 
     UNIT_ASSERT(SplitDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek));
     UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MIN_YEAR32, year);
@@ -267,7 +318,8 @@ Y_UNIT_TEST(Date32vsPostgres) {
     UNIT_ASSERT(MakeDate32(JULIAN_MINYEAR, JULIAN_MINMONTH, JULIAN_MINDAY, value));
     for (; value < NUdf::MAX_DATE32; ++value) {
         i32 year;
-        ui32 month, day;
+        ui32 month;
+        ui32 day;
         UNIT_ASSERT(SplitDate32(value, year, month, day));
         if (year < 0) {
             year++;
@@ -278,7 +330,9 @@ Y_UNIT_TEST(Date32vsPostgres) {
 
 Y_UNIT_TEST(PostgresVsDate32) {
     for (int value = DATETIME_MIN_JULIAN; value < DATE_END_JULIAN; ++value) {
-        int year, month, day;
+        int year;
+        int month;
+        int day;
         j2date(value, &year, &month, &day);
         i32 date32;
         if (year <= 0) {
@@ -287,9 +341,13 @@ Y_UNIT_TEST(PostgresVsDate32) {
         UNIT_ASSERT(MakeDate32(year, static_cast<ui32>(month), static_cast<ui32>(day), date32));
         UNIT_ASSERT_VALUES_EQUAL(date32, value - UNIX_EPOCH_JDATE);
 
-        ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
         i32 y;
-        ui32 m, d;
+        ui32 m;
+        ui32 d;
         SplitDate32(date32, y, m, d, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
         UNIT_ASSERT_VALUES_EQUAL(dayOfWeek % 7, j2day(value));
 

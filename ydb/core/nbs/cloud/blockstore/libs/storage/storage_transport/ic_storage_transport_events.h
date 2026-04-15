@@ -268,7 +268,7 @@ struct TEvTransportPrivate
         const ui64 Lsn;
         const NKikimr::NDDisk::TWriteInstruction Instruction;
         const TVector<NKikimrBlobStorage::NDDisk::TDDiskId> PersistentBufferIds;
-        const ui32 ReplyTimeoutMicroseconds;
+        const TDuration ReplyTimeout;
 
         const TGuardedSgList Data;
         NWilson::TTraceId TraceId;
@@ -282,7 +282,7 @@ struct TEvTransportPrivate
             const ui64 lsn,
             const NKikimr::NDDisk::TWriteInstruction instruction,
             TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
-            ui32 replyTimeoutMicroseconds,
+            const TDuration replyTimeout,
             const TGuardedSgList& data,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
@@ -291,7 +291,7 @@ struct TEvTransportPrivate
             , Lsn(lsn)
             , Instruction(instruction)
             , PersistentBufferIds(std::move(persistentBufferIds))
-            , ReplyTimeoutMicroseconds(replyTimeoutMicroseconds)
+            , ReplyTimeout(replyTimeout)
             , Data(data)
             , TraceId(std::move(traceId))
 

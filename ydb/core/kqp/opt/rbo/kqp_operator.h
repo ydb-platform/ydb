@@ -242,13 +242,8 @@ class TOpRead: public IOperator {
 public:
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos);
-    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
-            TPositionHandle pos);
-    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const ESortDir sortDireciont,
-            const TPhysicalOpProps& props, TPositionHandle pos);
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+            const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -260,15 +255,20 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     NYql::EStorageType GetTableStorageType() const;
 
+    TExprNode::TPtr GetRanges() const { return Ranges; }
+    TExprNode::TPtr GetTable() const { return TableCallable; }
+
     // TODO: make it private members, we should not access it directly
     TString Alias;
     TVector<TString> Columns;
     TVector<TInfoUnit> OutputIUs;
     NYql::EStorageType StorageType;
+
     // TODO: put it in read settings.
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
     TExprNode::TPtr Limit;
+    TExprNode::TPtr Ranges;
     ESortDir SortDir{ESortDir::None};
 };
 
@@ -417,8 +417,13 @@ class TOpJoin: public IBinaryOperator {
 public:
     TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
             const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+
+    TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
+            const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -429,6 +434,7 @@ public:
 
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+    TVector<TExpression> JoinFilters;
 };
 
 class TOpUnionAll: public IBinaryOperator {
@@ -446,7 +452,10 @@ public:
 class TOpLimit: public IUnaryOperator {
 public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase);
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+             std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -459,10 +468,13 @@ public:
     }
 
     TExpression GetLimitCond() const { return LimitCond; }
+    bool HasOffset() const { return OffsetCond.has_value(); }
+    std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
 
     // Make private.
     TExpression LimitCond;
 private:
+    std::optional<TExpression> OffsetCond;
     EOpPhase LimitPhase{EOpPhase::Undefined};
 };
 

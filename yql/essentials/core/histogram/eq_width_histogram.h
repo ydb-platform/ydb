@@ -170,13 +170,17 @@ public:
         Buckets_[index]++;
     }
 
+    // To prevent large positive value due to e.g. AddElement<ui32>(-5).
+    template <typename T>
+    void AddElement(std::type_identity_t<T> val) = delete;
+
     // Returns an index of the bucket which stores the given `val`.
     // Returned index in range [0, numBuckets - 1].
     // Not using `std::lower_bound()` here because need an index to map to `suffix` and `prefix` sum.
     template <typename T>
     ui32 FindBucketIndex(T val) const {
-        const T domainStart = LoadFrom<T>(DomainRange_.Start.data());
-        const T domainEnd = LoadFrom<T>(DomainRange_.End.data());
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start.data());
+        const T domainEnd = LoadFrom<T>(GetDomainRange().End.data());
         if (CmpLess<T>(val, domainStart)) {
             return 0;
         }
@@ -199,15 +203,20 @@ public:
         return static_cast<ui32>(bucketIndex);
     }
 
+    // To prevent large positive value due to e.g. FindBucketIndex<ui32>(-5).
+    template <typename T>
+    ui32 FindBucketIndex(std::type_identity_t<T> val) = delete;
+
     // Returns bucket width based on domain range and number of buckets.
     template <typename T>
     THistValue GetBucketWidth() const {
         THistValue returnValue;
-        const T start = LoadFrom<T>(DomainRange_.Start.data());
-        const T end = LoadFrom<T>(DomainRange_.End.data());
+        const T start = LoadFrom<T>(GetDomainRange().Start.data());
+        const T end = LoadFrom<T>(GetDomainRange().End.data());
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
             const UT rangeLen = static_cast<UT>(end) - static_cast<UT>(start);
+            // width is truncated after division.
             const UT bucketWidth = rangeLen / static_cast<UT>(GetNumBuckets());
             StoreTo<UT>(returnValue.Value.data(), bucketWidth);
             return returnValue;
@@ -218,14 +227,30 @@ public:
         return returnValue;
     }
 
+    // Returns border value of targeted bucket.
+    template <typename T>
+    T GetBorderValue(i64 index) const {
+        Y_ENSURE(CmpLess<i64>(-1, index));
+        Y_ENSURE(CmpLess<i64>(index, GetNumBuckets()));
+
+        const TEqWidthHistogram::THistValue bucketWidth = GetBucketWidth<T>();
+        const T width = LoadFrom<T>(bucketWidth.Value.data());
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start.data());
+        const T border = domainStart + static_cast<T>(index) * width;
+        return border;
+    }
+
     // Initializes buckets with a given `range`.
+    // NOTE: buckets can be less than range (i.e. end - start)
     template <typename T>
     void InitializeBuckets(T rangeStart, T rangeEnd) {
+        // class invariant: start < end.
         Y_ENSURE(CmpLess<T>(rangeStart, rangeEnd));
         DomainRange_ = {};
         StoreTo<T>(DomainRange_.Start.data(), rangeStart);
         StoreTo<T>(DomainRange_.End.data(), rangeEnd);
-        const THistValue bucketWidth = GetBucketWidth<T>(); // non-zero positive width of each bucket
+        // class invariant: bucket width is non-zero positive.
+        const THistValue bucketWidth = GetBucketWidth<T>();
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
             Y_ENSURE(CmpLess<UT>(0, LoadFrom<UT>(bucketWidth.Value.data())), "Domain range is too close");
@@ -234,6 +259,10 @@ public:
         }
     }
 
+    // To prevent large positive value due to e.g. InitializeBuckets<ui32>(-5, -1).
+    template <typename T>
+    void InitializeBuckets(std::type_identity_t<T> rangeStart, std::type_identity_t<T> rangeEnd) = delete;
+
     // Checks whether two histograms have same parameters.
     template <typename T>
     bool BucketsEqual(const TEqWidthHistogram& other) {
@@ -241,9 +270,9 @@ public:
             return false;
         } else if (ValueType_ != other.GetType()) {
             return false;
-        } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.Start.data()), LoadFrom<T>(other.GetDomainRange().Start.data()))) {
+        } else if (!CmpEqual<T>(LoadFrom<T>(GetDomainRange().Start.data()), LoadFrom<T>(other.GetDomainRange().Start.data()))) {
             return false;
-        } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.End.data()), LoadFrom<T>(other.GetDomainRange().End.data()))) {
+        } else if (!CmpEqual<T>(LoadFrom<T>(GetDomainRange().End.data()), LoadFrom<T>(other.GetDomainRange().End.data()))) {
             return false;
         }
         return true;
@@ -266,8 +295,9 @@ public:
     }
 
     // Returns a number of elements in a bucket by the given `index`.
-    ui64 GetNumElementsInBucket(ui32 index) const {
-        Y_ENSURE(index < GetNumBuckets());
+    ui64 GetNumElementsInBucket(i64 index) const {
+        Y_ENSURE(CmpLess<i64>(-1, index));
+        Y_ENSURE(CmpLess<i64>(index, GetNumBuckets()));
         return Buckets_[index];
     }
 
@@ -276,11 +306,19 @@ public:
         return DomainRange_;
     }
 
-private:
     // Returns binary size of the histogram.
-    ui64 GetBinarySize(ui32 nBuckets) const;
+    size_t GetSize() const {
+        return GetBinarySize(NumBuckets_);
+    }
 
+    static ui64 GetBinarySize(ui32 nBuckets) {
+        return sizeof(VersionNumber_) + sizeof(nBuckets) +
+               sizeof(EHistogramValueType) + sizeof(TDomainRange) + sizeof(ui64) * nBuckets;
+    }
+
+private:
     ui8 VersionNumber_ = 0;
+    ui32 NumBuckets_;
     EHistogramValueType ValueType_;
     TDomainRange DomainRange_;
     TVector<ui64> Buckets_;
@@ -319,11 +357,14 @@ public:
         const TEqWidthHistogram::THistValue bucketWidth = Histogram_->GetBucketWidth<T>();
         // Assuming uniform distribution.
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+            // Final estimated values are truncated after division.
             const ui64 width = LoadFrom<ui64>(bucketWidth.Value.data());
             return count / width;
         }
-        const T width = LoadFrom<T>(bucketWidth.Value.data());
-        return static_cast<ui64>(count / width);
+        // TODO: currenty return count due to close-to-zero width thus count / width generates large value
+        // const T width = LoadFrom<T>(bucketWidth.Value.data());
+        // return static_cast<ui64>(count / width);
+        return count;
     }
 
     // Returns the total number elements in histogram.

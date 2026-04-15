@@ -44,7 +44,7 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
+        res.Success = DoTypeCheck(request.Mode, astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
 
         return res;
     }
@@ -58,7 +58,7 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
+        res.Success = DoTypeCheck(request.Mode, astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
 
         return res;
     }
@@ -72,17 +72,17 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
+        res.Success = DoTypeCheck(request.Mode, astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
 
         return res;
     }
 
-    bool DoTypeCheck(TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues) {
+    bool DoTypeCheck(EMode mode, TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues) {
         if (!udfMeta) {
             udfMeta = GetDefaultUdfMeta();
         }
 
-        return PartialAnnonateTypes(astRoot, langver, udfMeta, issues, [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); }, [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); });
+        return PartialAnnonateTypes(astRoot, mode == EMode::Library, langver, udfMeta, issues, [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); }, [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); });
     }
 };
 

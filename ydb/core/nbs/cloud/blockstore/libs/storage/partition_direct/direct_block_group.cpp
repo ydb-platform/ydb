@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -77,12 +78,16 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
 
 TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
+    ISchedulerPtr scheduler,
+    ITimerPtr timer,
     TExecutorPtr executor,
     ui64 tabletId,
     ui32 generation,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds)
     : ActorSystem(actorSystem)
+    , Scheduler(std::move(scheduler))
+    , Timer(std::move(timer))
     , Executor(std::move(executor))
     , TabletId(tabletId)
     , StorageTransport(
@@ -90,6 +95,8 @@ TDirectBlockGroup::TDirectBlockGroup(
 {
     Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);
     Y_ASSERT(ddisksIds.size() == DirectBlockGroupHostCount);
+
+    HostStatistics.resize(DirectBlockGroupHostCount);
 
     auto addDDiskConnections = [&](const TVector<NBsController::TDDiskId>& ids,
                                    TVector<TDDiskConnection>& connections,
@@ -125,6 +132,14 @@ TDirectBlockGroup::TDirectBlockGroup(
 TExecutorPtr TDirectBlockGroup::GetExecutor()
 {
     return Executor;
+}
+
+void TDirectBlockGroup::Schedule(TDuration delay, TCallback callback)
+{
+    Scheduler->Schedule(
+        Executor.get(),
+        Timer->Now() + delay,
+        std::move(callback));
 }
 
 void TDirectBlockGroup::EstablishConnections()
@@ -165,6 +180,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
         NWilson::EFlags::NONE,
         ActorSystem);
 
+    auto startAt = TMonotonic::Now();
     auto promise = NewPromise<TDBGReadBlocksResponse>();
     auto result = promise.GetFuture();
     auto future = StorageTransport->ReadFromDDisk(
@@ -177,7 +193,10 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
         guardedSglist,
         childSpan);
     future.Subscribe(
-        [promise = std::move(promise),
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         hostIndex,
+         startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvReadResultFuture& f) mutable
@@ -185,7 +204,12 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
             // ActorSystem thread
 
             executor->ExecuteSimple(
-                [promise = std::move(promise), threadChecker, f]   //
+                [weakSelf,
+                 promise = std::move(promise),
+                 hostIndex,
+                 startAt,
+                 threadChecker,
+                 f]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
@@ -196,6 +220,14 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK
                             ? MakeError(S_OK)
                             : MakeError(E_FAIL, response.GetErrorReason());
+
+                    if (auto self = weakSelf.lock()) {
+                        self->OnResponse(
+                            hostIndex,
+                            TMonotonic::Now() - startAt,
+                            EOperation::ReadFromDDisk,
+                            error);
+                    }
 
                     promise.SetValue(
                         TDBGReadBlocksResponse{.Error = std::move(error)});
@@ -217,6 +249,8 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
 
     using TEvReadPersistentBufferResultFuture =
         TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>;
+
+    const auto startAt = TMonotonic::Now();
 
     if (!Initialized) {
         return MakeFuture<TDBGReadBlocksResponse>(
@@ -244,7 +278,10 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
         guardedSglist,
         childSpan);
     future.Subscribe(
-        [promise = std::move(promise),
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         hostIndex,
+         startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvReadPersistentBufferResultFuture& f) mutable
@@ -252,7 +289,12 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
             // ActorSystem thread
 
             executor->ExecuteSimple(
-                [promise = std::move(promise), threadChecker, f]   //
+                [weakSelf,
+                 promise = std::move(promise),
+                 hostIndex,
+                 startAt,
+                 threadChecker,
+                 f]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
@@ -263,6 +305,14 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
                                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK
                             ? MakeError(S_OK)
                             : MakeError(E_FAIL, response.GetErrorReason());
+
+                    if (auto self = weakSelf.lock()) {
+                        self->OnResponse(
+                            hostIndex,
+                            TMonotonic::Now() - startAt,
+                            EOperation::ReadFromPBuffer,
+                            error);
+                    }
 
                     promise.SetValue(
                         TDBGReadBlocksResponse{.Error = std::move(error)});
@@ -283,6 +333,8 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     using TEvWriterResultFuture =
         NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvWriteResult>;
+
+    const auto startAt = TMonotonic::Now();
 
     if (!Initialized) {
         return MakeFuture<TDBGWriteBlocksResponse>(
@@ -309,7 +361,10 @@ TDirectBlockGroup::WriteBlocksToDDisk(
         guardedSglist,
         childSpan);
     future.Subscribe(
-        [promise = std::move(promise),
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         hostIndex,
+         startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvWriterResultFuture& f) mutable
@@ -317,7 +372,12 @@ TDirectBlockGroup::WriteBlocksToDDisk(
             // ActorSystem thread
 
             executor->ExecuteSimple(
-                [promise = std::move(promise), threadChecker, f]   //
+                [weakSelf,
+                 promise = std::move(promise),
+                 hostIndex,
+                 startAt,
+                 threadChecker,
+                 f]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
@@ -328,6 +388,14 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK
                             ? MakeError(S_OK)
                             : MakeError(E_FAIL, response.GetErrorReason());
+
+                    if (auto self = weakSelf.lock()) {
+                        self->OnResponse(
+                            hostIndex,
+                            TMonotonic::Now() - startAt,
+                            EOperation::WriteToDDisk,
+                            error);
+                    }
 
                     promise.SetValue(
                         TDBGWriteBlocksResponse{.Error = std::move(error)});
@@ -349,6 +417,8 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 
     using TEvWritePersistentBufferResultFuture = NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>;
+
+    const auto startAt = TMonotonic::Now();
 
     if (!Initialized) {
         return MakeFuture<TDBGWriteBlocksResponse>(
@@ -376,7 +446,10 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
         guardedSglist,
         childSpan);
     future.Subscribe(
-        [promise = std::move(promise),
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         hostIndex,
+         startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvWritePersistentBufferResultFuture& f) mutable
@@ -384,7 +457,12 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
             // ActorSystem thread
 
             executor->ExecuteSimple(
-                [promise = std::move(promise), threadChecker, f]   //
+                [weakSelf,
+                 promise = std::move(promise),
+                 hostIndex,
+                 startAt,
+                 threadChecker,
+                 f]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
@@ -395,6 +473,14 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
                                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK
                             ? MakeError(S_OK)
                             : MakeError(E_FAIL, response.GetErrorReason());
+
+                    if (auto self = weakSelf.lock()) {
+                        self->OnResponse(
+                            hostIndex,
+                            TMonotonic::Now() - startAt,
+                            EOperation::WriteToPBuffer,
+                            error);
+                    }
 
                     promise.SetValue(
                         TDBGWriteBlocksResponse{.Error = std::move(error)});
@@ -409,7 +495,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     std::vector<ui8> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
-    ui32 replyTimeoutMicroseconds,
+    TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId)
 {
@@ -418,6 +504,8 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
     using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
         NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
+
+    const auto startAt = TMonotonic::Now();
 
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds(hostIndexes.size());
     for (auto hostIndex: hostIndexes) {
@@ -454,12 +542,13 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         std::move(disksIds),
-        replyTimeoutMicroseconds,
+        replyTimeout,
         guardedSglist,
         childSpan);
 
     future.Subscribe(
         [promise = std::move(promise),
+         startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          weakSelf = weak_from_this()](
@@ -469,6 +558,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
             executor->ExecuteSimple(
                 [promise = std::move(promise),
+                 startAt,
                  threadChecker,
                  f,
                  weakSelf = std::move(weakSelf)]() mutable
@@ -477,7 +567,8 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
                     if (auto self = weakSelf.lock()) {
                         self->OnWriteBlocksToManyPBuffersResponse(
                             f.GetValue(),
-                            std::move(promise));
+                            std::move(promise),
+                            TMonotonic::Now() - startAt);
                     } else {
                         promise.SetValue(
                             TDBGWriteBlocksToManyPBuffersResponse::
@@ -493,13 +584,14 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
 void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
     const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult& response,
-    TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise)
+    TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
+    TDuration executionTime)
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
     for (const auto& singlePBufferResponse: response.GetResult()) {
-        auto hostIndex = PBufferIdToHostIndex.find(
+        ui8* hostIndex = PBufferIdToHostIndex.FindPtr(
             singlePBufferResponse.GetPersistentBufferId());
-        if (hostIndex == PBufferIdToHostIndex.end()) {
+        if (!hostIndex) {
             LOG_ERROR(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
@@ -511,7 +603,7 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
             continue;
         }
         Y_ABORT_UNLESS(
-            PBufferConnections[hostIndex->second].HostConnection.DDiskId ==
+            PBufferConnections[*hostIndex].HostConnection.DDiskId ==
             singlePBufferResponse.GetPersistentBufferId());
 
         NProto::TError error =
@@ -522,8 +614,14 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
                       E_FAIL,
                       singlePBufferResponse.GetResult().GetErrorReason());
 
+        OnResponse(
+            *hostIndex,
+            executionTime,
+            EOperation::WriteToPBuffer,
+            error);
+
         dbgResponse.Responses.push_back(
-            {.HostId = hostIndex->second, .Error = std::move(error)});
+            {.HostIndex = *hostIndex, .Error = std::move(error)});
     }
     promise.SetValue(std::move(dbgResponse));
 }
@@ -539,6 +637,8 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 
     using TEvSyncWithPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+
+    const auto startAt = TMonotonic::Now();
 
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
     TVector<ui64> lsns;
@@ -568,7 +668,11 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     auto result = promise.GetFuture();
 
     future.Subscribe(
-        [promise = std::move(promise),
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         pbufferHostIndex,
+         ddiskHostIndex,
+         startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          segmentCount = segments.size()]   //
@@ -578,25 +682,48 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 
             const TEvSyncWithPersistentBufferResult& response = f.GetValue();
             TDBGFlushResponse result;
-            for (size_t i = 0; i < segmentCount; ++i) {
-                const auto& segmentResult = response.GetSegmentResults(i);
-                const bool ok =
-                    segmentResult.GetStatus() ==
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
-                    segmentResult.GetStatus() ==
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
-                result.Errors.push_back(MakeError(
-                    ok ? S_OK : E_FAIL,
-                    ok ? "" : segmentResult.GetErrorReason()));
+            if (response.GetStatus() ==
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK &&
+                response.GetSegmentResults().size() ==
+                    static_cast<int>(segmentCount))
+            {
+                for (size_t i = 0; i < segmentCount; ++i) {
+                    const auto& segmentResult = response.GetSegmentResults(i);
+                    const bool ok =
+                        segmentResult.GetStatus() ==
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
+                        segmentResult.GetStatus() ==
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
+                    result.Errors.push_back(MakeError(
+                        ok ? S_OK : E_FAIL,
+                        ok ? "" : segmentResult.GetErrorReason()));
+                }
+            } else {
+                for (size_t i = 0; i < segmentCount; ++i) {
+                    result.Errors.push_back(
+                        MakeError(E_FAIL, response.GetErrorReason()));
+                }
             }
 
             executor->ExecuteSimple(
-                [promise = std::move(promise),
+                [weakSelf,
+                 promise = std::move(promise),
+                 pbufferHostIndex,
+                 ddiskHostIndex,
+                 startAt,
                  result = std::move(result),
                  threadChecker]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
+
+                    if (auto self = weakSelf.lock()) {
+                        self->OnMultiFlushResponse(
+                            pbufferHostIndex,
+                            ddiskHostIndex,
+                            TMonotonic::Now() - startAt,
+                            result.Errors);
+                    }
 
                     promise.SetValue(std::move(result));
                 });
@@ -615,6 +742,8 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
 
     using TEvErasePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
+    const auto startAt = TMonotonic::Now();
 
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
     TVector<ui64> lsns;
@@ -643,7 +772,10 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
     auto result = promise.GetFuture();
 
     future.Subscribe(
-        [promise = std::move(promise),
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         hostIndex,
+         startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          segmentCount = segments.size()]   //
@@ -652,7 +784,10 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
             // ActorSystem thread
 
             executor->ExecuteSimple(
-                [promise = std::move(promise),
+                [weakSelf,
+                 promise = std::move(promise),
+                 hostIndex,
+                 startAt,
                  threadChecker,
                  result = UnsafeExtractValue(f)]   //
                 () mutable
@@ -664,6 +799,15 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
                                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK
                             ? MakeError(S_OK)
                             : MakeError(E_FAIL, result.GetErrorReason());
+
+                    if (auto self = weakSelf.lock()) {
+                        self->OnResponse(
+                            hostIndex,
+                            TMonotonic::Now() - startAt,
+                            EOperation::Erase,
+                            error);
+                    }
+
                     promise.SetValue(
                         TDBGEraseResponse{.Error = std::move(error)});
                 });
@@ -880,6 +1024,56 @@ void TDirectBlockGroup::DoRestore(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     promise.SetValue(std::move(RestoredPBuffers[vChunkIndex]));
+}
+
+void TDirectBlockGroup::OnResponse(
+    ui8 hostIndex,
+    TDuration executionTime,
+    EOperation operation,
+    const NProto::TError& error)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (HasError(error)) {
+        HostStatistics[hostIndex].OnError(TInstant::Now(), operation);
+    } else {
+        HostStatistics[hostIndex].OnSuccess(
+            TInstant::Now(),
+            executionTime,
+            operation);
+    }
+}
+
+void TDirectBlockGroup::OnMultiFlushResponse(
+    ui8 pbufferHostIndex,
+    ui8 ddiskHostIndex,
+    TDuration executionTime,
+    const TVector<NProto::TError>& errors)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto operation = pbufferHostIndex == ddiskHostIndex
+                               ? EOperation::Flush
+                               : EOperation::FlushCrossNode;
+    const bool hasError = AnyOf(
+        errors,
+        [](const NProto::TError& error)
+        {   //
+            return HasError(error);
+        });
+
+    if (hasError) {
+        HostStatistics[ddiskHostIndex].OnError(TInstant::Now(), operation);
+    } else {
+        HostStatistics[ddiskHostIndex].OnSuccess(
+            TInstant::Now(),
+            executionTime,
+            operation);
+        HostStatistics[pbufferHostIndex].OnSuccess(
+            TInstant::Now(),
+            executionTime,
+            operation);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -5,6 +5,8 @@
 #include "purge.h"
 #include "retention.h"
 
+#include <ydb/core/ymq/actor/deduplicator.h>
+#include <ydb/core/ymq/base/run_query.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/core/ymq/base/constants.h>
@@ -106,6 +108,11 @@ void TQueueLeader::BecomeWorking() {
         ProcessSendMessageBatch(reqInfo);
     }
 
+    for (auto&& [reqId, reqInfo] : DeduplicateMessageRequests_) {
+        ProcessDeduplicateMessageBatch(std::move(reqInfo));
+    }
+    DeduplicateMessageRequests_.clear();
+
     for (auto&& [reqId, reqInfo] : ReceiveMessageRequests_) {
         ProcessReceiveMessageBatch(reqInfo);
     }
@@ -139,6 +146,7 @@ STATEFN(TQueueLeader::StateInit) {
         hFunc(TSqsEvents::TEvDeadLetterQueueNotification, HandleDeadLetterQueueNotification); // service periodically notifies active dead letter queues
         hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
+        hFunc(TSqsEvents::TEvDeduplicateMessageBatch, HandleDeduplicateMessageBatchWhileIniting); // from send message action actor
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -167,6 +175,7 @@ STATEFN(TQueueLeader::StateWorking) {
         hFunc(TSqsEvents::TEvDeadLetterQueueNotification, HandleDeadLetterQueueNotification); // service periodically notifies active dead letter queues
         hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
+        hFunc(TSqsEvents::TEvDeduplicateMessageBatch, HandleDeduplicateMessageBatchWhileWorking); // from send message action actor
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -580,6 +589,25 @@ void TQueueLeader::ProcessSendMessageBatch(TSendMessageBatchRequestProcessing& r
     shardInfo.SendBatchingState.AddRequest(reqInfo);
     shardInfo.SendBatchingState.TryExecute(this);
 }
+
+void TQueueLeader::HandleDeduplicateMessageBatchWhileIniting(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev) {
+    TString reqId = ev->Get()->RequestId;
+    Y_ABORT_UNLESS(DeduplicateMessageRequests_.emplace(std::move(reqId), std::move(ev)).second);
+}
+
+void TQueueLeader::HandleDeduplicateMessageBatchWhileWorking(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev) {
+    ProcessDeduplicateMessageBatch(std::move(ev));
+}
+
+void TQueueLeader::ProcessDeduplicateMessageBatch(TSqsEvents::TEvDeduplicateMessageBatch::TPtr&& ev) {
+    Register(new TDeduplicatorActor(std::move(ev), TDeduplicatorSettings{
+        .UserName = UserName_,
+        .QueueName = QueueName_,
+        .QueueVersion = QueueVersion_,
+        .TablesFormat = TablesFormat_
+    }));
+}
+
 
 void TQueueLeader::OnMessageSent(const TString& requestId, size_t index, const TSqsEvents::TEvExecuted::TRecord& reply, const NKikimr::NClient::TValue* messageRecord) {
     auto reqInfoIt = SendMessageRequests_.find(requestId);
@@ -1502,6 +1530,7 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
     resp->SchemeCache = SchemeCache_;
     resp->QueueLeader = SelfId();
     resp->QuoterResources = QuoterResources_;
+    resp->Settings = req->Get()->Settings;
 
     if (req->Get()->NeedQueueAttributes) {
         Y_ABORT_UNLESS(QueueAttributes_);

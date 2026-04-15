@@ -268,9 +268,9 @@ where State = 'EXECUTING'
 
 ## См. также
 
-* [{#T}](../yql/reference/syntax/create-resource-pool.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-* [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

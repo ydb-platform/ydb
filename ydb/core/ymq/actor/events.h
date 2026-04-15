@@ -141,6 +141,9 @@ struct TSqsEvents {
         EvActionCounterChanged,
         EvLocalCounterChanged,
 
+        EvDeduplicateMessageBatch,
+        EvDeduplicateMessageBatchResponse,
+
         EvEnd,
     };
 
@@ -158,6 +161,11 @@ struct TSqsEvents {
         // has operator<<
     };
 
+    struct TUserSettings {
+        size_t MigrationCompatibility: 1 = 0;
+        size_t MigrationFinished: 1 = 0;
+    };
+
     struct TEvGetConfiguration : public NActors::TEventLocal<TEvGetConfiguration, EvGetConfiguration> {
         TString  RequestId;
         TString  UserName;
@@ -165,6 +173,8 @@ struct TSqsEvents {
         TString  FolderId;
         bool EnableThrottling = true;
         ui64 Flags = 0;
+
+        TUserSettings Settings;
 
         enum EFlags {
             NeedQueueLeader = 1,
@@ -217,10 +227,15 @@ struct TSqsEvents {
         bool UserExists = false;
         bool QueueExists = false;
 
+        // User settings
+        TUserSettings Settings;
+
         // Event processing was throttled
         bool Throttled = false;
 
         // Queue info
+        TString QueueName;
+        TString FolderId;
         ui32 TablesFormat = 0;
         ui64 QueueVersion = 0;
         ui64 Shards = 1;
@@ -696,6 +711,29 @@ struct TSqsEvents {
             ui64 SequenceNumber = 0;
         };
         std::vector<TMessageResult> Statuses;
+    };
+
+    struct TEvDeduplicateMessageBatch : public NActors::TEventLocal<TEvDeduplicateMessageBatch, EvDeduplicateMessageBatch> {
+        TString RequestId;
+        TString SenderId;
+        std::vector<TString> DeduplicationMessageIds;
+    };
+
+    struct TEvDeduplicateMessageBatchResponse : public NActors::TEventLocal<TEvDeduplicateMessageBatchResponse, EvDeduplicateMessageBatchResponse> {
+        TEvDeduplicateMessageBatchResponse(std::unordered_map<TString, std::pair<TString, ui64>>&& blockedDeduplicationMessageIds)
+            : StatusCode(Ydb::StatusIds::SUCCESS)
+            , BlockedDeduplicationMessageIds(std::move(blockedDeduplicationMessageIds))
+        {
+        }
+
+        TEvDeduplicateMessageBatchResponse(Ydb::StatusIds::StatusCode statusCode)
+            : StatusCode(statusCode)
+        {
+        }
+
+        Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::SUCCESS;
+        // deduplication message id -> sequenceNumber
+        std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds;
     };
 
     // Request to try to receive message batch.

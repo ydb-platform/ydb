@@ -91,25 +91,25 @@ namespace {
     void SingleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo(Shard1));
-        key.Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+        key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     void DoubleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo(Shard1));
-        partitions->push_back(TKeyDesc::TPartitionInfo(Shard2));
-        key.Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+        partitions.push_back(TKeyDesc::TPartitionInfo(Shard2));
+        key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     void TwoShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2));
-        key.Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2));
+        key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     struct TDriver {
@@ -198,7 +198,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, NACLib::TUserContextBuilder().Build(), hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
                 IEngineFlat::TValidationInfo validationInfo;
                 IEngineFlat::EResult result = dataEngine->Validate(validationInfo);
@@ -216,7 +216,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, NACLib::TUserContextBuilder().Build(), hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
                 auto result = dataEngine->PrepareOutgoingReadsets();
                 if (result != IEngineFlat::EResult::Ok) {
@@ -252,7 +252,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, NACLib::TUserContextBuilder().Build(), hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
 
                 if (incomingReadsets.contains(shardPgm.first)) {

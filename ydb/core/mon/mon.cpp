@@ -31,12 +31,25 @@
 
 #include <util/system/hostname.h>
 
+#include <algorithm>
+#include <limits>
+#include <queue>
+
 namespace NActors {
 
 namespace {
 
 using namespace NKikimr;
 using NMonitoring::TEvMon;
+
+struct TIssueInfo {
+    const Ydb::Issue::IssueMessage* Issue = nullptr;
+    ui64 Depth = 0;
+
+    ui32 GetSeverity() const {
+        return Issue->severity();
+    }
+};
 
 bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
@@ -73,6 +86,39 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
             std::move(peerName)),
         IEventHandle::FlagTrackDelivery
     );
+}
+
+const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
+    std::queue<TIssueInfo> issuesQueue;
+    ui32 minimalSeverity = std::numeric_limits<ui32>::max();
+    for (const auto& issue : issues) {
+        issuesQueue.push({&issue, 1});
+        minimalSeverity = std::min(minimalSeverity, issue.severity());
+    }
+
+    const Ydb::Issue::IssueMessage* result = nullptr;
+    ui64 maxDepth = 0;
+    while (!issuesQueue.empty()) {
+        const auto issue = issuesQueue.front();
+        issuesQueue.pop();
+
+        const auto severity = issue.GetSeverity();
+        if (severity > minimalSeverity) {
+            continue;
+        }
+
+        if (!result || severity < minimalSeverity || issue.Depth > maxDepth) {
+            minimalSeverity = severity;
+            maxDepth = issue.Depth;
+            result = issue.Issue;
+        }
+
+        for (const auto& subIssue : issue.Issue->issues()) {
+            issuesQueue.push({&subIssue, issue.Depth + 1});
+        }
+    }
+
+    return result;
 }
 
 } // namespace
@@ -139,20 +185,10 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
     TString textStatus = TStringBuilder() << status;
     jsonResponse["status"] = textStatus;
 
-    // find first deepest error
-    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
-        return a.severity() < b.severity();
-    });
-
-    const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssuesPtr = &protoIssues;
-    while (protoIssuesPtr->size() > 0 && protoIssuesPtr->at(0).issuesSize() > 0) {
-        protoIssuesPtr = &protoIssuesPtr->at(0).issues();
-    }
-
-    if (protoIssuesPtr->size() > 0) {
-        const Ydb::Issue::IssueMessage& issue = protoIssuesPtr->at(0);
-        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
-        message = issue.message();
+    // find first deepest error with minimal severity
+    if (const auto* deepestIssue = FindDeepestIssue(protoIssues)) {
+        NProtobufJson::Proto2Json(*deepestIssue, jsonResponse["error"]);
+        message = deepestIssue->message();
     } else {
         jsonResponse["error"]["message"] = textStatus;
     }

@@ -12,7 +12,8 @@ void PerformTest(const ui8* testData, size_t offset, size_t length) {
     std::vector<ui8> copied(arrow::BitUtil::BytesForBits(length) + 1, 0);
     CopyDenseBitmap(copied.data(), testData, offset, length);
 
-    std::vector<ui8> origSparse(length), copiedSparse(length);
+    std::vector<ui8> origSparse(length);
+    std::vector<ui8> copiedSparse(length);
     DecompressToSparseBitmap(origSparse.data(), testData, offset, length);
     DecompressToSparseBitmap(copiedSparse.data(), copied.data(), 0, length);
     for (size_t i = 0; i < length; i++) {

@@ -151,7 +151,8 @@ Y_UNIT_TEST(Reset) {
 }
 
 Y_UNIT_TEST(ResetWithPointer) {
-    TTestStruct obj1, obj2;
+    TTestStruct obj1;
+    TTestStruct obj2;
     TCheckedDerefPtr<TTestStruct> ptr(&obj1);
     UNIT_ASSERT_EQUAL(ptr.Get(), &obj1);
 
@@ -160,7 +161,8 @@ Y_UNIT_TEST(ResetWithPointer) {
 }
 
 Y_UNIT_TEST(Swap) {
-    TTestStruct obj1, obj2;
+    TTestStruct obj1;
+    TTestStruct obj2;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj1);
     TCheckedDerefPtr<TTestStruct> ptr2(&obj2);
 
@@ -170,7 +172,8 @@ Y_UNIT_TEST(Swap) {
 }
 
 Y_UNIT_TEST(StdSwap) {
-    TTestStruct obj1, obj2;
+    TTestStruct obj1;
+    TTestStruct obj2;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj1);
     TCheckedDerefPtr<TTestStruct> ptr2(&obj2);
 

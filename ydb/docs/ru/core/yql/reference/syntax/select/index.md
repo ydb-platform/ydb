@@ -131,7 +131,6 @@ query1 UNION query2 UNION ALL query3
 ### Примеры
 
 ```yql
-USE some_cluster;
 SELECT * FROM CONCAT(
   `table1`,
   `table2`,
@@ -139,7 +138,6 @@ SELECT * FROM CONCAT(
 ```
 
 ```yql
-USE some_cluster;
 $indices = ListFromRange(1, 4);
 $tables = ListMap($indices, ($index) -> {
     RETURN "table" || CAST($index AS String);
@@ -148,7 +146,6 @@ SELECT * FROM EACH($tables); -- идентично предыдущему при
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM RANGE(`my_folder`);
 ```
 
@@ -160,7 +157,6 @@ SELECT * FROM some_cluster.RANGE( -- Кластер можно указать п
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
   `from_folder`,
@@ -169,7 +165,6 @@ SELECT * FROM RANGE(
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
   `from_table`,
@@ -179,7 +174,6 @@ SELECT * FROM RANGE(
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM LIKE(
   `my_folder`,
   "2017-03-%"
@@ -187,7 +181,6 @@ SELECT * FROM LIKE(
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM REGEXP(
   `my_folder`,
   "2017-03-1[2-4]?"
@@ -199,7 +192,6 @@ $callable = ($table_name) -> {
     return $table_name > "2017-03-13";
 };
 
-USE some_cluster;
 SELECT * FROM FILTER(
   `my_folder`,
   $callable
@@ -264,5 +256,6 @@ SELECT * FROM FILTER(
 * [VIEW secondary_index](secondary_index.md)
 
 * [VIEW vector_index](vector_index.md)
+* [VIEW fulltext_index](fulltext_index.md)
 
 {% endif %}

@@ -2131,10 +2131,13 @@ void TTcpConnection::DoSslShutdown()
                 return;
             default:
                 int error = SSL_get_error(Ssl_.get(), result);
-                YT_LOG_WARNING(
-                    GetLastSslError("TLS/SSL shutdown error"),
-                    "Could not perform SSL_shutdown (SslErrorCode: %v)",
-                    error);
+                // We are closing connection so it is all right to ignore SSL_ERROR_WANT_{READ/WRITE}.
+                if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
+                    YT_LOG_WARNING(
+                        GetLastSslError("TLS/SSL shutdown error"),
+                        "Could not perform SSL_shutdown (SslErrorCode: %v)",
+                        error);
+                }
 
                 // We did our best under the circumstances.
                 return;

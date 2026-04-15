@@ -342,7 +342,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 log_file.close()
                 self.set_aux_file(self.__log_file_name)
 
-                logger.info(f"restart node_id {self.node_id} log_file {self.__log_file_name}")
+                logger.info("restart node_id %s log_file %s", self.node_id, self.__log_file_name)
 
             self.update_command(self.__make_run_command())
             super(KiKiMRNode, self).start()

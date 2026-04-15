@@ -7,8 +7,8 @@ namespace {
 using namespace NKikimr::NKqp;
 
 void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperator>& op) {
-    json["E-Rows"] = TStringBuilder() << op->Props.Statistics->RecordsCount;
-    json["E-Size"] = TStringBuilder() << op->Props.Statistics->DataSize;
+    json["E-Rows"] = TStringBuilder() << op->Props.Statistics->ERows;
+    json["E-Size"] = TStringBuilder() << op->Props.Statistics->EBytes;
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 

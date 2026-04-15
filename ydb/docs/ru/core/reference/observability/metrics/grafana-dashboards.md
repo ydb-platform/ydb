@@ -25,6 +25,64 @@
 
 Скачать шаблон дашборда **DB overview**: [dboverview.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dboverview.json).
 
+## YDB Essential Metrics {#ydbessentials}
+
+Дашборд для мониторинга ключевых показателей базы данных.
+
+### Секция Health {#ydbessentials-health}
+
+В этой секции размещены графики, отображающие состояние компонентов кластера и базы данных.
+
+| Имя | Описание |
+|---|---|
+| Nodes count | Количество запущенных узлов YDB, в шт. |
+| Nodes Uptime | Время непрерывной работы каждого узла с момента запуска; помогает обнаруживать перезапуски и нестабильные узлы, в секундах. |
+| VDisks count | Количество доступных VDisk в кластере, в шт. |
+
+### Секция Saturation {#ydbessentials-saturation}
+
+В этой секции размещены графики, отражающие утилизацию ресурсов базы данных.
+
+| Имя | Описание |
+|---|---|
+| CPU by thread pool (dynnodes) | Потребление CPU динамическими узлами в разрезе [пулов исполнения](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), в ядрах CPU. |
+| CPU utilization (dynnodes) | Утилизация CPU динамическими узлами в разрезе [пулов исполнения](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), в %. |
+| Elapsed Time vs CPU Time | Соотношение реального времени выполнения операций (`ElapsedMicrosec`) и процессорного времени (`CpuMicrosec`) по узлам. Устойчивое превышение отметки 100% означает, что сессии проводят время в ожидании, а не в активной работе: как правило, это ожидание I/O или CPU overcommit на стороне гипервизора. |
+| RSS size by node | Объём оперативной памяти (Resident set size), потребляемой каждым динамическим узлом, с отображением лимитов памяти cgroup, в байтах. |
+| Storage usage | Логический размер базы данных и установленный на него лимит, в байтах. |
+| Overloaded shard count | Количество [перегруженных DataShard](../../../troubleshooting/performance/schemas/overloaded-shards.md) по диапазонам загрузки CPU — от 50% до 100%, в шт. |
+
+### Секция Traffic {#ydbessentials-traffic}
+
+В этой секции расположены графики, характеризующие нагрузку на базу данных.
+
+| Имя | Описание |
+|---|---|
+| Queries per second by latency buckets | Количество запросов в секунду с разбивкой по диапазонам задержки (от 1 мс до +∞). Каждый диапазон выделен отдельным цветом — от зелёного для быстрых запросов до фиолетового для медленных. Позволяет оценить распределение задержек и общий rps, в шт/с |
+| Transactions per second by latency buckets | Количество транзакций в секунду с разбивкой по диапазонам задержки (от 1 мс до +∞). Каждый диапазон выделен отдельным цветом — от зелёного для быстрых транзакций до фиолетового для медленных. Позволяет оценить распределение задержек и общий tps, в шт/с |
+| Rows read, uploaded, updated, deleted | Количество операций со строками таблиц в секунду: чтение, создание, обновление и удаление, в операциях/с |
+| Session count by dynnode | Количество активных сессий на каждом динамическом узле, в шт |
+
+### Секция Latency {#ydbessentials-latency}
+
+В этой секции расположены графики, отображающие время выполнения запросов и транзакций.
+
+| Имя | Описание |
+|---|---|
+| Query latency percentiles (ms) | Время выполнения запросов к базе данных в перцентилях p50, p90, p95, p99, в миллисекундах |
+| Transaction latency percentiles (ms) | Время выполнения транзакций в базе данных в перцентилях p50, p90, p95, p99, в миллисекундах |
+
+### Секция Errors {#ydbessentials-errors}
+
+В этой секции расположены графики, отображающие количество возникающих ошибок.
+
+| Имя | Описание |
+|---|---|
+| YQL Issues per second | Количество ошибок выполнения YQL-запросов по типам ошибок, в шт/с. |
+| GRPC response errors per second | Количество gRPC-ответов с ошибками с разбивкой по статусам, в шт/с. |
+
+Скачать шаблон дашборда **YDB Essential Metrics**: [ydb-essentials.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/ydb-essentials.json).
+
 ## Actors {#actors}
 
 Потребление CPU в актор-системе.

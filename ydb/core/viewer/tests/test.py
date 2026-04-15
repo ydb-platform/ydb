@@ -933,6 +933,15 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_query_issues_printing(cls):
+        result = cls.get_viewer_db("/viewer/query", {
+            'query': '$y = SELECT CAST(1 AS Uint32) + 1 AS Data; SELECT CAST(Data AS List<List<Int32>>) FROM $y',
+            'schema': 'multi'
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+
+    @classmethod
     def test_pqrb_tablet(cls):
         response_create_topic = cls.call_viewer("/viewer/query", {
             'database': cls.dedicated_db,

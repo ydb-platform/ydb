@@ -25,6 +25,8 @@ SRCS(
     vchunk_config.cpp
     vchunk.cpp
     write_request.cpp
+    write_with_direct_replication_request.cpp
+    write_with_pb_replication_request.cpp
 )
 
 PEERDIR(

@@ -269,7 +269,7 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
     TString error;
     auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig, nullptr);
     auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
-                                CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS)
+                                CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, EOperation::Alter)
                                 : Ydb::StatusIds::BAD_REQUEST;
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyWithError(status,
@@ -433,41 +433,6 @@ void TPQAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransactio
     if (!error.empty()) {
         Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
 
-        return RespondWithCode(status);
-    }
-}
-
-
-TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-}
-
-TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-    : TBase(request)
-{
-}
-
-void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx) {
-    TBase::Bootstrap(ctx);
-    SendDescribeProposeRequest(ctx);
-    Become(&TBase::StateWork);
-}
-
-void TAlterTopicActor::ModifyPersqueueConfig(
-    TAppData* appData,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(pqGroupDescription);
-    Y_UNUSED(selfInfo);
-    TString error;
-    Y_UNUSED(selfInfo);
-
-    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, appData, error, GetCdcStreamName().Defined());
-    if (!error.empty()) {
-        Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
         return RespondWithCode(status);
     }
 }
@@ -1468,73 +1433,6 @@ bool TPartitionsLocationActor::OnUnhandledException(const std::exception& exc) {
 
     this->RaiseError("Unhandled exception", Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::UNAVAILABLE, ActorContext());
 
-    return true;
-}
-
-TAlterTopicActorInternal::TAlterTopicActorInternal(
-        TAlterTopicActorInternal::TRequest&& request,
-        NThreading::TPromise<TAlterTopicResponse>&& promise,
-        bool missingOk
-)
-    : TActorBase(std::move(request), TActorId{})
-    , Promise(std::move(promise))
-    , MissingOk(missingOk)
-{}
-
-void TAlterTopicActorInternal::Bootstrap(const NActors::TActorContext&) {
-    SendDescribeProposeRequest();
-    Become(&TAlterTopicActorInternal::StateWork);
-}
-
-void TAlterTopicActorInternal::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    if (!TActorBase::HandleCacheNavigateResponseBase(ev)) {
-        this->Die(ActorContext());
-        return;
-    }
-    TUpdateSchemeBase::HandleCacheNavigateResponse(ev);
-    auto& schemeTx = Response->Response.ModifyScheme;
-    std::pair <TString, TString> pathPair;
-    try {
-        pathPair = NKikimr::NGRpcService::SplitPath(GetTopicPath());
-    } catch (const std::exception &ex) {
-        Response->Response.Issues.AddIssue(NYql::ExceptionToIssue(ex));
-        RespondWithCode(Ydb::StatusIds::BAD_REQUEST);
-        return;
-    }
-
-    const auto& workingDir = pathPair.first;
-    const auto& name = pathPair.second;
-    FillModifyScheme(schemeTx, ActorContext(), workingDir, name);
-}
-
-void TAlterTopicActorInternal::ModifyPersqueueConfig(
-    TAppData* appData,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(pqGroupDescription);
-    Y_UNUSED(selfInfo);
-    TString error;
-    Y_UNUSED(selfInfo);
-
-    auto status = FillProposeRequestImpl(GetRequest().Request, groupConfig, appData, error, GetCdcStreamName().Defined());
-    if (!error.empty()) {
-        Response->Response.Issues.AddIssue(error);
-    }
-    RespondWithCode(status);
-}
-
-bool TAlterTopicActorInternal::RespondOverride(Ydb::StatusIds::StatusCode status, bool notFound) {
-    if (MissingOk && notFound) {
-        Response->Response.Status = Ydb::StatusIds::SUCCESS;
-        Response->Response.ModifyScheme.Clear();
-
-    } else {
-        Response->Response.Status = status;
-        Response->Response.Issues.AddIssues(std::move(Response->Issues));
-    }
-    Promise.SetValue(std::move(Response->Response));
     return true;
 }
 

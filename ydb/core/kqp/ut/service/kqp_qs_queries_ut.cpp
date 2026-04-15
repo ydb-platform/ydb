@@ -5688,7 +5688,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         if (!qResult.IsSuccess()) {
             Cerr << "Query failed, status: " << qResult.GetStatus() << ": " << qResult.GetIssues().ToString() << Endl;
         }
-        UNIT_ASSERT(qResult.IsSuccess() == expectOk);
+        UNIT_ASSERT_C(qResult.IsSuccess() == expectOk, TStringBuilder() << "Query: " << query << ", status: " << qResult.GetStatus() << ": " << qResult.GetIssues().ToString());
     };
 
     struct TEntryCheck {

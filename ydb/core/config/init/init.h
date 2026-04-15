@@ -61,7 +61,7 @@ class IErrorCollector {
 public:
     virtual ~IErrorCollector() {}
     // TODO(Enjection): CFG-UX-0 replace regular throw with just collecting
-    virtual void Fatal(TString error) = 0;
+    virtual void Fatal(TString error, TStringBuf errorCode = {}) = 0;
 };
 
 class IProtoConfigFileProvider {
@@ -180,6 +180,11 @@ public:
 class IStorageConfigResult {
 public:
     virtual ~IStorageConfigResult() {}
+    virtual bool IsSuccess() const = 0;
+    virtual bool IsTransportError() const = 0;
+    virtual const TString& GetEndpoint() const = 0;
+    virtual const TString& GetPrimaryIssueMessage() const = 0;
+    virtual const TString& GetIssuesText() const = 0;
     virtual const std::optional<TString>& GetMainYamlConfig() const = 0;
     virtual const std::optional<TString>& GetStorageYamlConfig() const = 0;
     virtual const TString& GetSourceAddress() const = 0;

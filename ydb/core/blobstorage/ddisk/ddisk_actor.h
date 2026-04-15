@@ -120,6 +120,8 @@ namespace NKikimr::NDDisk {
         template <typename T>
         void FillPool(TSpscCircularQueue<std::unique_ptr<T>>& pool);
 
+        void InitUring();
+
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
 
     private:
@@ -637,17 +639,19 @@ namespace NKikimr::NDDisk {
                 TRope JoinData(ui32 sectorSize);
             };
             std::map<ui64, TRecord> Records;
-            ui32 Size = 0;
+            ui64 Size = 0;
         };
 
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
+        std::map<TInstant, std::set<std::tuple<ui64, ui32, ui64>>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
 
         ui64 CalcPersistentBufferInMemoryCacheSize();
         TString PersistentBufferToString();
 
-        void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);
+        void SanitizePersistentBufferInMemoryCache();
+        void SanitizePersistentBufferInMemoryCache(ui64 tabletId, ui32 generation, ui64 lsn, TPersistentBuffer::TRecord& record);
 
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 

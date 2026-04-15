@@ -30,6 +30,7 @@ RECURSE(
     mlp
     partition_index_generator
     partition_key_range
+    schema
     write_meta
     cloud_events
 )

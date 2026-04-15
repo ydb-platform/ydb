@@ -26,6 +26,64 @@ General database dashboard by categories:
 
 Download the [dboverview.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dboverview.json) file with the **DB overview** dashboard.
 
+## YDB Essential Metrics {#ydbessentials}
+
+A dashboard for monitoring key database metrics.
+
+### Health {#ydbessentials-health}
+
+This section contains panels showing the state of cluster and database components.
+
+| Name | Description |
+|---|---|
+| Nodes count | Number of running YDB nodes, in units |
+| Nodes Uptime | Uptime of each node since startup; helps detect restarts and unstable nodes, in seconds |
+| VDisks count | Number of available VDisks in the cluster, in units |
+
+### Saturation {#ydbessentials-saturation}
+
+This section contains panels showing database resource utilization.
+
+| Name | Description |
+|---|---|
+| CPU by thread pool (dynnodes) | CPU consumption by dynamic nodes broken down by [execution pools](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), in CPU cores |
+| CPU utilization (dynnodes) | CPU utilization by dynamic nodes broken down by [execution pools](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), in % |
+| Elapsed Time vs CPU Time | Ratio of real elapsed operation time (`ElapsedMicrosec`) to CPU time (`CpuMicrosec`) by node. Persisting value above 100% means sessions spend time waiting rather than actively executing; this is typically caused by I/O waits or CPU overcommit on the hypervisor side. |
+| RSS size by node | Amount of RAM (Resident set size) consumed by each dynamic node, with cgroup memory limits, in bytes |
+| Storage usage | Total logical database size and its limit (if set), in bytes |
+| Overloaded shard count | Number of DataShards experiencing [CPU overload](../../../troubleshooting/performance/schemas/overloaded-shards.md), grouped by CPU load range (from 50% to 100%), in units |
+
+### Traffic {#ydbessentials-traffic}
+
+This section provides panels for analyzing the database workload.
+
+| Name | Description |
+|---|---|
+| Queries per second by latency buckets | Number of queries per second broken down by latency ranges (from 1 ms to +∞). Each range is highlighted with a separate color — from green for fast queries to purple for slow ones. Helps assess latency distribution and overall RPS, in req/s |
+| Transactions per second by latency buckets | Number of transactions per second broken down by latency ranges (from 1 ms to +∞). Each range is highlighted with a separate color — from green for fast transactions to purple for slow ones. Helps assess latency distribution and overall TPS, in tx/s |
+| Rows read, uploaded, updated, deleted | Number of table row operations per second: reads, inserts, updates, and deletes, in ops/s |
+| Session count by dynnode | Number of active sessions on each dynamic node, in units |
+
+### Latency {#ydbessentials-latency}
+
+This section contains panels showing query and transaction execution time.
+
+| Name | Description |
+|---|---|
+| Query latency percentiles (ms) | Query execution time percentiles p50, p90, p95, p99, in milliseconds |
+| Transaction latency percentiles (ms) | Transaction execution time percentiles p50, p90, p95, p99, in milliseconds |
+
+### Errors {#ydbessentials-errors}
+
+This section contains panels representing error rate.
+
+| Name | Description |
+|---|---|
+| YQL Issues per second | Number of YQL query execution errors broken down by error type, in errors/s |
+| GRPC response errors per second | Number of gRPC responses with errors broken down by status, in errors/s |
+
+Download the [ydb-essentials.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/ydb-essentials.json) file with the **YDB Essential Metrics** dashboard.
+
 ## Actors {#actors}
 
 CPU utilization in an actor system.

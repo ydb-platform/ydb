@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Iterable, List, Tuple
 
-from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
+from ydb.tests.library.nemesis.safety_warden import (
+    LocalCommandExecutor,
+    UnifiedAgentVerifyFailedSafetyWarden,
+    GrepDMesgForPatternsSafetyWarden,
+)
 from ydb.tests.library.wardens.logs import (
-    kikimr_grep_dmesg_safety_warden_factory,
     kikimr_start_logs_safety_warden_factory,
     kikimr_crit_and_alert_logs_safety_warden_factory,
 )
 from ydb.tests.stability.nemesis.internal.safety_warden_execution import SafetyCheckSpec
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -48,7 +54,12 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
 
     Each spec wraps a factory that produces ``(slot_name, warden)`` pairs.
     To add a new agent safety check, append a ``SafetyCheckSpec`` to this list.
+
+    All command-based wardens use ``LocalCommandExecutor`` — commands run
+    directly on the agent host, no SSH.
     """
+    local_executor = LocalCommandExecutor()
+
     return [
         SafetyCheckSpec(
             name="kikimr_start_logs",
@@ -56,9 +67,8 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
             build_pairs=lambda: _pairs_from_wardens(
                 kikimr_start_logs_safety_warden_factory.__name__,
                 kikimr_start_logs_safety_warden_factory(
-                    ctx.local_hosts,
-                    None,
-                    ctx.log_directory,
+                    executor=local_executor,
+                    deploy_path=ctx.log_directory,
                     lines_after=5,
                     cut=True,
                     modification_days=1,
@@ -67,10 +77,11 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
         ),
         SafetyCheckSpec(
             name="kikimr_grep_dmesg",
-            description="Grep dmesg for Kikimr-related errors",
-            build_pairs=lambda: _pairs_from_wardens(
-                kikimr_grep_dmesg_safety_warden_factory.__name__,
-                kikimr_grep_dmesg_safety_warden_factory(ctx.local_hosts, None, lines_after=5),
+            description="Grep dmesg for Kikimr-related errors (local, no SSH)",
+            build_warden=lambda: GrepDMesgForPatternsSafetyWarden(
+                executor=local_executor,
+                list_of_markers=['Out of memory: Kill process'],
+                lines_after=5,
             ),
         ),
         SafetyCheckSpec(
@@ -78,7 +89,9 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
             description="Check Kikimr logs for CRIT and ALERT entries",
             build_pairs=lambda: _pairs_from_wardens(
                 kikimr_crit_and_alert_logs_safety_warden_factory.__name__,
-                kikimr_crit_and_alert_logs_safety_warden_factory(ctx.local_hosts, None),
+                kikimr_crit_and_alert_logs_safety_warden_factory(
+                    executor=local_executor,
+                ),
             ),
         ),
         SafetyCheckSpec(

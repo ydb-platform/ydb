@@ -50,38 +50,6 @@ concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
 
-bool IsLocalTableIndex(const Ydb::Table::TableIndex& index) {
-    switch (index.type_case()) {
-        case Ydb::Table::TableIndex::kGlobalIndex:
-        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
-        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
-        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
-        case Ydb::Table::TableIndex::kGlobalJsonIndex:
-        case Ydb::Table::TableIndex::TYPE_NOT_SET:
-            return false;
-        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
-        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
-            return true;
-        default:
-            Y_ABORT("Unexpected Ydb::Table::TableIndex::type_case");
-    }
-}
-
-bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
-    if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
-        return false;
-    }
-
-    while (item.NextIndexIdx < item.Table->indexes_size() &&
-           IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx))) {
-        ++item.NextIndexIdx;
-    }
-
-    return item.NextIndexIdx < item.Table->indexes_size();
-}
-
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
     THashMap<EState, int> counter;
     for (const auto& item : items) {
@@ -1896,7 +1864,8 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
+                const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
+                if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
@@ -1915,11 +1884,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during index building");
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (item.Table) {
-                    ++item.NextIndexIdx;
-                }
-
-                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
+                if (item.Table && ++item.NextIndexIdx < item.Table->indexes_size()) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

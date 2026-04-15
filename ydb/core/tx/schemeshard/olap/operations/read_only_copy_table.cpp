@@ -416,7 +416,7 @@ public:
         if (!opDescr.GetIsBackup()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Read-Only Copy Column Table is supported for backup only.");
             return result;
-        }        
+        }
 
         TString errStr;
 

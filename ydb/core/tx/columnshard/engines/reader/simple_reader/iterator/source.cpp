@@ -642,7 +642,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
         const TPortionDataAccessor::TPageRange pageRange(pageStart, *earlyPageEndRow);
         batch = GetPortionAccessor()
                     .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), pageRange, ss)
-                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
+                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                     .DetachResult();
         // The assembled batch contains only the current page's rows (page-relative,
         // starting at row 0).  TBuildResultStep must use batchStartIndex=0 for this path.
@@ -650,7 +650,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     } else {
         batch = GetPortionAccessor()
                     .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
+                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                     .DetachResult();
     }
 

@@ -3,6 +3,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/util/proto_duration.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NKqp {
 
 TEvKqp::TEvQueryRequest::TEvQueryRequest(

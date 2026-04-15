@@ -2,6 +2,7 @@
 #include "mkql_engine_flat_impl.h"
 #include "mkql_keys.h"
 #include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/library/aclib/user_context.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>

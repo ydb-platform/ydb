@@ -5,6 +5,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 
@@ -865,7 +866,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
-            const TShardedTableOptions& opts, 
+            const TShardedTableOptions& opts,
             const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
@@ -892,7 +893,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     template <typename SK = ui32>
-    void Run(const TString& path, const TShardedTableOptions& opts, 
+    void Run(const TString& path, const TShardedTableOptions& opts,
             NACLib::TUserContext::TPtr userCtx,
             const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)

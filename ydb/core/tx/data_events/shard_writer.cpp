@@ -7,6 +7,8 @@
 
 #include <ydb/core/protos/config.pb.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NEvWrite {
 
     TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId)
@@ -188,7 +190,7 @@ namespace NKikimr::NEvWrite {
     bool TShardWriter::IsMaxRetriesReached() const {
         return NumRetries >= GetMaxRetriesPerShard();
     }
-    
+
     ui32 TShardWriter::GetMaxRetriesPerShard() const {
         return AppData() ? AppData()->ColumnShardConfig.GetProxyMaxRetriesPerShard() : MaxRetriesPerShard;
     }

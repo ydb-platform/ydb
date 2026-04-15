@@ -11,6 +11,7 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 

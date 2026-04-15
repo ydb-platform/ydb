@@ -14,6 +14,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>

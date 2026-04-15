@@ -4,6 +4,8 @@
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <util/generic/vector.h>
 
 namespace NKikimr {

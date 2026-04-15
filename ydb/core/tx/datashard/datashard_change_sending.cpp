@@ -3,6 +3,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <optional>
 
 namespace NKikimr::NDataShard {

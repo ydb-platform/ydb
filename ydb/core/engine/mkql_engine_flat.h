@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/minikql_engine.pb.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -273,7 +274,7 @@ namespace NMiniKQL {
                 const IFunctionRegistry* functionRegistry,
                 IRandomProvider& randomProvider,
                 ITimeProvider& timeProvider,
-                NACLib::TUserContext::TPtr userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build(),
+                NACLib::TUserContext::TPtr userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_NO_USER_SID).Build(),
                 IEngineFlatHost* host = nullptr,
                 const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters()
                 )

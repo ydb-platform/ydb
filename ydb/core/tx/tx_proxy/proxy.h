@@ -13,6 +13,8 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 

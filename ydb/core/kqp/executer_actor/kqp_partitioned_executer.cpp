@@ -14,6 +14,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/stlog.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

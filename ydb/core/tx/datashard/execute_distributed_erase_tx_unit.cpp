@@ -10,6 +10,8 @@
 
 #include <util/generic/bitmap.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NDataShard {
 

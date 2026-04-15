@@ -8,6 +8,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/aclib/user_context.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>

@@ -250,11 +250,6 @@ private:
             return;
         }
 
-        if (!TailChunkIdx) {
-            AllocateNewChunk();
-            return;
-        }
-
         ui32 nextItemSize = (WriteQueue.empty() ? 0 : WriteQueue.front().SerializedSize());
         ui32 minRequiredSize = PendingWrite.size() + nextItemSize + Ctx.AppendBlockSize;
 
@@ -282,7 +277,6 @@ private:
             Send(Ctx.ChunkKeeperId, new TEvChunkKeeperFree(chunkIdx, SubsystemId));
         } else {
             RequestInFlight = false;
-            ProcessQueues();
         }
     }
 

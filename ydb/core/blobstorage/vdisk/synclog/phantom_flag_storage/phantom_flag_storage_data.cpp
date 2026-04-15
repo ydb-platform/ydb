@@ -19,28 +19,15 @@ TPhantomFlagStorageItem TPhantomFlagStorageItem::CreateFlag(const TLogoBlobRec* 
 TPhantomFlagStorageItem TPhantomFlagStorageItem::CreateThreshold(ui32 orderNumber,
         ui64 tabletId, ui8 channel, ui32 generation, ui32 step) {
     TPhantomFlagStorageItem res;
-    // Zero-initialize to avoid uninitialized padding bytes being serialized to disk
-    TThreshold threshold{};
-    threshold.TabletId = tabletId;
-    threshold.Channel = channel;
-    threshold.Generation = generation;
-    threshold.Step = step;
-    threshold.OrderNumber = orderNumber;
-    res.Data.emplace<TThreshold>(threshold);
+    res.Data.emplace<TThreshold>(tabletId, channel, generation, step, orderNumber);
     return res;
 }
 
 TPhantomFlagStorageItem TPhantomFlagStorageItem::CreateThreshold(ui32 orderNumber,
         const TLogoBlobID& blobId) {
     TPhantomFlagStorageItem res;
-    // Zero-initialize to avoid uninitialized padding bytes being serialized to disk
-    TThreshold threshold{};
-    threshold.TabletId = blobId.TabletID();
-    threshold.Channel = blobId.Channel();
-    threshold.Generation = blobId.Generation();
-    threshold.Step = blobId.Step();
-    threshold.OrderNumber = orderNumber;
-    res.Data.emplace<TThreshold>(threshold);
+    res.Data.emplace<TThreshold>(blobId.TabletID(), blobId.Channel(), blobId.Generation(),
+            blobId.Step(), orderNumber);
     return res;
 }
 

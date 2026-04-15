@@ -109,8 +109,29 @@ bool TIndexMeta::IsAvailableType(const NScheme::TTypeInfo type) {
 }
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
-    auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
-    return NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType).ToJson();
+    const auto& colFeatures = indexInfo.GetColumnFeaturesVerified(GetColumnId());
+    auto minmax = NArrow::NAccessor::TMinMax::FromBinaryString(data, colFeatures.GetArrowField()->type());
+
+    std::shared_ptr<arrow::DataType> targetType;
+    switch (colFeatures.GetTypeInfo().GetTypeId()) {
+        case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::Date32:
+            targetType = arrow::date32();
+            break;
+        case NScheme::NTypeIds::Datetime:
+        case NScheme::NTypeIds::Datetime64:
+            targetType = arrow::timestamp(arrow::TimeUnit::SECOND);
+            break;
+        default:
+            break;
+    }
+
+    if (targetType) {
+        minmax.Min() = arrow::compute::Cast(*minmax.Min(), targetType).ValueOrDie().scalar();
+        minmax.Max() = arrow::compute::Cast(*minmax.Max(), targetType).ValueOrDie().scalar();
+    }
+
+    return minmax.ToJson();
 }
 
 void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {

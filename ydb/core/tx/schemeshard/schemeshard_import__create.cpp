@@ -64,8 +64,6 @@ bool IsLocalTableIndex(const Ydb::Table::TableIndex& index) {
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
             return true;
-        default:
-            Y_ABORT("Unexpected Ydb::Table::TableIndex::type_case");
     }
 }
 
@@ -1896,7 +1894,8 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
+                const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
+                if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
@@ -1915,11 +1914,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during index building");
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (item.Table) {
-                    ++item.NextIndexIdx;
-                }
-
-                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
+                if (item.Table && ++item.NextIndexIdx < item.Table->indexes_size()) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

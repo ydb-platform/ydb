@@ -23,12 +23,6 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
-namespace NKikimr::NColumnShard {
-
-LWTRACE_USING(YDB_CS);
-
-}
-
 namespace NKikimr::NOlap {
 
 namespace {

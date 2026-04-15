@@ -161,7 +161,8 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
               Columns { Name: "key"   Type: "Uint32" }
               Columns { Name: "value" Type: "Utf8"   }
               KeyColumnNames: ["key"]
-              UniformPartitionsCount: 3
+              SplitBoundary { KeyPrefix { Tuple { Optional { Uint32 : 100 } } } }
+              SplitBoundary { KeyPrefix { Tuple { Optional { Uint32 : 200 } } } }
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -208,6 +209,72 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
             WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
                 0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 {1, 2}, TSerializedCellMatrix(cells, 1, 2), false);
+        }
+    }
+
+    Y_UNIT_TEST(ThreeDataShardsSplitBoundariesNullInOnePartitionValidationFails) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+              SplitBoundary { KeyPrefix { Tuple { Optional { Uint32 : 100 } } } }
+              SplitBoundary { KeyPrefix { Tuple { Optional { Uint32 : 200 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1), TCell(TStringBuf("test_value_1")),
+                TCell::Make((ui32)101), TCell(),
+                TCell::Make((ui32)201), TCell(TStringBuf("test_value_201"))
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 3, 2), true);
+        }
+
+        ui64 setConstraintTxId = ++txId;
+        auto response = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response.ShortDebugString());
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        CheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 3u);
+
+        {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)300), TCell()
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 1, 2), true);
         }
     }
 

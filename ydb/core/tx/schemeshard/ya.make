@@ -248,7 +248,6 @@ SRCS(
     schemeshard_restore_incremental__list.cpp
     schemeshard_bg_tasks__list.cpp
     schemeshard_billing_helpers.cpp
-    schemeshard_build_index_common.cpp
     schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
     schemeshard_continuous_backup_cleaner.cpp

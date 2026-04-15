@@ -96,12 +96,11 @@ public:
             }
         }
 
-        std::vector<std::string> sortedNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
-
         if (settings.NotNullColumnsSize() == 0) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: There are no columns that need to be updated");
         }
 
+        std::vector<std::string> sortedNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
         std::sort(sortedNotNullColumns.begin(), sortedNotNullColumns.end());
 
         if (const auto duplicateIt = std::adjacent_find(sortedNotNullColumns.begin(), sortedNotNullColumns.end()); duplicateIt != sortedNotNullColumns.end()) {

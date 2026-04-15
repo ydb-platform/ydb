@@ -14,10 +14,6 @@ private:
 private:
     static ui64 Hash(const char* data, size_t size, size_t hashIndex);
 
-    static size_t StaticSize(ui64 width, ui64 depth) {
-        return sizeof(TCountMinSketch) + width * depth * sizeof(ui32);
-    }
-
     const ui32* Buckets() const {
         return reinterpret_cast<const ui32*>(this + 1);
     }
@@ -37,6 +33,10 @@ public:
 
     size_t GetSize() const {
         return StaticSize(Width_, Depth_);
+    }
+
+    static size_t StaticSize(ui64 width, ui64 depth) {
+        return sizeof(TCountMinSketch) + width * depth * sizeof(ui32);
     }
 
     size_t GetWidth() const {

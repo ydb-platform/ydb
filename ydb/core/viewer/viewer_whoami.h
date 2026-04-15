@@ -20,7 +20,7 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonWhoAmI(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonWhoAmI(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
@@ -33,7 +33,7 @@ public:
 
     void ReplyAndPassAway() {
         NACLibProto::TUserToken userToken;
-        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken);
+        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(GetRequest().GetUserTokenObject());
         NJson::TJsonValue json(NJson::JSON_MAP);
         if (userToken.HasUserSID()) {
             json["UserSID"] = userToken.GetUserSID();

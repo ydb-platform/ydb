@@ -1,6 +1,14 @@
 /*.md @ydb-platform/docs
+
 /CHANGELOG.md @ydb-platform/changelog-reviewers
 
+/AGENTS.md @ydb-platform/ai-reviewers
+
+/BUILD.md @ydb-platform/ci
+
+/CLAUDE.md @ydb-platform/ai-reviewers
+
+/.cursorindexingignore-personal @ydb-platform/ai-reviewers
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci
@@ -21,6 +29,7 @@
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
+/ydb/core/kqp/ut/tli/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs
@@ -31,6 +40,7 @@
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown @ydb-platform/fq
+/ydb/library/yql/providers/dq @ydb-platform/yql
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
@@ -83,6 +93,8 @@
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
+/ydb/core/tx/schemeshard/index @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index_build @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
@@ -108,8 +120,9 @@
 /ydb/core/security @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
-/ydb/library/login @ydb-platform/Security
 /ydb/library/aclib @ydb-platform/Security
+/ydb/library/login @ydb-platform/Security
+/ydb/library/security @ydb-platform/Security
 /ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
 /ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security
 /ydb/core/sys_view/common/registry.h @ydb-platform/Security
@@ -119,3 +132,6 @@
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
 
 /ydb/tests/library @ydb-platform/Engineering
+
+/ydb/core/nbs @ydb-platform/nbs_yandex
+/ydb/tests/functional/nbs @ydb-platform/nbs_yandex

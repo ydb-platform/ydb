@@ -12,6 +12,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
@@ -102,6 +103,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     using namespace NOlap::NReader;
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_READER));
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_DATA_SOURCE));
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
     StartInstant = TMonotonic::Now();
     Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
@@ -128,7 +130,10 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
-    SpaceWatcherId = RegisterWithSameMailbox(SpaceWatcher);
+    auto* spaceWatcherRawPtr = SpaceWatcher.release();
+    SpaceWatcherId = RegisterWithSameMailbox(spaceWatcherRawPtr);
+    // Actor System will keep this object
+    SpaceWatcher = std::unique_ptr<TSpaceWatcher, std::function<void(TSpaceWatcher*)>>(spaceWatcherRawPtr, [](auto*){});
     ScanDiagnosticsActorId = Register(new NDiagnostics::TScanDiagnosticsActor());
     ActorsToStop.push_back(ScanDiagnosticsActorId);
     Limits.RegisterControls(icb);

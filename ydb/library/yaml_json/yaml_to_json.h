@@ -5,6 +5,6 @@
 
 namespace NKikimr::NYaml {
 
-    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot);
+    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot, TString currentPath = {});
 
 }

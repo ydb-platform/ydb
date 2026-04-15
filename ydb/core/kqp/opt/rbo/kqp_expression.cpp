@@ -431,8 +431,8 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(vec.size());
 
     // Fetch context and plan properties from one of the conjuncts
-    TExprContext* ctx;
-    TPlanProps* props;
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
 
     for (auto& expr : vec) {
         if (expr.Ctx) {
@@ -477,10 +477,23 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     return TExpression(lambda, ctx, props);
 }
 
+TExpression MakeNegation(const TExpression& expr) {
+    Y_ENSURE(expr.Ctx);
+    Y_ENSURE(expr.PlanProps);
+
+    // clang-format off
+    auto negation = Build<TCoNot>(*expr.Ctx, expr.Node->Pos())
+        .Value(expr.GetExpressionBody())
+        .Done().Ptr();
+    // clang-format on
+
+    return TExpression(negation, expr.Ctx, expr.PlanProps);
+}
+
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right) {
     // Fetch context and plan properties from one of the arguments
-    TExprContext* ctx;
-    TPlanProps* props;
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
 
     if (left.Ctx) {
         ctx = left.Ctx;

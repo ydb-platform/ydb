@@ -29,11 +29,13 @@ inline bool IsUnrecoverable(const NKikimrProto::EReplyStatus status)
 ////////////////////////////////////////////////////////////////////////////////
 
 #define BLOCKSTORE_IMPLEMENT_REQUEST(name, ns)                     \
-    void Handle##name(const ns::TEv##name##Request::TPtr& ev,      \
-                      const NActors::TActorContext& ctx);          \
+    void Handle##name(                                             \
+        const ns::TEv##name##Request::TPtr& ev,                    \
+        const NActors::TActorContext& ctx);                        \
                                                                    \
-    void Reject##name(const ns::TEv##name##Request::TPtr& ev,      \
-                      const NActors::TActorContext& ctx)           \
+    void Reject##name(                                             \
+        const ns::TEv##name##Request::TPtr& ev,                    \
+        const NActors::TActorContext& ctx)                         \
     {                                                              \
         auto response = std::make_unique<ns::TEv##name##Response>( \
             MakeError(E_REJECTED, #name " request rejected"));     \

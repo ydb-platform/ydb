@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -82,7 +83,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     static std::tuple<TString, TString> DoLocalKMeans(
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parentFrom, NTableIndex::NKMeans::TClusterId parentTo, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
-        VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000, ui32 overlapClusters = 0, bool expectEmpty = false)
+        VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000, ui32 overlapClusters = 0, bool expectEmpty = false,
+        std::optional<TSerializedTableRange> keyRange = {})
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -139,6 +141,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 rec.SetOutputName(kPostingTable);
 
                 rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
+
+                if (keyRange) {
+                    keyRange->Serialize(*rec.MutableKeyRange());
+                }
             };
             fill(ev1);
             fill(ev2);
@@ -1050,6 +1056,145 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 recreate();
             }
         }
+    }
+
+    Y_UNIT_TEST(MainToPostingWithKeyRange) {
+        // Verify that specifying a KeyRange in the request causes only rows
+        // in that range to be scanned (resume-from-checkpoint semantics).
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"mm\2\", \"one\"),"
+            "(2, \"mm\2\", \"two\"),"
+            "(3, \"mm\2\", \"three\"),"
+            "(4, \"11\2\", \"four\"),"
+            "(5, \"11\2\", \"five\");");
+
+        auto create = [&] {
+            CreateLevelTable(server, sender, options);
+            CreatePostingTable(server, sender, options);
+        };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-level");
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        ui64 seed = 0;
+        ui64 k = 2;
+
+        // Full scan (no KeyRange): all 5 rows clustered.
+        auto [fullLevel, fullPosting] = DoLocalKMeans(server, sender, 0, 0, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
+        recreate();
+
+        // Resumed scan: start strictly after key=2.
+        TCell fromCell = TCell::Make(ui32(2));
+        TSerializedTableRange resumeRange{TArrayRef<const TCell>{&fromCell, 1}, false, {}, false};
+        auto [resumedLevel, resumedPosting] = DoLocalKMeans(server, sender, 0, 0, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
+            50000, 0, false, resumeRange);
+
+        // Resumed scan should only contain rows 3, 4, 5.
+        UNIT_ASSERT(!resumedPosting.Contains("key = 1,"));
+        UNIT_ASSERT(!resumedPosting.Contains("key = 2,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 3,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 4,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 5,"));
+
+        // Full scan covers all rows.
+        UNIT_ASSERT(fullPosting.Contains("key = 1,"));
+        UNIT_ASSERT(fullPosting.Contains("key = 2,"));
+        UNIT_ASSERT(fullPosting.Contains("key = 3,"));
+        UNIT_ASSERT(fullPosting.Contains("key = 4,"));
+        UNIT_ASSERT(fullPosting.Contains("key = 5,"));
+    }
+
+    Y_UNIT_TEST(BuildToBuildWithKeyRange) {
+        // Verify that KeyRange restricts scanning for the build-to-build upload mode.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateBuildTable(server, sender, options, "table-main");
+
+        // Insert rows under parent cluster 1 (keys 1..5) — used as scan input.
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (__ydb_parent, key, embedding, data) VALUES )"
+            "(1, 1, \"mm\2\", \"one\"),"
+            "(1, 2, \"mm\2\", \"two\"),"
+            "(1, 3, \"mm\2\", \"three\"),"
+            "(1, 4, \"11\2\", \"four\"),"
+            "(1, 5, \"11\2\", \"five\");");
+
+        auto create = [&] {
+            CreateLevelTable(server, sender, options);
+            CreateBuildTable(server, sender, options, "table-posting");
+        };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-level");
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        ui64 seed = 0;
+        ui64 k = 2;
+
+        // Full scan of parent=1.
+        auto [fullLevel, fullPosting] = DoLocalKMeans(server, sender, 1, 1, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
+        recreate();
+
+        // Resume from (parent=1, key=3) exclusive — should only see keys 4 and 5.
+        TCell fromCells[2] = {TCell::Make(ui64(1)), TCell::Make(ui32(3))};
+        TSerializedTableRange resumeRange{TArrayRef<const TCell>{fromCells, 2}, false, {}, false};
+        auto [resumedLevel, resumedPosting] = DoLocalKMeans(server, sender, 1, 1, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
+            50000, 0, false, resumeRange);
+
+        UNIT_ASSERT(!resumedPosting.Contains("key = 1,"));
+        UNIT_ASSERT(!resumedPosting.Contains("key = 2,"));
+        UNIT_ASSERT(!resumedPosting.Contains("key = 3,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 4,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 5,"));
+
+        UNIT_ASSERT(fullPosting.Contains("key = 1,"));
+        UNIT_ASSERT(fullPosting.Contains("key = 4,"));
     }
 }
 

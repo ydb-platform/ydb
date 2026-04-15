@@ -125,6 +125,13 @@ def _init_stress_utils():
             ],
             'local_path': 'ydb/tests/stress/streaming/streaming'
         },
+        'TopicSqs': {
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--sqs-endpoint", "http://{node_host}:8433/{database}",
+            ],
+            'local_path': 'ydb/tests/stress/topic_sqs/topic_sqs'
+        },
     }
 
     for table_type in ['row', 'column']:

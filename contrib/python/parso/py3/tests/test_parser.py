@@ -117,7 +117,7 @@ def test_param_splitting(each_version):
 
 
 def test_unicode_string():
-    s = tree.String(None, 'bö', (0, 0))
+    s = tree.String('bö', (0, 0))
     assert repr(s)  # Should not raise an Error!
 
 

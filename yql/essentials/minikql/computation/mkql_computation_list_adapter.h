@@ -8,10 +8,10 @@ namespace NKikimr::NMiniKQL {
 template <typename TVectorType>
 class TVectorListAdapter: public TComputationValue<TVectorListAdapter<TVectorType>> {
 public:
-    typedef typename TVectorType::value_type TItem;
-    typedef TVectorListAdapter<TVectorType> TSelf;
-    typedef std::function<NUdf::TUnboxedValue(const TItem&)> TItemFactory;
-    typedef TComputationValue<TVectorListAdapter<TVectorType>> TBase;
+    using TItem = typename TVectorType::value_type;
+    using TSelf = TVectorListAdapter<TVectorType>;
+    using TItemFactory = std::function<NUdf::TUnboxedValue(const TItem&)>;
+    using TBase = TComputationValue<TVectorListAdapter<TVectorType>>;
 
     class TIterator: public TTemporaryComputationValue<TIterator> {
     public:

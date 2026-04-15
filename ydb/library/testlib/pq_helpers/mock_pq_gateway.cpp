@@ -43,7 +43,7 @@ private:
 };
 
 class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSession, public NYdb::NTopic::IReadSession {
-    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSession {
+    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSessionControl {
         TMockPartitionSession(const TString& topicPath, ui64 partitionId) {
             PartitionSessionId = 0;
             TopicPath = topicPath;
@@ -53,6 +53,18 @@ class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSes
 
         void RequestStatus() final {
             Y_ENSURE(false, "Not implemented");
+        }
+
+        void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override final {
+        }
+
+        void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/) override final {
+        }
+
+        void ConfirmDestroy() override final {
+        }
+
+        void ConfirmEnd(std::span<const uint32_t> /*childIds*/) override final {
         }
     };
 
@@ -589,17 +601,17 @@ private:
     }
 
     std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const std::string& topic, ui64 partitionId) {
-        if (Settings.Runtime && Settings.Notifier) {
-            Settings.Runtime->Send(Settings.Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
-        }
-
         const TString path(topic);
-        auto& info = GetTopicInfo(path);
         auto session = std::make_shared<TMockPqReadSession>(path, partitionId);
 
         with_lock (Mutex) {
+            auto& info = Topics[path];
             info.ReadSessionsByPartition[partitionId] = session;
             info.LastCreatedPartitionId = partitionId;
+        }
+
+        if (Settings.Runtime && Settings.Notifier) {
+            Settings.Runtime->Send(Settings.Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
         }
 
         return session;

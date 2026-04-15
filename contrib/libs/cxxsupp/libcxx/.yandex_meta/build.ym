@@ -1,13 +1,14 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}9feac2cbd0d80927ce9a8b4c3e810d2b81802d55{% endblock %}
-{% block current_date %}2025-03-18{% endblock %}
+{% block current_version %}7157f33c6c88143acb8bc02bc26a0d6786136419{% endblock %}
+{% block current_date %}2025-06-20{% endblock %}
 
 {% block keep_sources %}
 .yandex_meta/scripts/fixlic.py
 .yandex_meta/scripts/sysincls.py
 include/__config_site
 include/__config_epilogue.h
+include/__math/abs_cuda.h
 include/__memory/pointer_safety.h
 include/__memory/allocator_const.h
 include/__support/win32/atomic_win32.h

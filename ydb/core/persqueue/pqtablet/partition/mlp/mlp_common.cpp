@@ -107,3 +107,8 @@ ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev) {
 }
 
 }
+
+template<>
+void Out<NKikimr::NPQ::NMLP::TDLQMessage>(IOutputStream& o, const NKikimr::NPQ::NMLP::TDLQMessage& p) {
+    o << "(" << p.Offset << ", " << p.SeqNo << ")";
+}

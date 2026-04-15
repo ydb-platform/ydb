@@ -3,6 +3,7 @@
 #include <util/generic/hash_set.h>
 #include <util/datetime/base.h>
 #include <ydb/library/aclib/protos/aclib.pb.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 namespace NACLib {
 
@@ -133,7 +134,7 @@ public:
     TACL() = default;
     TACL(const TString& string); // proto format
     std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = DefaultInheritanceType);
-    std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
+    std::pair<ui32, ui32> RemoveAccess(EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
     bool HasAccess(const NACLib::TSID& sid);
     std::pair<ui32, ui32> ClearAccess();
@@ -188,9 +189,67 @@ protected:
     bool IsContainer;
 };
 
+class TUserContext : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<TUserContext>;
 
+    TUserContext(const TString& userSID, const NWilson::TTraceId& userTraceId):
+        UserSID(userSID),
+        UserTraceId(userTraceId ? userTraceId.Clone() : NWilson::TTraceId())
+    {}
 
+    const TString& GetUserSID() const {
+        return UserSID;
+    }
 
+    const NWilson::TTraceId& GetUserTraceId() const {
+        return UserTraceId;
+    }
+
+    template <typename TEvent>
+    void SerializeToEvent(TEvent& event) const {
+        event.SetUserSID(GetUserSID());
+    }
+
+protected:
+    TString UserSID;
+    NWilson::TTraceId UserTraceId;
+};
+
+class TUserContextBuilder {
+public:
+    using TPtr = TIntrusivePtr<TUserContext>;
+
+    TString UserSID{BUILTIN_ACL_NO_USER_SID};
+    NWilson::TTraceId UserTraceId;
+
+    TUserContextBuilder() {}
+
+    TUserContextBuilder& WithUserSID(const TString& userSID) {
+        UserSID = userSID;
+        return *this;
+    }
+
+    TUserContextBuilder& WithUserTraceId(const NWilson::TTraceId& userTraceId) {
+        UserTraceId = userTraceId ? userTraceId.Clone() : NWilson::TTraceId();
+        return *this;
+    }
+
+    template <typename TEvent>
+    TUserContextBuilder& DeserializeFromEvent(TEvent& event, const NWilson::TTraceId& traceId) {
+        return WithUserSID(event.Record.GetUserSID())
+            .WithUserTraceId(traceId);
+    }
+
+    template <typename TEventHandle>
+    TUserContextBuilder& DeserializeFromEventHandle(TEventHandle& eventHandle) {
+        return DeserializeFromEvent(*eventHandle.Get(), eventHandle.TraceId);
+    }
+
+    TUserContext::TPtr Build() {
+        return MakeIntrusive<TUserContext>(UserSID, UserTraceId);
+    }
+};
 
 
 }

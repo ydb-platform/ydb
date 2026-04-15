@@ -81,6 +81,7 @@ public:
         if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
             if (info->State != EVolatileTxState::Aborting) {
                 VolatileVersion = Max(VolatileVersion, info->Version);
+                Self.SysLocksTable().AddVolatileDependency(txId);
             }
         } else {
             Self.SysLocksTable().AddReadConflict(txId);
@@ -117,9 +118,9 @@ public:
         : Self(self)
         , Lock(std::move(lock))
         , OtherLock(std::move(otherLock))
-        , RequestId(Self.NextTieBreakerIndex++)
     {
         if (Lock->GetLockId() != OtherLock->GetLockId()) {
+            RequestId = Self.NextTieBreakerIndex++;
             Self.LockRowsWaitRequests[RequestId] = &state;
             Self.Send(
                 MakeLongTxServiceID(Self.SelfId().NodeId()),
@@ -140,14 +141,16 @@ public:
         // Note: we may fail to send the request with an exception, after
         // inserting request into LockRowsWaitRequests. Make sure the request
         // is removed when we exit the scope.
-        Self.LockRowsWaitRequests.erase(RequestId);
+        if (RequestId) {
+            Self.LockRowsWaitRequests.erase(RequestId);
+        }
     }
 
 private:
     TDataShard& Self;
     const TLockInfo::TPtr Lock;
     const TLockInfo::TPtr OtherLock;
-    const ui64 RequestId;
+    ui64 RequestId = 0;
     bool Sent = false;
 };
 
@@ -217,6 +220,27 @@ bool TDataShard::CheckLockRowsReject(TLockRowsRequestState& state) {
     return false;
 }
 
+TLockInfo::TPtr TDataShard::FindValidLockOwner(ui64 lockId) {
+    auto lock = SysLocksTable().GetRawLock(lockId);
+    if (!lock) {
+        // When lock is removed it implicitly unlocks all locks
+        return nullptr;
+    }
+
+    if (lock->IsBroken()) {
+        // When lock is broken it implicitly unlocks all locks
+        return nullptr;
+    }
+
+    auto* info = GetVolatileTxManager().FindByCommitTxId(lockId);
+    if (info) {
+        // When volatile transaction starts to commit it implicitly unlocks all locks
+        return nullptr;
+    }
+
+    return lock;
+}
+
 void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev) {
     auto* msg = ev->Get();
 
@@ -249,8 +273,22 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         co_return;
     }
 
+    NTable::ELockMode lockMode;
     switch (msg->Record.GetLockMode()) {
         case NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE:
+            lockMode = NTable::ELockMode::Exclusive;
+            break;
+
+        case NKikimrDataEvents::PESSIMISTIC_SHARED:
+            lockMode = NTable::ELockMode::Shared;
+            break;
+
+        case NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE_NO_KEY:
+            lockMode = NTable::ELockMode::NoKeyExclusive;
+            break;
+
+        case NKikimrDataEvents::PESSIMISTIC_SHARED_KEY:
+            lockMode = NTable::ELockMode::KeyShared;
             break;
 
         default:
@@ -306,6 +344,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         auto it = LockRowsRequests.find(requestId);
         Y_ABORT_UNLESS(it != LockRowsRequests.end());
         Y_ABORT_UNLESS(&it->second == &state);
+        state.Scope.Cancel();
         state.Finished.NotifyAll();
         LockRowsRequests.erase(it);
         // Note: update counters unless actor system is shutting down
@@ -402,8 +441,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         co_return;
     }
 
-    auto checkSchema = [&]() -> ui32 {
-        auto tableInfo = FindUserTable(tableId.PathId);
+    auto checkSchema = [&](TUserTable::TCPtr tableInfo) -> ui32 {
         if (!tableInfo) {
             state.Result = makeError(NKikimrDataEvents::TEvLockRowsResult::STATUS_SCHEME_ERROR, TStringBuilder()
                 << "Table '" << tableId << "' doesn't exist at shard " << TabletID());
@@ -443,7 +481,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 Y_ENSURE(takenLocks.size() == 1);
                 // Perform a a very simplistic lock merge
                 ok = (
-                    takenLocks[0].Generation == res.first[0].Generation ||
+                    takenLocks[0].Generation == res.first[0].Generation &&
                     takenLocks[0].Counter == res.first[0].Counter);
             }
             takenLocks = std::move(res.first);
@@ -491,15 +529,34 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
     auto success = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
             TabletID(), requestId.RequestId, NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
 
-    for (;;) {
+    ui64 globalTxId = 0;
+    Y_DEFER {
+        if (globalTxId) {
+            // We may allocate some globalTxId, but find out later we no longer
+            // need it, because someone else created the same MultiTxId chain.
+            // Avoid wasting this resource and give it to someone else.
+            RecycleGlobalTxId(globalTxId);
+        }
+    };
+
+    while (!state.Result) {
         bool reschedule = false;
-        std::optional<ui64> waitForLock;
+        bool needGlobalTxId = false;
+        TLockInfo::TPtr waitForLock;
 
         // We need to run each iteration in a transaction
         co_await TTxLockRows::Run(this, [&](TTransactionContext& txc) {
             if (lock && lock->IsBroken()) {
                 state.Result = makeError(NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN, TStringBuilder()
-                    << "Lock " << lockId << " is broken or cannot be created at shard " << TabletID());
+                    << "Lock " << lockId << " is broken at shard " << TabletID());
+                state.Result->AddLock(
+                    lockId,
+                    TabletID(),
+                    lock->GetGeneration(),
+                    lock->GetCounter(),
+                    tableId.PathId.OwnerId,
+                    tableId.PathId.LocalPathId,
+                    lock->IsWriteLock());
                 return ETxLockRows::Rollback;
             }
 
@@ -509,7 +566,8 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
             }
 
             // Schema may have changed, must recheck on every iteration
-            ui32 localTid = checkSchema();
+            auto userTablePtr = FindUserTable(tableId.PathId);
+            ui32 localTid = checkSchema(userTablePtr);
             if (!localTid) {
                 Y_ENSURE(state.Result);
                 return ETxLockRows::Rollback;
@@ -517,6 +575,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
             auto& tableInfo = txc.DB.GetScheme().Tables.at(localTid);
 
+            NIceDb::TNiceDb db(txc.DB);
             TDataShardLocksDb locksDb(*this, txc);
             TSetupSysLocks guardLocks(lockId, lockNodeId, *this, &locksDb);
 
@@ -529,8 +588,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                         Y_ENSURE(lock == guardLocks.Lock);
                     } else {
                         lock = guardLocks.Lock;
+                        lock->SetPessimistic();
+                        StartLockRowsBrokenWatcher(requestId, tableId, lock);
                     }
-                    guardLocks.PreserveEmptyLock = true;
                     SubscribeNewLocks();
                     break;
 
@@ -560,8 +620,11 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 // changes, including undecided volatile transactions.
                 auto observer = MakeIntrusive<TLockRowsTxObserver>(*this);
 
-                // Probe the key until the first persistently committed version
-                auto row = txc.DB.SelectRowVersion(localTid, key, /* readFlags */ 0, /* tx map */ nullptr, observer);
+                ui32 uniqueColumnCount = userTablePtr->UniqueIndexKeySize;
+                TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(key, uniqueColumnCount);
+
+                // Probe the key or unique prefix until the first persistently committed version
+                auto row = txc.DB.SelectRowVersionByKeyPrefix(localTid, uniqueKey, observer);
 
                 // Handle page fault by restarting or rescheduling
                 if (row.Ready == NTable::EReady::Page) {
@@ -581,39 +644,136 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 // instead. A subsequent re-read will wait for the decision.
                 const bool modified = row.RowVersion > snapshot || observer->VolatileVersion > snapshot;
 
-                // Special case when this lock is already the key owner
-                // We must not add ourselves to the wait queue in that case
-                // Note: we don't try to lock the key out-of-order however
-                if (row.LockTxId == lockId) {
-                    if (row.LockMode != NTable::ELockMode::Exclusive) {
-                        state.Result = makeError(NKikimrDataEvents::TEvLockRowsResult::STATUS_INTERNAL_ERROR, TStringBuilder()
-                            << "Upgrading to exclusive locks is unsupported at shard " << TabletID());
-                        return ETxLockRows::Rollback;
+                auto setLockMode = [&](NTable::ELockMode newLockMode, ui64 txId) {
+                    typedKey.clear();
+                    for (size_t i = 0; i < columnIds.size(); ++i) {
+                        if (key[i].IsNull()) {
+                            typedKey.emplace_back();
+                        } else {
+                            auto typeId = tableInfo.Columns.at(columnIds[i]).PType.GetTypeId();
+                            typedKey.emplace_back(key[i].Data(), key[i].Size(), typeId);
+                        }
                     }
+                    GetConflictsCache().GetTableCache(localTid).AddUncommittedWrite(key, txId, txc.DB);
+                    txc.DB.LockRowTx(localTid, newLockMode, typedKey, txId);
+                    SysLocksTable().SetWriteLock(tableId, uniqueKey);
+                    advanced = true;
+                };
 
+                auto finishLocked = [&]() {
                     success->Record.AddLockedKeys(processedKeys);
                     if (modified) {
                         success->Record.AddModifiedKeys(processedKeys);
                     }
                     runtimeLock.Reset();
                     ++processedKeys;
+                };
+
+                auto finishSkipped = [&]() {
+                    success->Record.AddSkippedKeys(processedKeys);
+                    runtimeLock.Reset();
+                    ++processedKeys;
+                };
+
+                // Special case when this single lock is already the key owner
+                // We must not add ourselves to the wait queue in that case
+                // Note: we don't try to lock the key out-of-order however
+                if (row.LockTxId == lockId) {
+                    Y_ENSURE(row.LockMode != NTable::ELockMode::None);
+                    Y_ENSURE(row.LockMode != NTable::ELockMode::Multi);
+                    if (lockMode > row.LockMode) {
+                        NTable::ELockMode combinedLockMode = CombinedRowLockMode(row.LockMode, lockMode);
+                        setLockMode(combinedLockMode, lockId);
+                    }
+                    finishLocked();
+                    continue;
+                }
+
+                // The first conflicting owner we need to wait for
+                TLockInfo::TPtr currentOwner;
+                NTable::ELockMode currentLockMode = NTable::ELockMode::None;
+
+                bool multiLockEmpty = false;
+                const TMultiTxId* multiLock = nullptr;
+                if (row.LockMode == NTable::ELockMode::Multi) {
+                    multiLock = MultiTxIdManager.FindMultiTxId(row.LockTxId);
+                    if (multiLock) {
+                        // Find the first conflicting lock we would need to wait
+                        auto enumerator = MultiTxIdManager.EnumerateLocks(multiLock, lockMode);
+                        while (auto result = enumerator.Next()) {
+                            if (result.LockId != lockId) {
+                                // Note: we are not supposed to have removed or broken locks in the owners list
+                                currentOwner = FindValidLockOwner(result.LockId);
+                                if (currentOwner) {
+                                    currentLockMode = result.LockMode;
+                                    break;
+                                } else {
+                                    // TODO: cleanup removed or broken leaf locks from MultiTxId
+                                    // Y_DEBUG_ABORT_UNLESS(false, "Unexpected invalid lock contained in MultiTxId");
+                                }
+                            }
+                        }
+                        // When we don't have any conflicting locks we might be the only valid owner
+                        if (!currentOwner) {
+                            multiLockEmpty = true;
+                            bool haveOtherLocks = false;
+                            enumerator.Reset(multiLock, NTable::ELockMode::None);
+                            while (auto result = enumerator.Next()) {
+                                if (result.LockId != lockId) {
+                                    // We have found some other lock, so we cannot upgrade without waiting
+                                    if (FindValidLockOwner(result.LockId)) {
+                                        multiLockEmpty = false;
+                                        haveOtherLocks = true;
+                                    } else {
+                                        // TODO: cleanup removed or broken leaf locks from MultiTxId
+                                        // Y_DEBUG_ABORT_UNLESS(false, "Unexpected invalid lock contained in MultiTxId");
+                                    }
+                                } else {
+                                    currentLockMode = Max(currentLockMode, result.LockMode);
+                                    multiLockEmpty = false;
+                                }
+                            }
+                            // We don't need to lock the row when current lock mode is the same or stronger
+                            if (currentLockMode >= lockMode) {
+                                finishLocked();
+                                continue;
+                            }
+                            // We can use fast path upgrade when current lock is the only owner
+                            if (currentLockMode != NTable::ELockMode::None && !haveOtherLocks) {
+                                NTable::ELockMode combinedLockMode = CombinedRowLockMode(currentLockMode, lockMode);
+                                MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
+                                setLockMode(combinedLockMode, lockId);
+                                finishLocked();
+                                continue;
+                            }
+                        }
+                    }
+                } else if (row.LockMode != NTable::ELockMode::None) {
+                    currentOwner = FindValidLockOwner(row.LockTxId);
+                    if (currentOwner) {
+                        currentLockMode = row.LockMode;
+                    }
+                }
+
+                // Don't bother waiting in skipLocked mode when current owner conflicts with us
+                if (skipLocked && currentOwner && !IsCompatibleRowLockMode(currentLockMode, lockMode)) {
+                    finishSkipped();
                     continue;
                 }
 
                 // Key is either not locked, or locked by someone else
                 // We need to establish a runtime lock for fair locking
-                // TODO: we need to jump the queue when another lock from the
-                // current transaction is waiting already, or owns the lock.
-                // Otherwise transaction may indirectly start waiting on itself,
-                // causing deadlocks.
                 if (!runtimeLock.IsValid()) {
-                    runtimeLock = SysLocksTable().AddRuntimeLock(tableId, key);
+                    // Note: AddRuntimeLock will group multiple runtime locks
+                    // with the same key and lock together, however it will not
+                    // do that for different (related) locks. When implementing
+                    // safepoints we would need to group all locks from the same
+                    // transaction, not just having the same LockId.
+                    runtimeLock = SysLocksTable().AddRuntimeLock(tableId, uniqueKey);
                     Y_ENSURE(runtimeLock.IsValid());
                     if (!runtimeLock.IsOwner()) {
                         if (skipLocked) {
-                            success->Record.AddSkippedKeys(processedKeys);
-                            runtimeLock.Reset();
-                            ++processedKeys;
+                            finishSkipped();
                             continue;
                         }
 
@@ -626,45 +786,68 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
                 Y_ENSURE(runtimeLock.IsOwner());
 
-                if (row.LockMode != NTable::ELockMode::None) {
-                    auto currentOwner = SysLocksTable().GetRawLock(row.LockTxId);
-                    if (currentOwner) {
-                        if (skipLocked) {
-                            success->Record.AddSkippedKeys(processedKeys);
-                            runtimeLock.Reset();
-                            ++processedKeys;
-                            continue;
-                        }
+                // Wait for current conflicting owner to release the lock
+                if (currentOwner && !IsCompatibleRowLockMode(currentLockMode, lockMode)) {
+                    waitForLock = currentOwner;
+                    applyLocks();
+                    return ETxLockRows::CommitAsync;
+                }
 
-                        waitForLock = row.LockTxId;
+                if (multiLock && !multiLock->HasFlag(EMultiTxIdFlag::Broken) && !multiLockEmpty) {
+                    // We don't conflict with current locks, create a new MultiTxId which includes the new lock and mode
+                    auto singleLockMode = multiLock->GetLockMode();
+                    Y_ENSURE(singleLockMode, "TODO: support extending multiple row lock modes");
 
+                    ui64 newMultiTxId = MultiTxIdManager.CombineRowLocks(
+                        db,
+                        row.LockTxId, *singleLockMode,
+                        lockId, lockMode,
+                        globalTxId);
+
+                    if (!newMultiTxId) {
+                        Y_ENSURE(!globalTxId);
+                        needGlobalTxId = true;
                         applyLocks();
-
                         return ETxLockRows::CommitAsync;
                     }
+
+                    MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
+                    setLockMode(NTable::ELockMode::Multi, newMultiTxId);
+                    finishLocked();
+                    continue;
                 }
 
-                typedKey.clear();
-                for (size_t i = 0; i < columnIds.size(); ++i) {
-                    if (key[i].IsNull()) {
-                        typedKey.emplace_back();
-                    } else {
-                        auto typeId = tableInfo.Columns.at(columnIds[i]).PType.GetTypeId();
-                        typedKey.emplace_back(key[i].Data(), key[i].Size(), typeId);
+                if (currentOwner) {
+                    // For multiLock currentOwner points to the first conflict (which we are not supposed to have)
+                    Y_ENSURE(!multiLock);
+                    Y_ENSURE(currentOwner->GetLockId() != lockId);
+                    Y_ENSURE(IsCompatibleRowLockMode(currentLockMode, lockMode));
+
+                    ui64 newMultiTxId = MultiTxIdManager.CombineRowLocks(
+                        db,
+                        currentOwner->GetLockId(), currentLockMode,
+                        lockId, lockMode,
+                        globalTxId);
+
+                    if (!newMultiTxId) {
+                        Y_ENSURE(!globalTxId);
+                        needGlobalTxId = true;
+                        applyLocks();
+                        return ETxLockRows::CommitAsync;
                     }
+
+                    setLockMode(NTable::ELockMode::Multi, newMultiTxId);
+                    finishLocked();
+                    continue;
                 }
 
-                GetConflictsCache().GetTableCache(localTid).AddUncommittedWrite(key, lockId, txc.DB);
-                txc.DB.LockRowTx(localTid, NTable::ELockMode::Exclusive, typedKey, lockId);
-                SysLocksTable().SetWriteLock(tableId, key);
-                advanced = true;
-
-                success->Record.AddLockedKeys(processedKeys);
-                if (modified) {
-                    success->Record.AddModifiedKeys(processedKeys);
+                if (multiLock) {
+                    // We are going to overwrite this row lock below
+                    MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
                 }
-                runtimeLock.Reset();
-                ++processedKeys;
+
+                setLockMode(lockMode, lockId);
+                finishLocked();
             }
 
             applyLocks();
@@ -681,13 +864,19 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         });
 
         if (state.Result) {
-            Send(ev->Sender, state.Result.release(), 0, ev->Cookie);
-            co_return;
+            break;
         }
 
         if (reschedule) {
             // Note: reschedule transaction without waiting for anything
             continue;
+        }
+
+        if (needGlobalTxId) {
+            Y_ENSURE(!globalTxId);
+            globalTxId = co_await AllocateGlobalTxId();
+            Y_ENSURE(globalTxId);
+            needGlobalTxId = false;
         }
 
         if (runtimeLock.IsValid()) {
@@ -696,28 +885,21 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, runtimeLock.Predecessor().GetLock());
                 // Wait until lock predecessor changes
                 co_await runtimeLock.OnChangedEvent.Wait([&]{
-                    // TODO: we need to somehow notify the service about new waiting graph edges,
-                    // which must also take into account that earlier requests may be cancelled while
-                    // we wait, and the previous runtime lock in the waiting list might change.
                     setWaiting(true);
                 });
             }
 
             if (waitForLock) {
-                // Wait until current row's persistent owner is removed
-                auto currentOwner = SysLocksTable().GetRawLock(*waitForLock);
-                if (currentOwner) {
+                // Wait until current row's persistent owner is broken or removed
+                if (!waitForLock->IsBroken()) {
                     // Notify long tx service abour waiting for the predecessor
-                    TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, currentOwner);
-                    // Wake up when current row owner is removed entirely
-                    // TODO: we probably want to wait until it is broken in the future
-                    co_await currentOwner->OnRemovedEvent.Wait([&]{
-                        // TODO: we need to somehow notify the service about new waiting graph edge
-                        // between our lockId and *waitForLock id.
+                    TLockRowsNotifyWaitGuard waitGuard(*this, state, lock, waitForLock);
+                    // Wake up when current row owner is broken (removing it also breaks)
+                    co_await waitForLock->OnBrokenEvent.Wait([&]{
                         setWaiting(true);
                     });
                 }
-                waitForLock.reset();
+                waitForLock.Reset();
             }
         }
 
@@ -726,6 +908,8 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         // Cycle in the low-priority queue before doing anything expensive
         co_await LowPriorityQueue.Next();
     }
+
+    Send(ev->Sender, state.Result.release(), 0, ev->Cookie);
 }
 
 void TDataShard::HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev) {
@@ -735,7 +919,7 @@ void TDataShard::HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::T
     auto it = LockRowsRequests.find(requestId);
     if (it != LockRowsRequests.end()) {
         it->second.Scope.Cancel();
-            // Note: awaiter queue size may change when Cancel is called
+        // Note: awaiter queue size may change when Cancel is called
         UpdateProposeQueueSize();
     }
 }
@@ -756,6 +940,59 @@ void TDataShard::HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock
             UpdateProposeQueueSize();
         }
     }
+}
+
+void TDataShard::StartLockRowsBrokenWatcher(TLockRowsRequestId requestId, TTableId tableId, TLockInfo::TPtr lock) {
+    // Note: this watcher uses unstructured concurrency to watch when an
+    // acquired lock breaks while the request is waiting. This function starts
+    // recursively while inside the transaction, so we can be sure the request
+    // is still valid and lock is not broken yet. However the request may exit
+    // at any time, invalidating the state.
+    TLockRowsRequestState* state = LockRowsRequests.FindPtr(requestId);
+    Y_ENSURE(state, "TEvLockRows request state must be wait in StartLockRowsBrokenWatcher");
+    Y_ENSURE(!lock->IsBroken(), "Unexpected broken lock in StartLockRowsBrokenWatcher");
+    // We attach to the same scope, which will cancel the wait along with the
+    // request. The return value will be true when the callback returns
+    // normally, i.e. when the lock becomes broken or is removed.
+    bool ok = co_await state->Scope.Wrap([&]() -> async<void> {
+        co_await lock->OnBrokenEvent.Wait();
+    });
+    if (ok && lock->IsBroken()) {
+        // Even when this coroutine is resumed because the lock becomes broken,
+        // the request may have been destroyed concurrently. Make sure we don't
+        // try working with the missing request.
+        state = LockRowsRequests.FindPtr(requestId);
+        if (state && !state->Result) {
+            state->Result = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
+                TabletID(), requestId.RequestId,
+                NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN,
+                TStringBuilder() << "Lock " << lock->GetLockId() << " is broken at shard " << TabletID());
+            state->Result->AddLock(
+                lock->GetLockId(),
+                TabletID(),
+                lock->GetGeneration(),
+                lock->GetCounter(),
+                tableId.PathId.OwnerId,
+                tableId.PathId.LocalPathId,
+                lock->IsWriteLock());
+            state->Scope.Cancel();
+            // Note: awaiter queue size may change when Cancel is called
+            UpdateProposeQueueSize();
+        }
+    }
+}
+
+TConstArrayRef<TCell> GetUniqueIndexKey(TConstArrayRef<TCell> cells, ui32 count) {
+    if (!count || count >= cells.size()) {
+        return cells;
+    }
+    for (ui32 i = 0; i < count; i++) {
+        if (cells[i].IsNull()) {
+            // Unique keys with NULL never conflict with anything - original key should be used
+            return cells;
+        }
+    }
+    return cells.Slice(0, count);
 }
 
 } // namespace NKikimr::NDataShard

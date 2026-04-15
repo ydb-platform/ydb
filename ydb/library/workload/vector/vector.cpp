@@ -12,6 +12,7 @@ TCommandVector::TCommandVector()
     : TClientCommandTree("vector", {}, "YDB vector workload. Reference: https://ydb.tech/docs/concepts/vector_search")
     , Params(std::make_unique<NYdbWorkload::TVectorWorkloadParams>())
 {
+    CompletionDescription = "YDB vector workload";
     if (const auto desc = Params->GetDescription(NYdbWorkload::TWorkloadParams::ECommandType::Root, 0)) {
         Description = desc;
     }

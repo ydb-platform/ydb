@@ -16,7 +16,7 @@ namespace NYql::NUdf {
 template <bool Const>
 class TStringRefBase {
 public:
-    typedef std::conditional_t<Const, const char*, char*> TDataType;
+    using TDataType = std::conditional_t<Const, const char*, char*>;
 
 protected:
     inline constexpr TStringRefBase() noexcept = default;
@@ -75,7 +75,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////////
 class TMutableStringRef: public TStringRefBase<false> {
 public:
-    typedef TStringRefBase<false> TBase;
+    using TBase = TStringRefBase<false>;
 
     inline constexpr TMutableStringRef(TDataType data, ui32 size) noexcept
         : TBase(data, size)
@@ -90,7 +90,7 @@ UDF_ASSERT_TYPE_SIZE(TMutableStringRef, 16);
 //////////////////////////////////////////////////////////////////////////////
 class TStringRef: public TStringRefBase<true> {
 public:
-    typedef TStringRefBase<true> TBase;
+    using TBase = TStringRefBase<true>;
 
     inline constexpr TStringRef() noexcept = default;
 

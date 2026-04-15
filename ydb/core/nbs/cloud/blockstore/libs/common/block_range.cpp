@@ -58,7 +58,7 @@ TString DescribeRange(const TVector<TBlockIndex>& blocks)
 {
     if (blocks) {
         return TStringBuilder()
-            << "[" << blocks.front() << ".." << blocks.back() << "]";
+               << "[" << blocks.front() << ".." << blocks.back() << "]";
     }
     return "<none>";
 }

@@ -402,8 +402,8 @@ public:
 
     size_t GetChildrenDefaultDataWeight() const {
         size_t size = 0;
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            size += Children_[i]->GetDefaultValueWeight();
+        for (const auto& child : Children_) {
+            size += child->GetDefaultValueWeight();
         }
         return size;
     }

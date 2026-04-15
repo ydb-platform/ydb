@@ -48,6 +48,8 @@ public:
 
     ui32 GetTopicMaxPartitionCount() const;
 
+    void ConfigMetadataMonitoringOptions(TClientCommand::TConfig& config);
+
     TDuration TotalSec;
     TDuration WindowSec;
     TDuration WarmupSec;
@@ -73,6 +75,7 @@ public:
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
+    bool NoTrackProducerIdInTx = false;
     size_t CommitPeriodSeconds = 1;
     size_t TxCommitIntervalMs = 0;
     size_t CommitMessages = 1'000'000;
@@ -88,12 +91,14 @@ public:
     bool CleanupPolicyCompact = false;
     std::optional<size_t> ConsumerMaxMemoryUsageBytes;
     size_t PartitionMaxInflightBytes = 0; // zero means no limit
+    bool DirectRead = false;
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;
     size_t ConfigConsumerCount = 0;
     bool NeedDescribeTopic = false;
     TString DescribeConsumerName;
+    TMaybe<ui32> PartitionsPerTablet;
 
 protected:
     void CreateTopic(const TString& database,

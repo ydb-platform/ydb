@@ -1,6 +1,11 @@
 items:
 - name: Начало работы
   href: getting-started.md
+- name: Потоковые запросы
+  href: streaming-query/index.md
+  include:
+    mode: link
+    path: streaming-query/toc_p.yaml
 - name: Примеры приложений
   href: example-app/index.md
   include:
@@ -22,6 +27,8 @@ items:
   href: vector-indexes.md
 - name: Векторный индекс вида vector_kmeans_tree
   href: vector-indexes-kmeans-tree-type.md
+- name: Полнотекстовые индексы
+  href: fulltext-indexes.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md
 - name: Подсказки оптимизатора

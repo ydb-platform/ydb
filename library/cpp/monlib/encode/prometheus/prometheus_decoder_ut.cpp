@@ -105,6 +105,63 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         }
     }
 
+    Y_UNIT_TEST(NameAlreadyPresent) {
+        constexpr auto inputMetrics =
+            "# A normal comment.\n"
+            "#\n"
+            "# TYPE name counter\n"
+            "name{sensor=\"some_name\",labelname=\"val1\",basename=\"basevalue\"} NaN\n"
+            "name{labelname=\"val2\",basename=\"basevalue\"} Nan\n"
+            "name {labelname=\"val3\",basename=\"basevalue\"} 2.3 1234567890\n"
+            "# HELP name two-line\\n doc  str\\\\ing\n";
+
+        try {
+            auto samples = Decode(inputMetrics);
+        } catch(...) {
+            return;
+        }
+        UNIT_ASSERT(false);
+    }
+
+    Y_UNIT_TEST(NameAlreadyPresentButMangled) {
+        constexpr auto inputMetrics =
+            "# A normal comment.\n"
+            "#\n"
+            "# TYPE name counter\n"
+            "name{sensor=\"some_name\",labelname=\"val1\",basename=\"basevalue\"} NaN\n"
+            "name{labelname=\"val2\",basename=\"basevalue\"} Nan\n"
+            "name {labelname=\"val3\",basename=\"basevalue\"} 2.3 1234567890\n"
+            "# HELP name two-line\\n doc  str\\\\ing\n";
+
+        try {
+            auto samples = Decode(inputMetrics, TPrometheusDecodeSettings{.NameMangler = [](auto s) -> TString {
+                                      return TStringBuilder{}<<"mm_" << s;
+                                  }});
+        } catch(...) {
+            UNIT_ASSERT(false);
+        }
+    }
+
+    Y_UNIT_TEST(MangledNameClash) {
+        constexpr auto inputMetrics =
+            "# A normal comment.\n"
+            "#\n"
+            "# TYPE name counter\n"
+            "name{mm_sensor=\"other\",sensor=\"some_name\",labelname=\"val1\",basename=\"basevalue\"} NaN\n"
+            "name{labelname=\"val2\",basename=\"basevalue\"} Nan\n"
+            "name {labelname=\"val3\",basename=\"basevalue\"} 2.3 1234567890\n"
+            "# HELP name two-line\\n doc  str\\\\ing\n";
+
+        try {
+            auto samples = Decode(inputMetrics, TPrometheusDecodeSettings{.NameMangler = [](auto s) -> TString {
+                                      return TStringBuilder{}<<"mm_" << s;
+                                  }});
+        } catch(...) {
+            return;
+        }
+        UNIT_ASSERT(false);
+    }
+
     Y_UNIT_TEST(Counter) {
         constexpr auto inputMetrics =
             "# A normal comment.\n"

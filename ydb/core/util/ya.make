@@ -48,6 +48,7 @@ SRCS(
     random.cpp
     simple_cache.h
     source_location.cpp
+    spsc_circular_queue.h
     stlog.cpp
     stlog.h
     text.cpp

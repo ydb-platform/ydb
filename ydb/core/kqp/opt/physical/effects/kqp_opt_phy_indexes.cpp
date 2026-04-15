@@ -112,6 +112,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
         if (index.KeyColumns && addIndex) {
             TIntrusivePtr<TKikimrTableMetadata> implTable = table.Metadata->ImplTables[i];
             switch (index.Type) {
+                case TIndexDescription::EType::GlobalJson:
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique: {

@@ -46,26 +46,29 @@ TTableChunkStats TFmrTableDataServiceBaseWriter::GetStats() {
 void TFmrTableDataServiceBaseWriter::DoFlush() {
     PutRows();
     with_lock(State_->Mutex) {
+        State_->CondVar.Wait(State_->Mutex, [this] {
+            return State_->CurInflightChunks == 0 || State_->Exception;
+        });
         if (State_->Exception) {
             std::rethrow_exception(State_->Exception);
         }
-        State_->CondVar.Wait(State_->Mutex, [this] {
-            return State_->CurInflightChunks == 0;
-        });
     }
 }
 
 NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(const TString& currentYsonContent) {
     std::unordered_map<TString, TString> splittedYsonByColumnGroups;
-    auto columnGroupSplitYsonResult = SplitYsonByColumnGroups(currentYsonContent, ColumnGroupSpec_);
+    auto columnGroupSplitYsonResult = SplitYsonByColumnGroupsRaw(currentYsonContent, ColumnGroupSpec_);
     ui64 recordsCount = columnGroupSplitYsonResult.RecordsCount;
     CurrentChunkRows_ += recordsCount;
-    splittedYsonByColumnGroups = columnGroupSplitYsonResult.SplittedYsonByColumnGroups;
+    splittedYsonByColumnGroups = std::move(columnGroupSplitYsonResult.SplittedYsonByColumnGroups);
 
     with_lock(State_->Mutex) {
         State_->CondVar.Wait(State_->Mutex, [&] {
-            return State_->CurInflightChunks < MaxInflightChunks_;
+            return State_->CurInflightChunks < MaxInflightChunks_ || State_->Exception;
         });
+        if (State_->Exception) {
+            std::rethrow_exception(State_->Exception);
+        }
         State_->CurInflightChunks += splittedYsonByColumnGroups.size(); // Adding number of keys which we want to put to TableDataService to inflight
     }
 
@@ -74,13 +77,19 @@ NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(
     for (auto& [groupName, columnGroupYsonContent]: splittedYsonByColumnGroups) {
         auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
         auto tableDataServiceChunkId = GetTableDataServiceChunkId(ChunkCount_, groupName);
-        auto future = TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId,columnGroupYsonContent).Subscribe(
+        auto future = TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId, columnGroupYsonContent).Subscribe(
             [weakState = std::weak_ptr(State_)] (const auto& putFuture) mutable {
                 std::shared_ptr<TFmrWriterState> state = weakState.lock();
                 if (state) {
                     with_lock(state->Mutex) {
                         --state->CurInflightChunks;
-                        putFuture.GetValue();
+                        try {
+                            putFuture.GetValue();
+                        } catch (...) {
+                            if (!state->Exception) {
+                                state->Exception = std::current_exception();
+                            }
+                        }
                         state->CondVar.Signal();
                     }
                 }

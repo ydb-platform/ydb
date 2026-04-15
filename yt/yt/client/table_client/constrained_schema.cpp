@@ -13,10 +13,6 @@ constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TConstrainedTableSchema::TConstrainedTableSchema(const TTableSchema& schema)
-    : TableSchema_(schema)
-{ }
-
 TConstrainedTableSchema::TConstrainedTableSchema(TTableSchema schema, TColumnNameToConstraintMap columnNameToConstraint)
     : TableSchema_(std::move(schema))
     , ColumnToConstraint_(std::move(columnNameToConstraint))

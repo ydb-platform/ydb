@@ -23,16 +23,16 @@ public:
     TAsyncSemaphoreGuard(TAsyncSemaphoreGuard&& other) noexcept;
     ~TAsyncSemaphoreGuard();
 
-    TAsyncSemaphoreGuard& operator=(TAsyncSemaphoreGuard&& other);
+    TAsyncSemaphoreGuard& operator=(TAsyncSemaphoreGuard&& other) noexcept;
 
     static TAsyncSemaphoreGuard Acquire(TAsyncSemaphorePtr semaphore, i64 slots = 1);
     static TAsyncSemaphoreGuard TryAcquire(TAsyncSemaphorePtr semaphore, i64 slots = 1);
 
-    friend void swap(TAsyncSemaphoreGuard& lhs, TAsyncSemaphoreGuard& rhs);
+    friend void swap(TAsyncSemaphoreGuard& lhs, TAsyncSemaphoreGuard& rhs) noexcept;
 
     TAsyncSemaphoreGuard TransferSlots(i64 slotsToTransfer);
 
-    void Release();
+    void Release() noexcept;
 
     explicit operator bool() const;
 
@@ -43,7 +43,7 @@ private:
 
     TAsyncSemaphoreGuard(TAsyncSemaphorePtr semaphore, i64 slots);
 
-    void MoveFrom(TAsyncSemaphoreGuard&& other);
+    void MoveFrom(TAsyncSemaphoreGuard&& other) noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

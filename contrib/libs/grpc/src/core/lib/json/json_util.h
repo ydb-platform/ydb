@@ -55,12 +55,13 @@ bool ExtractJsonNumber(const Json& json, y_absl::string_view field_name,
                        NumericType* output,
                        std::vector<grpc_error_handle>* error_list) {
   static_assert(std::is_integral<NumericType>::value, "Integral required");
-  if (json.type() != Json::Type::NUMBER && json.type() != Json::Type::STRING) {
+  if (json.type() != Json::Type::kNumber &&
+      json.type() != Json::Type::kString) {
     error_list->push_back(GRPC_ERROR_CREATE(y_absl::StrCat(
         "field:", field_name, " error:type should be NUMBER or STRING")));
     return false;
   }
-  if (!y_absl::SimpleAtoi(json.string_value(), output)) {
+  if (!y_absl::SimpleAtoi(json.string(), output)) {
     error_list->push_back(GRPC_ERROR_CREATE(
         y_absl::StrCat("field:", field_name, " error:failed to parse.")));
     return false;
@@ -76,13 +77,13 @@ template <typename OutputType>
 bool ExtractJsonString(const Json& json, y_absl::string_view field_name,
                        OutputType* output,
                        std::vector<grpc_error_handle>* error_list) {
-  if (json.type() != Json::Type::STRING) {
+  if (json.type() != Json::Type::kString) {
     *output = "";
     error_list->push_back(GRPC_ERROR_CREATE(
         y_absl::StrCat("field:", field_name, " error:type should be STRING")));
     return false;
   }
-  *output = json.string_value();
+  *output = json.string();
   return true;
 }
 

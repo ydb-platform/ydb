@@ -19,6 +19,8 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -139,7 +141,7 @@ struct TPersonStructWithOptList {
     TString FirstName;
     TString LastName;
     ui32 Age;
-    typedef std::vector<ui32> TTagList;
+    using TTagList = std::vector<ui32>;
     TTagList Tags;
 
     NUdf::TUnboxedValue GetByIndex(ui32 index) const {
@@ -170,7 +172,7 @@ template <>
 struct TTypeBuilderHelper<NUdf::TPersonStruct> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         auto structBuilder = builder.Struct(3);
-        structBuilder->AddField<char*>("FirstName", &TPersonStruct::MetaIndexes[0])
+        structBuilder->AddField<char*>("FirstName", TPersonStruct::MetaIndexes.data())
             .AddField<char*>("LastName", &TPersonStruct::MetaIndexes[1])
             .AddField<ui32>("Age", &TPersonStruct::MetaIndexes[2]);
         auto structType = structBuilder->Build();
@@ -189,7 +191,7 @@ struct TTypeBuilderHelper<NUdf::TPersonStructWithOptList> {
         auto listTags = builder.List()->Item<ui32>().Build();
         auto optionalListTags = builder.Optional()->Item(listTags).Build();
         auto structBuilder = builder.Struct(3);
-        structBuilder->AddField<char*>("FirstName", &TPersonStructWithOptList::MetaIndexes[0])
+        structBuilder->AddField<char*>("FirstName", TPersonStructWithOptList::MetaIndexes.data())
             .AddField<char*>("LastName", &TPersonStructWithOptList::MetaIndexes[1])
             .AddField<ui32>("Age", &TPersonStructWithOptList::MetaIndexes[2])
             .AddField("Tags", optionalListTags, &TPersonStructWithOptList::MetaIndexes[3]);
@@ -332,13 +334,13 @@ private:
     }
 };
 
-typedef std::pair<ui32, ui32> PosPair;
+using PosPair = std::pair<ui32, ui32>;
 
 template <class TKey, class TValue>
 struct TBrokenDictIterator: public NUdf::TBoxedValue {
     TBrokenDictIterator(const std::vector<std::pair<TKey, TValue>>& dictData, PosPair holePos)
         : DictData_(dictData)
-        , HolePos_(holePos)
+        , HolePos_(std::move(holePos))
         , Index_(-1)
     {
     }
@@ -374,7 +376,7 @@ struct TBrokenDictBoxedValue: public NUdf::TBoxedValue {
     TBrokenDictBoxedValue(const std::vector<std::pair<TKey, TValue>>& dictData,
                           PosPair holePos, NUdf::TUnboxedValue&& hole = NUdf::TUnboxedValuePod())
         : DictData_(dictData)
-        , HolePos_(holePos)
+        , HolePos_(std::move(holePos))
         , Hole_(std::move(hole))
     {
     }
@@ -489,7 +491,7 @@ SIMPLE_UDF_RUN(TSeqListWithHole, NUdf::TListType<ui32>(ui32, ui32), NUdf::TOptio
 
 static const auto TUPLE = std::make_tuple(ui8(33), TString("world"), ui64(0xFEEDB00B2A115E), TString("funny bunny"));
 
-typedef NUdf::TTuple<ui8, char*, ui64, char*> NUdfTuple;
+using NUdfTuple = NUdf::TTuple<ui8, char*, ui64, char*>;
 
 SIMPLE_UDF(TTuple, NUdfTuple(ui32)) {
     Y_UNUSED(valueBuilder);
@@ -505,7 +507,7 @@ static const std::vector<std::pair<ui32, ui64>> DICT_DIGIT2DIGIT = {
     {777, 777777777777},
 };
 
-typedef NUdf::TDict<ui32, ui64> NUdfDictDigDig;
+using NUdfDictDigDig = NUdf::TDict<ui32, ui64>;
 
 SIMPLE_UDF_RUN(TDictDigDig, NUdfDictDigDig(ui32, ui32), NUdf::TOptional<void>) {
     Y_UNUSED(valueBuilder);
@@ -526,13 +528,13 @@ SIMPLE_UDF(TDictDigDigHoleAsOpt, NUdfDictDigDig(ui32, ui32)) {
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static const NUdf::TPersonStruct STRUCT_PERSON_JONNIE = {"Johnnie Walker", "Blue Label", 25};
-static const NUdf::TPersonStruct STRUCT_PERSON_HITHCOCK = {"Alfred", "Hithcock", 81};
-static const NUdf::TPersonStruct STRUCT_PERSON_LOVECRAFT = {"Howard", "Lovecraft", 25};
-static const NUdf::TPersonStruct STRUCT_PERSON_KING = {"Stephen", "King", 25};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_HITHCOCK_LIST = {"Alfred", "Hithcock", 81, {}};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_LOVECRAFT_LIST = {"Howard", "Lovecraft", 25, {3, 2, 99}};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_KING_LIST = {"Stephen", "King", 25, {}};
+static const NUdf::TPersonStruct STRUCT_PERSON_JONNIE = {.FirstName = "Johnnie Walker", .LastName = "Blue Label", .Age = 25};
+static const NUdf::TPersonStruct STRUCT_PERSON_HITHCOCK = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81};
+static const NUdf::TPersonStruct STRUCT_PERSON_LOVECRAFT = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25};
+static const NUdf::TPersonStruct STRUCT_PERSON_KING = {.FirstName = "Stephen", .LastName = "King", .Age = 25};
+static const NUdf::TPersonStructWithOptList STRUCT_PERSON_HITHCOCK_LIST = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81, .Tags = {}};
+static const NUdf::TPersonStructWithOptList STRUCT_PERSON_LOVECRAFT_LIST = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25, .Tags = {3, 2, 99}};
+static const NUdf::TPersonStructWithOptList STRUCT_PERSON_KING_LIST = {.FirstName = "Stephen", .LastName = "King", .Age = 25, .Tags = {}};
 
 SIMPLE_UDF_RUN(TPersonStruct, NUdf::TPersonStruct(ui32), NUdf::TOptional<void>) {
     Y_UNUSED(valueBuilder);
@@ -541,7 +543,7 @@ SIMPLE_UDF_RUN(TPersonStruct, NUdf::TPersonStruct(ui32), NUdf::TOptional<void>) 
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-typedef NUdf::TTuple<NUdf::TPersonStructWithOptList, NUdf::TPersonStruct, NUdf::TPersonStructWithOptList, NUdf::TPersonStruct> NUdfPersonTuple;
+using NUdfPersonTuple = NUdf::TTuple<NUdf::TPersonStructWithOptList, NUdf::TPersonStruct, NUdf::TPersonStructWithOptList, NUdf::TPersonStruct>;
 static const auto TUPLE_OF_PERSON = std::make_tuple(
     STRUCT_PERSON_HITHCOCK_LIST,
     STRUCT_PERSON_JONNIE,
@@ -572,7 +574,7 @@ static const std::vector<NUdf::TPersonStructWithOptList> LIST_OF_STRUCT_PERSON =
     STRUCT_PERSON_LOVECRAFT_LIST,
     STRUCT_PERSON_KING_LIST};
 
-typedef NUdf::TDict<ui64, NUdf::TPersonStructWithOptList> TIndexDictFromPersonList;
+using TIndexDictFromPersonList = NUdf::TDict<ui64, NUdf::TPersonStructWithOptList>;
 SIMPLE_UDF(TListOfPersonStructToIndexDict, TIndexDictFromPersonList(ui32)) {
     Y_UNUSED(valueBuilder);
     Y_UNUSED(args);
@@ -600,7 +602,7 @@ static std::array<const NUdf::TPersonStruct*, 3> DICT_DIGIT2PERSON_BROKEN_CONTEN
 const ui32 DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX = 1;
 const ui32 DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX = 2;
 
-const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBroken() {
+std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBroken() {
     std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> DICT_DIGIT2PERSON_BROKEN = {
         {333, new TBrokenStructBoxedValue<NUdf::TPersonStruct>(STRUCT_PERSON_HITHCOCK, RAW_INDEX_NO_HOLE)},
         {5, new TBrokenStructBoxedValue<NUdf::TPersonStruct>(STRUCT_PERSON_JONNIE, DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX)},
@@ -610,7 +612,7 @@ const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBro
     return DICT_DIGIT2PERSON_BROKEN;
 }
 
-typedef NUdf::TDict<ui32, NUdf::TPersonStruct> NUdfDictDigPerson;
+using NUdfDictDigPerson = NUdf::TDict<ui32, NUdf::TPersonStruct>;
 
 std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2Person() {
     const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> DICT_DIGIT2PERSON = {
@@ -668,9 +670,9 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistryWithUDFs() {
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
-typedef std::function<std::vector<TRuntimeNode>(TProgramBuilder&)> BuildArgsFunc;
-typedef std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*)> ValidateValueFunc;
-typedef std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*, const TType* type)> FullValidateValueFunc;
+using BuildArgsFunc = std::function<std::vector<TRuntimeNode>(TProgramBuilder&)>;
+using ValidateValueFunc = std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*)>;
+using FullValidateValueFunc = std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*, const TType* type)>;
 
 void ProcessSimpleUdfFunc(const char* udfFuncName, BuildArgsFunc argsFunc = BuildArgsFunc(),
                           ValidateValueFunc validateFunc = ValidateValueFunc(),
@@ -956,7 +958,8 @@ Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitKeyHole) {
     ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder) {
         Y_UNUSED(valueBuilder);
         auto dictIter = value.GetDictIterator();
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         UNIT_ASSERT_EXCEPTION(dictIter.NextPair(key, payload), TUdfValidateException);
         for (ui32 index = 1; dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), DICT_DIGIT2DIGIT[index].first);
@@ -974,7 +977,8 @@ Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitValueHole) {
     ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder) {
         Y_UNUSED(valueBuilder);
         auto dictIter = value.GetDictIterator();
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         for (ui32 index = 0; index < DICT_DIGIT2DIGIT.size() - 1 && dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), DICT_DIGIT2DIGIT[index].first);
             UNIT_ASSERT_VALUES_EQUAL(payload.Get<ui64>(), DICT_DIGIT2DIGIT[index].second);
@@ -991,7 +995,8 @@ Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitHoleAsOptKeyHole) {
     ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder) {
         Y_UNUSED(valueBuilder);
         auto dictIter = value.GetDictIterator();
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         UNIT_ASSERT_EXCEPTION(dictIter.NextPair(key, payload), TUdfValidateException);
         for (ui32 index = 1; dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), DICT_DIGIT2DIGIT[index].first);
@@ -1009,7 +1014,8 @@ Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitHoleAsOptValueHole) {
     ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder) {
         Y_UNUSED(valueBuilder);
         auto dictIter = value.GetDictIterator();
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         for (ui32 index = 0; index < DICT_DIGIT2DIGIT.size() - 1 && dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), DICT_DIGIT2DIGIT[index].first);
             UNIT_ASSERT_VALUES_EQUAL(payload.Get<ui64>(), DICT_DIGIT2DIGIT[index].second);
@@ -1097,7 +1103,8 @@ void ValidateDictOfPersonStructFunc(const NUdf::TUnboxedValuePod& value, ui32 lo
     UNIT_ASSERT_VALUES_EQUAL(person.GetElement(NUdf::TPersonStructWithOptList::MetaIndexes[2]).Get<ui32>(), LIST_OF_STRUCT_PERSON[lookupIndex].Age);
     UNIT_ASSERT(!person.GetElement(NUdf::TPersonStructWithOptList::MetaIndexes[3]));
     auto dictIter = value.GetDictIterator();
-    NUdf::TUnboxedValue key, payload;
+    NUdf::TUnboxedValue key;
+    NUdf::TUnboxedValue payload;
     for (ui32 index = 0; index < broken_index && dictIter.NextPair(key, payload); ++index) {
         UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), index);
         auto person = payload;
@@ -1166,7 +1173,8 @@ Y_UNIT_TEST(TestUdfResultCheckListOfPersonStructWithBrokenIndexToDict) {
 Y_UNIT_TEST(TestUdfResultCheckDictOfPerson) {
     ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder*) {
         auto dictIter = value.GetDictIterator();
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         for (ui32 index = 0; dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2Person()[index].first);
             auto person = payload;
@@ -1183,7 +1191,8 @@ Y_UNIT_TEST(TestUdfResultCheckDictOfPerson) {
 Y_UNIT_TEST(TestUdfResultCheckDictOfPersonBroken) {
     ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder*) {
         auto dictIter = value.GetDictIterator();
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         for (ui32 index = 0; index < DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX && dictIter.NextPair(key, payload); ++index) {
             UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2PersonBroken()[index].first);
             auto person = payload;

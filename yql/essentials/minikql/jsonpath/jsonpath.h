@@ -12,7 +12,7 @@ namespace NYql::NJsonPath {
 TVariablesMap DictToVariables(const NUdf::TUnboxedValue& dict);
 
 TResult ExecuteJsonPath(
-    const TJsonPathPtr jsonPath,
+    TJsonPathPtr jsonPath,
     const TValue& json,
     const TVariablesMap& variables,
     const NUdf::IValueBuilder* valueBuilder);

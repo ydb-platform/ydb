@@ -398,12 +398,15 @@ message TKqpPhyConnection {
 enum EKqpFullTextIndexType {
     EKqpFullTextPlain = 0;
     EKqpFullTextRelevance = 1;
+    EKqpFullTextJson = 2;
 }
 
 message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
         repeated TKqpPhyValue QueryValue = 2;
+        // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
+        repeated bytes Tokens = 3;
     }
 
     message TIndexTable {

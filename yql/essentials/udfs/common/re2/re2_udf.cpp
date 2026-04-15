@@ -9,6 +9,8 @@
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
+#include <utility>
+
 using namespace re2;
 using namespace NKikimr;
 using namespace NUdf;
@@ -124,11 +126,11 @@ public:
             const TOptionsSchema& optionsSchema,
             TSourcePosition pos,
             NYql::TLangVersion currentlangVersion,
-            const TRegexpGroups& regexpGroups = TRegexpGroups())
+            TRegexpGroups regexpGroups = TRegexpGroups())
             : Mode_(mode)
             , OptionsSchema_(optionsSchema)
             , Pos_(pos)
-            , RegexpGroups_(regexpGroups)
+            , RegexpGroups_(std::move(regexpGroups))
             , CurrentLangVersion_(currentlangVersion)
         {
         }
@@ -269,7 +271,7 @@ private:
                     StringPiece text(piece);
                     std::vector<TUnboxedValue> matches;
                     for (StringPiece w; text.begin() < text.end() && RE2::FindAndConsume(&text, *Regexp_, &w);) {
-                        if (w.size() == 0 && !text.empty()) {
+                        if (w.empty() && !text.empty()) {
                             text.remove_prefix(1);
                         }
                         matches.emplace_back(valueBuilder->SubString(args[0], std::distance(piece.begin(), w.begin()), w.size()));
@@ -322,7 +324,7 @@ TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& buil
     TOptionsSchema ret;
     auto structBuilder = builder.Struct(EOptionsField::Count);
 #define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]);
-    OPTIONS_MAP(FIELD_HANDLE)
+    OPTIONS_MAP(FIELD_HANDLE) // NOLINT(readability-container-data-pointer)
 #undef FIELD_HANDLE
 
     ret.StructType = structBuilder->Build();

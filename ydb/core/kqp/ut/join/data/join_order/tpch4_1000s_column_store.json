@@ -3,7 +3,7 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"InnerJoin (BlockHash)",
         "args":
           [
             {
@@ -12,7 +12,7 @@
                 [
                   {
                     "op_name":"TableFullScan",
-                    "table":"orders"
+                    "table":"lineitem"
                   }
                 ]
             },
@@ -22,7 +22,7 @@
                 [
                   {
                     "op_name":"TableFullScan",
-                    "table":"lineitem"
+                    "table":"orders"
                   }
                 ]
             }

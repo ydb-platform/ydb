@@ -32,10 +32,9 @@ using NYql::TExprNode;
 
 Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
-    Y_UNIT_TEST_TWIN(TestNoLocksIssue, withSink) {
+    Y_UNIT_TEST(TestNoLocksIssue) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -130,9 +129,8 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TestNoLocksIssueInteractiveTx, withSink) {
+    Y_UNIT_TEST(TestNoLocksIssueInteractiveTx) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -251,7 +249,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
     Y_UNIT_TEST_TWIN(TestNoWrite, EnableIndexStreamWrite) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(settings);
@@ -333,7 +330,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
     Y_UNIT_TEST(TestSnapshotIfInsertRead) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -406,7 +402,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
     Y_UNIT_TEST_TWIN(TestSecondaryIndexWithoutSnapshot, StreamIndex) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
 
         TKikimrRunner kikimr(settings);
@@ -459,9 +454,8 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TestSnapshotWithDependentReads, UseSink) {
+    Y_UNIT_TEST(TestSnapshotWithDependentReads) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

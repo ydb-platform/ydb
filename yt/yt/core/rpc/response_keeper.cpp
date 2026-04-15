@@ -45,10 +45,10 @@ public:
         EvictionExecutor_->Start();
 
         profiler.AddFuncGauge("/response_keeper/kept_response_count", MakeStrong(this), [this] {
-            return FinishedResponseCount_;
+            return FinishedResponseCount_.load(std::memory_order::relaxed);
         });
         profiler.AddFuncGauge("/response_keeper/kept_response_space", MakeStrong(this), [this] {
-            return FinishedResponseSpace_;
+            return FinishedResponseSpace_.load(std::memory_order::relaxed);
         });
     }
 
@@ -81,8 +81,8 @@ public:
         PendingResponses_.clear();
         FinishedResponses_.clear();
         ResponseEvictionQueue_.clear();
-        FinishedResponseSpace_ = 0;
-        FinishedResponseCount_ = 0;
+        FinishedResponseCount_.store(0, std::memory_order::release);
+        FinishedResponseSpace_.store(0, std::memory_order::release);
         Started_ = false;
 
         YT_LOG_INFO("Response keeper stopped");
@@ -141,8 +141,8 @@ public:
                     it,
                 });
 
-                FinishedResponseCount_ += 1;
-                FinishedResponseSpace_ += space;
+                FinishedResponseCount_.fetch_add(1, std::memory_order::acq_rel);
+                FinishedResponseSpace_.fetch_add(space, std::memory_order::acq_rel);
             }
         }
 
@@ -273,8 +273,8 @@ private:
     using TFinishedResponseMap = THashMap<TMutationId, TSharedRefArray>;
     TFinishedResponseMap FinishedResponses_;
 
-    int FinishedResponseCount_ = 0;
-    i64 FinishedResponseSpace_ = 0;
+    std::atomic<int> FinishedResponseCount_ = 0;
+    std::atomic<i64> FinishedResponseSpace_ = 0;
 
     struct TEvictionItem
     {
@@ -363,8 +363,8 @@ private:
 
             FinishedResponses_.erase(item.Iterator);
 
-            FinishedResponseCount_ -= 1;
-            FinishedResponseSpace_ -= item.Space;
+            FinishedResponseCount_.fetch_sub(1, std::memory_order::acq_rel);
+            FinishedResponseSpace_.fetch_sub(item.Space, std::memory_order::acq_rel);
 
             ResponseEvictionQueue_.pop();
         }

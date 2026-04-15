@@ -5,11 +5,12 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
-
+#include <yql/essentials/core/yql_expr_type_annotation_pg.h>
 
 namespace NYql::NTypeAnnImpl {
 
 bool AdjustPgUnknownType(TVector<const TItemExprType*>& outputItems, TExprContext& ctx);
+
 IGraphTransformer::TStatus InferPgCommonType(
     TPositionHandle pos,
     const TExprNode* setItems,
@@ -18,7 +19,8 @@ IGraphTransformer::TStatus InferPgCommonType(
     const TStructExprType*& resultStructType,
     TExtContext& ctx,
     bool& isUniversal);
-TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx);
+
+TVector<TExprNode::TPtr> InferPgGroupRefTypes(const TExprNode& groupExprs, TExprContext& ctx);
 const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal);
 const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal);
 

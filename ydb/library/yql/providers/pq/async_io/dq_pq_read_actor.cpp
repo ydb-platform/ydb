@@ -144,8 +144,13 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
     static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters,
-            const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
+        TMetrics(
+            const TTxId& txId,
+            ui64 taskId,
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const NPq::NProto::TDqPqTopicSource& sourceParams,
+            bool enableStreamingQueriesCounters,
+            bool enableCountersPerTask = false)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters)
         {
@@ -162,7 +167,11 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
                     SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
                 }
                 Source = SubGroup->GetSubgroup("tx_id", TxId);
-                Task = Source->GetSubgroup("task_id", ToString(taskId));
+                if (enableCountersPerTask) {
+                    Task = Source->GetSubgroup("task_id", ToString(taskId));
+                } else {
+                    Task = Source;
+                }
             }
             InFlyAsyncInputData = Task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = Task->GetCounter("InFlySubscribe");
@@ -227,7 +236,7 @@ public:
         const TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters,
         TActorId infoAggregator)
@@ -430,7 +439,11 @@ private:
     }
 
     void NotifyCA() {
-        Metrics.InFlyAsyncInputData->Set(1);
+        if (!CaNotified) {
+            Metrics.InFlyAsyncInputData->Inc();
+            CaNotified = true;
+        }
+
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -625,7 +638,10 @@ private:
 
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         // called with bound allocator
-        Metrics.InFlyAsyncInputData->Set(0);
+        if (CaNotified) {
+            Metrics.InFlyAsyncInputData->Dec();
+            CaNotified = false;
+        }
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
@@ -997,12 +1013,13 @@ private:
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
     bool WakeupScheduled = false;
     TInstant LastActiveTime = TInstant::Now();
+    bool CaNotified = false;
 };
 
 ui32 ExtractPartitionsFromParams(
@@ -1047,7 +1064,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     const THolderFactory& holderFactory,
     std::shared_ptr<TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    IPqGateway::TPtr pqGateway,
+    IPqStaticGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
     i64 bufferSize,
@@ -1056,6 +1073,10 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
+    const auto configuredReadBufferBytes = settings.GetReadSessionBufferBytes();
+    const i64 effectiveReadBufferBytes = configuredReadBufferBytes
+        ? static_cast<i64>(configuredReadBufferBytes)
+        : bufferSize;
 
     TDqPqReadActor* actor = new TDqPqReadActor(
         inputIndex,
@@ -1070,7 +1091,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        settings.GetReadSessionBufferBytes() ? settings.GetReadSessionBufferBytes() : bufferSize,
+        effectiveReadBufferBytes,
         pqGateway,
         topicPartitionsCount,
         enableStreamingQueriesCounters,
@@ -1080,7 +1101,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,
@@ -1129,6 +1150,11 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 PQReadDefaultFreeSpace,
                 infoAggregator);
         }
+
+        const TStringBuf format(settings.GetFormat());
+        const TStringBuf normalizedFormat = format.empty() ? TStringBuf("raw") : format;
+        YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
+            "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
 
         return CreateDqPqRdReadActor(
             args.TypeEnv,

@@ -56,7 +56,7 @@ struct TWorkerFactoryOptions {
         bool useSystemColumns,
         bool useWorkerPool,
         const TInternalProgramSettings& internalSettings,
-        const TString& issueReportTarget)
+        TString issueReportTarget)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
@@ -77,7 +77,7 @@ struct TWorkerFactoryOptions {
         , UseSystemColumns(useSystemColumns)
         , UseWorkerPool(useWorkerPool)
         , InternalSettings(internalSettings)
-        , IssueReportTarget(issueReportTarget)
+        , IssueReportTarget(std::move(issueReportTarget))
     {
     }
 };

@@ -16,6 +16,7 @@
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 #include <array>
+#include <utility>
 
 #include <arrow/c/bridge.h>
 
@@ -29,9 +30,9 @@ static const TString UdfName("UDF");
 
 class TPrefixLogger: public NUdf::ILogger {
 public:
-    TPrefixLogger(const TString& moduleName, const NUdf::TLoggerPtr& inner)
-        : ModuleName_(moduleName)
-        , Inner_(inner)
+    TPrefixLogger(TString moduleName, NUdf::TLoggerPtr inner)
+        : ModuleName_(std::move(moduleName))
+        , Inner_(std::move(inner))
     {
     }
 
@@ -713,7 +714,8 @@ public:
         auto iter = value.GetDictIterator();
         if (value.IsSortedDict()) {
             ui64 result = 0ULL;
-            NUdf::TUnboxedValue key, payload;
+            NUdf::TUnboxedValue key;
+            NUdf::TUnboxedValue payload;
             while (iter.NextPair(key, payload)) {
                 result = CombineHashes(result, KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key)));
                 result = CombineHashes(result, PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload)));
@@ -724,7 +726,8 @@ public:
             TVector<ui64, NKikimr::NMiniKQL::TMKQLAllocator<ui64>> hashes;
             hashes.reserve(value.GetDictLength());
 
-            NUdf::TUnboxedValue key, payload;
+            NUdf::TUnboxedValue key;
+            NUdf::TUnboxedValue payload;
             while (iter.NextPair(key, payload)) {
                 auto keyHash = KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key));
                 auto payloadHash = PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload));
@@ -963,7 +966,8 @@ public:
         }
 
         auto lhsIter = lhs.GetDictIterator();
-        NUdf::TUnboxedValue lhsKey, lhsPayload;
+        NUdf::TUnboxedValue lhsKey;
+        NUdf::TUnboxedValue lhsPayload;
         while (lhsIter.NextPair(lhsKey, lhsPayload)) {
             auto lookup = rhs.Lookup(lhsKey);
             if (!lookup) {
@@ -1329,12 +1333,14 @@ public:
         auto rhsIter = rhs.GetDictIterator();
 
         using TKP = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
-        TVector<TKP, NMiniKQL::TMKQLAllocator<TKP>> lhsData, rhsData;
+        TVector<TKP, NMiniKQL::TMKQLAllocator<TKP>> lhsData;
+        TVector<TKP, NMiniKQL::TMKQLAllocator<TKP>> rhsData;
 
         lhsData.reserve(lhs.GetDictLength());
         rhsData.reserve(rhs.GetDictLength());
 
-        NUdf::TUnboxedValue key, payload;
+        NUdf::TUnboxedValue key;
+        NUdf::TUnboxedValue payload;
         while (lhsIter.NextPair(key, payload)) {
             lhsData.emplace_back(std::make_pair(key, payload));
         }
@@ -1733,7 +1739,7 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoidLazy())
     , UserType_(Env_.GetTypeOfVoidLazy())
-    , TypeInfoHelper_(typeInfoHelper)
+    , TypeInfoHelper_(std::move(typeInfoHelper))
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
     , Pos_(pos)

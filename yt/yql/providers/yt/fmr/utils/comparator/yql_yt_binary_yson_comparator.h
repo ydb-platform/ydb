@@ -3,12 +3,18 @@
 
 #include <util/generic/yexception.h>
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {
 
 struct TFmrTableKeysBoundary;
 int CompareKeyRows(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs);
+
+struct TSortingColumns {
+    std::vector<TString> Columns;
+    std::vector<ESortOrder> SortOrders;
+    bool operator==(const TSortingColumns&) const = default;
+};
 
 struct TFmrTableKeysBoundary {
     TString Row;
@@ -158,5 +164,7 @@ private:
     TStringBuf BlobData_;
     std::vector<ESortOrder> SortOrders_;
 };
+
+TFmrTableKeysBoundary MakeKeyBound(const NYT::TNode& keyRow, const TSortingColumns& keyColumns);
 
 } // namespace NYql::NFmr

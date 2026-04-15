@@ -2,6 +2,7 @@
 #include "executor_pool_basic.h"
 #include "hfunc.h"
 #include "scheduler_basic.h"
+#include "subsystems/stats.h"
 
 #include <ydb/library/actors/util/should_continue.h>
 
@@ -272,7 +273,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
         TVector<TExecutorThreadStats> stats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats);
         // Sum all per-thread counters into the 0th element
         for (ui32 idx = 1; idx < stats.size(); ++idx) {
             stats[0].Aggregate(stats[idx]);
@@ -299,6 +300,27 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4096); // one line
         UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
+    }
+
+    Y_UNIT_TEST(GetExecutorPoolStateWithoutHarmonizerUsesMinAndMaxLimits) {
+        TBasicExecutorPoolConfig config;
+        config.Threads = 4;
+        config.MinThreadCount = 1;
+        config.DefaultThreadCount = 2;
+        config.MaxThreadCount = 4;
+
+        TBasicExecutorPool executorPool(config, nullptr, nullptr);
+
+        TExecutorPoolState state;
+        state.PossibleMaxLimit = -1;
+        state.MaxLimit = -1;
+
+        executorPool.GetExecutorPoolState(state);
+
+        UNIT_ASSERT_VALUES_EQUAL(state.CurrentLimit, executorPool.GetThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.MinLimit, executorPool.GetMinThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.MaxLimit, executorPool.GetMaxThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.PossibleMaxLimit, state.MaxLimit);
     }
 }
 

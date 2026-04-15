@@ -428,6 +428,8 @@ message TCreatePersistentSnapshot {
     optional uint64 OwnerId = 1;
     optional uint64 PathId = 2;
     optional string Name = 3;
+    optional bool PrepareValidation = 4;
+    optional uint64 TableSchemaVersion = 5;
 }
 
 message TDropPersistentSnapshot {
@@ -443,6 +445,12 @@ message TInitiateBuildIndex {
     optional uint64 TableSchemaVersion = 3;
 
     optional NKikimrSchemeOp.TIndexDescription IndexDescription = 4;
+}
+
+message TPrepareIndexValidation {
+    optional NKikimrProto.TPathID IndexId = 1;
+    optional string SnapshotName = 2;
+    optional uint64 TableSchemaVersion = 3;
 }
 
 message TFinalizeBuildIndex {
@@ -574,6 +582,8 @@ message TFlatSchemeTransaction {
     optional TCreateIncrementalBackupSrc CreateIncrementalBackupSrc = 23;
 
     optional TTruncateTable TruncateTable = 25;
+
+    optional TPrepareIndexValidation PrepareIndexValidation = 26;
 }
 
 message TDistributedEraseTransaction {
@@ -973,6 +983,7 @@ message TEvUploadRowsRequest {
     optional bool UpsertIfExists = 8 [ default = false ];
     optional uint64 SchemaVersion = 9;
     optional string UserSID = 10;
+    optional bool DisableChangeCollection = 11 [ default = false ];
 }
 
 message TEvUploadRowsResponse {
@@ -1509,6 +1520,24 @@ message TEvConditionalEraseRowsResponse {
     optional TStats Stats = 4;
 }
 
+message TEvValidateRowConditionRequest {
+    optional uint64 Id = 1;
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+    optional uint64 SeqNoGeneration = 5;
+    optional uint64 SeqNoRound = 6;
+    repeated string NotNullColumns = 7;
+}
+
+message TEvValidateRowConditionResponse {
+    optional uint64 Id = 1;
+    optional uint64 TabletId = 2;
+    optional NKikimrIndexBuilder.EBuildStatus Status = 3;
+    optional bool IsValid = 4;
+    repeated Ydb.Issue.IssueMessage Issues = 5;
+}
+
 message TEvBuildIndexCreateRequest {
     optional uint64 Id = 1;          // unique id of build index process
 
@@ -1656,6 +1685,8 @@ message TEvLocalKMeansRequest {
     optional uint32 OverlapClusters = 24;
     optional double OverlapRatio = 25;
     optional bool OverlapOutForeign = 26;
+
+    optional NKikimrTx.TKeyRange KeyRange = 27;
 }
 
 message TEvLocalKMeansResponse {
@@ -1673,6 +1704,8 @@ message TEvLocalKMeansResponse {
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
     optional bool IsEmpty = 13;
+
+    optional bytes LastKeyAck = 14;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1710,6 +1743,8 @@ message TEvReshuffleKMeansRequest {
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
     optional bool OverlapOutForeign = 20;
+
+    optional NKikimrTx.TKeyRange KeyRange = 21;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1726,6 +1761,8 @@ message TEvReshuffleKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+
+    optional bytes LastKeyAck = 13;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -1829,6 +1866,8 @@ message TEvPrefixKMeansRequest {
     optional uint32 OverlapClusters = 21;
     optional double OverlapRatio = 22;
     optional bool OverlapOutForeign = 23;
+
+    optional NKikimrTx.TKeyRange KeyRange = 24;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1845,6 +1884,8 @@ message TEvPrefixKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+
+    optional bytes LastKeyAck = 13;
 }
 
 // Copy rows from an intermediate build table with more than <OverlapClusters> overlapping clusters
@@ -1902,6 +1943,7 @@ message TEvFilterKMeansResponse {
 enum EFulltextIndexType {
     FulltextPlain = 0;
     FulltextRelevance = 1;
+    Json = 2;
 }
 
 message TEvBuildFulltextIndexRequest {
@@ -1928,6 +1970,8 @@ message TEvBuildFulltextIndexRequest {
     optional string DocsTableName = 13;
 
     optional EFulltextIndexType IndexType = 14;
+
+    optional NKikimrTx.TKeyRange KeyRange = 15;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -1946,6 +1990,8 @@ message TEvBuildFulltextIndexResponse {
 
     optional uint64 DocCount = 9;
     optional uint64 TotalDocLength = 10;
+
+    optional bytes LastKeyAck = 11;
 }
 
 message TEvBuildFulltextDictRequest {
@@ -2692,6 +2738,8 @@ message TEvValidateUniqueIndexRequest {
 
     optional uint64 SeqNoGeneration = 6; // monotonically increasing sequence, first part
     optional uint64 SeqNoRound = 7; // monotonically increasing sequence, second part
+
+    optional NKikimrProto.TRowVersion Snapshot = 8;
 }
 
 message TEvValidateUniqueIndexResponse {

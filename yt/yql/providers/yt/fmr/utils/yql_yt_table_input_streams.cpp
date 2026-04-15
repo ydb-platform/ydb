@@ -42,7 +42,8 @@ std::vector<NYT::TRawTableReaderPtr> GetTableInputStreams(
     IYtJobService::TPtr jobService,
     ITableDataService::TPtr tableDataService,
     const TTaskTableRef& tableRef,
-    const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections
+    const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+    const TFmrReaderSettings& readerSettings
 ) {
     auto ytTableTaskRef = std::get_if<TYtTableTaskRef>(&tableRef);
     auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
@@ -50,7 +51,7 @@ std::vector<NYT::TRawTableReaderPtr> GetTableInputStreams(
     if (ytTableTaskRef) {
         return GetYtTableReaders(jobService, *ytTableTaskRef, clusterConnections);
     } else {
-        return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, tableDataService, fmrTable->Columns, fmrTable->SerializedColumnGroups)}; // TODO - fmr reader settings
+        return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, tableDataService, fmrTable->Columns, fmrTable->SerializedColumnGroups, readerSettings)};
     }
 }
 

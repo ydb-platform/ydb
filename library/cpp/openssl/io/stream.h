@@ -47,4 +47,11 @@ namespace NPrivate {
 }
 
 using TOpenSslX509StorePtr = THolder<x509_store_st, NPrivate::TSslDestroy>;
+
 TOpenSslX509StorePtr GetBuiltinOpenSslX509Store();
+
+// Builds default Certificate Authority bundle which includes:
+// - builtin "certs/cacert.pem" when SSL_CERT_FILE and SSL_CERT_DIR both unset
+// - SSL_CERT_FILE when set or /usr/local/ssl/cert.pem when unset
+// - SSL_CERT_DIR when set or /usr/local/ssl/certs when unset
+TOpenSslX509StorePtr GetDefaultOpenSslX509Store();

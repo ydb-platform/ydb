@@ -298,11 +298,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMergeBeforePublis
             }
 
             if (!AllOf(mergeSection.Paths(), [](TYtPath path) {
+                const auto tableInfo = TYtTableBaseInfo::GetMeta(path.Table());
+
                 return path.Table().Maybe<TYtOutput>()
                     && path.Columns().Maybe<TCoVoid>()
                     && path.Ranges().Maybe<TCoVoid>()
                     && path.QLFilter().Maybe<TCoVoid>()
-                    && !TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic;
+                    && !tableInfo->IsDynamic
+                    && !tableInfo->HasRLS;
             })) {
                 continue;
             }
@@ -397,6 +400,16 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MapToMerge(TExprBase no
             // Don't convert YtMap, which produces sorted output from unsorted input
             return node;
         }
+
+        for (auto path: map.Input().Item(0).Paths()) {
+            auto inputRowSpec = TYtPathInfo(path).Table->RowSpec;
+            if (outRowSpec.SortedBy.size() > inputRowSpec->SortedBy.size() ||
+                !std::equal(outRowSpec.SortedBy.begin(), outRowSpec.SortedBy.end(), inputRowSpec->SortedBy.begin())) {
+                    // In this case merge will be sorted, but sorted merge with different in\out sorts is not supported by yt.
+                    return node;
+            }
+        }
+
         if (auto maxTablesForSortedMerge = State_->Configuration->MaxInputTablesForSortedMerge.Get()) {
             if (map.Input().Item(0).Paths().Size() > *maxTablesForSortedMerge) {
                 return node;
@@ -460,7 +473,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MergeToCopy(TExprBase n
         return node;
     }
     auto tableInfo = TYtTableBaseInfo::Parse(path.Table());
-    if (path.Table().Maybe<TYtTable>() || tableInfo->Meta->IsDynamic || !tableInfo->RowSpec || !tableInfo->RowSpec->StrictSchema) {
+    if (path.Table().Maybe<TYtTable>() || tableInfo->Meta->IsDynamic || tableInfo->Meta->HasRLS || !tableInfo->RowSpec || !tableInfo->RowSpec->StrictSchema) {
         return node;
     }
     if (tableInfo->IsUnordered && tableInfo->RowSpec->IsSorted()) {
@@ -537,24 +550,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ForceTransform(TExprBas
     return node;
 }
 
-template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtReadTable>(TExprBase node, TExprContext& ctx) const;
-template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtTransientOpBase>(TExprBase node, TExprContext& ctx) const;
-
 template <class TNodeType>
-TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic(TExprBase node, TExprContext& ctx) const {
-    const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(EConvertDynamicTablesToStatic::Disable);
-    if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Disable) {
-        return node;
-    } else if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Join
-        && !TYtEquiJoin::Match(node.Raw())) {
-        return node;
-    }
-
-    if (TYtMerge::Match(node.Raw()) || TYtMap::Match(node.Raw())) {
-        // To not get stuck in a loop
-        return node;
-    }
-
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertSpecificTablesToStatic(TExprBase node, TExprContext& ctx, std::function<bool(const TYtTableMetaInfo::TPtr&)> tableChecker) const {
     auto op = node.Cast<TNodeType>();
 
     TVector<TYtSection> newInputs;
@@ -571,7 +568,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
         otherInputs.reserve(section.Paths().Size());
 
         for (const auto& path : section.Paths()) {
-            if (TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic) {
+            if (tableChecker(TYtTableBaseInfo::GetMeta(path.Table()))) {
                 dynamicTableInputs.emplace_back(path);
             } else {
                 otherInputs.emplace_back(path);
@@ -628,6 +625,31 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
                 .Ptr());
     }
     return node;
+}
+
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtReadTable>(TExprBase node, TExprContext& ctx) const;
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtTransientOpBase>(TExprBase node, TExprContext& ctx) const;
+
+template <class TNodeType>
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic(TExprBase node, TExprContext& ctx) const {
+    const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(EConvertDynamicTablesToStatic::Disable);
+    if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Disable) {
+        return node;
+    } else if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Join
+        && !TYtEquiJoin::Match(node.Raw())) {
+        return node;
+    }
+
+    if (TYtMerge::Match(node.Raw()) || TYtMap::Match(node.Raw())) {
+        // To not get stuck in a loop
+        return node;
+    }
+
+    return ConvertSpecificTablesToStatic<TNodeType>(node, ctx, [](const TYtTableMetaInfo::TPtr& meta) { return meta->IsDynamic; });
+}
+
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertRLSTablesToStatic(TExprBase node, TExprContext& ctx) const {
+    return ConvertSpecificTablesToStatic<TYtReadTable>(node, ctx, [](const TYtTableMetaInfo::TPtr& meta) { return meta->HasRLS; });
 }
 
 }  // namespace NYql

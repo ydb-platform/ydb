@@ -80,6 +80,10 @@ public:
         return *UsedMem_;
     }
 
+    void SetForceDisableSkiff(bool value) {
+        ForceDisableSkiff_ = value;
+    }
+
     void ApplyJobProps(TYqlJobBase& job);
     TTransformerFiles GetTransformerFiles();
 
@@ -105,6 +109,7 @@ protected:
     TMaybe<ui32> PublicId_;
     EPhase Phase_ = EPhase::All;
     bool ForceLocalTableContent_;
+    bool ForceDisableSkiff_ = false;
 
     // Wrap to shared ptr because TGatewayTransformer is passed by value
     std::shared_ptr<bool> TableContentFlag_;

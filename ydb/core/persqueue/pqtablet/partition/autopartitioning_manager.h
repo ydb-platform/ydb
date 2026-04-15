@@ -14,11 +14,13 @@ namespace NKikimr::NPQ {
 
 class TPartitionId;
 
+using TUint128 = unsigned __int128;
+
 class IAutopartitioningManager {
 public:
     virtual ~IAutopartitioningManager() = default;
 
-    virtual void OnWrite(const TString& sourceId, ui64 size) = 0;
+    virtual void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") = 0;
     virtual void CleanUp() = 0;
 
     virtual NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) = 0;

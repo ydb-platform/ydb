@@ -32,11 +32,11 @@ public:
 #define ACCESS_CONTROL_ENTRY(namespace, name) \
     {(name), TAccessControlObjectDescriptor((namespace), (name))}
 
-const inline std::vector<EAccessControlObjectNamespace> AccessControlObjectNamespaces = {
+inline const std::vector<EAccessControlObjectNamespace> AccessControlObjectNamespaces = {
     EAccessControlObjectNamespace::AdminCommands
 };
 
-const inline THashMap<EAccessControlObject, TAccessControlObjectDescriptor> AccessControlObjects = {
+inline const THashMap<EAccessControlObject, TAccessControlObjectDescriptor> AccessControlObjects = {
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::BuildMasterSnapshot),
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::BuildSnapshot),
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::CollectCoverage),
@@ -50,6 +50,7 @@ const inline THashMap<EAccessControlObject, TAccessControlObjectDescriptor> Acce
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::RequestRestart),
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::ResurrectChunkLocations),
     ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::SwitchLeader),
+    ACCESS_CONTROL_ENTRY(EAccessControlObjectNamespace::AdminCommands, EAccessControlObject::SetUserBanned),
 };
 
 #undef ACCESS_CONTROL_ENTRY

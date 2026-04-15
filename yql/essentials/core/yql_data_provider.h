@@ -14,6 +14,7 @@
 #include <util/generic/string.h>
 
 #include <functional>
+#include <utility>
 
 class IRandomProvider;
 class ITimeProvider;
@@ -34,11 +35,11 @@ struct TPinInfo {
     bool HideInBasicPlan;
 
     TPinInfo(const TExprNode* dataSource, const TExprNode* dataSink,
-        const TExprNode* key, const TString& displayName, bool hideInBasicPlan)
+        const TExprNode* key, TString  displayName, bool hideInBasicPlan)
         : DataSource(dataSource)
         , DataSink(dataSink)
         , Key(key)
-        , DisplayName(displayName)
+        , DisplayName(std::move(displayName))
         , HideInBasicPlan(hideInBasicPlan)
     {}
 };

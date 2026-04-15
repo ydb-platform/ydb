@@ -13,7 +13,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
-#include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
@@ -363,13 +363,19 @@ namespace NSchemeShardUT_Private {
     void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess, const TApplyIf& applyIf = {});
 
     // upgrade subdomain
-    TEvTx* UpgradeSubDomainRequest(ui64 txId, const TString& parentPath, const TString& name);
+    TEvTx* UpgradeSubDomainRequest(ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
+    void AsyncUpgradeSubDomain(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
     void AsyncUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name);
+    void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults);
+    void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
     void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults);
     void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name);
 
-    TEvTx* UpgradeSubDomainDecisionRequest(ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    TEvTx* UpgradeSubDomainDecisionRequest(ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    void AsyncUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
 
@@ -574,8 +580,7 @@ namespace NSchemeShardUT_Private {
     TLocalPathId GetNextLocalPathId(TTestActorRuntime& runtime, ui64& txId);
 
     template <typename TCreateFunc>
-    void CreateWithIntermediateDirs(TCreateFunc func) {
-        TTestWithReboots t;
+    void CreateWithIntermediateDirs(TTestWithReboots& t, TCreateFunc func) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             func(runtime, ++t.TxId, "/MyRoot", false); // invalid
             func(runtime, ++t.TxId, "/MyRoot", true); // valid
@@ -592,8 +597,13 @@ namespace NSchemeShardUT_Private {
     }
 
     template <typename TCreateFunc>
-    void CreateWithIntermediateDirsForceDrop(TCreateFunc func) {
+    void CreateWithIntermediateDirs(TCreateFunc func) {
         TTestWithReboots t;
+        CreateWithIntermediateDirs<TCreateFunc>(t, func);
+    }
+
+    template <typename TCreateFunc>
+    void CreateWithIntermediateDirsForceDrop(TTestWithReboots& t, TCreateFunc func) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TLocalPathId nextPathId;
             {
@@ -611,6 +621,12 @@ namespace NSchemeShardUT_Private {
                                    {NLs::PathNotExist});
             }
         });
+    }
+
+    template <typename TCreateFunc>
+    void CreateWithIntermediateDirsForceDrop(TCreateFunc func) {
+        TTestWithReboots t;
+        CreateWithIntermediateDirsForceDrop<TCreateFunc>(t, func);
     }
 
     TRowVersion CreateVolatileSnapshot(
@@ -710,7 +726,7 @@ namespace NSchemeShardUT_Private {
             TVector<NScheme::TTypeInfo> KeyColumnTypes;
             TVector<TBorder> Partitioning;
 
-            std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> ResolveKey(const TTableRange& range) const;
+            std::shared_ptr<const TPartitioning> ResolveKey(const TTableRange& range) const;
         };
 
         void FillTablePartitioningInfo();

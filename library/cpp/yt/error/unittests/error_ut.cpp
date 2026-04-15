@@ -83,7 +83,7 @@ public:
     }
     TWidget& operator = (const TWidget&) = delete;
 
-    TWidget(TWidget&&)
+    TWidget(TWidget&&) noexcept
     {
         MoveConstructorCalls++;
     }
@@ -875,6 +875,48 @@ TEST(TErrorTest, Enrichers)
         EXPECT_EQ(getAttribute(TError(TErrorException() <<= TError(std::runtime_error("E")))), "XX");
 
         testFromExceptionEnricherEnabled = false;
+    }
+}
+
+TEST(TErrorTest, ValueOrCrashSimple)
+{
+    TErrorOr<int> result = 42;
+    EXPECT_EQ(result.ValueOrCrash(), 42);
+
+    result.ValueOrCrash() = 67;
+    EXPECT_EQ(result.ValueOrCrash(), 67);
+}
+
+TEST(TErrorTest, ValueOrCrashHappyPath)
+{
+    TErrorOr<TWidget> result;
+    EXPECT_EQ(result.ValueOrCrash().ResetDefaultCount(), 1);
+
+    {
+        const auto& resultRef = result;
+        auto value = resultRef.ValueOrCrash();
+        EXPECT_EQ(value.ResetCopyCount(), 1);
+    }
+
+    {
+        auto value = std::move(result).ValueOrCrash();
+        EXPECT_EQ(value.ResetMoveCount(), 1);
+    }
+}
+
+TEST(TErrorTest, ValueOrCrashDeath)
+{
+    TErrorOr<TWidget> result = TError("death");
+
+    EXPECT_DEATH({ result.ValueOrCrash(); }, "YT_VERIFY");
+
+    {
+        const auto& resultRef = result;
+        EXPECT_DEATH({ resultRef.ValueOrCrash(); }, "YT_VERIFY");
+    }
+
+    {
+        EXPECT_DEATH({ std::move(result).ValueOrCrash(); }, "YT_VERIFY");
     }
 }
 

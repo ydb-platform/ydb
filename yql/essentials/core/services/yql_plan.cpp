@@ -3,6 +3,8 @@
 
 #include <util/generic/map.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -12,8 +14,8 @@ struct TPinAttrs {
     ui32 ProviderId = 0;
     ui32 PinId = 0;
 
-    explicit TPinAttrs(const TPinInfo& info)
-        : Info(info)
+    explicit TPinAttrs(TPinInfo info)
+        : Info(std::move(info))
     {
     }
 };
@@ -469,7 +471,7 @@ public:
                         continue;
                     }
 
-                    auto inputKey = TPinKey{input.ProviderId, input.PinId, TBasicNode::EType::Input};
+                    auto inputKey = TPinKey{.ProviderId = input.ProviderId, .PinId = input.PinId, .Type = TBasicNode::EType::Input};
                     if (allInputs.contains(inputKey)) {
                         continue;
                     }
@@ -493,7 +495,7 @@ public:
                         continue;
                     }
 
-                    auto outputKey = TPinKey{output.ProviderId, output.PinId, TBasicNode::EType::Output};
+                    auto outputKey = TPinKey{.ProviderId = output.ProviderId, .PinId = output.PinId, .Type = TBasicNode::EType::Output};
                     if (allOutputs.contains(outputKey)) {
                         continue;
                     }
@@ -538,7 +540,7 @@ public:
             basicNodes.push_back(basicNode);
 
             for (auto& input : info.Inputs) {
-                auto inputKey = TPinKey{input.ProviderId, input.PinId, TBasicNode::EType::Input};
+                auto inputKey = TPinKey{.ProviderId = input.ProviderId, .PinId = input.PinId, .Type = TBasicNode::EType::Input};
                 auto foundInput = allInputs.FindPtr(inputKey);
                 if (foundInput) {
                     basicLinks.push_back(TBasicLink(*foundInput, info.NodeId));
@@ -546,7 +548,7 @@ public:
             }
 
             for (auto& output : info.Outputs) {
-                auto outputKey = TPinKey{output.ProviderId, output.PinId, TBasicNode::EType::Output};
+                auto outputKey = TPinKey{.ProviderId = output.ProviderId, .PinId = output.PinId, .Type = TBasicNode::EType::Output};
                 auto foundOutput = allOutputs.FindPtr(outputKey);
                 if (foundOutput) {
                     basicLinks.push_back(TBasicLink(info.NodeId, *foundOutput));

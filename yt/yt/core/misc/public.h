@@ -210,6 +210,7 @@ DEFINE_ENUM(EProcessErrorCode,
 
 DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
 DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IScopedMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

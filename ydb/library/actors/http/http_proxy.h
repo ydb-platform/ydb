@@ -80,6 +80,7 @@ struct TEvHttpProxy {
         ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
         TDuration InactivityTimeout = TDuration::Minutes(2);
+        bool AllowHttp2 = false; // enable HTTP/2 support on this port
 
         TEvAddListeningPort() = default;
 
@@ -126,6 +127,7 @@ struct TEvHttpProxy {
         THttpOutgoingRequestPtr Request;
         TDuration Timeout;
         bool AllowConnectionReuse = false;
+        bool UseHttp2 = false;
         std::vector<TString> StreamContentTypes;
 
         TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request)
@@ -183,7 +185,7 @@ struct TEvHttpProxy {
             , Response(std::move(response))
         {}
     };
-    
+
     struct TEvHttpOutgoingResponse : NActors::TEventLocal<TEvHttpOutgoingResponse, EvHttpOutgoingResponse> {
         THttpOutgoingResponsePtr Response;
         ui64 ProgressNotificationBytes = 0;
@@ -342,6 +344,7 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
     TRateLimiter RateLimiter;
     TDuration InactivityTimeout;
+    bool AllowHttp2 = false;
 
     TPrivateEndpointInfo(const std::vector<TString>& compressContentTypes)
         : THttpEndpointInfo(compressContentTypes)

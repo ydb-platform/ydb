@@ -4,6 +4,7 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 FORK_TEST_FILES()
 
 TEST_SRCS(
+    backpressure_test.py
     base.py
     basic_reading.py
     data_paging.py
@@ -13,6 +14,9 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 

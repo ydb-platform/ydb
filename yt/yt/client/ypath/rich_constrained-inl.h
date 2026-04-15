@@ -676,6 +676,18 @@ std::optional<TString> TConstrainedRichYPath<TValidator...>::GetInputQuery() con
 }
 
 template <class... TValidator>
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetQueueConsumerName() const
+{
+    return FindAttribute<std::string>(*this, "queue_consumer_name");
+}
+
+template <class... TValidator>
+void TConstrainedRichYPath<TValidator...>::SetQueueConsumerName(const std::string& value)
+{
+    SetAttribute("queue_consumer_name", value);
+}
+
+template <class... TValidator>
 bool TConstrainedRichYPath<TValidator...>::operator==(const TConstrainedRichYPath& other) const
 {
     return GetPath() == other.GetPath() && Attributes() == other.Attributes();

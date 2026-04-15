@@ -81,7 +81,7 @@ inline TStaticSymbols GetStaticSymbols();
 //////////////////////////////////////////////////////////////////////////////
 class IFunctionDescriptor {
 public:
-    typedef TUniquePtr<IFunctionDescriptor> TPtr;
+    using TPtr = TUniquePtr<IFunctionDescriptor>;
 
     virtual ~IFunctionDescriptor() = default;
 
@@ -102,7 +102,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IFunctionsSink, 8);
 
-typedef IFunctionsSink IFunctionNamesSink;
+using IFunctionNamesSink = IFunctionsSink;
 
 //////////////////////////////////////////////////////////////////////////////
 // IUdfModule
@@ -153,7 +153,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IRegistrator, 8);
 
-typedef void (*TBackTraceCallback)();
+using TBackTraceCallback = void (*)();
 
 using TRegisterFunctionPtr = void (*)(IRegistrator& registrator, ui32 flags);
 using TAbiVersionFunctionPtr = ui32 (*)();
@@ -211,14 +211,17 @@ Y_PRAGMA_DIAGNOSTIC_PUSH
 Y_PRAGMA_NO_DEPRECATED
 
 inline TStaticSymbols GetStaticSymbols() {
-    return {&UdfAllocate, &UdfFree, &UdfTerminate, &UdfRegisterObject, &UdfUnregisterObject
+    return {.UdfAllocateFunc = &UdfAllocate, .UdfFreeFunc = &UdfFree, .UdfTerminate = &UdfTerminate, .UdfRegisterObject = &UdfRegisterObject, .UdfUnregisterObject = &UdfUnregisterObject
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
             ,
-            &UdfAllocateWithSize, &UdfFreeWithSize
+            .UdfAllocateWithSizeFunc = &UdfAllocateWithSize,
+            .UdfFreeWithSizeFunc = &UdfFreeWithSize
     #endif
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
             ,
-            &UdfArrowAllocate, &UdfArrowReallocate, &UdfArrowFree
+            .UdfArrowAllocateFunc = &UdfArrowAllocate,
+            .UdfArrowReallocateFunc = &UdfArrowReallocate,
+            .UdfArrowFreeFunc = &UdfArrowFree
     #endif
     };
 }

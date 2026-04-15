@@ -113,7 +113,7 @@ void TSkiffRowTableReader::Next()
 
     CheckValidity();
 
-    if (Y_UNLIKELY(Finished_ || !Parser_->HasMoreData())) {
+    if (Finished_ || !Parser_->HasMoreData()) [[unlikely]] {
         Finished_ = true;
         Valid_ = false;
         return;

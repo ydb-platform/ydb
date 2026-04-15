@@ -43,16 +43,20 @@ public:
     explicit TPoisonPillHelper(IPoisonPillHelperOwner* owner);
     virtual ~TPoisonPillHelper();
 
-    void TakeOwnership(const NActors::TActorContext& ctx,
-                       NActors::TActorId actor);
-    void ReleaseOwnership(const NActors::TActorContext& ctx,
-                          NActors::TActorId actor);
+    void TakeOwnership(
+        const NActors::TActorContext& ctx,
+        NActors::TActorId actor);
+    void ReleaseOwnership(
+        const NActors::TActorContext& ctx,
+        NActors::TActorId actor);
 
-    void HandlePoisonPill(const NActors::TEvents::TEvPoisonPill::TPtr& ev,
-                          const NActors::TActorContext& ctx);
+    void HandlePoisonPill(
+        const NActors::TEvents::TEvPoisonPill::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
-    void HandlePoisonTaken(const NActors::TEvents::TEvPoisonTaken::TPtr& ev,
-                           const NActors::TActorContext& ctx);
+    void HandlePoisonTaken(
+        const NActors::TEvents::TEvPoisonTaken::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
 private:
     void KillActors(const NActors::TActorContext& ctx);

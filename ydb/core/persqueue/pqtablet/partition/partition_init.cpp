@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <memory>
 
@@ -894,12 +895,12 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
     switch(range->GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-            for (auto& w : *range->MutablePair()) {
+            for (auto& w : range->GetPair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 auto r = wal.ParseFromString(w.GetValue());
                 AFL_ENSURE(r)("key", w.key());
 
-                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(*w.MutableKey()), std::move(wal));
+                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(TString{w.GetKey()}, std::move(wal));
                 AFL_ENSURE(a)("key", w.key());
             }
 

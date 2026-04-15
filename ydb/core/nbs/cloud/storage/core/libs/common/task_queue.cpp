@@ -6,17 +6,14 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTaskQueueStub final
-    : public ITaskQueue
+class TTaskQueueStub final: public ITaskQueue
 {
 public:
     void Start() override
-    {
-    }
+    {}
 
     void Stop() override
-    {
-    }
+    {}
 
     void Enqueue(ITaskPtr task) override
     {

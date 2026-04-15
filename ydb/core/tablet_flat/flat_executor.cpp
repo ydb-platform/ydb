@@ -48,6 +48,10 @@
 #include <util/generic/ymath.h>
 
 
+#define LOG_BACKUP_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
+#define LOG_BACKUP_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
+#define LOG_BACKUP_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -4380,7 +4384,10 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
-        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
+        hFunc(NBackup::TEvStartNewBackup, Handle);
+        hFunc(NBackup::TEvWriteChangelogAck, Handle);
+        hFunc(NBackup::TEvSnapshotStats, Handle);
+        hFunc(NBackup::TEvChangelogStats, Handle);
     default:
         break;
     }
@@ -4823,10 +4830,12 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
         return false;
     }
 
-    { // Check by key filter existence
-        bool partByKeyFilter = bool(partView->ByKey);
-        bool schemeByKeyFilter = tableInfo.ByKeyFilter;
-        if (partByKeyFilter != schemeByKeyFilter) {
+    { // Check bloom filters
+        TVector<ui32> partPrefixes;
+        for (const auto& [prefixLen, bloom] : partView->ByKeyPrefixes) {
+            if (bloom) partPrefixes.push_back(prefixLen);
+        }
+        if (partPrefixes != tableInfo.ByKeyFilterPrefixes) {
             return true;
         }
     }
@@ -4899,7 +4908,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
-    comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
+    comp->Layout.ByKeyFilterPrefixes = tableInfo->ByKeyFilterPrefixes;
     comp->Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
     comp->Layout.SplitKeys = comp->Params->SplitKeys.Get();
     comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
@@ -5145,6 +5154,10 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
+TStringBuilder TExecutor::BackupLogPrefix() const {
+    return TStringBuilder() << "[" << Owner->TabletID() << ":" << Generation0 << "] ";
+}
+
 void TExecutor::StartNewBackup() {
     if (!Owner->NeedBackup()) {
         return;
@@ -5159,6 +5172,7 @@ void TExecutor::StartNewBackup() {
     ui64 tabletId = Owner->TabletID();
 
     if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
+        LOG_BACKUP_D("Tablet excluded from backup");
         return;
     }
 
@@ -5170,12 +5184,18 @@ void TExecutor::StartNewBackup() {
     const auto& tables = scheme.Tables;
     auto exclusion = Owner->BackupExclusion();
 
+    Y_ENSURE(!BackupSnapshotInProgress);
+
+    // Stop the old backup changelog
+    CommitManager->BackupLogic.Stop();
+
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
     auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
+        LOG_BACKUP_N("Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
             if (exclusion && exclusion->HasTable(tableId)) {
@@ -5185,21 +5205,88 @@ void TExecutor::StartNewBackup() {
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
             QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
-        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+        BackupSnapshotInProgress = true;
+        Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(1);
+
+        auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor, backupConfig.GetChangelogInFlightBytesLimit());
+    } else {
+        LOG_BACKUP_D("Backup not configured");
     }
 }
 
-void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
-    Owner->BackupSnapshotComplete(OwnerCtx());
+void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
 
-    if (CommitManager) {
-        Forward(ev, CommitManager->GetBackupWriter());
+    CommitManager->BackupLogic.OnProcessedBytes(ev->Get()->ProcessedBytes);
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    BackupSnapshotInProgress = false;
+    Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
+    if (ev->Get()->Success) {
+        LOG_BACKUP_N("Snapshot completed" << " Bytes# " << ev->Get()->WrittenBytes);
+        Owner->BackupSnapshotComplete(OwnerCtx());
+
+        if (CommitManager->BackupLogic.IsRunning()) {
+            CommitManager->BackupLogic.OnSnapshotCompleted(ev);
+        } else {
+            ScheduleRetryBackup();
+        }
+    } else {
+        Counters->Cumulative()[TExecutorCounters::BACKUP_SNAPSHOT_ERRORS].Increment(1);
+        FailBackup("Backup snapshot failed: " + ev->Get()->Error);
     }
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
-    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
+    Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_ERRORS].Increment(1);
+    FailBackup("Backup changelog failed: " + ev->Get()->Error);
+}
+
+void TExecutor::FailBackup(const TString& error) {
+    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+
+    if (backupConfig.GetFailBehaviour() == NKikimrConfig::TSystemTabletBackupConfig::TABLET_RESTART) {
+        Y_TABLET_ERROR(error);
+    }
+
+    LOG_BACKUP_E(error);
+    CommitManager->BackupLogic.Stop();
+    ScheduleRetryBackup();
+}
+
+void TExecutor::ScheduleRetryBackup() const {
+    if (!BackupSnapshotInProgress) {
+        auto retryTimeout = TDuration::Seconds(AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        LOG_BACKUP_N("Scheduling backup retry" << " Timeout# " << retryTimeout);
+        Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
+    }
+}
+
+void TExecutor::Handle(NBackup::TEvStartNewBackup::TPtr& ev) {
+    if (ev->Sender != SelfId() && ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
+    StartNewBackup();
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotStats::TPtr& ev) {
+    Counters->Cumulative()[TExecutorCounters::BACKUP_SNAPSHOT_BYTES_WRITTEN].Increment(ev->Get()->BytesWritten);
+}
+
+void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
+    const auto* msg = ev->Get();
+    Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_BYTES_WRITTEN].Increment(msg->BytesWritten);
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].IncrementFor(msg->FlushLatency.MicroSeconds());
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
 }
 
 }

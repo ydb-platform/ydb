@@ -204,6 +204,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         DoBaseCase(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseAsync, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCase(t, NKikimrSchemeOp::EIndexTypeGlobalAsync);
+    }
+
     void DoBaseCaseWithDataColumns(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
@@ -289,6 +293,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseWithDataColumnsUniq, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         DoBaseCaseWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseWithDataColumnsAsync, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCaseWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
     void DoDropIndex(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {

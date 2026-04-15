@@ -348,6 +348,11 @@ NKikimrKqp::EQueryAction GetActionFromExecMode(Ydb::Query::ExecMode execMode) {
 
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
+    using TRetry = TQueryRetryActor<TCreateScriptOperationQuery, TEvPrivate::TEvCreateScriptOperationResponse,
+        TString, TActorId, NKikimrKqp::TEvQueryRequest, NKikimrKqp::TScriptExecutionOperationMeta, TDuration,
+        NKikimrKqp::TScriptExecutionRetryState, std::optional<NKikimrKqp::TQueryPhysicalGraph>, NKikimrConfig::TQueryServiceConfig,
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition>, i64>;
+
     TCreateScriptOperationQuery(const TString& executionId, const TActorId& runScriptActorId,
         const NKikimrKqp::TEvQueryRequest& req, const NKikimrKqp::TScriptExecutionOperationMeta& meta,
         TDuration maxRunTime, const NKikimrKqp::TScriptExecutionRetryState& retryState,
@@ -592,7 +597,7 @@ public:
             disposition = nullptr; // Do not save disposition if state already saved
         }
 
-        const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
+        const auto& creatorId = Register(new TCreateScriptOperationQuery::TRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
         KQP_PROXY_LOG_D("Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
     }
 
@@ -739,6 +744,8 @@ public:
     }
 
     void OnGetLeaseInfo() {
+        LeaseExists = false;
+
         if (ResultSets.size() != 1) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
@@ -746,14 +753,13 @@ public:
 
         NYdb::TResultSetParser result(ResultSets[0]);
         if (!result.TryNextRow()) {
-            LeaseExists = false;
             Finish(Ydb::StatusIds::NOT_FOUND, "No such execution");
             return;
         }
 
         const auto leaseGenerationInDatabase = result.ColumnParser("lease_generation").GetOptionalInt64();
         if (!leaseGenerationInDatabase) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unknown lease generation");
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unknown lease generation, lease was lost");
             return;
         }
 
@@ -768,6 +774,7 @@ public:
             return;
         }
 
+        LeaseExists = true;
         UpdateLease();
     }
 
@@ -3220,7 +3227,7 @@ private:
 
         if (const auto delay = RetryState->GetNextRetryDelay()) {
             KQP_PROXY_LOG_W("Schedule retry for error: " << issues.ToOneLineString() << " in " << *delay);
-            Issues.AddIssues(std::move(issues));
+            Issues.AddIssues(issues);
             Schedule(*delay, new TEvents::TEvWakeup());
             WaitRetry = true;
             return true;
@@ -3234,7 +3241,7 @@ private:
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
-        Issues.AddIssues(std::move(issues));
+        Issues.AddIssues(issues);
 
         if (status == Ydb::StatusIds::SUCCESS) {
             KQP_PROXY_LOG_D("Reply success, issues: " << Issues.ToOneLineString());
@@ -4229,6 +4236,10 @@ public:
                 retry_state = $retry_state
             WHERE database = $database AND execution_id = $execution_id;
         )";
+
+        if (Request.CancelledByUser) {
+            RetryState.ClearRetryPolicyMapping();
+        }
 
         TInstant retryDeadline = TInstant::Now();
         ELeaseState leaseState = ELeaseState::ScriptFinalizing;

@@ -248,6 +248,7 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
+                OPTIONAL(AppliedGroupGeneration)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
@@ -373,7 +374,7 @@ public:
             while (!table.EndOfSet()) {
                 const TPDiskId pdiskId(table.GetValue<Table::NodeID>(), table.GetValue<Table::PDiskID>());
                 if (TPDiskInfo *pdisk = Self->FindPDisk(pdiskId)) {
-                    pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    pdisk->PersistedMetrics = pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
                 } else {
                     pdiskMetricsToDelete.push_back(table.GetKey());
                 }
@@ -446,7 +447,7 @@ public:
                 const TVDiskID key(TGroupId::FromValue(table.GetValue<Table::GroupID>()), table.GetValue<Table::GroupGeneration>(),
                     table.GetValue<Table::Ring>(), table.GetValue<Table::FailDomain>(), table.GetValue<Table::VDisk>());
                 if (TVSlotInfo *slot = Self->FindVSlot(key)) {
-                    slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    slot->PersistedMetrics = slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
                     slot->UpdateVDiskMetrics();
                 } else {
                     vdiskMetricsToDelete.push_back(table.GetKey());
@@ -688,16 +689,8 @@ public:
                 kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
                 kvp->SetGeneration(groupInfo->Generation);
 
-                TMaybe<TKikimrScopeId> scopeId;
-                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
-                if (info.SchemeshardId && info.PathItemId) {
-                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
-                } else {
-                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
-                }
-
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, info, scopeId);
+                SerializeGroupInfo(&proto, *groupInfo, Self->StoragePools);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }

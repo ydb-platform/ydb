@@ -967,9 +967,8 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
     }
 }
 
-Y_UNIT_TEST_TWIN(ReturningDeleteUpdate, UseSink) {
+Y_UNIT_TEST(ReturningDeleteUpdate) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     TKikimrRunner kikimr(settings);
 
     auto client = kikimr.GetQueryClient();

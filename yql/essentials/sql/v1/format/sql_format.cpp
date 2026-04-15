@@ -1,5 +1,6 @@
 #include "sql_format.h"
 
+#include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 
 #include <yql/essentials/parser/lexer_common/lexer.h>
@@ -15,6 +16,8 @@
 #include <util/string/strip.h>
 #include <util/string/subst.h>
 #include <util/generic/hash_set.h>
+
+#include <utility>
 
 namespace NSQLFormat {
 
@@ -440,8 +443,7 @@ public:
         Y_ENSURE(MarkTokenStack_.empty());
 
         for (; LastComment_ < Comments_.size(); ++LastComment_) {
-            const auto text = Comments_[LastComment_].Content;
-            AddComment(text);
+            AddLastComment(/*nextTokenIndex=*/ParsedTokens_.size());
         }
 
         ui32 lines = OutLine_ - (OutColumn_ == 0 ? 1 : 0);
@@ -492,7 +494,7 @@ private:
 
     void NewLine() {
         if (TokenIndex_ >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_].Line > LastLine_) {
-            WriteComments(true);
+            WriteComments(true, /*nextTokenIndex=*/TokenIndex_);
         }
 
         if (OutColumn_) {
@@ -500,7 +502,9 @@ private:
         }
     }
 
-    void AddComment(TStringBuf text) {
+    void AddLastComment(size_t nextTokenIndex) {
+        const TStringBuf text = Comments_[LastComment_].Content;
+
         if (!AfterComment_ && OutLine_ > BlockFirstLine_ && OutColumn_ == 0) {
             Out('\n');
         }
@@ -525,8 +529,8 @@ private:
         }
 
         if (!text.StartsWith("--") &&
-            TokenIndex_ < ParsedTokens_.size() &&
-            Comments_[LastComment_].Line < ParsedTokens_[TokenIndex_].Line &&
+            nextTokenIndex < ParsedTokens_.size() &&
+            Comments_[LastComment_].Line < ParsedTokens_[nextTokenIndex].Line &&
             (LastComment_ + 1 >= Comments_.size() || Comments_[LastComment_].Line < Comments_[LastComment_ + 1].Line)) {
             Out('\n');
         }
@@ -854,7 +858,7 @@ private:
                 break;
             }
             case TRule_value_constructor::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -993,7 +997,10 @@ private:
 
             case TRule_named_nodes_stmt::TBlock3::kAlt2: {
                 const auto& alt = msg.GetBlock3().GetAlt2();
-                Out(" (");
+                if (OutColumn_ != 0) {
+                    Out(' ');
+                }
+                Out('(');
                 NewLine();
                 PushCurrentIndent();
                 Visit(alt);
@@ -1755,14 +1762,14 @@ private:
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
 
-    void WriteComments(bool completeLine) {
+    void WriteComments(bool completeLine, size_t nextTokenIndex) {
         while (LastComment_ < Comments_.size()) {
             const auto& c = Comments_[LastComment_];
             if (c.Line > LastLine_ || !completeLine && c.Line == LastLine_ && c.LinePos > LastColumn_) {
                 break;
             }
 
-            AddComment(c.Content);
+            AddLastComment(nextTokenIndex);
             ++LastComment_;
         }
     }
@@ -1770,7 +1777,7 @@ private:
     void PosFromToken(const TToken& token) {
         LastLine_ = token.GetLine();
         LastColumn_ = token.GetColumn();
-        WriteComments(false);
+        WriteComments(false, /*nextTokenIndex=*/TokenIndex_);
     }
 
     void VisitToken(const TToken& token) {
@@ -1869,7 +1876,7 @@ private:
         Out(str);
 
         if (TokenIndex_ + 1 >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_ + 1].Line > LastLine_) {
-            WriteComments(true);
+            WriteComments(true, /*nextTokenIndex=*/TokenIndex_ + 1);
         }
 
         if (str == ";") {
@@ -2568,6 +2575,32 @@ private:
         NewLine();
     }
 
+    void VisitGroupingSetsSpecification(const TRule_grouping_sets_specification& msg) {
+        Visit(msg.GetToken1());
+        Visit(msg.GetToken2());
+        Visit(msg.GetToken3());
+        NewLine();
+        PushCurrentIndent();
+
+        const auto& list = msg.GetRule_grouping_element_list4();
+
+        Visit(list.GetRule_grouping_element1());
+        for (const auto& block : list.GetBlock2()) {
+            Visit(block.GetToken1());
+            NewLine();
+            Visit(block.GetRule_grouping_element2());
+        }
+
+        if (msg.HasBlock5()) {
+            Visit(msg.GetBlock5());
+        }
+
+        PopCurrentIndent();
+        NewLine();
+
+        Visit(msg.GetToken6());
+    }
+
     void VisitGroupByClause(const TRule_group_by_clause& msg) {
         Visit(msg.GetToken1());
         if (msg.HasBlock2()) {
@@ -2866,7 +2899,7 @@ private:
                 VisitKeyword(msg.GetAlt_ttl_tier_action2().GetToken1());
                 break;
             case TRule_ttl_tier_action::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -3166,6 +3199,7 @@ TStaticData::TStaticData()
           {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
           {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
           {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
+          {TRule_grouping_sets_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingSetsSpecification)},
           {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
           {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},
           {TRule_window_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowSpecification)},
@@ -3306,12 +3340,12 @@ TStaticData::TStaticData()
 
 class TSqlFormatter: public NSQLFormat::ISqlFormatter {
 public:
-    TSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
-                  const NSQLTranslationV1::TParsers& parsers,
-                  const NSQLTranslation::TTranslationSettings& settings)
-        : Lexers_(lexers)
-        , Parsers_(parsers)
-        , Settings_(settings)
+    TSqlFormatter(NSQLTranslationV1::TLexers lexers,
+                  NSQLTranslationV1::TParsers parsers,
+                  NSQLTranslation::TTranslationSettings settings)
+        : Lexers_(std::move(lexers))
+        , Parsers_(std::move(parsers))
+        , Settings_(std::move(settings))
     {
     }
 
@@ -3353,7 +3387,8 @@ public:
             }
 
             TVector<NSQLTranslation::TParsedToken> comments;
-            TParsedTokenList parsedTokens, stmtTokens;
+            TParsedTokenList parsedTokens;
+            TParsedTokenList stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
@@ -3368,8 +3403,8 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
-            if (!message) {
+            google::protobuf::Message* message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            if (!message || IsEmptyQuery(message)) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
                     finalFormattedQuery << "\n";

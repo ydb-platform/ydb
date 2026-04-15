@@ -9,8 +9,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
-#include <ydb/core/security/certificate_check/cert_auth_processor.h>
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
@@ -48,8 +46,8 @@ using namespace NYdb::NScheme;
 
 namespace {
 
-struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
-    using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
+struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl> {
+    using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 
     struct TServerInitialization {
         bool EnforceUserToken = false;
@@ -135,10 +133,14 @@ void SetLogPriority(TKikimrServerForTestNodeRegistration& server) {
     server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
 }
 
-NDiscovery::TNodeRegistrationResult RegisterNode(const TDriverConfig& config) {
+NDiscovery::TNodeRegistrationResult RegisterNode(const TDriverConfig& config, const TMaybe<TDuration>& clientTimeout = Nothing()) {
     auto connection = NYdb::TDriver(config);
     NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
+    auto settings = GetNodeRegistrationSettings();
+    if (clientTimeout.Defined()) {
+        settings.ClientTimeout(*clientTimeout);
+    }
+    const auto result = discoveryClient.NodeRegistration(settings).GetValueSync();
     connection.Stop(true);
     return result;
 }
@@ -154,13 +156,19 @@ void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const 
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
 }
 
+void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const EStatus& expectedStatus) {
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+}
+
 void CheckAccessDeniedRegisterNode(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
     UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_EmptyAllowedSids) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     {
         TKikimrServerForTestNodeRegistration server({
@@ -206,7 +214,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_EmptyAllowedSids) 
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     {
         TKikimrServerForTestNodeRegistration server({
@@ -252,7 +260,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AllowOnlyDefaultGroup) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     {
         TKikimrServerForTestNodeRegistration server({
@@ -298,7 +306,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AllowOnlyDefaultGr
 }
 
 Y_UNIT_TEST(ServerWithIssuerVerification_ClientWithSameIssuer) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     {
         TKikimrServerForTestNodeRegistration server({
@@ -342,7 +350,7 @@ Y_UNIT_TEST(ServerWithIssuerVerification_ClientWithSameIssuer) {
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey noCert;
     {
         TKikimrServerForTestNodeRegistration server({
@@ -387,7 +395,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     {
         TKikimrServerForTestNodeRegistration server({
@@ -428,7 +436,7 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey noCert;
     {
         TKikimrServerForTestNodeRegistration server({
@@ -469,7 +477,7 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvideIncorrectCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     {
         TKikimrServerForTestNodeRegistration server({
@@ -557,7 +565,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey& serverCert = GenerateSignedCert(caCert, TProps::AsServer()); // client or client-server is allowed, not just server
     {
         TKikimrServerForTestNodeRegistration server({
@@ -603,112 +611,58 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
     }
 }
 
+void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& clientServerCert) {
+    const auto timeout = TDuration::Seconds(2);
+    const auto expectedStatus = EStatus::CLIENT_DEADLINE_EXCEEDED;
+
+    for (bool enforceUserToken : {true, false}) {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = enforceUserToken,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(server);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckAccessDenied(RegisterNode(config, timeout), expectedStatus);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedStatus);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedStatus);
+    }
+}
+
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     if (clientServerCert.Certificate[50] != 'a') {
         clientServerCert.Certificate[50] = 'a';
     } else {
         clientServerCert.Certificate[50] = 'b';
     }
-    {
-        TKikimrServerForTestNodeRegistration server({
-            .EnforceUserToken = true,
-            .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
-        });
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
 
-        SetLogPriority(server);
-
-        TDriverConfig config;
-        config.UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-            .SetEndpoint(location);
-
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
-    }
-    {
-        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
-            .EnforceUserToken = false,
-            .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
-        });
-        ui16 grpc = serverDoesNotRequireToken.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        SetLogPriority(serverDoesNotRequireToken);
-
-        TDriverConfig config;
-        config.UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-            .SetEndpoint(location);
-
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
-    }
+    TestCorruptedClientAuthData(caCert, clientServerCert);
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     if (clientServerCert.PrivateKey[20] != 'a') {
         clientServerCert.PrivateKey[20] = 'a';
     } else {
-        clientServerCert.Certificate[20] = 'b';
+        clientServerCert.PrivateKey[20] = 'b';
     }
-    {
-        TKikimrServerForTestNodeRegistration server({
-            .EnforceUserToken = true,
-            .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
-        });
-        ui16 grpc = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
 
-        SetLogPriority(server);
-
-        TDriverConfig config;
-        config.UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-            .SetEndpoint(location);
-
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
-    }
-    {
-        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
-            .EnforceUserToken = false,
-            .EnableDynamicNodeAuth = true,
-            .SetNodeAuthValues = true
-        });
-        ui16 grpc = serverDoesNotRequireToken.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        SetLogPriority(serverDoesNotRequireToken);
-
-        TDriverConfig config;
-        config.UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-            .SetEndpoint(location);
-
-        const TString expectedError = "empty address list";
-        CheckAccessDenied(RegisterNode(config), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
-    }
+    TestCorruptedClientAuthData(caCert, clientServerCert);
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer().WithValid(TDuration::Seconds(2)));
     {
         TKikimrServerForTestNodeRegistration server({
@@ -761,7 +715,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
 }
 
 Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer().WithValid(TDuration::Seconds(2)));
     {
         TKikimrServerForTestNodeRegistration server({
@@ -808,7 +762,7 @@ Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     {
         TKikimrServerForTestNodeRegistration server({
             .EnforceUserToken = true,
@@ -850,7 +804,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     {
         TKikimrServerForTestNodeRegistration server({
             .EnforceUserToken = true,
@@ -889,7 +843,7 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
 
 Y_UNIT_TEST(ServerWithCertVerification_AuthNotRequired) {
     // Scenario when we want to turn on secure node registration, but to check it in safe way
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     TProps props = TProps::AsClientServer();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, props);
 
@@ -989,7 +943,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
 
     NClient::TKikimr kikimr = GetKikimr(location, caCert, clientServerCert);
@@ -1012,7 +966,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AccessDenied) {
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
 
     NClient::TKikimr kikimr = GetKikimr(location, caCert, clientServerCert);
@@ -1035,7 +989,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey noCert;
 
     NClient::TKikimr kikimr = GetKikimr(location, caCert, noCert);
@@ -1065,7 +1019,7 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
 
     NClient::TKikimr kikimr = GetKikimr(location, caCert, clientServerCert);
@@ -1085,7 +1039,7 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey noCert;
 
     NClient::TKikimr kikimr = GetKikimr(location, caCert, noCert);
@@ -1124,7 +1078,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
 
     NClient::TKikimr kikimr = GetKikimr(location, caCert, clientServerCert);

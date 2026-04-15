@@ -69,6 +69,8 @@ void TYtTableDescription::ToYson(NYson::TYsonWriter& writer, const TString& clus
         writer.OnBooleanScalar(RowSpec && RowSpec->IsSorted());
         writer.OnKeyedItem("IsDynamic");
         writer.OnBooleanScalar(Meta->IsDynamic);
+        writer.OnKeyedItem("HasRLS");
+        writer.OnBooleanScalar(Meta->HasRLS);
         writer.OnKeyedItem("UniqueKeys");
         writer.OnBooleanScalar(RowSpec && RowSpec->UniqueKeys);
         writer.OnKeyedItem("CanWrite");
@@ -314,7 +316,7 @@ void TYtState::Reset() {
     NextEpochId = 1;
     FlowDependsOnId = 0;
     if (FullCapture_) {
-        FullCapture_ = CreateYtFullCapture();
+        FullCapture_->Reset();
     }
 }
 
@@ -446,9 +448,13 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         info.Source = CreateYtDataSource(ytState);
         info.Sink = CreateYtDataSink(ytState);
         info.SupportFullResultDataSink = true;
-        info.OpenSession = [gateway, statWriter, qContext, fullCapture](const TString& sessionId, const TString& username,
+        info.OpenSession = [
+            gateway, statWriter, qContext, fullCapture, useSecureTmp = ytState->UseSecureTmp
+        ](
+            const TString& sessionId, const TString& username,
             const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-            TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider) {
+            TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider
+        ) {
             gateway->OpenSession(
                 IYtGateway::TOpenSessionOptions(sessionId)
                     .UserName(username)
@@ -459,6 +465,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                     .StatWriter(statWriter)
                     .QContext(qContext)
                     .FullCapture(fullCapture)
+                    .UseSecureTmp(useSecureTmp)
             );
             return NThreading::MakeFuture();
         };

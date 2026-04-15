@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/dictionary_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
@@ -268,7 +269,8 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const auto info = *infoPointer;
     for (auto&& i : info.GetChunks()) {
         const TString data = i.GetData(cat);
-        if (std::static_pointer_cast<NIndexes::TSkipIndex>(meta)->CheckValue(data, cat, value, fetchContext.GetOperation())) {
+        if (std::static_pointer_cast<NIndexes::TSkipIndex>(meta)->CheckValue(
+                data, cat, value, fetchContext.GetOperation(), GetSourceSchema()->GetIndexInfo())) {
             filter.Add(true, i.GetRecordsCount());
             NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
             GetContext()->GetCommonContext()->GetCounters().OnAcceptedByIndex(i.GetRecordsCount());
@@ -345,7 +347,18 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+
+    const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter = GetStageData().HasTable()
+        ? GetStageData().GetAppliedFilter()
+        : context.GetResources().GetAppliedFilter();
+    const bool canUseDictionaryOnly = addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+        GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
+            NArrow::NAccessor::IChunkedArray::EType::Dictionary && UsageClass == TPKRangeFilter::EUsageClass::FullUsage &&
+        (!appliedFilter || appliedFilter->IsTotalAllowFilter());
+    if (canUseDictionaryOnly) {
+        GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
+        return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);
+    } else if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
         return std::make_shared<NCommon::TSubColumnsFetchLogic>(
@@ -380,7 +393,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 
     auto batch = GetPortionAccessor()
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
+                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
 
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);

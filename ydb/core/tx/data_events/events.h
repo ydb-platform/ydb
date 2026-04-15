@@ -68,11 +68,6 @@ struct TDataEvents {
             return *this;
         }
 
-        TEvWrite& SetUserSID(const TString& userSID) {
-            Record.SetUserSID(userSID);
-            return *this;
-        }
-
         NKikimrDataEvents::TEvWrite::TOperation& AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
             const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat,
@@ -229,6 +224,10 @@ struct TDataEvents {
     struct TEvLockRowsCancel : public NActors::TEventPB<TEvLockRowsCancel, NKikimrDataEvents::TEvLockRowsCancel, TDataEvents::EvLockRowsCancel> {
     public:
         TEvLockRowsCancel() = default;
+
+        explicit TEvLockRowsCancel(ui64 requestId) {
+            Record.SetRequestId(requestId);
+        }
     };
 
     struct TEvLockRowsResult : public NActors::TEventPB<TEvLockRowsResult, NKikimrDataEvents::TEvLockRowsResult, TDataEvents::EvLockRowsResult> {

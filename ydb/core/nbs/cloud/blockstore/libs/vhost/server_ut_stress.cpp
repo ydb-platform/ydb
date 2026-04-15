@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
@@ -50,19 +51,17 @@ public:
     template <typename F>
     void Add(F f)
     {
-        Workers.push_back(
-            SystemThreadFactory()->Run(
-                [this, f = std::move(f)]()
-                {
-                    while (!ShouldStart.test()) {
-                    }
-                    f();
-                }));
+        Workers.push_back(SystemThreadFactory()->Run(
+            [this, f = std::move(f)]()
+            {
+                while (!ShouldStart.test()) {
+                }
+                f();
+            }));
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
 class TStressStorage final: public IStorage
 {
 private:
@@ -233,6 +232,7 @@ Y_UNIT_TEST_SUITE(TServerStressTest)
             sockets.emplace_back(TTempFile(socketPath + ToString(i + 1)));
             auto future = server->StartEndpoint(
                 sockets.back().Name(),
+                std::make_shared<TTestPartitionDirectService>(),
                 std::move(storage),
                 TStorageOptions{
                     .DiskId = "disk" + ToString(i + 1),
@@ -240,8 +240,7 @@ Y_UNIT_TEST_SUITE(TServerStressTest)
                     .BlocksCount = 1024 * 1024,
                     .VhostQueuesCount = 2,
                     .UnalignedRequestsDisabled = false,
-                    .CreateOverlappedRequestsGuard = true
-                });
+                    .CreateOverlappedRequestsGuard = true});
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }

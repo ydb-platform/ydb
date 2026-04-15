@@ -279,6 +279,7 @@ public:
             .VirtualTimestamps = stream.VirtualTimestamps,
             .ShardId = DataShard.TabletId,
             .UserSIDs = stream.UserSIDs,
+            .TraceIds = stream.TraceIds,
         }))
     {
     }
@@ -586,7 +587,7 @@ class TCdcChangeSenderMain
         Y_ENSURE(topicAutoPartitioning || entry.PQGroupInfo->Schema);
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
-        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
+        KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);
 
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
@@ -597,7 +598,7 @@ class TCdcChangeSenderMain
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));
         }
 
-        CreateSenders(NChangeExchange::MakePartitionIds(*KeyDesc->Partitioning));
+        CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
         Become(&TThis::StateMain);
     }
 

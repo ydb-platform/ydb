@@ -323,6 +323,7 @@ protected:
 
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithoutToken(TPathId pathId, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithToken(
         const TString& path, ui32 access, ui64 cookie = 0);
@@ -385,14 +386,17 @@ protected:
     void RequestDone(i32 requests = 1);
     void CacheRequestDone();
     void CancelAllRequests();
+    void Cancelled();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);
+    STATEFN(StateWork);
     void RedirectToDatabase(const TString& database);
     bool NeedToRedirect(bool checkDatabaseAuth = true);
     void HandleTimeout();

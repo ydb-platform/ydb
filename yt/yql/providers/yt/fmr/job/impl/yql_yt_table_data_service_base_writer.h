@@ -13,8 +13,9 @@ namespace NYql::NFmr {
 
 struct TFmrWriterSettings {
     ui64 ChunkSize = 1024 * 1024;
-    ui64 MaxInflightChunks = 1;
+    ui64 MaxInflightChunks = 4;
     ui64 MaxRowWeight = 1024 * 1024 * 16;
+    bool SkipSortedCheck = false;
 };
 
 class TFmrTableDataServiceBaseWriter: public NYT::TRawTableWriter {

@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         });
 
         AssertReadError(runtime, Ydb::StatusIds::SCHEME_ERROR,
-            "You do not have access or the '/Root/topic_not_exists' does not exist");
+            "You do not have access permissions or the '/Root/topic_not_exists' does not exist");
     }
 
     Y_UNIT_TEST(TopicWithoutConsumer) {
@@ -56,6 +56,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
         setup->Write("/Root/topic1", "msg-1", 0);
 
+        auto now = TInstant::Now().MilliSeconds() - 1; // -1 to avoid flakiness
+
         auto& runtime = setup->GetRuntime();
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
@@ -72,6 +74,10 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
+        UNIT_ASSERT(response->Messages[0].ApproximateFirstReceiveTimestamp.has_value());
+        UNIT_ASSERT_GE_C(response->Messages[0].ApproximateFirstReceiveTimestamp->MilliSeconds(), now,
+            "ApproximateFirstReceiveTimestamp=" << response->Messages[0].ApproximateFirstReceiveTimestamp->MilliSeconds() << " now=" << now);
     }
 
     Y_UNIT_TEST(TopicWithManyIterationsData) {
@@ -100,7 +106,9 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].ApproximateReceiveCount, 1);
         }
 
         {
@@ -117,6 +125,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-3");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
         }
 
         {
@@ -150,9 +159,10 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].ApproximateReceiveCount, 2);
         }
-
     }
 
     Y_UNIT_TEST(TopicWithBigMessage) {

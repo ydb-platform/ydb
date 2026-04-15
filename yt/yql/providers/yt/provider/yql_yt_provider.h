@@ -139,6 +139,8 @@ struct TYtState {
     NLayers::ILayersIntegrationPtr LayersIntegration_;
     THashMap<TString, THashMap<TString, std::pair<TString, ui64>>> LayersSnapshots;
     IYtFullCapture::TPtr FullCapture_;
+    std::shared_ptr<std::atomic<bool>> UseSecureTmp = std::make_shared<std::atomic<bool>>(false);  // must be set during table metadata loading (before any major tmp access)
+
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;

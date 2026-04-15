@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(DeserializeVariant) {
 Y_UNIT_TEST(VariantTuple) {
     TTestContext ctx;
     TStringStream json;
-    json << "[1, {\"A\":true,\"B\":800}]";
+    json << R"([1, {"A":true,"B":800}])";
 
     auto members = std::to_array<TStructMember>({
         TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)),
@@ -369,7 +369,7 @@ Y_UNIT_TEST(Set) {
 Y_UNIT_TEST(DictOfUtf8) {
     TTestContext ctx;
     TStringStream json;
-    json << "[[\"key_1\",101], [\"key_2\",201]]";
+    json << R"([["key_1",101], ["key_2",201]])";
 
     auto type = TDictType::Create(
         TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv),

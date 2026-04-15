@@ -7,6 +7,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
@@ -596,7 +597,7 @@ protected:
     {
         for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
             // TODO: precalc unused nodes; this is too expensive to do for every row
-            // if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i]) {
+            // if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U || Nodes.PasstroughtItems[i]) {
             Nodes.ItemNodes[i]->RefValue(Ctx) = *input[i];
             // }
         }
@@ -1687,6 +1688,9 @@ public:
         }
 
         InputUnpackedItemsType = TMultiType::Create(InputTypes.size() - 1, InputTypes.data(), ctx.TypeEnv);
+
+        BlockArrays.resize(OutputColumns);
+        BlockDatums.resize(OutputColumns);
     }
 
     TUnboxedValue* const* GetInputBuffer() override {
@@ -1759,14 +1763,60 @@ public:
     }
 
     NUdf::EFetchStatus TryDrain(NUdf::TUnboxedValue* const* output) override {
-        return TryDrainInternal(output);
+        return TryDrainBlocks(output);
     }
 
     NUdf::EFetchStatus TryDrainDirect() {
-        return TryDrainInternal(DrainBufferPointers.data());
+        return TryDrainBlocks(DrainBufferPointers.data());
     }
 
-    NUdf::EFetchStatus TryDrainInternal(NUdf::TUnboxedValue* const* output) {
+    NUdf::EFetchStatus TryDrainBlocks(NUdf::TUnboxedValue* const* output) {
+        if (!HasPendingBlocks) {
+            auto status = TryDrainInternal();
+            if (status != NUdf::EFetchStatus::Ok) {
+                return status;
+            }
+        }
+
+        MKQL_ENSURE(HasPendingBlocks, "TryDrainInternal has promised us a block but did not deliver");
+
+        // Slice off the smallest chunk
+        size_t sliceSize = BlockSizeRemaining;
+        for (ui32 i = 0; i < OutputColumns; ++i) {
+            const auto& arr = BlockArrays[i];
+            MKQL_ENSURE(!arr.empty() && arr.front()->length <= static_cast<int64_t>(BlockSizeRemaining), "Block column height mismatch at column " << i);
+            sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
+        }
+
+        for (ui32 i = 0; i < OutputColumns; ++i) {
+            auto& arr = BlockArrays[i];
+            if (auto& array = arr.front(); ui64(array->length) == sliceSize) {
+                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(array));
+                arr.pop_front();
+            }
+            else {
+                *output[i] = Ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Chop(arr.front(), sliceSize));
+            }
+        }
+
+        *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(sliceSize)));
+
+        OutputRowCounter.Add(sliceSize);
+        BlockSizeRemaining -= sliceSize;
+
+        if (!BlockSizeRemaining) {
+            HasPendingBlocks = false;
+            for (ui32 i = 0; i < OutputColumns; ++i) {
+                BlockDatums[i] = arrow::Datum();
+                MKQL_ENSURE(BlockArrays[i].empty(), "Not all columns have been drained completely");
+            }
+        }
+
+        return NUdf::EFetchStatus::Ok;
+    }
+
+
+    NUdf::EFetchStatus TryDrainInternal() {
         MKQL_ENSURE(IsDraining(), "Cannot call TryDrain() unless IsDraining()");
 
         TTypeInfoHelper helper;
@@ -1778,14 +1828,12 @@ public:
 
         size_t currentBlockSize = 0;
         void* tuple = nullptr;
-        bool yielding = false;
 
         while (currentBlockSize < MaxOutputBlockLen) {
             tuple = DrainArenaIterator.Next();
-            if (!tuple) {
+            if (!tuple && !currentBlockSize) {
                 if (CheckRefillFromPendingBuckets()) {
-                    yielding = true;
-                    break;
+                    return NUdf::EFetchStatus::Yield;
                 }
                 tuple = DrainArenaIterator.Next();
             }
@@ -1830,33 +1878,32 @@ public:
         }
 
         if (currentBlockSize) {
+            BlockSizeRemaining = currentBlockSize;
+            HasPendingBlocks = true;
             for (size_t i = 0; i < OutputColumns; ++i) {
-                auto datum = blockBuilders[i]->Build(true);
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(datum));
+                auto& datum = BlockDatums[i];
+                auto& blockColumn = BlockArrays[i];
+                datum = blockBuilders[i]->Build(true);
+
+                MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
+                NYql::NUdf::ForEachArrayData(datum, [&blockColumn](const auto& arrayData) {
+                    blockColumn.push_back(arrayData);
+                });
             }
-
-            *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(currentBlockSize)));
-            OutputRowCounter.Inc();
+            return NUdf::EFetchStatus::Ok;
         }
 
-        if (yielding) {
-            // If yielding with currentBlockSize > 0 we'll do a "real" yield in a next call to WideFetch/DoCalculate
-            return currentBlockSize > 0 ? NUdf::EFetchStatus::Ok : NUdf::EFetchStatus::Yield;
+        MKQL_ENSURE(!tuple, "Empty block has been generated while the state is still draining");
+
+        Draining = false;
+        if (!IsAggregation) {
+            PrepareForNewBatch();
+        } else {
+            Map.Reset();
+            Store->Clear();
         }
 
-        if (!tuple) {
-            Draining = false;
-            if (!IsAggregation) {
-                PrepareForNewBatch();
-            } else {
-                Map.Reset();
-                Store->Clear();
-            }
-
-            return currentBlockSize > 0 ? NUdf::EFetchStatus::Ok : NUdf::EFetchStatus::Finish;
-        }
-
-        return NUdf::EFetchStatus::Ok;
+        return NUdf::EFetchStatus::Finish;
     }
 
 private:
@@ -1883,6 +1930,11 @@ private:
 
     TUnboxedValueVector DrainBuffer;
     std::vector<TUnboxedValue*> DrainBufferPointers;
+
+    std::vector<arrow::Datum> BlockDatums;
+    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> BlockArrays;
+    bool HasPendingBlocks = false;
+    size_t BlockSizeRemaining = 0;
 
     size_t CurrentInputBatchSize = 0;
     size_t CurrentInputBatchPtr = 0;

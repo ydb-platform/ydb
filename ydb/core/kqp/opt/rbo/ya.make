@@ -16,11 +16,12 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo/rules
-    ydb/core/kqp/opt/rbo/physical_convertion
+    ydb/core/kqp/opt/rbo/physical_conversion
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
@@ -29,6 +30,7 @@ PEERDIR(
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
+    yql/essentials/core/extract_predicate
 )
 
 YQL_LAST_ABI_VERSION()

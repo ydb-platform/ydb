@@ -1,13 +1,15 @@
 #include "service_counters.h"
 
+#include <utility>
+
 namespace NYql::NCommon {
 
 TServiceCounters::TServiceCounters(
-    const ::NMonitoring::TDynamicCounterPtr& rootCounters,
-    const ::NMonitoring::TDynamicCounterPtr& publicCounters,
+    ::NMonitoring::TDynamicCounterPtr rootCounters,
+    ::NMonitoring::TDynamicCounterPtr publicCounters,
     const TString& subsystemName)
-    : RootCounters(rootCounters)
-    , PublicCounters(publicCounters)
+    : RootCounters(std::move(rootCounters))
+    , PublicCounters(std::move(publicCounters))
     , Counters(subsystemName ? RootCounters->GetSubgroup("subsystem", subsystemName) : RootCounters)
 {
 }

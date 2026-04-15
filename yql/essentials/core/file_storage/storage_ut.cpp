@@ -29,7 +29,7 @@ private:
 
 public:
     explicit TTestDir(const TString& name) {
-        Y_ENSURE(name.length() > 0, "have to specify name");
+        Y_ENSURE(!name.empty(), "have to specify name");
         Y_ENSURE(name.find('.') == TString::npos, "must be simple name");
         Y_ENSURE(name.find('/') == TString::npos, "must be simple name");
         Y_ENSURE(name.find('\\') == TString::npos, "must be simple name");
@@ -143,8 +143,8 @@ Y_UNIT_TEST(DisplaceByCount) {
     storage->GetRoot().ListNames(filesInStorage);
     UNIT_ASSERT_EQUAL(filesInStorage.size(), 4); // 2 files + 1 hardlink directory + 1 locks directory
 
-    auto beg = filesInStorage.begin(),
-         end = filesInStorage.end();
+    auto beg = filesInStorage.begin();
+    auto end = filesInStorage.end();
 
     // file1 was displaced
     UNIT_ASSERT(Find(beg, end, file1->GetStorageFileName()) == end);
@@ -180,8 +180,8 @@ Y_UNIT_TEST(DisplaceBySize) {
     storage->GetRoot().ListNames(filesInStorage);
     UNIT_ASSERT_EQUAL(filesInStorage.size(), 4); // 2 files + 1 hardlink directory + 1 locks folder
 
-    auto beg = filesInStorage.begin(),
-         end = filesInStorage.end();
+    auto beg = filesInStorage.begin();
+    auto end = filesInStorage.end();
 
     // file1 was displaced
     UNIT_ASSERT(Find(beg, end, file1->GetStorageFileName()) == end);

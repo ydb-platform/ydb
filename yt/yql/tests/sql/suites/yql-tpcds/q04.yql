@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (union_op select_subexpr_intersect)* */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -15,7 +14,7 @@ $year_total = (
         c_email_address AS customer_email_address,
         d_year AS dyear,
         Sum(((ss_ext_list_price - ss_ext_wholesale_cost - ss_ext_discount_amt) + ss_ext_sales_price) / 2) AS year_total,
-        's' sale_type
+        's' AS sale_type
     FROM
         plato.customer
     ,
@@ -102,17 +101,17 @@ SELECT
     t_s_secyear.customer_last_name,
     t_s_secyear.customer_email_address
 FROM
-    year_total AS t_s_firstyear
+    $year_total AS t_s_firstyear
 ,
-    year_total AS t_s_secyear
+    $year_total AS t_s_secyear
 ,
-    year_total AS t_c_firstyear
+    $year_total AS t_c_firstyear
 ,
-    year_total AS t_c_secyear
+    $year_total AS t_c_secyear
 ,
-    year_total AS t_w_firstyear
+    $year_total AS t_w_firstyear
 ,
-    year_total AS t_w_secyear
+    $year_total AS t_w_secyear
 WHERE
     t_s_secyear.customer_id == t_s_firstyear.customer_id
     AND t_s_firstyear.customer_id == t_c_secyear.customer_id

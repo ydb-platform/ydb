@@ -16,12 +16,14 @@
 
 #include "src/core/lib/backoff/random_early_detection.h"
 
+#include "y_absl/random/distributions.h"
+
 namespace grpc_core {
 
-bool RandomEarlyDetection::Reject(uint64_t size) {
+bool RandomEarlyDetection::Reject(uint64_t size, y_absl::BitGenRef bitsrc) const {
   if (size <= soft_limit_) return false;
   if (size < hard_limit_) {
-    return y_absl::Bernoulli(bitgen_,
+    return y_absl::Bernoulli(bitsrc,
                            static_cast<double>(size - soft_limit_) /
                                static_cast<double>(hard_limit_ - soft_limit_));
   }

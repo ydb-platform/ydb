@@ -66,16 +66,22 @@ private:
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {
                 Fetcher->OnError("cannot fetch accessors");
-            } else {
-                AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
-                std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
-                for (auto&& i : Fetcher->GetInput().GetPortions()) {
-                    accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
-                }
-                Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
-                Fetcher->MutableScript().Next();
-                Fetcher->Resume(Fetcher);
+                return;
             }
+
+            if (result.HasRemovedData()) {
+                Fetcher->OnError(TStringBuilder{} << "some portion accessors were removed, count: " << result.GetRemovedData().size());
+                return;
+            }
+
+            AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
+            std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
+            for (auto&& i : Fetcher->GetInput().GetPortions()) {
+                accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
+            }
+            Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
+            Fetcher->MutableScript().Next();
+            Fetcher->Resume(Fetcher);
         }
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();
@@ -329,7 +335,7 @@ private:
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
                 accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i])
-                    .AssembleToGeneralContainer({}, portion->GetPortionInfo()->GetPathId().DebugString())
+                    .AssembleToGeneralContainer({})
                     .DetachResult();
             result.emplace_back(std::move(*container));
         }

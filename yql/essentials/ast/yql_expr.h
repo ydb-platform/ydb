@@ -49,6 +49,7 @@
 #include <unordered_map>
 #include <span>
 #include <stack>
+#include <utility>
 
 // #define YQL_CHECK_NODES_CONSISTENCY
 #ifdef YQL_CHECK_NODES_CONSISTENCY
@@ -400,9 +401,9 @@ public:
         }
     };
 
-    typedef std::vector<const TTypeAnnotationNode*> TListType;
-    typedef std::span<const TTypeAnnotationNode*> TSpanType;
-    typedef std::span<const TTypeAnnotationNode* const> TConstSpanType;
+    using TListType = std::vector<const TTypeAnnotationNode*>;
+    using TSpanType = std::span<const TTypeAnnotationNode*>;
+    using TConstSpanType = std::span<const TTypeAnnotationNode* const>;
 
 protected:
     template <typename T>
@@ -1506,9 +1507,9 @@ class TErrorExprType: public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Error;
 
-    TErrorExprType(ui64 hash, const TIssue& error)
+    TErrorExprType(ui64 hash, TIssue error)
         : TTypeAnnotationNode(KindValue, TypeHasError, hash, 0)
-        , Error_(error)
+        , Error_(std::move(error))
     {
     }
 
@@ -1780,10 +1781,10 @@ private:
     };
 
 public:
-    typedef TIntrusivePtr<TExprNode> TPtr;
-    typedef std::vector<TPtr> TListType;
-    typedef TArrayRef<const TPtr> TChildrenType;
-    typedef std::span<const TPtr> TExprNodeSpan;
+    using TPtr = TIntrusivePtr<TExprNode>;
+    using TListType = std::vector<TPtr>;
+    using TChildrenType = TArrayRef<const TPtr>;
+    using TExprNodeSpan = std::span<const TPtr>;
 
     struct TPtrHash: private std::hash<const TExprNode*> {
         size_t operator()(const TPtr& p) const {
@@ -2434,13 +2435,15 @@ public:
         }
     }
 
-    ~TExprNode() {
-        Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
-                       UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
-        Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
-                       UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
-        DestroyPtrs();
-    }
+    TExprNode(const TExprNode&) = delete;
+
+    TExprNode(TExprNode&&) = delete;
+
+    TExprNode& operator=(const TExprNode&) = delete;
+
+    TExprNode& operator=(TExprNode&&) = delete;
+
+    ~TExprNode();
 
 private:
     static void DestroyNode(TExprNode::TPtr& node, TExprNode*& root);
@@ -2478,11 +2481,6 @@ private:
         , CseeSafe_(1)
     {
     }
-
-    TExprNode(const TExprNode&) = delete;
-    TExprNode(TExprNode&&) = delete;
-    TExprNode& operator=(const TExprNode&) = delete;
-    TExprNode& operator=(TExprNode&&) = delete;
 
     bool Frozen() const {
         return ExprFlags_ & TExprFlags::Frozen;
@@ -2593,7 +2591,7 @@ using TModulesTable = THashMap<TString, TExportTable>;
 
 class IModuleResolver {
 public:
-    typedef std::shared_ptr<IModuleResolver> TPtr;
+    using TPtr = std::shared_ptr<IModuleResolver>;
     virtual bool AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
     virtual bool AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
     virtual bool AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
@@ -2920,7 +2918,7 @@ struct TExprContext: private TNonCopyable {
 
     TStringBuf AppendString(const TStringBuf& buf) {
         ENSURE_NOT_FROZEN_CTX
-        if (buf.size() == 0) {
+        if (buf.empty()) {
             return ZeroString;
         }
 

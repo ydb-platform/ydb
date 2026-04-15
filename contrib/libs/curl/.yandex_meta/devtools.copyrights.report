@@ -114,6 +114,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        lib/vtls/apple.h [10:10]
         lib/vtls/cipher_suite.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 38cad413a2ebb8a3334028596a877e60
@@ -146,14 +147,13 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 45323df52808e24e39741bd52fa522fb
 BELONGS ya.make
     License text:
-         * Copyright (C) Steve Holme, <steve_holme@hotmail.com>.
+         * Copyright (C) Steve Holme, <steve_holme@hotmail.com>
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/curl_des.c [8:8]
-        lib/curl_des.h [10:10]
+        lib/curl_ntlm_core.c [133:133]
         lib/curlx/version_win32.c [8:8]
         lib/curlx/version_win32.h [10:10]
         lib/system_win32.c [8:8]
@@ -163,22 +163,6 @@ BELONGS ya.make
         lib/vauth/krb5_sspi.c [8:8]
         lib/vauth/vauth.c [8:8]
         lib/vauth/vauth.h [10:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 487047a176f57677c51faf4394df4c7d
-BELONGS bin/ya.make ya.make
-    License text:
-         * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan
-         * (Royal Institute of Technology, Stockholm, Sweden).
-         * Copyright (C) Daniel Stenberg
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/krb5.c [3:6]
-    Belongs difference:
-        + bin/ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4bed51efe5f7195bd9f509322531651c
 BELONGS ya.make
@@ -221,19 +205,6 @@ BELONGS ya.make
     Files with this license:
         lib/vtls/rustls.c [8:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 84500f86b97af8062c8463ad37fdf711
-BELONGS bin/ya.make ya.make
-    License text:
-         * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/vssh/curl_path.c [110:110]
-    Belongs difference:
-        + bin/ya.make
-
 KEEP     COPYRIGHT_SERVICE_LABEL 8c40bd65c3875627e322bf53ea9eaaa3
 BELONGS ya.make
     License text:
@@ -246,20 +217,6 @@ BELONGS ya.make
     Files with this license:
         lib/smb.c [8:9]
         lib/smb.h [10:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 998d598c0b2c4665183fefe5ae17d48c
-BELONGS ya.make
-    License text:
-         * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan
-         * (Royal Institute of Technology, Stockholm, Sweden).
-         * Copyright (C) Daniel Stenberg
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/krb5.c [3:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9c50cbe37ab155bc81052d66295612bf
 BELONGS ya.make
@@ -339,13 +296,14 @@ BELONGS ya.make
         lib/curl_endian.h [10:10]
         lib/curl_fnmatch.c [8:8]
         lib/curl_fnmatch.h [10:10]
+        lib/curl_fopen.c [8:8]
+        lib/curl_fopen.h [10:10]
         lib/curl_get_line.c [8:8]
         lib/curl_get_line.h [10:10]
         lib/curl_gethostname.c [8:8]
         lib/curl_gethostname.h [10:10]
         lib/curl_gssapi.c [8:8]
         lib/curl_hmac.h [10:10]
-        lib/curl_krb5.h [10:10]
         lib/curl_ldap.h [10:10]
         lib/curl_md4.h [10:10]
         lib/curl_md5.h [10:10]
@@ -376,12 +334,16 @@ BELONGS ya.make
         lib/curlx/curlx.h [10:10]
         lib/curlx/dynbuf.c [8:8]
         lib/curlx/dynbuf.h [10:10]
+        lib/curlx/fopen.c [8:8]
+        lib/curlx/fopen.h [10:10]
         lib/curlx/inet_ntop.h [10:10]
         lib/curlx/inet_pton.h [10:10]
         lib/curlx/multibyte.c [8:8]
         lib/curlx/multibyte.h [10:10]
         lib/curlx/nonblock.c [8:8]
         lib/curlx/nonblock.h [10:10]
+        lib/curlx/strerr.c [8:8]
+        lib/curlx/strerr.h [10:10]
         lib/curlx/strparse.c [8:8]
         lib/curlx/strparse.h [10:10]
         lib/curlx/timediff.c [8:8]
@@ -418,8 +380,6 @@ BELONGS ya.make
         lib/file.h [10:10]
         lib/fileinfo.c [8:8]
         lib/fileinfo.h [10:10]
-        lib/fopen.c [8:8]
-        lib/fopen.h [10:10]
         lib/formdata.c [8:8]
         lib/formdata.h [10:10]
         lib/ftp.c [8:8]
@@ -485,6 +445,8 @@ BELONGS ya.make
         lib/multi.c [8:8]
         lib/multi_ev.c [8:8]
         lib/multi_ev.h [10:10]
+        lib/multi_ntfy.c [8:8]
+        lib/multi_ntfy.h [10:10]
         lib/multihandle.h [10:10]
         lib/multiif.h [10:10]
         lib/netrc.c [8:8]
@@ -591,7 +553,7 @@ BELONGS ya.make
         lib/vssh/curl_path.h [10:10]
         lib/vssh/libssh2.c [8:8]
         lib/vssh/ssh.h [10:10]
-        lib/vssh/wolfssh.c [8:8]
+        lib/vtls/apple.c [8:8]
         lib/vtls/gtls.c [8:8]
         lib/vtls/gtls.h [10:10]
         lib/vtls/hostcheck.c [8:8]
@@ -768,8 +730,8 @@ BELONGS bin/ya.make ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/md4.c [237:242]
-        lib/md5.c [272:277]
+        lib/md4.c [192:197]
+        lib/md5.c [277:282]
     Belongs difference:
         + bin/ya.make
 

@@ -1905,13 +1905,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    std::shared_ptr<TKikimrRunner> CreateSampleDataSource(const TString& externalDataSourceName, const TString& externalTableName, bool enableOltp) {
+    std::shared_ptr<TKikimrRunner> CreateSampleDataSource(const TString& externalDataSourceName, const TString& externalTableName) {
         const TString bucket = "test_bucket3";
         const TString object = "test_object";
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(enableOltp);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
@@ -1964,11 +1963,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
     }
 
-    void ValidateTables(TQueryClient& client, const TString& oltpTable, const TString& olapTable, bool enableOltp) {
-        if (enableOltp) {
-            const TString query = TStringBuilder() << "SELECT Unwrap(key), Unwrap(value) FROM `" << oltpTable << "`;";
-            ValidateResult(client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync());
-        }
+    void ValidateTables(TQueryClient& client, const TString& oltpTable, const TString& olapTable) {
+        const TString query = TStringBuilder() << "SELECT Unwrap(key), Unwrap(value) FROM `" << oltpTable << "`;";
+        ValidateResult(client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync());
 
         {
             const TString query = TStringBuilder() << "SELECT key, value FROM `" << olapTable << "` ORDER BY key;";
@@ -1976,33 +1973,31 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    void DoCreateTableAsSelectFromExternalDataSource(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner, bool enableOltp) {
+    void DoCreateTableAsSelectFromExternalDataSource(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner) {
         const TString externalDataSourceName = "external_data_source";
         const TString externalTableName = "test_binding_resolve";
 
-        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName, enableOltp);
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
         auto client = kikimr->GetQueryClient();
 
         const TString oltpTable = "DestinationOltp";
-        if (enableOltp) {
-            const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "TestDomain";
-                CREATE TABLE `{destination}` (
-                    PRIMARY KEY (key, value)
+        const TString query = fmt::format(R"(
+            PRAGMA TablePathPrefix = "TestDomain";
+            CREATE TABLE `{destination}` (
+                PRIMARY KEY (key, value)
+            )
+            AS SELECT *
+            FROM `{external_source}`.`/` WITH (
+                format="json_each_row",
+                schema(
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
                 )
-                AS SELECT *
-                FROM `{external_source}`.`/` WITH (
-                    format="json_each_row",
-                    schema(
-                        key Utf8 NOT NULL,
-                        value Utf8 NOT NULL
-                    )
-                );)",
-                "destination"_a = oltpTable,
-                "external_source"_a = externalDataSourceName
-            );
-            requestRunner(query, client, kikimr->GetDriver());
-        }
+            );)",
+            "destination"_a = oltpTable,
+            "external_source"_a = externalDataSourceName
+        );
+        requestRunner(query, client, kikimr->GetDriver());
 
         const TString olapTable = "DestinationOlap";
         {
@@ -2026,7 +2021,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             requestRunner(query, client, kikimr->GetDriver());
         }
 
-        ValidateTables(client, oltpTable, olapTable, enableOltp);
+        ValidateTables(client, oltpTable, olapTable);
     }
 
     void RunGenericQuery(const TString& query, TQueryClient& client, const TDriver&) {
@@ -2054,34 +2049,32 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSourceGenericQuery) {
-        DoCreateTableAsSelectFromExternalDataSource(&RunGenericQuery, true);
+        DoCreateTableAsSelectFromExternalDataSource(&RunGenericQuery);
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalDataSourceGenericScript) {
-        DoCreateTableAsSelectFromExternalDataSource(&RunGenericScript, false);
+        DoCreateTableAsSelectFromExternalDataSource(&RunGenericScript);
     }
 
-    void DoCreateTableAsSelectFromExternalTable(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner, bool enableOltp) {
+    void DoCreateTableAsSelectFromExternalTable(std::function<void(const TString&, TQueryClient&, const TDriver&)> requestRunner) {
         const TString externalDataSourceName = "external_data_source";
         const TString externalTableName = "test_binding_resolve";
 
-        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName, enableOltp);
+        auto kikimr = CreateSampleDataSource(externalDataSourceName, externalTableName);
         auto client = kikimr->GetQueryClient();
 
         const TString oltpTable = "DestinationOltp";
-        if (enableOltp) {
-            const TString query = fmt::format(R"(
-                PRAGMA TablePathPrefix = "TestDomain";
-                CREATE TABLE `{destination}` (
-                    PRIMARY KEY (key, value)
-                )
-                AS SELECT *
-                FROM `{external_table}`;)",
-                "destination"_a = oltpTable,
-                "external_table"_a = externalTableName
-            );
-            requestRunner(query, client, kikimr->GetDriver());
-        }
+        const TString query = fmt::format(R"(
+            PRAGMA TablePathPrefix = "TestDomain";
+            CREATE TABLE `{destination}` (
+                PRIMARY KEY (key, value)
+            )
+            AS SELECT *
+            FROM `{external_table}`;)",
+            "destination"_a = oltpTable,
+            "external_table"_a = externalTableName
+        );
+        requestRunner(query, client, kikimr->GetDriver());
 
         const TString olapTable = "DestinationOlap";
         {
@@ -2099,15 +2092,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             requestRunner(query, client, kikimr->GetDriver());
         }
 
-        ValidateTables(client, oltpTable, olapTable, enableOltp);
+        ValidateTables(client, oltpTable, olapTable);
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalTableGenericQuery) {
-        DoCreateTableAsSelectFromExternalTable(&RunGenericQuery, true);
+        DoCreateTableAsSelectFromExternalTable(&RunGenericQuery);
     }
 
     Y_UNIT_TEST(CreateTableAsSelectFromExternalTableGenericScript) {
-        DoCreateTableAsSelectFromExternalTable(&RunGenericScript, false);
+        DoCreateTableAsSelectFromExternalTable(&RunGenericScript);
     }
 
     Y_UNIT_TEST(OverridePlannerDefaults) {

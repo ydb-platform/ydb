@@ -60,7 +60,8 @@
                 {"Index": 5, "Name": "Compression", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "LimitHint", "Type": "TExprBase"},
                 {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 8, "Name": "Watermark", "Type": "TCoLambda", "Optional": true}
+                {"Index": 8, "Name": "Watermark", "Type": "TExprBase", "Optional": true},
+                {"Index": 9, "Name": "UserSchemaColumns", "Type": "TExprBase", "Optional": true}
             ]
         },
         {
@@ -75,7 +76,8 @@
                 {"Index": 4, "Name": "Token", "Type": "TCoSecureParam"},
                 {"Index": 5, "Name": "FilterPredicate", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 7, "Name": "Watermark", "Type": "TCoAtom"}
+                {"Index": 7, "Name": "WatermarkExpr", "Type": "TCoLambda", "Optional": true},
+                {"Index": 8, "Name": "WatermarkSerialized", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

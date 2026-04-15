@@ -8,15 +8,17 @@
 #include <util/generic/maybe.h>
 #include <util/string/vector.h>
 
+#include <utility>
+
 namespace NYql::NCommon {
 
 using namespace NNodes;
 
 TProviderConfigurationTransformer::TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,
-                                                                     const TTypeAnnotationContext& types, const TString& provider, const THashSet<TStringBuf>& configureCallables)
-    : Dispatcher(dispatcher)
+                                                                     const TTypeAnnotationContext& types, TString provider, const THashSet<TStringBuf>& configureCallables)
+    : Dispatcher(std::move(dispatcher))
     , Types_(types)
-    , Provider_(provider)
+    , Provider_(std::move(provider))
     , ConfigureCallables_(configureCallables)
 {
     if (ConfigureCallables_.empty()) {

@@ -1,4 +1,4 @@
 RECURSE(
-    stress
+    functional
     concurrency
 )

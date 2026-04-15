@@ -136,7 +136,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         std::vector<TString> filterDescriptions;
         ui32 filtersSumSize = 0;
         for (auto&& i : filtersBuilder.MutableBuilders()) {
-            filterDescriptions.emplace_back(GetBitsStorageConstructor()->Build(std::move(i.MutableFilter()))->SerializeToString());
+            filterDescriptions.emplace_back(GetBitsStorageConstructor()->SerializeToString(std::move(i.MutableFilter())));
             filtersSumSize += filterDescriptions.back().size();
             auto* category = protoDescription.AddCategories();
             category->SetFilterSize(filterDescriptions.back().size());
@@ -177,8 +177,8 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     AFL_VERIFY(op.GetCaseSensitive());
@@ -213,7 +213,8 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
             return false;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                     : NDefaults::FalsePositiveProbability;
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

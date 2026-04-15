@@ -191,6 +191,38 @@ const TBuildIndexOperation::TMetadata& TBuildIndexOperation::Metadata() const {
     return Metadata_;
 }
 
+TCompact::TCompact(bool cascade, uint32_t maxShardsInFlight)
+    : Cascade_(cascade)
+    , MaxShardsInFlight_(maxShardsInFlight)
+{}
+
+TCompact::TCompact()
+    : TCompact(false, 1)
+{}
+
+void TCompact::SerializeTo(Ydb::Table::CompactItem& proto) const {
+    proto.set_cascade(Cascade_);
+    proto.set_max_shards_in_flight(MaxShardsInFlight_);
+}
+
+TCompactionOperation::TCompactionOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::CompactMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<ECompactState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Path = metadata.path();
+    Metadata_.Cascade = metadata.cascade();
+    Metadata_.MaxInFlight = metadata.max_shards_in_flight();
+    Metadata_.Total = metadata.shards_total();
+    Metadata_.Done = metadata.shards_done();
+}
+
+const TCompactionOperation::TMetadata& TCompactionOperation::Metadata() const {
+    return Metadata_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitioningSettings::TImpl {
@@ -379,6 +411,10 @@ class TTableDescription::TImpl {
 
         // read replicas settings
         ReadReplicasSettings_ = TReadReplicasSettings::FromProto(proto.read_replicas_settings());
+
+        if (proto.has_metrics_settings()) {
+            MetricsSettings_ = TMetricsSettings::FromProto(proto.metrics_settings());
+        }
     }
 
 public:
@@ -546,6 +582,15 @@ public:
         ReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount);
     }
 
+    /**
+     * Set the metrics configuration for the given table.
+     *
+     * @param[in] metricsLevel The metrics level
+     */
+    void SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel) {
+        MetricsSettings_ = TMetricsSettings(metricsLevel);
+    }
+
     void SetStoreType(EStoreType type) {
         StoreType_ = type;
     }
@@ -642,6 +687,15 @@ public:
         return ReadReplicasSettings_;
     }
 
+    /**
+     * Return the metrics configuration for the given table.
+     *
+     * @return The metrics configuration
+     */
+    const std::optional<TMetricsSettings>& GetMetricsSettings() const {
+        return MetricsSettings_;
+    }
+
 private:
     Ydb::Table::DescribeTableResult Proto_;
     TStorageSettings StorageSettings_;
@@ -664,6 +718,7 @@ private:
     TPartitioningSettings PartitioningSettings_;
     std::optional<bool> KeyBloomFilter_;
     std::optional<TReadReplicasSettings> ReadReplicasSettings_;
+    std::optional<TMetricsSettings> MetricsSettings_;
     bool HasStorageSettings_ = false;
     bool HasPartitioningSettings_ = false;
     EStoreType StoreType_ = EStoreType::Row;
@@ -800,6 +855,14 @@ void TTableDescription::AddFulltextIndex(const std::string& indexName, EIndexTyp
     Impl_->AddFulltextIndex(indexName, indexType, indexColumns, dataColumns, indexSettings);
 }
 
+void TTableDescription::AddJsonIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
+    AddSecondaryIndex(indexName, EIndexType::GlobalJson, indexColumns);
+}
+
+void TTableDescription::AddJsonIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns) {
+    AddSecondaryIndex(indexName, EIndexType::GlobalJson, indexColumns, dataColumns);
+}
+
 void TTableDescription::AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
     AddSyncSecondaryIndex(indexName, indexColumns);
 }
@@ -860,6 +923,10 @@ void TTableDescription::SetReadReplicasSettings(TReadReplicasSettings::EMode mod
     Impl_->SetReadReplicasSettings(mode, readReplicasCount);
 }
 
+void TTableDescription::SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel) {
+    Impl_->SetMetricsSettings(metricsLevel);
+}
+
 void TTableDescription::SetStoreType(EStoreType type) {
     Impl_->SetStoreType(type);
 }
@@ -910,6 +977,10 @@ std::optional<bool> TTableDescription::GetKeyBloomFilter() const {
 
 std::optional<TReadReplicasSettings> TTableDescription::GetReadReplicasSettings() const {
     return Impl_->GetReadReplicasSettings();
+}
+
+std::optional<TMetricsSettings> TTableDescription::GetMetricsSettings() const {
+    return Impl_->GetMetricsSettings();
 }
 
 const Ydb::Table::DescribeTableResult& TTableDescription::GetProto() const {
@@ -993,6 +1064,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& settings = Impl_->GetReadReplicasSettings()) {
         settings->SerializeTo(*request.mutable_read_replicas_settings());
+    }
+
+    if (const auto& settings = Impl_->GetMetricsSettings()) {
+        settings->SerializeTo(*request.mutable_metrics_settings());
     }
 }
 
@@ -1337,7 +1412,7 @@ TTableBuilder& TTableBuilder::SetStorageSettings(const TStorageSettings& setting
 }
 
 TTableBuilder& TTableBuilder::AddColumnFamily(const TColumnFamilyDescription& desc) {
-    TableDescription_.AddColumnFamily(std::move(desc));
+    TableDescription_.AddColumnFamily(desc);
     return *this;
 }
 
@@ -1383,6 +1458,11 @@ TTableBuilder& TTableBuilder::SetKeyBloomFilter(bool enabled) {
 
 TTableBuilder& TTableBuilder::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {
     TableDescription_.SetReadReplicasSettings(mode, readReplicasCount);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel) {
+    TableDescription_.SetMetricsSettings(metricsLevel);
     return *this;
 }
 
@@ -1800,6 +1880,21 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
     if (settings.SetReadReplicasSettings_.has_value()) {
         const auto& replSettings = settings.SetReadReplicasSettings_.value();
         replSettings.SerializeTo(*request.mutable_set_read_replicas_settings());
+    }
+
+    if (const auto& metricsSettings = settings.GetAlterMetricsSettings()) {
+        switch (metricsSettings->GetAction()) {
+        case TAlterMetricsSettings::EAction::Set:
+            metricsSettings->GetMetricsSettings().SerializeTo(*request.mutable_set_metrics_settings());
+            break;
+        case TAlterMetricsSettings::EAction::Drop:
+            request.mutable_drop_metrics_settings();
+            break;
+        }
+    }
+
+    if (settings.Compact_) {
+        settings.Compact_->SerializeTo(*request.mutable_compact());
     }
 
     return request;
@@ -2416,6 +2511,91 @@ uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes_;
 }
 
+TIndexDescription TIndexDescription::CreateGlobalIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& indexTableSettings
+) {
+    return TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns, {indexTableSettings});
+}
+
+TIndexDescription TIndexDescription::CreateGlobalAsyncIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& indexTableSettings
+) {
+    return TIndexDescription(name, EIndexType::GlobalAsync, indexColumns, dataColumns, {indexTableSettings});
+}
+
+TIndexDescription TIndexDescription::CreateGlobalUniqueIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& indexTableSettings
+) {
+    return TIndexDescription(name, EIndexType::GlobalUnique, indexColumns, dataColumns, {indexTableSettings});
+}
+
+TIndexDescription TIndexDescription::CreateVectorIndex(
+    const std::string& name,
+    const std::string& vectorColumn,
+    const TKMeansTreeSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& levelTableSettings,
+    const TGlobalIndexSettings& postingTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalVectorKMeansTree, {vectorColumn}, dataColumns,
+        {levelTableSettings, postingTableSettings}, specializedIndexSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreatePrefixedVectorIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const TKMeansTreeSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& levelTableSettings,
+    const TGlobalIndexSettings& postingTableSettings,
+    const TGlobalIndexSettings& prefixTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns,
+        {levelTableSettings, postingTableSettings, prefixTableSettings}, specializedIndexSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreateFulltextPlainIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const TFulltextIndexSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& indexTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalFulltextPlain, indexColumns, dataColumns,
+        {indexTableSettings}, specializedIndexSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreateFulltextRelevanceIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const TFulltextIndexSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& postingTableSettings,
+    const TGlobalIndexSettings& dictTableSettings,
+    const TGlobalIndexSettings& docsTableSettings,
+    const TGlobalIndexSettings& statsTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalFulltextRelevance, indexColumns, dataColumns,
+        {dictTableSettings, docsTableSettings, statsTableSettings, postingTableSettings}, specializedIndexSettings
+    );
+}
+
 std::optional<TReadReplicasSettings> TReadReplicasSettings::FromProto(const Ydb::Table::ReadReplicasSettings& proto) {
     switch (proto.settings_case()) {
     case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
@@ -2444,6 +2624,60 @@ void TReadReplicasSettings::SerializeTo(Ydb::Table::ReadReplicasSettings& proto)
     }
 }
 
+std::optional<TMetricsSettings> TMetricsSettings::FromProto(
+    const Ydb::Table::MetricsSettings& proto
+) {
+    switch (proto.metrics_level()) {
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Unspecified);
+
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Disabled);
+
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Database);
+
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Table);
+
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Partition);
+
+    default:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Unspecified);
+    }
+}
+
+/**
+ * Read the metrics configuration to the corresponding protobuf message.
+ *
+ * @param[in,out] proto The message to write to
+ */
+void TMetricsSettings::SerializeTo(Ydb::Table::MetricsSettings& proto) const {
+    switch (GetMetricsLevel()) {
+    case EMetricsLevel::Unspecified:
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED);
+        break;
+
+    case EMetricsLevel::Disabled:
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED);
+        break;
+
+    case EMetricsLevel::Database:
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE);
+        break;
+
+    case EMetricsLevel::Table:
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE);
+        break;
+
+    case EMetricsLevel::Partition:
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION);
+        break;
+    }
+}
+
+
 TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
     auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
         switch (proto.partitions_case()) {
@@ -2456,10 +2690,17 @@ TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalInd
         }
     };
 
+    std::optional<TMetricsSettings> metricsSettings;
+
+    if (proto.has_metrics_settings()) {
+        metricsSettings = TMetricsSettings::FromProto(proto.metrics_settings());
+    }
+
     return {
         .PartitioningSettings = TPartitioningSettings(proto.partitioning_settings()),
         .Partitions = partitionsFromProto(proto),
-        .ReadReplicasSettings = TReadReplicasSettings::FromProto(proto.read_replicas_settings())
+        .ReadReplicasSettings = TReadReplicasSettings::FromProto(proto.read_replicas_settings()),
+        .MetricsSettings = metricsSettings,
     };
 }
 
@@ -2478,6 +2719,10 @@ void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings
 
     if (ReadReplicasSettings) {
         ReadReplicasSettings->SerializeTo(*settings.mutable_read_replicas_settings());
+    }
+
+    if (MetricsSettings) {
+        MetricsSettings->SerializeTo(*settings.mutable_metrics_settings());
     }
 }
 
@@ -2796,6 +3041,10 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
         break;
     }
+    case TProto::kGlobalJsonIndex:
+        type = EIndexType::GlobalJson;
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_json_index().settings()));
+        break;
     default: // fallback to global sync
         type = EIndexType::GlobalSync;
         globalIndexSettings.resize(1);
@@ -2886,6 +3135,13 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
+    case EIndexType::GlobalJson: {
+        auto& settings = *proto.mutable_global_json_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1) {
+            GlobalIndexSettings_.at(0).SerializeTo(settings);
+        }
+        break;
+    }
     case EIndexType::Unknown:
         break;
     }
@@ -2911,6 +3167,7 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::GlobalSync:
     case EIndexType::GlobalAsync:
     case EIndexType::GlobalUnique:
+    case EIndexType::GlobalJson:
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:
@@ -3018,6 +3275,11 @@ TChangefeedDescription& TChangefeedDescription::WithUserSIDs() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithTraceIds() {
+    TraceIds_ = true;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::AddAttribute(const std::string& key, const std::string& value) {
     Attributes_[key] = value;
     return *this;
@@ -3072,6 +3334,10 @@ bool TChangefeedDescription::GetInitialScan() const {
 
 bool TChangefeedDescription::GetUserSIDs() const {
     return UserSIDs_;
+}
+
+bool TChangefeedDescription::GetTraceIds() const {
+    return TraceIds_;
 }
 
 const std::unordered_map<std::string, std::string>& TChangefeedDescription::GetAttributes() const {
@@ -3136,6 +3402,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (proto.user_sids()) {
         ret.WithUserSIDs();
     }
+    if (proto.trace_ids()) {
+        ret.WithTraceIds();
+    }
     if (proto.has_resolved_timestamps_interval()) {
         ret.WithResolvedTimestamps(TDuration::MilliSeconds(
             ::google::protobuf::util::TimeUtil::DurationToMilliseconds(proto.resolved_timestamps_interval())));
@@ -3182,6 +3451,7 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_schema_changes(SchemaChanges_);
     proto.set_aws_region(TStringType{AwsRegion_});
     proto.set_user_sids(UserSIDs_);
+    proto.set_trace_ids(TraceIds_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
@@ -3613,6 +3883,78 @@ TAlterTableSettings& TAlterTtlSettingsBuilder::EndAlterTtlSettings() {
     return Parent_.AlterTtlSettings(Impl_->GetAlterTtlSettings());
 }
 
+/**
+ * The implementation of the builder for the metrics configuration
+ * for the ALTER TABLE request.
+ */
+class TAlterMetricsSettingsBuilder::TImpl {
+public:
+    /**
+     * Configure the ALTER TABLE request to remove the metrics configuration.
+     */
+    void Drop() {
+        AlterMetricsSettings_ = TAlterMetricsSettings::Drop();
+    }
+
+    /**
+     * Configure the ALTER TABLE request to use the given metrics configuration.
+     *
+     * @param[in] settings The metrics configuration to use
+     */
+    void Set(TMetricsSettings&& settings) {
+        AlterMetricsSettings_ = TAlterMetricsSettings::Set(std::move(settings));
+    }
+
+    /**
+     * Configure the ALTER TABLE request to use the given metrics configuration.
+     *
+     * @param[in] settings The metrics configuration to use
+     */
+    void Set(const TMetricsSettings& settings) {
+        AlterMetricsSettings_ = TAlterMetricsSettings::Set(settings);
+    }
+
+    /**
+     * Return the current metrics configuration.
+     *
+     * @return The current metrics configuration
+     */
+    const std::optional<TAlterMetricsSettings>& GetAlterMetricsSettings() const {
+        return AlterMetricsSettings_;
+    }
+
+private:
+    std::optional<TAlterMetricsSettings> AlterMetricsSettings_;
+};
+
+TAlterMetricsSettingsBuilder::TAlterMetricsSettingsBuilder(TAlterTableSettings& parent)
+    : Parent_(parent)
+    , Impl_(std::make_shared<TImpl>())
+{ }
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Drop() {
+    Impl_->Drop();
+    return *this;
+}
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(TMetricsSettings&& settings) {
+    Impl_->Set(std::move(settings));
+    return *this;
+}
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(const TMetricsSettings& settings) {
+    Impl_->Set(settings);
+    return *this;
+}
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(TMetricsSettings::EMetricsLevel metricsLevel) {
+    return Set(TMetricsSettings(metricsLevel));
+}
+
+TAlterTableSettings& TAlterMetricsSettingsBuilder::EndAlterMetricsSettings() {
+    return Parent_.SetAlterMetricsSettings(Impl_->GetAlterMetricsSettings());
+}
+
 class TAlterTableSettings::TImpl {
 public:
     TImpl() { }
@@ -3625,8 +3967,27 @@ public:
         return AlterTtlSettings_;
     }
 
+    /**
+     * Update the metrics configuration for the ALTER TABLE request.
+     *
+     * @param[in] settings The metrics configuration to use
+     */
+    void SetAlterMetricsSettings(const std::optional<TAlterMetricsSettings>& settings) {
+        AlterMetricsSettings_ = settings;
+    }
+
+    /**
+     * Return the current metrics configuration for the ALTER TABLE request.
+     *
+     * @return The current metrics configuration
+     */
+    const std::optional<TAlterMetricsSettings>& GetAlterMetricsSettings() const {
+        return AlterMetricsSettings_;
+    }
+
 private:
     std::optional<TAlterTtlSettings> AlterTtlSettings_;
+    std::optional<TAlterMetricsSettings> AlterMetricsSettings_;
 };
 
 TAlterTableSettings::TAlterTableSettings()
@@ -3642,6 +4003,17 @@ const std::optional<TAlterTtlSettings>& TAlterTableSettings::GetAlterTtlSettings
     return Impl_->GetAlterTtlSettings();
 }
 
+const std::optional<TAlterMetricsSettings>& TAlterTableSettings::GetAlterMetricsSettings() const {
+    return Impl_->GetAlterMetricsSettings();
+}
+
+TAlterTableSettings& TAlterTableSettings::SetAlterMetricsSettings(
+    const std::optional<TAlterMetricsSettings>& settings
+) {
+    Impl_->SetAlterMetricsSettings(settings);
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadReplicasSettings::TReadReplicasSettings(EMode mode, uint64_t readReplicasCount)
@@ -3655,6 +4027,14 @@ TReadReplicasSettings::EMode TReadReplicasSettings::GetMode() const {
 
 uint64_t TReadReplicasSettings::GetReadReplicasCount() const {
     return ReadReplicasCount_;
+}
+
+TMetricsSettings::TMetricsSettings(EMetricsLevel metricsLevel)
+    : MetricsLevel_(metricsLevel) {
+}
+
+TMetricsSettings::EMetricsLevel TMetricsSettings::GetMetricsLevel() const {
+    return MetricsLevel_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

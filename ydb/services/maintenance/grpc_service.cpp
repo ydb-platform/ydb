@@ -26,6 +26,7 @@ void TGRpcMaintenanceService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         requestType,                                            \
         YDB_API_DEFAULT_COUNTER_BLOCK(maintenance, methodName), \
         auditMode,                                              \
+        EEmptyDatabaseMode::EmptyDatabaseAllowed,               \
         COMMON,                                                 \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,     \
         GRpcRequestProxyId_,                                    \

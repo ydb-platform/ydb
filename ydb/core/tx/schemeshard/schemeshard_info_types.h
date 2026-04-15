@@ -1274,6 +1274,7 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         TSet<ui32> ChildPartitionIds;
 
         TShardIdx ShardIdx;
+        TInstant CreationTimestamp;
 
         void SetStatus(const TActorContext& ctx, ui32 value) {
             if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&
@@ -2758,6 +2759,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -2831,6 +2833,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
@@ -2883,6 +2886,7 @@ struct TCdcStreamSettings {
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
     OPTION(bool, UserSIDs);
+    OPTION(bool, TraceIds);
 
     #undef OPTION
 };
@@ -2931,6 +2935,7 @@ struct TCdcStreamInfo
             .WithSchemaChanges(desc.GetSchemaChanges())
             .WithAwsRegion(desc.GetAwsRegion())
             .WithUserSIDs(desc.GetUserSIDs())
+            .WithTraceIds(desc.GetTraceIds())
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -2956,6 +2961,7 @@ struct TCdcStreamInfo
             scanProgress.SetShardsCompleted(DoneShards.size());
         }
         desc.SetUserSIDs(UserSIDs);
+        desc.SetTraceIds(TraceIds);
     }
 
     void FinishAlter() {

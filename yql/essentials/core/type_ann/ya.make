@@ -35,6 +35,7 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/langver
+    yql/essentials/public/udf_meta
     library/cpp/yson/node
 )
 

@@ -38,7 +38,7 @@ public:
 };
 
 inline const IArrayBuilder::TArrayDataItem* LookupArrayDataItem(const IArrayBuilder::TArrayDataItem* arrays, size_t arrayCount, ui64& idx) {
-    IArrayBuilder::TArrayDataItem lookup{nullptr, idx};
+    IArrayBuilder::TArrayDataItem lookup{.Data = nullptr, .StartOffset = idx};
 
     auto it = std::lower_bound(arrays, arrays + arrayCount, lookup, [](const auto& left, const auto& right) {
         return left.StartOffset < right.StartOffset;
@@ -137,12 +137,12 @@ public:
     }
 
     inline void AddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
-        TArrayDataItem item = {&array, 0};
+        TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, beginIndex, count);
     }
 
     inline void AddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
-        TArrayDataItem item = {&array, 0};
+        TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, indexes, count);
     }
 
@@ -1124,8 +1124,8 @@ public:
     }
 
     void AddToChildrenDefault() {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->AddDefault();
+        for (const auto& child : Children_) {
+            child->AddDefault();
         }
     }
 
@@ -1151,8 +1151,8 @@ public:
     }
 
     void AddToChildren(TInputBuffer& input) {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->Add(input);
+        for (const auto& child : Children_) {
+            child->Add(input);
         }
     }
 
@@ -1179,8 +1179,8 @@ public:
 
     void BuildChildrenTree(bool finish, std::vector<TArrayBuilderBase::TBlockArrayTree::Ptr>& resultChildren) {
         resultChildren.reserve(Children_.size());
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            resultChildren.emplace_back(Children_[i]->BuildTree(finish));
+        for (const auto& child : Children_) {
+            resultChildren.emplace_back(child->BuildTree(finish));
         }
     }
 

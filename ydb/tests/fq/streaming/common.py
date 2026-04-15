@@ -62,12 +62,13 @@ class StreamingTestBase(TestYdsBase):
         return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
 
     def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False):
+        shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
         kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{os.getenv("YDB_ENDPOINT")}",
                 DATABASE_NAME = "{os.getenv("YDB_DATABASE")}",
-                SHARED_READING = "{shared}",
+                {shared_opt}
                 AUTH_METHOD = "NONE"
             );
         """)
@@ -108,7 +109,7 @@ class StreamingTestBase(TestYdsBase):
             completed = self.get_completed_checkpoints(kikimr, path)
             if completed >= checkpoints_count:
                 break
-            assert time.time() < deadline, "Wait checkpoint failed, actual completed: " + str(completed)
+            assert time.time() < deadline, f"Wait checkpoint failed, actual completed: {completed}, expected {checkpoints_count}"
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
@@ -132,3 +133,12 @@ class StreamingTestBase(TestYdsBase):
                 sum += sensor
         assert found or not expect_counters_exist
         return sum
+
+    def wait_streaming_query_metric(self, kikimr: Kikimr, path: str, metric_name: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), expected_value: int = 1) -> None:
+        deadline = time.time() + timeout
+        while True:
+            value = self.get_streaming_query_metric(kikimr, path, metric_name)
+            if value >= expected_value:
+                break
+            assert time.time() < deadline, "Wait streaming query metric failed, actual value: " + str(value)
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))

@@ -32,7 +32,7 @@ SRCS(
     aggregated_result.cpp
     archive.cpp
     config_examples.cpp
-    ddisk_write.cpp
+    ddisk_load.cpp
     interconnect_load.cpp
     keyvalue_write.cpp
     kqp.cpp
@@ -43,6 +43,7 @@ SRCS(
     pdisk_write.cpp
     service_actor.cpp
     group_write.cpp
+    util.cpp
     vdisk_write.cpp
     yql_single_query.cpp
 
@@ -73,6 +74,12 @@ IF (OS_LINUX)
         ydb/core/nbs/cloud/storage/core/libs/diagnostics
     )
 ENDIF()
+
+# Make NBS protos available for include checking on all platforms
+# even though they're only used on Linux
+PEERDIR(
+    ydb/core/nbs/cloud/storage/core/protos
+)
 
 GENERATE_ENUM_SERIALIZATION(percentile.h)
 

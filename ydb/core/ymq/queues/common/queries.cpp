@@ -18,6 +18,7 @@ extern const char* const GetQueueParamsQuery = R"__(
             'QueueId
             'QueueState
             'FifoQueue
+            'TopicCreated
             'Shards
             'Version
             'Partitions

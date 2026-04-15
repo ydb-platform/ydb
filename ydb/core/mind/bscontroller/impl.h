@@ -61,7 +61,6 @@ public:
     class TTxMonEvent_SetDown;
     class TTxMonEvent_GetDown;
     class TTxUpdateDiskMetrics;
-    class TTxUpdateGroupLatencies;
     class TTxGroupMetricsExchange;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
@@ -121,8 +120,9 @@ public:
         Table::PersistentBufferRefs::Type PersistentBufferRefs;
 
         // volatile state
+        mutable NKikimrBlobStorage::TVDiskMetrics PersistedMetrics;
         mutable NKikimrBlobStorage::TVDiskMetrics Metrics;
-        mutable bool MetricsDirty = false;
+        mutable bool MetricsCommitted = false; // at least once since restart
         mutable TResourceRawValues DiskResourceValues;
         mutable TResourceRawValues MaximumResourceValues{
             1ULL << 40, // 1 TB
@@ -312,7 +312,6 @@ public:
             const ui32 prevStatusFlags = Metrics.GetStatusFlags();
             Metrics.MergeFrom(vDiskMetrics);
             Metrics.DiscardUnknownFields();
-            MetricsDirty = true;
             UpdateVDiskMetrics();
             *allocatedSizeIncrementPtr = Metrics.GetAllocatedSize() - allocatedSizeBefore;
             return prevStatusFlags != Metrics.GetStatusFlags();
@@ -367,8 +366,10 @@ public:
 
         bool Operational = false; // set to true when both containing node is connected and Operational is reported in Metrics
 
-        NKikimrBlobStorage::TPDiskMetrics Metrics;
-        bool MetricsDirty = false;
+        NKikimrBlobStorage::TPDiskMetrics PersistedMetrics; // metrics persisted to storage
+        NKikimrBlobStorage::TPDiskMetrics Metrics; // metrics kept in-memory
+        TInstant MetricsUpdateTimestamp; // last time of update
+        bool MetricsCommitted = false; // at least once since restart
 
         NKikimrBlobStorage::EDriveStatus Status;
         TInstant StatusTimestamp;
@@ -496,8 +497,7 @@ public:
         bool UpdatePDiskMetrics(const NKikimrBlobStorage::TPDiskMetrics& pDiskMetrics, TInstant now) {
             const bool hadMetrics = HasFullMetrics();
             Metrics.CopyFrom(pDiskMetrics);
-            Metrics.SetUpdateTimestamp(now.GetValue());
-            MetricsDirty = true;
+            MetricsUpdateTimestamp = now;
             return !hadMetrics && HasFullMetrics(); // true if metrics have just arrived
         }
 
@@ -633,6 +633,7 @@ public:
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
+        TMaybe<Table::AppliedGroupGeneration::Type> AppliedGroupGeneration;
 
         bool Down = false; // is group are down right now (not selectable)
         TVector<TIndirectReferable<TVSlotInfo>::TPtr> VDisksInGroup;
@@ -709,7 +710,8 @@ public:
                     Table::BlobDepotId,
                     Table::ErrorReason,
                     Table::NeedAlter,
-                    Table::BridgeGroupInfo
+                    Table::BridgeGroupInfo,
+                    Table::AppliedGroupGeneration
                 > adapter(
                     &TGroupInfo::Generation,
                     &TGroupInfo::Owner,
@@ -734,7 +736,8 @@ public:
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
                     &TGroupInfo::NeedAlter,
-                    &TGroupInfo::BridgeGroupInfo
+                    &TGroupInfo::BridgeGroupInfo,
+                    &TGroupInfo::AppliedGroupGeneration
                 );
             callback(&adapter);
         }
@@ -1203,6 +1206,15 @@ public:
         Table::BridgeMode::Type BridgeMode = false;
         Table::DDisk::Type DDisk = false;
 
+        TMaybe<TKikimrScopeId> GetScopeId() const {
+            if (SchemeshardId && PathItemId) {
+                return TKikimrScopeId(*SchemeshardId, *PathItemId);
+            } else {
+                Y_DEBUG_ABORT_UNLESS(!SchemeshardId && !PathItemId);
+                return Nothing();
+            }
+        }
+
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
                 && RealmLevelBegin == other.RealmLevelBegin
@@ -1560,7 +1572,6 @@ private:
             EvProcessIncomingEvent,
             EvUpdateHostRecords,
             EvUpdateShredState,
-            EvCommitMetrics,
             EvCheckSyncerDisconnectedNodes,
         };
 
@@ -1805,8 +1816,6 @@ private:
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void SetHostRecords(THostRecordMap hostRecords);
 
-    void CommitMetrics();
-
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
     // should not render group unusable, also it should not exceed its fail model. It also takes into account replication
@@ -2038,6 +2047,9 @@ private:
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
 
+    void UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, ui32 generation, NKikimrBlobStorage::TGroupInfo bridgeGroupInfo,
+        TGroupId targetGroupId);
+
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
@@ -2247,7 +2259,6 @@ public:
         }
 
         ShredState.Initialize();
-        CommitMetrics();
         CheckSyncerDisconnectedNodes();
     }
 
@@ -2460,11 +2471,12 @@ public:
         const TVDiskID VDiskId;
         const NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskKind;
 
+        std::optional<NKikimrBlobStorage::TVDiskMetrics> PersistedVDiskMetrics;
         std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
         std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
-        bool MetricsDirty = false;
+        bool MetricsCommitted = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
                 const std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
@@ -2475,7 +2487,9 @@ public:
             const TVSlotId vslotId(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID());
             if (const auto it = prev.find(vslotId); it != prev.end()) {
                 const TStaticVSlotInfo& item = it->second;
+                PersistedVDiskMetrics = item.PersistedVDiskMetrics;
                 VDiskMetrics = item.VDiskMetrics;
+                MetricsCommitted = item.MetricsCommitted;
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
@@ -2501,6 +2515,7 @@ public:
         // runtime info
         ui32 StaticSlotUsage = 0;
         std::optional<NKikimrBlobStorage::TPDiskMetrics> PDiskMetrics;
+        TInstant PDiskMetricsUpdateTimestamp;
 
         TStaticPDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
                 const std::map<TPDiskId, TStaticPDiskInfo>& prev)
@@ -2522,6 +2537,7 @@ public:
             if (const auto it = prev.find(pdiskId); it != prev.end()) {
                 const TStaticPDiskInfo& item = it->second;
                 PDiskMetrics = item.PDiskMetrics;
+                PDiskMetricsUpdateTimestamp = item.PDiskMetricsUpdateTimestamp;
             }
         }
 
@@ -2575,13 +2591,19 @@ public:
     static void SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk, const TVSlotInfo& vslot,
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
-        const TStoragePoolInfo& poolInfo, const TMaybe<TKikimrScopeId>& scopeId);
+        const TMap<TBoxStoragePoolId, TStoragePoolInfo>& storagePools);
 
     void SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings);
 
     static NKikimrBlobStorage::TGroupStatus::E DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
         const TBlobStorageGroupInfo::TGroupVDisks& failed);
+
+    static bool CompareMetrics(const NKikimrBlobStorage::TPDiskMetrics& prev, const NKikimrBlobStorage::TPDiskMetrics& cur,
+        bool committedAtLeastOnce);
+
+    static bool CompareMetrics(const NKikimrBlobStorage::TVDiskMetrics& prev, const NKikimrBlobStorage::TVDiskMetrics& cur,
+        bool committedAtLeastOnce);
 };
 
-} //NBsController
+} // NBsController
 } // NKikimr

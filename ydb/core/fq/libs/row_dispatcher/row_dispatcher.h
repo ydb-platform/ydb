@@ -28,7 +28,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring = nullptr,
     NActors::TActorId nodesManagerId = {},

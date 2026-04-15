@@ -175,6 +175,12 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
                 return new TCustomTablet(tablet, info);
             });
 
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            runtime.DispatchEvents(options);
+        }
+
         auto config = MakeIntrusive<TPipePerNodeCacheConfig>();
         auto cacheActor = runtime.Register(CreatePipePerNodeCache(config));
 

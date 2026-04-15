@@ -8,7 +8,6 @@ import subprocess
 import sys
 import tempfile
 
-
 OUT_DIR_FLAG_PATTERN = re.compile(r'^(--go(([-_]\w+))*_out=)')
 
 

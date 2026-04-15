@@ -8,24 +8,17 @@ using namespace NSQLv1Generated;
 
 class TSqlCallExpr: public TSqlTranslation {
 public:
-    TSqlCallExpr(TContext& ctx, NSQLTranslation::ESqlMode mode)
-        : TSqlTranslation(ctx, mode)
+    explicit TSqlCallExpr(const TSqlTranslation& that)
+        : TSqlTranslation(that)
     {
     }
 
+    TSqlCallExpr(const TSqlCallExpr&) = default;
+
     TSqlCallExpr(const TSqlCallExpr& call, const TVector<TNodePtr>& args)
-        : TSqlTranslation(call.Ctx_, call.Mode_)
-        , Pos_(call.Pos_)
-        , Func_(call.Func_)
-        , Module_(call.Module_)
-        , Node_(call.Node_)
-        , Args_(args)
-        , AggMode_(call.AggMode_)
-        , DistinctAllowed_(call.DistinctAllowed_)
-        , UsingCallExpr_(call.UsingCallExpr_)
-        , IsExternalCall_(call.IsExternalCall_)
-        , CallConfig_(call.CallConfig_)
+        : TSqlCallExpr(call)
     {
+        Args_ = args;
     }
 
     void AllowDistinct() {

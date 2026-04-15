@@ -36,7 +36,7 @@ struct TCombinerNodes {
     }
 
     bool IsInputItemNodeUsed(size_t i) const {
-        return (ItemNodes[i]->GetDependencesCount() > 0U || PasstroughtItems[i]);
+        return (ItemNodes[i]->GetDependentsCount() > 0U || PasstroughtItems[i]);
     }
 
     NUdf::TUnboxedValue* GetUsedInputItemNodePtrOrNull(TComputationContext& ctx, size_t i) const {

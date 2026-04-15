@@ -1,8 +1,8 @@
 #include "kqp_operator.h"
 
-#include <yql/essentials/core/yql_cost_function.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
 
 /***
  * All the methods to compute metadata and statistics are collected in this file
@@ -14,8 +14,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
-
-TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NYql::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
+TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
     if (!keyColumns) {
         return {};
     }
@@ -105,8 +104,8 @@ void TOpEmptySource::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Y_UNUSED(planProps);
     Y_ENSURE(Props.Metadata.has_value());
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->RecordsCount = 1;
-    Props.Statistics->DataSize = 1;
+    Props.Statistics->ERows = 1;
+    Props.Statistics->EBytes = 1;
     Props.Cost = 0;
 }
 
@@ -176,8 +175,8 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
 
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->RecordsCount = tableData.Metadata->RecordsCount;
-    Props.Statistics->DataSize = tableData.Metadata->DataSize;
+    Props.Statistics->ERows = tableData.Metadata->RecordsCount;
+    Props.Statistics->EBytes = tableData.Metadata->DataSize;
     Props.Cost = 0;
 }
 
@@ -199,7 +198,7 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
     double filterSelectivity = selectivity * Props.Statistics->Selectivity;
-    Props.Statistics->DataSize = filterSelectivity * Props.Statistics->DataSize;
+    Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
     Props.Statistics->Selectivity = filterSelectivity;
 }
 
@@ -276,14 +275,14 @@ void TOpMap::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
-        double inputDataSize = Props.Statistics->DataSize;
+        double inputDataSize = Props.Statistics->EBytes;
         if (inputColumnsCount!=0) {
-            Props.Statistics->DataSize = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+            Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
         }
         // Input may have 0 columns (e.g. EmptySource), in such case the data size depends on the number of records
         // and the number of columns in the output. We just assume each column contains 8 bytes
         else {
-            Props.Statistics->DataSize = Props.Statistics->RecordsCount * Props.Metadata->ColumnsCount * 8;
+            Props.Statistics->EBytes = Props.Statistics->ERows * Props.Metadata->ColumnsCount * 8;
         }
     }
 }
@@ -329,8 +328,8 @@ void TOpAggregate::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     const auto inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
-        double inputDataSize = Props.Statistics->DataSize;
-        Props.Statistics->DataSize = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+        double inputDataSize = Props.Statistics->EBytes;
+        Props.Statistics->EBytes = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
     }
 }
 
@@ -363,7 +362,7 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TString> unionOfAliases;
     ComputeAlisesForJoin(GetLeftInput(), GetRightInput(), leftAliases, rightAliases, unionOfAliases);
     
-    EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined;
+    NKqp::EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
 
     auto hints = ctx.KqpCtx.GetOptimizerHints();
     auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(*leftStats, 
@@ -429,15 +428,15 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
         *rightStats, 
         leftJoinKeys, 
         rightJoinKeys,
-        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined,
+        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined,
         ConvertToJoinKind(JoinKind),
         FindCardHint(unionOfAliases, *hints.CardinalityHints),
         false,
         false,
         FindCardHint(unionOfAliases, *hints.BytesHints));
 
-    Props.Statistics->DataSize = CBOStats.ByteSize;
-    Props.Statistics->RecordsCount = CBOStats.Nrows;
+    Props.Statistics->EBytes = CBOStats.ByteSize;
+    Props.Statistics->ERows = CBOStats.Nrows;
     Props.Statistics->Selectivity = CBOStats.Selectivity;
 
     if (Props.JoinAlgo.has_value()) {
@@ -466,8 +465,8 @@ void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     }
 
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->DataSize = GetLeftInput()->Props.Statistics->DataSize + GetRightInput()->Props.Statistics->DataSize;
-    Props.Statistics->RecordsCount = GetLeftInput()->Props.Statistics->RecordsCount + GetRightInput()->Props.Statistics->RecordsCount;
+    Props.Statistics->EBytes = GetLeftInput()->Props.Statistics->EBytes + GetRightInput()->Props.Statistics->EBytes;
+    Props.Statistics->ERows = GetLeftInput()->Props.Statistics->ERows + GetRightInput()->Props.Statistics->ERows;
 
     if (GetLeftInput()->Props.Cost.has_value() && GetRightInput()->Props.Cost.has_value()) {
         Props.Cost = *GetLeftInput()->Props.Cost + *GetRightInput()->Props.Cost;

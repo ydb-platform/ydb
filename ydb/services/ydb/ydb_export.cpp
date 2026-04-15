@@ -17,7 +17,7 @@ void TGRpcYdbExportService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_EXPORT_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, export, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, export, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
     SETUP_EXPORT_METHOD(ExportToYt, DoExportToYtRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
     SETUP_EXPORT_METHOD(ExportToS3, DoExportToS3Request, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));

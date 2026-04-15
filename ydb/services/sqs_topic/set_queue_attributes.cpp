@@ -54,7 +54,8 @@ namespace NKikimr::NSqsTopic::V1 {
 
     class TSetQueueAttributesActor:
         public TQueueUrlHolder,
-        public TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>
+        public TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>,
+        public TCdcStreamCompatible
     {
     protected:
         using TBase = TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>;
@@ -100,11 +101,23 @@ namespace NKikimr::NSqsTopic::V1 {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
-            if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
-                                                std::format("The specified queue doesn't exist")));
+            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if (ProcessCdc(response)) {
+                        return;
+                    }
+                }
+                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
+                                                    std::format("The specified queue doesn't exist")));
+                }
+                // ok
+            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
+            } else {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
-
             Y_ABORT_UNLESS(response.PQGroupInfo);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
@@ -130,13 +143,13 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const Ydb::Ymq::V1::SetQueueAttributesRequest& request = Request();
             const TString& queueName = QueueUrl_->TopicPath;
-            if (auto cc = ParseConsumerAttributes(request.attributes(), queueName, QueueUrl_->Consumer, this->Database, EConsumerAttributeUsageTarget::Alter); !cc.has_value()) {
+            if (auto cc = ParseQueueAttributes(request.attributes(), queueName, QueueUrl_->Consumer, this->Database, EConsumerAttributeUsageTarget::Alter); !cc.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", cc.error())));
             } else {
-                NewConsumerConfig = std::move(cc).value();
+                NewQueueAttributes = std::move(cc).value();
             }
 
-            if (auto check = ValidateLimits(NewConsumerConfig); !check.has_value()) {
+            if (auto check = ValidateLimits(NewQueueAttributes); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", check.error())));
             }
 
@@ -149,8 +162,8 @@ namespace NKikimr::NSqsTopic::V1 {
 
         std::expected<void, std::string> ValidateFifoImmutability() const {
             bool existingFifo = ExistingConsumer.GetKeepMessageOrder();
-            if (NewConsumerConfig.Consumer.HasKeepMessageOrder()) {
-                bool newFifo = NewConsumerConfig.Consumer.GetKeepMessageOrder();
+            if (NewQueueAttributes.Consumer.HasKeepMessageOrder()) {
+                bool newFifo = NewQueueAttributes.Consumer.GetKeepMessageOrder();
                 if (existingFifo != newFifo) {
                     return std::unexpected(std::format(
                         "FifoQueue attribute cannot be changed. Current value: {}",
@@ -164,7 +177,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void SendAlterTopicRequest(const TActorContext& ctx) {
             std::pair<TString, TString> pathPair;
             try {
-                pathPair = NKikimr::NGRpcService::SplitPath(TQueueUrlHolder::FullTopicPath_);
+                pathPair = NKikimr::NGRpcService::SplitPath(TBase::GetTopicPath());
             } catch (const std::exception& ex) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, ex.what()));
             }
@@ -183,10 +196,18 @@ namespace NKikimr::NSqsTopic::V1 {
             modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
             modifyScheme.SetWorkingDir(workingDir);
 
+            if (TBase::GetCdcStreamName().Defined()) {
+                modifyScheme.SetAllowAccessToPrivatePaths(true);
+            }
+
             auto* alterConfig = modifyScheme.MutableAlterPersQueueGroup();
             alterConfig->CopyFrom(PQGroup);
             alterConfig->ClearTotalGroupCount();
             alterConfig->MutablePQTabletConfig()->ClearPartitionKeySchema();
+
+            if (NewQueueAttributes.ContentBasedDeduplication.Defined()) {
+                alterConfig->MutablePQTabletConfig()->SetContentBasedDeduplication(NewQueueAttributes.ContentBasedDeduplication.Get());
+            }
 
             auto applyIf = modifyScheme.AddApplyIf();
             applyIf->SetPathId(SelfInfo.GetPathId());
@@ -208,8 +229,8 @@ namespace NKikimr::NSqsTopic::V1 {
             ApplyNewAttributes(consumerToModify);
 
             // should we increase global limit?
-            if (NewConsumerConfig.MessageRetentionPeriod.Defined()) {
-                ui64 requestedRetentionSeconds = NewConsumerConfig.MessageRetentionPeriod->Seconds();
+            if (NewQueueAttributes.MessageRetentionPeriod.Defined()) {
+                ui64 requestedRetentionSeconds = NewQueueAttributes.MessageRetentionPeriod->Seconds();
                 ui64 currentRetentionSeconds = PQGroup.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds();
                 if (requestedRetentionSeconds > currentRetentionSeconds) {
                     pqTabletConfig->MutablePartitionConfig()->SetLifetimeSeconds(requestedRetentionSeconds);
@@ -221,7 +242,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void ApplyNewAttributes(NKikimrPQ::TPQTabletConfig::TConsumer* consumer) {
-            const auto& newConsumer = NewConsumerConfig.Consumer;
+            const auto& newConsumer = NewQueueAttributes.Consumer;
 
             if (newConsumer.HasAvailabilityPeriodMs()) {
                 consumer->SetAvailabilityPeriodMs(newConsumer.GetAvailabilityPeriodMs());
@@ -234,9 +255,6 @@ namespace NKikimr::NSqsTopic::V1 {
             }
             if (newConsumer.HasDefaultReceiveMessageWaitTimeMs()) {
                 consumer->SetDefaultReceiveMessageWaitTimeMs(newConsumer.GetDefaultReceiveMessageWaitTimeMs());
-            }
-            if (newConsumer.HasContentBasedDeduplication()) {
-                consumer->SetContentBasedDeduplication(newConsumer.GetContentBasedDeduplication());
             }
             if (newConsumer.HasMaxProcessingAttempts()) {
                 consumer->SetMaxProcessingAttempts(newConsumer.GetMaxProcessingAttempts());
@@ -283,7 +301,7 @@ namespace NKikimr::NSqsTopic::V1 {
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
         NKikimrPQ::TPQTabletConfig::TConsumer ExistingConsumer;
-        TConsumerAttributes NewConsumerConfig;
+        TQueueAttributes NewQueueAttributes;
     };
 
     std::unique_ptr<NActors::IActor> CreateSetQueueAttributesActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

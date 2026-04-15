@@ -147,16 +147,22 @@ void FormatValue(TStringBuilderBase* builder, const TUnversionedValue& value, TS
 
         case EValueType::Any:
         case EValueType::Composite: {
-            if (value.Type == EValueType::Composite) {
-                // ermolovd@ says "composites" are comparable, in contrast to "any".
-                builder->AppendString("><");
+            if (Any(value.Flags & EValueFlags::Hunk)) {
+                builder->AppendChar('"');
+                AppendWithCut(builder, value.AsStringBuf());
+                builder->AppendChar('"');
+            } else {
+                if (value.Type == EValueType::Composite) {
+                    // ermolovd@ says "composites" are comparable, in contrast to "any".
+                    builder->AppendString("><");
+                }
+
+                auto compositeString = ConvertToYsonString(
+                    NYson::TYsonString(value.AsString()),
+                    NYson::EYsonFormat::Text);
+
+                AppendWithCut(builder, compositeString.AsStringBuf());
             }
-
-            auto compositeString = ConvertToYsonString(
-                NYson::TYsonString(value.AsString()),
-                NYson::EYsonFormat::Text);
-
-            AppendWithCut(builder, compositeString.AsStringBuf());
             break;
         }
     }
@@ -189,17 +195,17 @@ size_t TBitwiseUnversionedValueHash::operator()(const TUnversionedValue& value) 
 
     switch (value.Type) {
         case EValueType::Int64:
-            result ^= SplitMix64(value.Data.Int64);
+            result ^= SplitMix(value.Data.Int64);
             break;
         case EValueType::Uint64:
-            result ^= SplitMix64(value.Data.Uint64);
+            result ^= SplitMix(value.Data.Uint64);
             break;
         case EValueType::Double:
             // In a bitwise hash, no double normalization is performed, WYSIWYG.
-            result ^= SplitMix64(BitCast<ui64>(value.Data.Double));
+            result ^= SplitMix(BitCast<ui64>(value.Data.Double));
             break;
         case EValueType::Boolean:
-            result ^= SplitMix64(static_cast<ui64>(value.Data.Boolean));
+            result ^= SplitMix(static_cast<ui64>(value.Data.Boolean));
             break;
         case EValueType::String:
         case EValueType::Any:

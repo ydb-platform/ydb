@@ -245,9 +245,9 @@ void TProducerSet::Collect(IRegistryPtr profiler, IInvokerPtr invoker)
 
     invoker->Invoke(BIND_NO_PROPAGATE([_ = std::move(toRemove)] { }));
 
-    // Use blocking Get(), because we want to lock current thread while data structure is updating.
+    // Use BlockingGet(), because we want to lock current thread while data structure is updating.
     for (const auto& future : offloadFutures) {
-        future.Get();
+        future.BlockingGet();
     }
 }
 

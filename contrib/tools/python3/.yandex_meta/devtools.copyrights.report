@@ -129,7 +129,6 @@ BELONGS Lib/ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        Lib/_pyrepl/curses.py [1:2]
         Lib/_pyrepl/simple_interact.py [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 266d6f62fcd508e39b8dfd2cc9abf823

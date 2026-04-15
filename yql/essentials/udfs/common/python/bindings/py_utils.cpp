@@ -63,7 +63,7 @@ bool HasEncodingCookie(const TString& source) {
     //
 
     static std::regex EncodingRe(
-        "^[ \\t\\v]*#.*?coding[:=][ \\t]*[-_.a-zA-Z0-9]+.*");
+        R"(^[ \t\v]*#.*?coding[:=][ \t]*[-_.a-zA-Z0-9]+.*)");
 
     int i = 0;
     for (const auto& it : StringSplitter(source).Split('\n')) {

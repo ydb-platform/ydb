@@ -105,7 +105,7 @@ constexpr const size_t TUI_LOG_LINES = 1000;
 // lower limit, real number is higher
 constexpr const size_t WAREHOUSES_PER_CPU_CORE = 1000;
 
-// according our runs
+// according to our runs
 constexpr const size_t SESSIONS_PER_COMPUTE_CORE = 15;
 constexpr const size_t COMPUTE_CORES_PER_IMPORT_THREAD = 4;
 

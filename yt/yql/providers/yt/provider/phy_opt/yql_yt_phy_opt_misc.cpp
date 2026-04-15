@@ -334,6 +334,19 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TakeOrSkip(TExprBase no
         return node;
     }
 
+    TVector<TYtTableBaseInfo::TPtr> tableInfos = GetInputTableInfos(input);
+    if (AnyOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return info->Meta->HasRLS; })) {
+        auto converted = ConvertRLSTablesToStatic(input.Maybe<TCoRight>().Input().Cast(), ctx);
+        if (!converted) {
+            return {};
+        }
+
+        return ctx.ChangeChild(
+            *node.Ptr(),
+            TCoCountBase::idx_Input,
+            Build<TCoRight>(ctx, node.Pos()).Input(converted.Cast()).Done().Ptr());
+    }
+
     auto count = State_->PassiveExecution ? countBase.Count() : CleanupWorld(countBase.Count(), ctx);
     if (!count) {
         return {};
@@ -675,7 +688,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Length(TExprBase node, 
         YQL_ENSURE(read.Input().Size() == 1);
         TYtSection section = read.Input().Item(0);
         bool needMaterialize = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample)
-            || AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; });
+            || AnyOf(section.Paths(), [](const TYtPath& path) {
+                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || meta->IsDynamic || meta->HasRLS;
+            });
         for (auto s: section.Settings()) {
             switch (FromString<EYtSettingType>(s.Name().Value())) {
             case EYtSettingType::Take:

@@ -134,7 +134,7 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
         case TRule_value_constructor::kAltValueConstructor1: {
             auto& ctor = node.GetAlt_value_constructor1();
             Func_ = "Variant";
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
                 return false;
             }
@@ -149,7 +149,7 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
         case TRule_value_constructor::kAltValueConstructor2: {
             auto& ctor = node.GetAlt_value_constructor2();
             Func_ = "Enum";
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
                 return false;
             }
@@ -161,7 +161,7 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
         case TRule_value_constructor::kAltValueConstructor3: {
             auto& ctor = node.GetAlt_value_constructor3();
             Func_ = "Callable";
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
                 return false;
             }
@@ -171,7 +171,7 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             break;
         }
         case TRule_value_constructor::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     PositionalArgs_ = Args_;
     return true;
@@ -195,7 +195,7 @@ bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
         scope.SetNoColumnErrContext("in external call params");
     }
 
-    TSqlExpression expression(Ctx_, Mode_);
+    TSqlExpression expression(*this);
     TNodePtr value = Unwrap(expression.Build(node.GetRule_expr3()));
     if (value && optimizeForParam) {
         TDeferredAtom atom;
@@ -250,7 +250,7 @@ bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
             break;
         }
         case TRule_using_call_expr::TBlock1::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     YQL_ENSURE(!DistinctAllowed_);
     UsingCallExpr_ = true;
@@ -367,7 +367,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 }
                 break;
             case TRule_invoke_expr::TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -396,7 +396,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 return false;
             }
             case TRule_invoke_expr_tail::TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -436,7 +436,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 break;
             }
             case TRule_window_name_or_specification::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
         Ctx_.IncrementMonCounter("sql_features", "WindowFunctionOver");
     }

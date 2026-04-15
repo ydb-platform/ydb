@@ -1,6 +1,7 @@
 RECURSE(
     adapters
     examples
+    plugins
     src
 )
 

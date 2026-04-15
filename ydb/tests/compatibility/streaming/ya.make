@@ -16,6 +16,7 @@ REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 
+
 DEPENDS(
     ydb/tests/library/compatibility/binaries
     ydb/tests/tools/pq_read

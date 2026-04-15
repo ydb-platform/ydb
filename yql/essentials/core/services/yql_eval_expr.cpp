@@ -1040,12 +1040,13 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", {clonedArg});
         }
 
-        TString key, yson;
+        TString key;
+        TString yson;
         NYT::TNode ysonNode;
         if (types.QContext) {
             key = MakeCacheKey(*clonedArg);
             if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
-                auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
+                auto item = types.QContext.GetReader()->Get({.Component = EvaluationComponent, .Label = key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
                 }
@@ -1136,7 +1137,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             if (ysonNode.HasKey("FallbackProvider")) {
                 nextProvider = ysonNode["FallbackProvider"].AsString();
             } else if (types.QContext.CanWrite()) {
-                types.QContext.GetWriter()->Put({EvaluationComponent, key}, yson).GetValueSync();
+                types.QContext.GetWriter()->Put({.Component = EvaluationComponent, .Label = key}, yson).GetValueSync();
             }
         } while (ysonNode.HasKey("FallbackProvider"));
 

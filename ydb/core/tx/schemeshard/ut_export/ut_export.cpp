@@ -3428,7 +3428,7 @@ state: STATE_ENABLED
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
-              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "key" Type: "Uint64" }
               Columns { Name: "embedding" Type: "String" }
               Columns { Name: "prefix" Type: "String" }
               Columns { Name: "value" Type: "Utf8" }
@@ -3547,6 +3547,50 @@ state: STATE_ENABLED
                   }
                   clusters: 4
                   levels: 5
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextPlain) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextPlain
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextRelevance) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextRelevance
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
                 }
               }
             }
@@ -3880,6 +3924,7 @@ WITH (
                 FederationAccount: "federation_account"
                 EnableCompactification: false
                 TimestampType: "LogAppendTime"
+                ContentBasedDeduplication: true
                 PartitionConfig {
                     LifetimeSeconds: 12
                     StorageLimitBytes: 104857600
@@ -3915,6 +3960,24 @@ WITH (
                     Name: "consumer_2"
                     Important: false
                     Codec {
+                        Ids: 1
+                        Ids: 2
+                    }
+                }
+                Consumers {
+                    Name: "consumer_3"
+                    Important: false
+                    Type: CONSUMER_TYPE_MLP
+                    KeepMessageOrder: true
+                    DefaultProcessingTimeoutSeconds: 30
+                    DefaultDelayMessageTimeMs: 5000
+                    DefaultReceiveMessageWaitTimeMs: 3000
+                    DeadLetterPolicyEnabled: true
+                    DeadLetterPolicy: DEAD_LETTER_POLICY_MOVE
+                    MaxProcessingAttempts: 42
+                    DeadLetterQueue: "/MyRoot/dlq_for_topic_full_test"
+                    Codec {
+                        Ids: 0
                         Ids: 1
                         Ids: 2
                     }
@@ -3981,7 +4044,7 @@ WITH (
             static_cast<int>(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY)
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 3);
 
         const auto& consumer1 = topicDescription.consumers(0);
         UNIT_ASSERT_VALUES_EQUAL(consumer1.name(), "consumer_1");
@@ -3996,6 +4059,26 @@ WITH (
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(0), 2);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(1), 3);
+
+        const auto& consumer3 = topicDescription.consumers(2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.name(), "consumer_3");
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.important(), false);
+        UNIT_ASSERT(consumer3.has_shared_consumer_type());
+        const auto& sharedType = consumer3.shared_consumer_type();
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.keep_messages_order(), true);
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.receive_message_delay().seconds(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.receive_message_wait_time().seconds(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.default_processing_timeout().seconds(), 30);
+        UNIT_ASSERT(sharedType.has_dead_letter_policy());
+        const auto& deadLetterPolicy = sharedType.dead_letter_policy();
+        UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.enabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.condition().max_processing_attempts(), 42u);
+        UNIT_ASSERT(deadLetterPolicy.has_move_action());
+        UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.move_action().dead_letter_queue(), "/MyRoot/dlq_for_topic_full_test");
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(2), 3);
 
         const auto& attrs = topicDescription.attributes();
         UNIT_ASSERT(attrs.size() > 0);

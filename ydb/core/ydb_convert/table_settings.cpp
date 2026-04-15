@@ -532,7 +532,6 @@ bool FillIndexTablePartitioning(
         }
         break;
     }
-
     case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         indexImplTableDescriptions.resize(1);
         if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions[0])) {
@@ -552,6 +551,13 @@ bool FillIndexTablePartitioning(
             return false;
         }
         if (!fillIndexPartitioning(index.global_fulltext_relevance_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::PostingTablePosition])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalJsonIndex:
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_json_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;

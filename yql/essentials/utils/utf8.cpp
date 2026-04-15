@@ -3,6 +3,7 @@
 #include <util/charset/wide.h>
 
 #include <cctype>
+#include <ranges>
 #include <vector>
 #include <array>
 
@@ -41,6 +42,7 @@ struct TUtf8Ranges {
 };
 
 // see https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8
+// NOLINTBEGIN(modernize-use-designated-initializers)
 // clang-format off
 inline static const std::vector<TUtf8Ranges> Utf8Ranges = {
     { 1, { {0x00, 0x7f}, {0x00, 0x00}, {0x00, 0x00}, {0x00, 0x00}, } },
@@ -54,6 +56,7 @@ inline static const std::vector<TUtf8Ranges> Utf8Ranges = {
     { 4, { {0xf4, 0xf4}, {0x80, 0x8f}, {0x80, 0xbf}, {0x80, 0xbf}, } },
 };
 // clang-format on
+// NOLINTEND(modernize-use-designated-initializers)
 
 std::optional<std::string> RoundBadUtf8(size_t range, std::string_view inputString, size_t pos,
                                         bool roundDown)
@@ -262,8 +265,7 @@ std::optional<std::string> NextValidUtf8(const std::string_view& str) {
     TUtf32String wide = UTF8ToUTF32<false>(str);
     bool incremented = false;
     size_t toDrop = 0;
-    for (auto it = wide.rbegin(); it != wide.rend(); ++it) {
-        auto& c = *it;
+    for (char32_t& c : std::ranges::reverse_view(wide)) {
         if (c < 0x10ffff) {
             c = (c == 0xd7ff) ? 0xe000 : (c + 1);
             incremented = true;
@@ -288,8 +290,7 @@ std::optional<std::string> NextLexicographicString(const std::string_view& str) 
     bool incremented = false;
     size_t toDrop = 0;
     std::string result{str};
-    for (auto it = result.rbegin(); it != result.rend(); ++it) {
-        auto& c = *it;
+    for (char& c : std::ranges::reverse_view(result)) {
         if (ui8(c) < 0xff) {
             ++c;
             incremented = true;

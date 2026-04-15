@@ -88,7 +88,7 @@ IActor* TTableUploader<TData>::CreateUploaderInternal(
     const TString& database, const TString& tablePath,
     const std::shared_ptr<TData>& data, ui64 cookie)
 {
-    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
+    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, false, cookie, DefaultBackoff);
 }
 
 }

@@ -6,8 +6,6 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/memory/free_list.h>
-
 #include <array>
 
 namespace NYT {

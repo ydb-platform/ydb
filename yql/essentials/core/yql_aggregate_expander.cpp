@@ -54,7 +54,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     if (Suffix_ == "Finalize") {
         EffectiveCompact_ = true;
         Suffix_ = "";
-    } else if (Suffix_ != "") {
+    } else if (!Suffix_.empty()) {
         EffectiveCompact_ = false;
     }
 
@@ -69,7 +69,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     auto keyExtractor = GetKeyExtractor(needPickle);
     CollectColumnsSpecs();
 
-    if (Suffix_ == "" && !HaveSessionSetting_ && !EffectiveCompact_ && UsePhases_) {
+    if (Suffix_.empty() && !HaveSessionSetting_ && !EffectiveCompact_ && UsePhases_) {
         return GeneratePhases();
     }
 
@@ -383,7 +383,7 @@ void TAggregateExpander::BuildNothingStates()
     }
 }
 
-TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TPtr keyExtractor,
+TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TPtr& keyExtractor,
     const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needPickle)
 {
     TExprNode::TPtr pickleTypeNode = nullptr;
@@ -397,9 +397,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
     if (!NonDistinctColumns_.empty()) {
         partialAgg = GeneratePartialAggregateForNonDistinct(keyExtractor, pickleTypeNode);
     }
-    for (ui32 index = 0; index < DistinctFields_.size(); ++index) {
-        auto distinctField = DistinctFields_[index];
-
+    for (auto distinctField : DistinctFields_) {
         bool needDistinctPickle = EffectiveCompact_ ? false : needPickle;
         auto distinctGrouper = GenerateDistinctGrouper(distinctField, keyItemTypes, needDistinctPickle);
 
@@ -526,7 +524,7 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
         }
     }
 
-    bool aggregateOnly = (Suffix_ != "");
+    bool aggregateOnly = (!Suffix_.empty());
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
     return Ctx_.Builder(Node_->Pos())
         .Lambda()
@@ -1012,7 +1010,7 @@ void TAggregateExpander::GenerateInitForDistinct(TExprNodeBuilder& parent, ui32&
     }
 }
 
-TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPtr distinctField,
+TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPtr& distinctField,
     const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needDistinctPickle)
 {
     auto& indicies = Distinct2Columns_[distinctField->Content()];
@@ -1798,7 +1796,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
                 .Seal()
             .Seal().Build();
     }
-    if (KeyColumns_->ChildrenSize() == 0 && !HaveSessionSetting_ && (Suffix_ == "" || Suffix_.EndsWith("Finalize"))) {
+    if (KeyColumns_->ChildrenSize() == 0 && !HaveSessionSetting_ && (Suffix_.empty() || Suffix_.EndsWith("Finalize"))) {
         return MakeSingleGroupRow(*Node_, postAgg, Ctx_);
     }
     return postAgg;
@@ -1878,7 +1876,7 @@ TExprNode::TPtr TAggregateExpander::GenerateCondenseSwitch(const TExprNode::TPtr
 
 TExprNode::TPtr TAggregateExpander::GeneratePostAggregateInitPhase()
 {
-    bool aggregateOnly = (Suffix_ != "");
+    bool aggregateOnly = (!Suffix_.empty());
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
 
     ui32 index = 0U;
@@ -2041,7 +2039,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateInitPhase()
 
 TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase()
 {
-    bool aggregateOnly = (Suffix_ != "");
+    bool aggregateOnly = (!Suffix_.empty());
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
 
     ui32 index = 0U;
@@ -2174,7 +2172,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase()
 
 TExprNode::TPtr TAggregateExpander::GeneratePostAggregateMergePhase()
 {
-    bool aggregateOnly = (Suffix_ != "");
+    bool aggregateOnly = (!Suffix_.empty());
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
 
     ui32 index = 0U;
@@ -2668,8 +2666,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         streams.push_back(SerializeIdxSet(NonDistinctColumns_));
     }
 
-    for (ui32 index = 0; index < DistinctFields_.size(); ++index) {
-        auto distinctField = DistinctFields_[index];
+    for (auto distinctField : DistinctFields_) {
         auto& indicies = Distinct2Columns_[distinctField->Content()];
         TExprNode::TListType allKeyColumns = KeyColumns_->ChildrenList();
         allKeyColumns.push_back(distinctField);

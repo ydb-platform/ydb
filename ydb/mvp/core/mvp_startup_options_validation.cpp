@@ -4,6 +4,8 @@
 
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/string/strip.h>
+#include <util/stream/file.h>
 
 namespace NMVP {
 namespace {
@@ -23,6 +25,44 @@ NMvp::TOAuth2Exchange::TCredentials::EType InferCredsType(const NMvp::TOAuth2Exc
         return TCreds::FIXED;
     }
     return TCreds::TYPE_UNSPECIFIED;
+}
+
+void NormalizeSecretInfo(NMvp::TSecretInfo* secretInfo) {
+    secretInfo->SetSecret(StripString(secretInfo->GetSecret()));
+    const bool hasSecret = !secretInfo->GetSecret().empty();
+    const bool hasSecretFile = !secretInfo->GetSecretFile().empty();
+
+    if (hasSecret && hasSecretFile) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX
+                            << "secret_info '" << secretInfo->GetName()
+                            << "' must not set both secret and secret_file.";
+    }
+
+    if (!hasSecret && !hasSecretFile) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX
+                            << "secret_info '" << secretInfo->GetName()
+                            << "' requires either secret or secret_file.";
+    }
+
+    if (hasSecretFile) {
+        TString secret;
+        try {
+            secret = StripString(TFileInput(secretInfo->GetSecretFile()).ReadAll());
+        } catch (const std::exception& e) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX
+                                << "unable to read secret_file for secret_info '" << secretInfo->GetName()
+                                << "': " << e.what();
+        }
+
+        if (secret.empty()) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX
+                                << "secret_file for secret_info '" << secretInfo->GetName()
+                                << "' resolved to empty secret.";
+        }
+
+        secretInfo->SetSecret(std::move(secret));
+        secretInfo->ClearSecretFile();
+    }
 }
 
 } // namespace
@@ -101,6 +141,10 @@ void TMvpStartupOptions::ValidateOAuth2CredentialsFields(
 }
 
 void TMvpStartupOptions::ValidateTokensConfig() {
+    for (auto& secretInfo : *Tokens.MutableSecretInfo()) {
+        NormalizeSecretInfo(&secretInfo);
+    }
+
     for (const auto& tokenExchangeInfo : Tokens.GetOAuth2Exchange()) {
         RequireNonEmptyField(tokenExchangeInfo.GetTokenEndpoint(), "'token_endpoint'", "in oauth2_exchange token config");
         if (!tokenExchangeInfo.HasSubjectCredentials()) {

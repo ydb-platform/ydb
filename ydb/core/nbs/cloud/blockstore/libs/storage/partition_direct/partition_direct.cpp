@@ -17,4 +17,4 @@ IActor* CreatePartitionTablet(const TActorId& tablet, TTabletStorageInfo* info)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

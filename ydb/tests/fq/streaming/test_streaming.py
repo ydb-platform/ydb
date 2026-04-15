@@ -4,6 +4,8 @@ import random
 import string
 import time
 
+import ydb
+
 from ydb.tests.fq.streaming.common import StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
@@ -42,7 +44,7 @@ class TestStreamingInYdb(StreamingTestBase):
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic", local_topics, entity_name)
+        input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
@@ -60,6 +62,369 @@ class TestStreamingInYdb(StreamingTestBase):
         self.write_stream(data, endpoint=endpoint)
         result_sets = future.result()
         assert result_sets[0].rows[0]['time'] == b'lunch time'
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv(self, kikimr, entity_name, local_topics):
+        """FORMAT csv: one topic message = one CSV row (ClickHouseClient.ParseFormat, no row dispatcher).
+
+        S3 batch analogs: `test_formats.TestS3Formats.test_csv_format_no_header`, etc.
+        """
+        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_csv", local_topics, entity_name)
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["lunch time"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        assert result_sets[0].rows[0]["time"] == b"lunch time"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv_with_names(self, kikimr, entity_name, local_topics):
+        """FORMAT csv_with_names: header + data line per message (same CH parser as S3; no row dispatcher).
+
+        S3 analog: `test_formats.TestS3Formats.test_format` / `test_custom_csv_delimiter_csv_with_names` (csv_with_names).
+        """
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_read_topic_csv_with_names", local_topics, entity_name
+        )
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["time\nlunch time\n"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        assert result_sets[0].rows[0]["time"] == b"lunch time"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_projection_column_order(self, kikimr, entity_name, local_topics):
+        """Headerless CSV: file fields follow SCHEMA order; SELECT only reorders output columns.
+
+        S3 analog: `test_formats.TestS3Formats.test_csv_projection_column_order`.
+        """
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_projection_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b, a FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        # SCHEMA (a, b): first CSV field is `a`, second is `b`.
+        data = ["aa,bb"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["b"] == b"bb"
+        assert row["a"] == b"aa"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_with_names_projection_column_order(self, kikimr, entity_name, local_topics):
+        """csv_with_names: header names map fields; SCHEMA order vs header row; SELECT only reorders output.
+
+        S3 analog: `test_formats.TestS3Formats.test_csv_with_names_projection_column_order`.
+        """
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_with_names_projection_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b, a FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        # Header lists a then b; data line matches that order (same as SCHEMA declaration order).
+        data = ["a,b\naa,bb\n"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["b"] == b"bb"
+        assert row["a"] == b"aa"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_custom_csv_delimiter_csv_with_names(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_custom_csv_delimiter_csv_with_names` (semicolon + header per message)."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_custom_csv_delimiter_csv_with_names", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                csv_delimiter = ";",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = [
+            "Fruit;Price;Weight\nBanana;3;100\n",
+            "Fruit;Price;Weight\nApple;2;22\n",
+            "Fruit;Price;Weight\nPear;15;33\n",
+        ]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Fruit"] == b"Banana" and rows[0]["Price"] == 3 and rows[0]["Weight"] == 100
+        assert rows[1]["Fruit"] == b"Apple" and rows[1]["Price"] == 2 and rows[1]["Weight"] == 22
+        assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_custom_csv_delimiter_csv(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_custom_csv_delimiter_csv` / `test_csv_format_custom_delimiter`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_custom_csv_delimiter_csv", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                csv_delimiter = ";",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["Banana;3;100", "Apple;2;22", "Pear;15;33"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Fruit"] == b"Banana" and rows[0]["Price"] == 3 and rows[0]["Weight"] == 100
+        assert rows[1]["Fruit"] == b"Apple" and rows[1]["Price"] == 2 and rows[1]["Weight"] == 22
+        assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_delimiter_invalid_format_rejected(self, kikimr, entity_name, local_topics):
+        input_name, _ = self.get_input_name(
+            kikimr, "test_csv_delimiter_invalid_format_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                csv_delimiter = ";",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert "csv_delimiter can only be used with csv or csv_with_names format" in str(exc_info.value)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, entity_name, local_topics):
+        input_name, _ = self.get_input_name(
+            kikimr, "test_csv_delimiter_must_be_single_character_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                csv_delimiter = ";;",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert "csv_delimiter must be single character" in str(exc_info.value)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_empty_schema_rejected(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_empty_schema_rejected`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_empty_schema_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = ()
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert (
+            "csv format requires SCHEMA with explicitly listed column names to determine column order"
+            in str(exc_info.value)
+        )
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_projection_single_column(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_projection_single_column`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_projection_single_column", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        self.write_stream(["aa,bb"], endpoint=endpoint)
+        result_sets = future.result()
+        assert len(result_sets[0].rows) == 1
+        assert result_sets[0].rows[0]["b"] == b"bb"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_projection_column_order_non_alphabetical_schema`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_projection_nonalpha_schema", local_topics, entity_name
+        )
+
+        sql = f"""SELECT a, b FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (b String NOT NULL, a String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        self.write_stream(["bb,aa"], endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["a"] == b"aa"
+        assert row["b"] == b"bb"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_no_header_three_rows(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_format_no_header` (same data as test_format_data/test_no_header.csv)."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_no_header_three_rows", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["Banana,3,100", "Apple,2,22", "Pear,15,33"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Fruit"] == b"Banana" and rows[0]["Price"] == 3 and rows[0]["Weight"] == 100
+        assert rows[1]["Fruit"] == b"Apple" and rows[1]["Price"] == 2 and rows[1]["Weight"] == 22
+        assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_no_header_select_price(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_format_no_header_project_non_first_alphabetic_column`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_no_header_select_price", local_topics, entity_name
+        )
+
+        sql = f"""SELECT Price FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            )
+            LIMIT 3"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["Banana,3,100", "Apple,2,22", "Pear,15,33"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        rows = result_sets[0].rows
+        assert len(rows) == 3
+        assert rows[0]["Price"] == 3
+        assert rows[1]["Price"] == 2
+        assert rows[2]["Price"] == 15
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_physical_column_order(self, kikimr, entity_name, local_topics):
+        """Analog of `TestS3Formats.test_csv_format_schema_order_differs_from_alphabet`."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_csv_physical_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (
+                    Weight Int NOT NULL,
+                    Price Int NOT NULL,
+                    Fruit String NOT NULL
+                )
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        self.write_stream(["100,3,Banana"], endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["Weight"] == 100
+        assert row["Price"] == 3
+        assert row["Fruit"] == b"Banana"
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_limit(self, kikimr, entity_name, local_topics):
@@ -89,7 +454,7 @@ class TestStreamingInYdb(StreamingTestBase):
     def test_restart_query(self, kikimr, entity_name, local_topics, use_partition_balancing):
         inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10)
 
-        name = "test_restart_query"
+        name = f"test_restart_query_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -127,7 +492,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "shared_reading_insert_to_topic", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"shared_reading_insert_to_topic{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -140,8 +505,8 @@ class TestStreamingInYdb(StreamingTestBase):
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
 
-        query_name1 = "test_read_topic_shared_reading_insert_to_topic1"
-        query_name2 = "test_read_topic_shared_reading_insert_to_topic2"
+        query_name1 = f"test_read_topic_shared_reading_insert_to_topic1_{local_topics!s:.1}"
+        query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
         path1 = f"/Root/{query_name1}"
@@ -149,10 +514,8 @@ class TestStreamingInYdb(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, path1)
 
         # Check that streaming.query.tasks.count metric exists for both queries
-        tasks_count1 = self.get_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expect_counters_exist=True)
-        tasks_count2 = self.get_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expect_counters_exist=True)
-        assert tasks_count1 > 0, f"Expected tasks count > 0 for {query_name1}, got {tasks_count1}"
-        assert tasks_count2 > 0, f"Expected tasks count > 0 for {query_name2}, got {tasks_count2}"
+        self.wait_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expected_value=1)
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
@@ -181,7 +544,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_restart_nodes(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "reading_restart_nodes", local_topics, entity_name, partitions_count=1, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"reading_restart_nodes_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -194,7 +557,7 @@ class TestStreamingInYdb(StreamingTestBase):
                 INSERT INTO {out} SELECT value FROM $in;
             END DO;'''
 
-        query_name = "test_read_topic_shared_reading_restart_nodes"
+        query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
@@ -204,25 +567,35 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
-        restart_node_id = None
-        for node_id in kikimr.cluster.nodes:
-            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            if count:
-                restart_node_id = node_id
+        def restart_node():
+            restart_node_id = None
+            for node_id in kikimr.cluster.nodes:
+                count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                if count:
+                    restart_node_id = node_id
+            assert restart_node_id is not None
+            logger.debug(f"Restart node {restart_node_id}")
+            node = kikimr.cluster.nodes[restart_node_id]
+            node.stop()
+            node.start()
 
-        logger.debug(f"Restart node {restart_node_id}")
-        node = kikimr.cluster.nodes[restart_node_id]
-        node.stop()
-        node.start()
-
+        restart_node()
         self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
         expected_data = ['value2']
+        self.wait_completed_checkpoints(kikimr, path)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+        restart_node()
+        self.write_stream(['{"value": "value3"}'], endpoint=endpoint)
+        expected_data = ['value3']
+        self.wait_completed_checkpoints(kikimr, path)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_read_topic_restore_state", local_topics, entity_name, partitions_count=1, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_read_topic_restore_state_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -251,7 +624,7 @@ class TestStreamingInYdb(StreamingTestBase):
                     SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $mr;
             END DO;'''
 
-        query_name = "test_read_topic_restore_state"
+        query_name = f"test_read_topic_restore_state_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
@@ -285,9 +658,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_json_errors(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_json_errors", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_json_errors_{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
-        name = "test_json_errors"
+        name = f"test_json_errors_{local_topics!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -315,9 +688,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query_by_rescaling", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query_by_rescaling{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
-        name = "test_restart_query_by_rescaling"
+        name = f"test_restart_query_by_rescaling_{local_topics!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -373,11 +746,11 @@ class TestStreamingInYdb(StreamingTestBase):
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_pragma(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_pragma", local_topics, entity_name, partitions_count=10)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name, partitions_count=10)
 
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
 
-        query_name = "test_pragma1"
+        query_name = f"test_pragma1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         pragma_balancing = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -403,7 +776,7 @@ class TestStreamingInYdb(StreamingTestBase):
     def test_types(self, kikimr, entity_name, local_topics, use_partition_balancing):
         inp, out, endpoint = self.get_io_names(kikimr, "test_types", local_topics, entity_name, partitions_count=1)
 
-        query_name = "test_types1"
+        query_name = f"test_types1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
 
         def test_type(self, kikimr, type, input, expected_output, use_partition_balancing=False):
             pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
@@ -442,7 +815,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
 
-        query_name = "test_raw_format_string"
+        query_name = f"test_raw_format_string_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -464,7 +837,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-        query_name = "test_raw_format_default"
+        query_name = f"test_raw_format_default_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -483,7 +856,7 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-        query_name = "test_raw_format_json"
+        query_name = f"test_raw_format_json_{local_topics!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -520,7 +893,7 @@ class TestStreamingInYdb(StreamingTestBase):
         # Disable deduplication
 
         inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10)
-        name = "test_deduplication"
+        name = f"test_deduplication_{local_topics!s:.1}"
         path = f"/Root/{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
         self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
@@ -564,3 +937,26 @@ class TestStreamingInYdb(StreamingTestBase):
         assert len(readed_data) == 10
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_shared_reading_in_streaming_queries": False},
+            {"enable_shared_reading_in_streaming_queries": True},
+        ],
+        indirect=["kikimr"],
+    )
+    def test_check_shared_reading_disabled(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
+        source_name = entity_name("MyEDS")
+
+        if enable_shared_reading_in_streaming_queries:
+            self.create_source(kikimr, source_name, shared=True)
+            kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
+        else:
+            with pytest.raises(
+                ydb.issues.GenericError,
+                match=r"SHARED_READING in External data source is not supported",
+            ):
+                self.create_source(kikimr, source_name, shared=True)

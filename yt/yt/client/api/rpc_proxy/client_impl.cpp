@@ -309,6 +309,27 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
     }));
 }
 
+TFuture<void> TClient::SetUserBanned(
+    const std::string&,
+    bool,
+    const TSetUserBannedOptions&)
+{
+    ThrowUnimplemented("SetUserBanned");
+}
+
+TFuture<bool> TClient::GetUserBanned(
+    const std::string&,
+    const TGetUserBannedOptions&)
+{
+    ThrowUnimplemented("GetUserBanned");
+}
+
+TFuture<std::vector<std::string>> TClient::ListBannedUsers(
+    const TListBannedUsersOptions&)
+{
+    ThrowUnimplemented("ListBannedUsers");
+}
+
 IPrerequisitePtr TClient::AttachPrerequisite(
     NPrerequisiteClient::TPrerequisiteId prerequisiteId,
     const TPrerequisiteAttachOptions& options)
@@ -790,6 +811,8 @@ TFuture<std::vector<TTabletActionId>> TClient::BalanceTabletCells(
     req->set_keep_actions(options.KeepActions);
     ToProto(req->mutable_movable_tables(), movableTables);
 
+    ToProto(req->mutable_mutating_options(), options);
+
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspBalanceTabletCellsPtr>& rspOrError) {
         const auto& rsp = rspOrError.ValueOrThrow();
         return FromProto<std::vector<TTabletActionId>>(rsp->tablet_actions());
@@ -829,6 +852,8 @@ TFuture<void> TClient::AlterReplicationCard(
     if (options.CollocationOptions) {
         req->set_collocation_options(ToProto(ConvertToYsonString(options.CollocationOptions)));
     }
+
+    ToProto(req->mutable_mutating_options(), options);
 
     return req->Invoke().As<void>();
 }
@@ -1991,7 +2016,13 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     req->set_partition_mode(static_cast<NProto::EPartitionTablesMode>(options.PartitionMode));
 
-    req->set_data_weight_per_partition(options.DataWeightPerPartition);
+    if (options.DataWeightPerPartition) {
+        req->set_data_weight_per_partition(*options.DataWeightPerPartition);
+    }
+
+    if (options.CompressedDataSizePerPartition) {
+        req->set_compressed_data_size_per_partition(*options.CompressedDataSizePerPartition);
+    }
 
     if (options.MaxPartitionCount) {
         req->set_max_partition_count(*options.MaxPartitionCount);
@@ -2035,7 +2066,7 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
 
                 auto rowBatchReader = New<TRowBatchReader>(std::move(inputStream), /*isStreamWithStatistics*/ false);
 
-                return NApi::CreateTablePartitionReader(rowBatchReader, /*schemas*/ {}, /*columnFilters=*/ {});
+                return NApi::CreateTablePartitionReader(rowBatchReader, /*schemas*/ {}, /*columnFilters*/ {});
             }));
         }));
 }

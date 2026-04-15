@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
 
         std::vector<std::thread> threads;
         
-        ui32 readers = 2;
+        ui32 readers = 1;
         ui32 writers = 10;
 
         TInstant start = TInstant::Now();

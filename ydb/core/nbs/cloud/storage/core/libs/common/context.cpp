@@ -14,7 +14,7 @@ TRequestTime TCallContextBase::CalcRequestTime(ui64 nowCycles) const
 {
     const ui64 startCycles = GetRequestStartedCycles();
     if (!startCycles || startCycles >= nowCycles) {
-        return TRequestTime {
+        return TRequestTime{
             .TotalTime = TDuration::Zero(),
             .ExecutionTime = TDuration::Zero(),
         };
@@ -24,7 +24,9 @@ TRequestTime TCallContextBase::CalcRequestTime(ui64 nowCycles) const
     requestTime.TotalTime = CyclesToDurationSafe(nowCycles - startCycles);
 
     const ui64 postponeStart = AtomicGet(PostponeTsCycles);
-    if (postponeStart && startCycles < postponeStart && postponeStart < nowCycles) {
+    if (postponeStart && startCycles < postponeStart &&
+        postponeStart < nowCycles)
+    {
         nowCycles = postponeStart;
     }
 
@@ -36,7 +38,7 @@ TRequestTime TCallContextBase::CalcRequestTime(ui64 nowCycles) const
         (responseSentCycles ? responseSentCycles : nowCycles) - startCycles);
 
     requestTime.ExecutionTime = responseDuration - postponeDuration -
-        backoffTime - GetPossiblePostponeDuration();
+                                backoffTime - GetPossiblePostponeDuration();
 
     return requestTime;
 }
@@ -104,7 +106,8 @@ TDuration TCallContextBase::Advance(ui64 nowCycles)
 
 TDuration TCallContextBase::Time(EProcessingStage stage) const
 {
-    return TDuration::MicroSeconds(AtomicGet(Stage2Time[static_cast<int>(stage)]));
+    return TDuration::MicroSeconds(
+        AtomicGet(Stage2Time[static_cast<int>(stage)]));
 }
 
 void TCallContextBase::AddTime(EProcessingStage stage, TDuration d)

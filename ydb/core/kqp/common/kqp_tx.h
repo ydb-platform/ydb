@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 
 #include <ydb/core/util/ulid.h>
 
@@ -21,66 +22,6 @@ namespace {
     constexpr size_t kMaxDeferredEffects = 100;
 }
 
-class TKqpTxLock {
-public:
-    using TKey = std::tuple<ui64, ui64, ui64, ui64>;
-
-    TKqpTxLock(const NKikimrMiniKQL::TValue& lockValue)
-        : LockValue(lockValue) {}
-
-    ui64 GetLockId() const { return LockValue.GetStruct(3).GetUint64(); }
-    ui64 GetDataShard() const { return LockValue.GetStruct(1).GetUint64(); }
-    ui64 GetSchemeShard() const { return LockValue.GetStruct(5).GetUint64(); }
-    ui64 GetPathId() const { return LockValue.GetStruct(4).GetUint64(); }
-    ui32 GetGeneration() const { return LockValue.GetStruct(2).GetUint32(); }
-    ui64 GetCounter() const { return LockValue.GetStruct(0).GetUint64(); }
-    bool HasWrites() const { return LockValue.GetStruct(6).GetBool(); }
-    void SetHasWrites() {
-        LockValue.MutableStruct(6)->SetBool(true);
-    }
-
-    TKey GetKey() const { return std::make_tuple(GetLockId(), GetDataShard(), GetSchemeShard(), GetPathId()); }
-    NKikimrMiniKQL::TValue GetValue() const { return LockValue; }
-    NYql::NDq::TMkqlValueRef GetValueRef(const NKikimrMiniKQL::TType& type) const { return NYql::NDq::TMkqlValueRef(type, LockValue); }
-
-    bool Invalidated(const TKqpTxLock& newLock) const {
-        YQL_ENSURE(GetKey() == newLock.GetKey());
-        return GetGeneration() != newLock.GetGeneration() || GetCounter() != newLock.GetCounter();
-    }
-
-private:
-    NKikimrMiniKQL::TValue LockValue;
-};
-
-struct TKqpTxLocks {
-    NKikimrMiniKQL::TType LockType;
-    NKikimrMiniKQL::TListType LocksListType;
-    THashMap<TKqpTxLock::TKey, TKqpTxLock> LocksMap;
-    NLongTxService::TLockHandle LockHandle;
-
-    TMaybe<NYql::TIssue> LockIssue;
-
-    bool HasLocks() const { return !LocksMap.empty(); }
-    bool Broken() const { return LockIssue.Defined(); }
-    void MarkBroken(NYql::TIssue lockIssue) { LockIssue.ConstructInPlace(std::move(lockIssue)); }
-    ui64 GetLockTxId() const { return LockHandle ? LockHandle.GetLockId() : HasLocks() ? LocksMap.begin()->second.GetLockId() : 0; }
-    size_t Size() const { return LocksMap.size(); }
-
-    NYql::TIssue GetIssue() const {
-        Y_ENSURE(LockIssue);
-        return *LockIssue;
-    }
-
-    void ReportIssues(NYql::TExprContext& ctx) {
-        if (LockIssue)
-            ctx.AddError(*LockIssue);
-    }
-
-    void Clear() {
-        LocksMap.clear();
-        LockIssue.Clear();
-    }
-};
 
 struct TDeferredEffect {
     TKqpPhyTxHolder::TConstPtr PhysicalTx;
@@ -178,6 +119,7 @@ public:
         : NYql::TKikimrTransactionContextBase()
         , Implicit(implicit)
         , ParamsState(MakeIntrusive<TParamsState>())
+        , TxManager(CreateKqpTransactionManager())
     {
         CreationTime = TInstant::Now();
         TxAlloc = std::make_shared<TTxAllocatorState>(funcRegistry, timeProvider, randomProvider);
@@ -207,8 +149,6 @@ public:
 
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
-        YQL_ENSURE(!Locks.HasLocks());
-        YQL_ENSURE(!TxManager);
         YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
@@ -240,6 +180,7 @@ public:
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
 
         HasOlapTable = false;
@@ -349,7 +290,7 @@ public:
     ui32 QueriesCount = 0;
     ui32 ExecutorId = 0;
 
-    TKqpTxLocks Locks;
+    NLongTxService::TLockHandle LockHandle;
 
     TDeferredEffects DeferredEffects;
     bool HasImmediateEffects = false;
@@ -364,7 +305,6 @@ public:
     bool HasTableWrite = false;
     bool HasTableRead = false;
 
-    std::optional<bool> EnableOltpSink;
     std::optional<bool> EnableOlapSink;
     std::optional<bool> EnableHtapTx;
 
@@ -523,13 +463,6 @@ public:
         return std::exchange(ToBeAborted, {});
     }
 };
-
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId,
-    TMaybe<ui64> victimQuerySpanId = Nothing());
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
-    TMaybe<ui64> victimQuerySpanId = Nothing());
-std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
-    const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);

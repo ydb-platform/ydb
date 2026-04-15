@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/persqueue/public/list_topics)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ELSE()
     SIZE(SMALL)

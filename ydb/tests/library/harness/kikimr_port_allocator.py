@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 import abc
+import library.python.port_manager
 import os
-import yatest
-import yatest.common.network
 
 
 class KikimrNodePortAllocatorInterface(object):
@@ -33,6 +32,10 @@ class KikimrNodePortAllocatorInterface(object):
 
     @abc.abstractproperty
     def sqs_port(self):
+        pass
+
+    @abc.abstractproperty
+    def http_proxy_port(self):
         pass
 
     @abc.abstractproperty
@@ -78,6 +81,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__mbus_port = None
         self.__ic_port = None
         self.__sqs_port = None
+        self.__http_proxy_port = None
         self.__grpc_ssl_port = None
         self.__ext_port = None
         self.__public_http_port = None
@@ -120,6 +124,12 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         return self.__sqs_port
 
     @property
+    def http_proxy_port(self):
+        if self.__http_proxy_port is None:
+            self.__http_proxy_port = self.__port_manager.get_port()
+        return self.__http_proxy_port
+
+    @property
     def pgwire_port(self):
         if self.__pgwire_port is None:
             self.__pgwire_port = self.__port_manager.get_port()
@@ -141,7 +151,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
 class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
     def __init__(self, port_manager=None):
         super(KikimrPortManagerPortAllocator, self).__init__()
-        self.__port_manager = yatest.common.network.PortManager() if port_manager is None else port_manager
+        self.__port_manager = library.python.port_manager.PortManager() if port_manager is None else port_manager
         self.__nodes_allocators = []
         self.__slots_allocators = []
 
@@ -172,6 +182,7 @@ DEFAULT_GRPC_SSL_PORT = 2137
 DEFAULT_SQS_PORT = 8771
 DEFAULT_PUBLIC_HTTP_PORT = 8766
 DEFAULT_PGWIRE_PORT = 5432
+DEFAULT_HTTP_PROXY_PORT = 8433
 
 #
 # Fixed port allocator
@@ -190,7 +201,8 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         sqs_port=DEFAULT_SQS_PORT,
         grpc_ssl_port=DEFAULT_GRPC_SSL_PORT,
         public_http_port=DEFAULT_PUBLIC_HTTP_PORT,
-        pgwire_port=DEFAULT_PGWIRE_PORT
+        pgwire_port=DEFAULT_PGWIRE_PORT,
+        http_proxy_port=DEFAULT_HTTP_PROXY_PORT
     ):
         super(KikimrFixedNodePortAllocator, self).__init__()
 
@@ -203,6 +215,7 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT', grpc_ssl_port))
         self.__public_http_port = int(os.getenv('PUBLIC_HTTP_PORT', public_http_port))
         self.__pgwire_port = int(os.getenv('YDB_PGWIRE_PORT', pgwire_port))
+        self.__http_proxy_port = int(os.getenv('HTTP_PROXY_PORT', http_proxy_port))
 
     @property
     def mon_port(self):
@@ -235,6 +248,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     @property
     def pgwire_port(self):
         return self.__pgwire_port + self.base_port_offset
+
+    @property
+    def http_proxy_port(self):
+        return self.__http_proxy_port + self.base_port_offset
 
 
 class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):

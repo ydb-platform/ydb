@@ -174,8 +174,7 @@ public:
             blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
             Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
         }
-        return GetPortionResult().PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns,
-            GetPortionResult().GetPortionInfo().GetPathId().DebugString());
+        return GetPortionResult().PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns);
     }
 
     std::vector<TBlobInfo>& MutableBlobs() {

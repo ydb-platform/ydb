@@ -62,7 +62,7 @@ namespace NYql::NUdf {
 
 namespace {
 
-typedef void (*TBackTraceCallback)();
+using TBackTraceCallback = void (*)();
 TBackTraceCallback BackTraceCallback;
 
 void UdfBackTraceFn(IOutputStream*, void* const*, size_t) {

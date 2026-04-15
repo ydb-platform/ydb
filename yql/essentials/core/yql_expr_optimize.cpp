@@ -9,6 +9,8 @@
 #include <util/generic/scope.h>
 #include <util/generic/hash.h>
 
+#include <utility>
+
 
 namespace NYql {
 
@@ -25,7 +27,7 @@ namespace {
         TMaybe<TFunctionStack> FunctionStack;
 
         TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
-            : Optimizer(optimizer)
+            : Optimizer(std::move(optimizer))
             , Expr(expr)
             , Settings(settings)
             , Replaces(replaces)
@@ -1147,7 +1149,8 @@ TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrF
 
 std::pair<TExprNode::TPtr, bool> FindSharedNode(const TExprNode::TPtr& firstRoot, const TExprNode::TPtr& secondRoot, const TExprVisitPtrFunc& predicate)
 {
-    TNodeSet nodes, visited;
+    TNodeSet nodes;
+    TNodeSet visited;
     VisitExpr(firstRoot, [&nodes, &predicate] (const TExprNode::TPtr& node) {
         if (predicate(node)) {
             nodes.insert(node.Get());

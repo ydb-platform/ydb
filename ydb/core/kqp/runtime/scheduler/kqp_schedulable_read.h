@@ -10,7 +10,11 @@ struct TSchedulableRead : TSchedulableTask {
     explicit TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query);
 
     bool TryConsumeQuota(TDuration expectedQuota);
-    void ReturnQuota(NHPTimer::STime elapsedCycles);
+    void ReturnQuota(NHPTimer::STime elapsedCycles = 0);
+
+    // Estimate delay until quota becomes available.
+    // Must be called right after TryConsumeQuota fails (refill already done).
+    TDuration EstimateQuotaDelay(TDuration expectedQuota) const;
 
 private:
     // Milliseconds precision - because THPTimer::STime to TDuration has the same precision

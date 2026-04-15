@@ -3,6 +3,7 @@
 #include "tree/dynamic.h"
 
 #include <yql/essentials/utils/yql_panic.h>
+#include <yt/yt/core/utilex/random.h>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -25,7 +26,7 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
 }
 
 bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
-    // TODO: support update of pool's read quota.
+    // TODO: support update of pool's read quota - on AddOrUpdatePool().
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
     // Refill quota
@@ -35,7 +36,13 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
         LastRefill = now;
     }
 
-    if (AvailableQuotaMs <= 0 || expectedQuotaMs > static_cast<ui64>(AvailableQuotaMs) || !TryIncreaseUsage()) {
+    if (AvailableQuotaMs <= 0  || !TryIncreaseUsage()) {
+        if (AvailableQuotaMs < static_cast<i64>(expectedQuotaMs)) {
+            TStringStream ss;
+            ss << "AvailableQuotaMs: " << AvailableQuotaMs << Endl;
+            Cerr << ss.Str();
+        }
+
         return false;
     }
 
@@ -46,6 +53,11 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
 }
 
 void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
+    // Makes calls idempotent - useful to handle reading errors and cancellations
+    if (ReservedQuotaMs == 0) {
+        return;
+    }
+
     static const double msPerCycle = 1000.0 / NHPTimer::GetCyclesPerSecond();
 
     auto ms = static_cast<ui64>(elapsedCycles * msPerCycle);
@@ -53,6 +65,34 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     ReservedQuotaMs = 0;
 
     DecreaseUsage(TDuration::MilliSeconds(ms), READ_DEFAULT);
+}
+
+TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
+    auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
+
+    if (AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {
+        auto delay = TDuration::MilliSeconds(10) + RandomDuration(TDuration::MilliSeconds(1));
+
+        TStringStream ss;
+        ss << "EstimateQuota (no usage): " << delay << Endl;
+        Cerr << ss.Str();
+
+        // Quota available, but TryIncreaseUsage() failed (fair-share exhausted)
+        return delay;
+    }
+
+    // Quota deficit — calculate refill time
+    i64 deficitMs = static_cast<i64>(expectedQuotaMs) - AvailableQuotaMs;
+    ui64 waitMs = static_cast<ui64>(std::ceil(deficitMs / QuotaPerSecond));
+    auto delay = TDuration::MilliSeconds(std::max<ui64>(waitMs, 1));
+
+    {
+        TStringStream ss;
+        ss << "EstimateQuota (no read): " << delay << Endl;
+        Cerr << ss.Str();
+    }
+
+    return delay;
 }
 
 TSchedulableReadFactory::TSchedulableReadFactory(TComputeSchedulerPtr scheduler)

@@ -84,6 +84,8 @@ private:
     void HandleReloadStateRequest(TSqsEvents::TEvReloadStateRequest::TPtr& ev);
     void HandleDeduplicateMessageBatchWhileIniting(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev);
     void HandleDeduplicateMessageBatchWhileWorking(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev);
+    void HandleGetMessageGroupsWhileIniting(TSqsEvents::TEvGetMessageGroups::TPtr& ev);
+    void HandleGetMessageGroupsWhileWorking(TSqsEvents::TEvGetMessageGroups::TPtr& ev);
 
     void CheckStillDLQ();
     void ForceReloadState();
@@ -135,6 +137,7 @@ private:
     void OnSendBatchExecuted(ui64 shard, ui64 batchId, const TSqsEvents::TEvExecuted::TRecord& reply);
 
     void ProcessDeduplicateMessageBatch(TSqsEvents::TEvDeduplicateMessageBatch::TPtr&& reqInfo);
+    void ProcessGetMessageGroups(TSqsEvents::TEvGetMessageGroups::TPtr&& reqInfo);
 
     // receive
     void ProcessReceiveMessageBatch(TReceiveMessageBatchRequestProcessing& reqInfo);
@@ -537,6 +540,7 @@ private:
     THashMap<std::pair<TString, ui64>, TChangeMessageVisibilityBatchRequestProcessing> ChangeMessageVisibilityRequests_; // (request id, shard) -> request
     THashMap<TString, TGetRuntimeQueueAttributesRequestProcessing> GetRuntimeQueueAttributesRequests_; // request id -> request
     THashMap<TString, TSqsEvents::TEvDeduplicateMessageBatch::TPtr> DeduplicateMessageRequests_; // request id -> request
+    THashMap<TString, TSqsEvents::TEvGetMessageGroups::TPtr> GetMessageGroupsRequests_; // request id -> request
 };
 
 } // namespace NKikimr::NSQS

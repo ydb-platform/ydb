@@ -4,6 +4,7 @@
 #include "log.h"
 #include "purge.h"
 #include "retention.h"
+#include "get_message_groups.h"
 
 #include <ydb/core/ymq/actor/deduplicator.h>
 #include <ydb/core/ymq/base/run_query.h>
@@ -113,6 +114,11 @@ void TQueueLeader::BecomeWorking() {
     }
     DeduplicateMessageRequests_.clear();
 
+    for (auto&& [reqId, reqInfo] : GetMessageGroupsRequests_) {
+        ProcessGetMessageGroups(std::move(reqInfo));
+    }
+    GetMessageGroupsRequests_.clear();
+
     for (auto&& [reqId, reqInfo] : ReceiveMessageRequests_) {
         ProcessReceiveMessageBatch(reqInfo);
     }
@@ -147,6 +153,7 @@ STATEFN(TQueueLeader::StateInit) {
         hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
         hFunc(TSqsEvents::TEvDeduplicateMessageBatch, HandleDeduplicateMessageBatchWhileIniting); // from send message action actor
+        hFunc(TSqsEvents::TEvGetMessageGroups, HandleGetMessageGroupsWhileIniting); // from receive message action actor
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -176,6 +183,7 @@ STATEFN(TQueueLeader::StateWorking) {
         hFunc(TSqsEvents::TEvForceReloadState, HandleForceReloadState);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
         hFunc(TSqsEvents::TEvDeduplicateMessageBatch, HandleDeduplicateMessageBatchWhileWorking); // from send message action actor
+        hFunc(TSqsEvents::TEvGetMessageGroups, HandleGetMessageGroupsWhileWorking); // from receive message action actor
 
         // internal
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
@@ -606,6 +614,34 @@ void TQueueLeader::ProcessDeduplicateMessageBatch(TSqsEvents::TEvDeduplicateMess
         .QueueVersion = QueueVersion_,
         .TablesFormat = TablesFormat_
     }));
+}
+
+void TQueueLeader::HandleGetMessageGroupsWhileIniting(TSqsEvents::TEvGetMessageGroups::TPtr& ev) {
+    TString reqId = ev->Get()->RequestId;
+    Y_ABORT_UNLESS(GetMessageGroupsRequests_.emplace(std::move(reqId), std::move(ev)).second);
+}
+
+void TQueueLeader::HandleGetMessageGroupsWhileWorking(TSqsEvents::TEvGetMessageGroups::TPtr& ev) {
+    ProcessGetMessageGroups(std::move(ev));
+}
+
+void TQueueLeader::ProcessGetMessageGroups(TSqsEvents::TEvGetMessageGroups::TPtr&& ev) {
+    auto messageCount = Shards_[0].MessagesCount;
+    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Handle TEvGetMessageGroups"
+       << " count: " << messageCount);
+
+    if (messageCount == 0) {
+        Send(ev->Sender, new TSqsEvents::TEvGetMessageGroupsResponse(std::vector<TString>()));
+    } else if (messageCount > 100) {
+        Send(ev->Sender, new TSqsEvents::TEvGetMessageGroupsResponse(Ydb::StatusIds::OVERLOADED));
+    } else {
+        Register(new TGetMessageGroupsActor(std::move(ev), TGetMessageGroupsSettings{
+            .UserName = UserName_,
+            .QueueName = QueueName_,
+            .QueueVersion = QueueVersion_,
+            .TablesFormat = TablesFormat_
+        }));
+    }
 }
 
 

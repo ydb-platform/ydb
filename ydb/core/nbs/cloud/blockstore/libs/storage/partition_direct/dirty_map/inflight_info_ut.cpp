@@ -44,9 +44,31 @@ struct TTestReadyQueue: public IReadyQueue
         ReadyToFlush.erase(lsn);
     }
 
+    void DataToPBufferAdded(
+        ELocation location,
+        EPBufferCounter counter,
+        size_t size) override
+    {
+        PBufferCounters[location][counter] += size;
+    }
+
+    void DataFromPBufferReleased(
+        ELocation location,
+        EPBufferCounter counter,
+        size_t size) override
+    {
+        PBufferCounters[location][counter] -= size;
+    }
+
+    size_t GetTotalBytes(ELocation location)
+    {
+        return PBufferCounters[location][EPBufferCounter::Total];
+    }
+
     THashSet<ui64> ReadyToClone;
     THashSet<ui64> ReadyToFlush;
     THashSet<ui64> ReadyToErase;
+    TMap<ELocation, TMap<EPBufferCounter, size_t>> PBufferCounters;
 };
 
 }   // namespace
@@ -58,7 +80,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleRestore)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, ELocation::PBuffer0);
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096, ELocation::PBuffer0);
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToClone.contains(123));
 
         inflightInfo.RestorePBuffer(ELocation::PBuffer1);
@@ -75,6 +97,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             123,
+            4096,
             TLocationMask::MakePrimaryPBuffers(),
             TLocationMask::MakePrimaryPBuffers());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
@@ -137,6 +160,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             123,
+            4096,
             TLocationMask::MakePrimaryPBuffers(),
             TLocationMask::MakePrimaryPBuffers());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
@@ -201,6 +225,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             123,
+            4096,
             TLocationMask::MakePrimaryPBuffers(),
             TLocationMask::MakePrimaryPBuffers());
 
@@ -256,6 +281,72 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         readyQueue.ReadyToErase.clear();
         inflightInfo.EraseFailed(ELocation::PBuffer0);
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+    }
+
+    Y_UNIT_TEST(ShouldCountTotalBytesForRestore)
+    {
+        TTestReadyQueue readyQueue;
+        {
+            TInflightInfo inflightInfo(
+                &readyQueue,
+                123,
+                4096,
+                ELocation::PBuffer0);
+
+            inflightInfo.RestorePBuffer(ELocation::PBuffer1);
+            inflightInfo.RestorePBuffer(ELocation::PBuffer2);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(ELocation::PBuffer0));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(ELocation::PBuffer1));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(ELocation::PBuffer2));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readyQueue.GetTotalBytes(ELocation::PBuffer0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readyQueue.GetTotalBytes(ELocation::PBuffer1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readyQueue.GetTotalBytes(ELocation::PBuffer2));
+    }
+
+    Y_UNIT_TEST(ShouldCountTotalBytesForConfirmedWrite)
+    {
+        TTestReadyQueue readyQueue;
+        {
+            TInflightInfo inflightInfo(
+                &readyQueue,
+                123,
+                4096,
+                TLocationMask::MakePrimaryPBuffers(),
+                TLocationMask::MakePrimaryPBuffers());
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(ELocation::PBuffer0));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(ELocation::PBuffer1));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(ELocation::PBuffer2));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readyQueue.GetTotalBytes(ELocation::PBuffer0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readyQueue.GetTotalBytes(ELocation::PBuffer1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readyQueue.GetTotalBytes(ELocation::PBuffer2));
     }
 }
 

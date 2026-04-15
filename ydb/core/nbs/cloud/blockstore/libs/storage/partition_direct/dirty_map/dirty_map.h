@@ -154,6 +154,19 @@ private:
     ui64 FlushableBlockCount = 0;
 };
 
+struct TPBufferCounters
+{
+    size_t CurrentRecordsCount = 0;
+    size_t CurrentBytesCount = 0;
+    size_t TotalRecordsCount = 0;
+    size_t TotalBytesCount = 0;
+
+    size_t CurrentLockedRecordsCount = 0;
+    size_t CurrentLockedBytesCount = 0;
+    size_t TotalLockedRecordsCount = 0;
+    size_t TotalLockedBytesCount = 0;
+};
+
 class TBlocksDirtyMap
     : public ILockableRanges
     , public IReadyQueue
@@ -161,6 +174,7 @@ class TBlocksDirtyMap
 {
 public:
     TBlocksDirtyMap(ui32 blockSize, ui64 blockCount);
+    ~TBlocksDirtyMap() override;
 
     void UpdateConfig(TLocationMask desired, TLocationMask disabled);
 
@@ -202,6 +216,8 @@ public:
     [[nodiscard]] size_t GetErasePendingCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
+    [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
+        ELocation pbuffer) const;
 
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;
@@ -214,6 +230,14 @@ public:
     // IReadyQueue implementation
     void Register(ui64 lsn, EQueueType queueType) override;
     void UnRegister(ui64 lsn) override;
+    void DataToPBufferAdded(
+        ELocation location,
+        EPBufferCounter counter,
+        size_t byteCount) override;
+    void DataFromPBufferReleased(
+        ELocation location,
+        EPBufferCounter counter,
+        size_t byteCount) override;
 
     // Debug purposes
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
@@ -256,6 +280,9 @@ private:
 
     // DDisks freshness state.
     THolderForLocation<TDDiskState> DDiskStates;
+
+    // PBuffers space usage counters.
+    THolderForLocation<TPBufferCounters> PBufferCounters;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

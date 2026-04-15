@@ -17,9 +17,7 @@ TPhantomFlagStorageState::TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> sl
 void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& data,
         TActorId syncLogKeeperId, TActorId chunkKeeperId, ui32 appendBlockSize) {
     IsPersistent = true;
-    if (!data.Chunks.empty()) {
-        Active = true;
-    }
+
     NActors::IActor* processorActor = CreatePhantomFlagStorageProcessor(std::move(data),
             TPhantomFlagStorageProcessorContext{
                 .SyncLogCtx = SlCtx,
@@ -28,6 +26,12 @@ void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& da
                 .AppendBlockSize = appendBlockSize,
             });
     ProcessorId = TActivationContext::Register(processorActor);
+
+    if (!data.Chunks.empty()) {
+        Active = true;
+        Building = true;
+        TActivationContext::Send(new IEventHandle(ProcessorId, syncLogKeeperId, new TEvPhantomFlagStorageGetSnapshot));
+    }
 }
 
 void TPhantomFlagStorageState::StartBuilding() {
@@ -78,7 +82,7 @@ void TPhantomFlagStorageState::ProcessBarrierRecordFromNeighbour(ui32 orderNumbe
     }
 }
 
-void TPhantomFlagStorageState::FinishBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
+void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
         ui64 sizeLimit) {
     if (!Active) {
         // PhantomFlagStorage was deactivated while building, do nothing
@@ -112,6 +116,13 @@ void TPhantomFlagStorageState::FinishBuilding(TPhantomFlags&& flags, TPhantomFla
     }
 
     Building = false;
+}
+
+void TPhantomFlagStorageState::Recover(TPhantomFlagStorageSnapshot&& snapshot) {
+    STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS10,
+            VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"));
+    Building = false;
+    Thresholds.Merge(std::move(snapshot.Thresholds));
 }
 
 void TPhantomFlagStorageState::Deactivate() {

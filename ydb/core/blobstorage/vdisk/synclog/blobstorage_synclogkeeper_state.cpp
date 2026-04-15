@@ -474,7 +474,11 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds) {
-            PhantomFlagStorageState.FinishBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
+            PhantomFlagStorageState.FinishInitialBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
+        }
+
+        void TSyncLogKeeperState::RecoverPhantomFlagStorage(TPhantomFlagStorageSnapshot&& snapshot) {
+            PhantomFlagStorageState.Recover(std::move(snapshot));
         }
 
         void TSyncLogKeeperState::RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const {

@@ -259,6 +259,12 @@ namespace NKikimr {
                 KeepState.RequestPhantomFlagStorageSnapshot(ev);
             }
 
+            void Handle(const TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
+                // This actor only requests PhantomFlagStorage snapshot on restart
+                // to rebuild ThresholdsStructure
+                KeepState.RecoverPhantomFlagStorage(std::move(ev->Get()->Snapshot));
+            }
+
             void Handle(const TEvLocalSyncData::TPtr& ev) {
                 TVDiskIdShort vdiskId(ev->Get()->VDiskID);
                 ui32 orderNumber = SlCtx->VCtx->Top->GetOrderNumber(vdiskId);

@@ -11,6 +11,7 @@
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <util/system/env.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <ctime>
 #include <regex>
@@ -188,7 +189,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-     Y_UNIT_TEST_TWIN(Filter, ColumnStore) {
+    Y_UNIT_TEST_TWIN(Filter, ColumnStore) {
         TestFilter(ColumnStore);
     }
 
@@ -419,6 +420,52 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(RangePushdown, ColumnStore) {
         TestRangePushdown(ColumnStore);
+    }
+
+    Y_UNIT_TEST(RangePushdownExplain) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                primary key(a, b)
+            ) WITH (STORE = column);
+        )";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        {
+            auto db = kikimr.GetQueryClient();
+            auto res = db.GetSession().GetValueSync();
+            NStatusHelpers::ThrowOnError(res);
+            auto session = res.GetSession();
+
+            auto result =
+                session.ExecuteQuery(
+                    R"(
+                        SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a > 1 and t1.a < 9 order by t1.a;
+                    )",
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto plan = TString{*result.GetStats()->GetPlan()};
+            Cout << plan << Endl;
+            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+            queryPlanPrinter.Print(plan);
+        }
     }
 
     void TestConstantFolding(bool columnTables) {

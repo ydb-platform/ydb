@@ -316,24 +316,12 @@ void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopic
     topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
 }
 
-void TTableInfo::CalculateColumnIdByName() const {
-    ColumnIdByName.clear();
-    ColumnIdByName.reserve(Columns.size());
+// TODO (flown4qqqq): rework this into a fast way.
+ui32 TTableInfo::GetColumnIdByNameSlow(const TString& columnName) const {
     for (const auto& [id, col] : Columns) {
-        if (!col.IsDropped()) {
-            ColumnIdByName[col.Name] = id;
+        if (!col.IsDropped() && col.Name == columnName) {
+            return id;
         }
-    }
-}
-
-ui32 TTableInfo::GetColumnIdByName(const TString& columnName, bool force) const {
-    if (ColumnIdByName.size() == 0 || force) {
-        CalculateColumnIdByName();
-    }
-
-    auto it = ColumnIdByName.find(columnName);
-    if (it != ColumnIdByName.end() && !Columns.at(it->second).IsDropped()) {
-        return it->second;
     }
 
     return InvalidColumnId;

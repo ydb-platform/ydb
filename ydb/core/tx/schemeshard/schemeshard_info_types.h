@@ -736,12 +736,11 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TTLColumnId;
     }
 
-    mutable absl::flat_hash_map<TString, ui32> ColumnIdByName;
     static constexpr ui32 InvalidColumnId = Max<ui32>();
-    ui32 GetColumnIdByName(const TString& columnName, bool force = false) const;
+    // TODO (flown4qqqq): rework this into a fast way.
+    ui32 GetColumnIdByNameSlow(const TString& columnName) const;
 
 private:
-    void CalculateColumnIdByName() const;
 
     using TPartitionsVec = TVector<TTableShardInfo>;
 

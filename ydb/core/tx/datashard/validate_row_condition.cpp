@@ -163,7 +163,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     auto rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
 
-    LOG_N("HandleSafe TEvValidateRowConditionRequest"
+    LOG_D("HandleSafe TEvValidateRowConditionRequest"
         << " id# " << id
         << " tabletId# " << record.GetTabletId()
         << " ownerId# " << record.GetOwnerId()
@@ -220,7 +220,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
 
     const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
 
-    LOG_D("HandleSafe TEvValidateRowConditionRequest: starting scan"
+    LOG_I("HandleSafe TEvValidateRowConditionRequest: starting scan"
         << " id# " << id
         << " tabletId# " << TabletID()
         << " localTid# " << userTable.LocalTid);

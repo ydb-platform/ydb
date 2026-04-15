@@ -93,7 +93,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
-        if (!isColumnTable && !NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table, status, error)) {
+        if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table, status, error)) {
             return nullptr;
         }
 

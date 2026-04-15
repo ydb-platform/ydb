@@ -7,6 +7,20 @@
 
 namespace NKikimr::NPQ::NSchema {
 
+namespace {
+
+TString GetWorkingDir(const NDescriber::TTopicInfo& topicInfo) {
+    std::pair <TString, TString> pathPair;
+    try {
+        pathPair = NKikimr::NGRpcService::SplitPath(topicInfo.RealPath);
+    } catch (const std::exception &ex) {
+        return {};
+    }
+    return pathPair.first;
+}
+    
+}
+
 TTopicAlterer::TTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings)
     : TBaseActor<TTopicAlterer>(service)
     , TPipeCacheClient(this)
@@ -41,7 +55,7 @@ void TTopicAlterer::DoDescribe() {
         { Settings.Strategy->GetTopicName() },
         {
             .UserToken = Settings.UserToken,
-            .AccessRights = NACLib::EAccessRights::AlterSchema
+            .AccessRights = Settings.Strategy->GetRequiredPermission()
         }));
 }
 
@@ -54,7 +68,7 @@ void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     TopicInfo = std::move(topics.begin()->second);
     switch(TopicInfo.Status) {
         case NDescriber::EStatus::SUCCESS: {
-            if (TopicInfo.CdcStream && !Settings.IsCdcStreamCompatible) {
+            if (TopicInfo.CdcStream && !Settings.Strategy->IsCdcStreamCompatible()) {
                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NOT_FOUND));
             }
             return DoAlter();
@@ -86,11 +100,6 @@ void TTopicAlterer::DoAlter() {
 
     Become(&TTopicAlterer::AlterState);
 
-    auto workingDir = GetWorkingDir();
-    if (workingDir.empty()) {
-        return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
-    }
-
     auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
     proposal->Record.SetDatabaseName(Settings.Database);
@@ -99,31 +108,11 @@ void TTopicAlterer::DoAlter() {
         proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
     }
 
-    NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-
-    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
-    modifyScheme.SetWorkingDir(workingDir);
-    modifyScheme.SetAllowAccessToPrivatePaths(Settings.IsCdcStreamCompatible);
-
-    auto* config = modifyScheme.MutableAlterPersQueueGroup();
-    config->CopyFrom(TopicInfo.Info->Description);
-
-    // keep previous values or set in ModifyPersqueueConfig
-    config->ClearTotalGroupCount();
-    config->MutablePQTabletConfig()->ClearPartitionKeySchema();
-
-    {
-        auto applyIf = modifyScheme.AddApplyIf();
-        applyIf->SetPathId(TopicInfo.Self->Info.GetPathId());
-        applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
-    }
-
-    auto [status, error] = Settings.Strategy->ApplyChanges(*config, TopicInfo.Info->Description, TopicInfo.CdcStream);
+    auto [status, error] = Settings.Strategy->BuildTransaction(TopicInfo, proposal->Record.MutableTransaction());
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyErrorAndDie(status, std::move(error));
     }
 
-    ModifyScheme = modifyScheme;
     Send(MakeTxProxyID(), std::move(proposal));
 }
 
@@ -200,26 +189,108 @@ STFUNC(TTopicAlterer::WaitTxCompletionState) {
     }
 }
 
-TString TTopicAlterer::GetWorkingDir() const {
-    std::pair <TString, TString> pathPair;
-    try {
-        pathPair = NKikimr::NGRpcService::SplitPath(TopicInfo.RealPath);
-    } catch (const std::exception &ex) {
-        return {};
-    }
-    return pathPair.first;
-}
-
 void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
-    Send(Settings.ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+    Send(Settings.ParentId, Settings.Strategy->CreateErrorResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
     PassAway();
 }
 
 void TTopicAlterer::ReplyOkAndDie() {
-    Send(Settings.ParentId, new TEvAlterTopicResponse(), 0, Settings.Cookie);
+    Send(Settings.ParentId, Settings.Strategy->CreateSuccessResponse(), 0, Settings.Cookie);
     PassAway();
 }
+
+
+//
+// IAlterTopicStrategy
+//
+bool IAlterTopicStrategy::IsCdcStreamCompatible() const {
+    return true;
+}
+
+NACLib::EAccessRights IAlterTopicStrategy::GetRequiredPermission() const {
+    return NACLib::EAccessRights::AlterSchema;
+}
+
+TResult IAlterTopicStrategy::BuildTransaction(
+    const NDescriber::TTopicInfo& topicInfo, 
+    NKikimrTxUserProxy::TTransaction* transaction
+) {
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *transaction->MutableModifyScheme();
+
+    auto workingDir = GetWorkingDir(topicInfo);
+    if (workingDir.empty()) {
+        return {Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name"};
+    }
+
+    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+    modifyScheme.SetWorkingDir(workingDir);
+    modifyScheme.SetAllowAccessToPrivatePaths(true);
+
+    auto* config = modifyScheme.MutableAlterPersQueueGroup();
+    config->CopyFrom(topicInfo.Info->Description);
+
+    // keep previous values or set in ModifyPersqueueConfig
+    config->ClearTotalGroupCount();
+    config->MutablePQTabletConfig()->ClearPartitionKeySchema();
+
+    {
+        auto applyIf = modifyScheme.AddApplyIf();
+        applyIf->SetPathId(topicInfo.Self->Info.GetPathId());
+        applyIf->SetPathVersion(topicInfo.Self->Info.GetPathVersion());
+    }
+
+    return ApplyChanges(*config, topicInfo.Info->Description, topicInfo.CdcStream);
+}
+
+IEventBase* IAlterTopicStrategy::CreateSuccessResponse() {
+    return new TEvAlterTopicResponse();
+}
+
+IEventBase* IAlterTopicStrategy::CreateErrorResponse(Ydb::StatusIds::StatusCode status, TString&& errorMessage) {
+    return new TEvAlterTopicResponse(status, std::move(errorMessage), std::move(ModifyScheme));
+}
+
+//
+// IDropTopicStrategy
+//
+bool IDropTopicStrategy::IsCdcStreamCompatible() const {
+    return false;
+}
+
+NACLib::EAccessRights IDropTopicStrategy::GetRequiredPermission() const {
+    return NACLib::EAccessRights::RemoveSchema;
+}
+
+TResult IDropTopicStrategy::BuildTransaction(
+    const NDescriber::TTopicInfo& topicInfo, 
+    NKikimrTxUserProxy::TTransaction* transaction
+) {
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *transaction->MutableModifyScheme();
+
+    auto workingDir = GetWorkingDir(topicInfo);
+    if (workingDir.empty()) {
+        return {Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name"};
+    }
+
+    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
+    modifyScheme.SetWorkingDir(workingDir);
+    modifyScheme.SetAllowAccessToPrivatePaths(false);
+
+    auto* config = modifyScheme.MutableDrop();
+    config->SetName(topicInfo.Info->Description.name());
+    
+    return {};
+}
+
+IEventBase* IDropTopicStrategy::CreateSuccessResponse() {
+    return new TEvDropTopicResponse();
+}
+
+IEventBase* IDropTopicStrategy::CreateErrorResponse(Ydb::StatusIds::StatusCode status, TString&& errorMessage) {
+    return new TEvDropTopicResponse(status, std::move(errorMessage));
+}
+
 
 IActor* CreateTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings) {
     return new TTopicAlterer(service, std::move(settings));

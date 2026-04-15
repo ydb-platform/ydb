@@ -8,24 +8,24 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
 
-class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest> {
-    using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>;
+class TDropTopicActor: public TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest> {
+    using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>;
 
 public:
-    TAlterTopicActor(NGRpcService::TEvAlterTopicRequest* request)
-        : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
+    TDropTopicActor(NGRpcService::TEvDropTopicRequest* request)
+        : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
     {
     }
 
-    TAlterTopicActor(NGRpcService::IRequestOpCtx* request)
-        : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
+    TDropTopicActor(NGRpcService::IRequestOpCtx* request)
+        : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
     {
     }
 
     void DoAction() {
-        Become(&TAlterTopicActor::StateWork);
+        Become(&TDropTopicActor::StateWork);
 
-        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
+        Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
             .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
             .PeerName = Request_->GetPeerName(),
             .Request = *GetProtoRequest(),
@@ -34,18 +34,18 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvDropTopicResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            Ydb::Topic::AlterTopicResponse result;
+            Ydb::Topic::DropTopicResponse result;
             ReplyWithResult(Ydb::StatusIds::SUCCESS, result);
         }
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvDropTopicResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }
@@ -53,9 +53,9 @@ private:
 };
 
 } // namespace
-    
-NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request) {
-    return new TAlterTopicActor(request);
+
+NActors::IActor* CreateDropTopicActor(NGRpcService::IRequestOpCtx* request) {
+    return new TDropTopicActor(request);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NTopic

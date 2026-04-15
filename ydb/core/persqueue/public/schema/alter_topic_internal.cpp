@@ -7,8 +7,10 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-class TAlterTopicInternalActor : public NPQ::TBaseActor<TAlterTopicInternalActor>
-                               , public NPQ::TConstantLogPrefix {
+namespace {
+
+class TAlterTopicInternalActor: public NPQ::TBaseActor<TAlterTopicInternalActor>
+                              , public NPQ::TConstantLogPrefix {
 
 public:
     TAlterTopicInternalActor(
@@ -69,6 +71,8 @@ private:
     NThreading::TPromise<TAlterTopicResponse> Promise;
     TAlterTopicSettings Settings;
 };
+
+} // namespace
     
 NActors::IActor* CreateAlterTopicActor(
     NThreading::TPromise<TAlterTopicResponse>&& promise,

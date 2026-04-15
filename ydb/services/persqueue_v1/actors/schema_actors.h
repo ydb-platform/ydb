@@ -30,18 +30,18 @@ public:
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
 };
 
-class TDropTopicActor : public TPQGrpcSchemaBase<TDropTopicActor, NKikimr::NGRpcService::TEvDropTopicRequest>, public TDropPropose {
-using TBase = TPQGrpcSchemaBase<TDropTopicActor, TEvDropTopicRequest>;
+// class TDropTopicActor : public TPQGrpcSchemaBase<TDropTopicActor, NKikimr::NGRpcService::TEvDropTopicRequest>, public TDropPropose {
+// using TBase = TPQGrpcSchemaBase<TDropTopicActor, TEvDropTopicRequest>;
 
-public:
-     TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* request);
-     TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
-    ~TDropTopicActor() = default;
+// public:
+//      TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* request);
+//      TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
+//     ~TDropTopicActor() = default;
 
-    void Bootstrap(const NActors::TActorContext& ctx);
+//     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-};
+//     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
+// };
 
 class TPQDescribeTopicActor : public TPQGrpcSchemaBase<TPQDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest>
                             , public TCdcStreamCompatible

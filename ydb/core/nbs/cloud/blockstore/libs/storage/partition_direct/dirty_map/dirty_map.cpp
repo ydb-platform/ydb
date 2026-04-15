@@ -244,7 +244,10 @@ void TBlocksDirtyMap::RestorePBuffer(
         auto& inflight = item->Value;
         inflight.RestorePBuffer(location);
     } else {
-        Inflight.AddRange(lsn, range, TInflightInfo(this, lsn, location));
+        Inflight.AddRange(
+            lsn,
+            range,
+            TInflightInfo(this, lsn, range.Size() * BlockSize, location));
     }
 }
 
@@ -415,7 +418,12 @@ void TBlocksDirtyMap::WriteFinished(
     const bool inserted = Inflight.AddRange(
         lsn,
         range,
-        TInflightInfo(this, lsn, requested, confirmed));
+        TInflightInfo(
+            this,
+            lsn,
+            range.Size() * BlockSize,
+            requested,
+            confirmed));
     Y_ABORT_UNLESS(inserted);
 }
 
@@ -536,6 +544,12 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
     return *ReadyToErase.begin();
 }
 
+const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
+    ELocation pbuffer) const
+{
+    return PBufferCounters[pbuffer];
+}
+
 void TBlocksDirtyMap::LockPBuffer(ui64 lsn)
 {
     auto item = Inflight.GetValue(lsn);
@@ -611,6 +625,52 @@ void TBlocksDirtyMap::UnRegister(ui64 lsn)
     ReadyToErase.erase(lsn);
     ReadyToClone.erase(lsn);
     ReadyToFlush.erase(lsn);
+}
+
+void TBlocksDirtyMap::DataToPBufferAdded(
+    ELocation location,
+    EPBufferCounter counter,
+    size_t byteCount)
+{
+    auto& counters = PBufferCounters[location];
+
+    switch (counter) {
+        case IReadyQueue::EPBufferCounter::Total: {
+            counters.CurrentRecordsCount++;
+            counters.CurrentBytesCount += byteCount;
+            counters.TotalRecordsCount++;
+            counters.TotalBytesCount += byteCount;
+            break;
+        }
+        case IReadyQueue::EPBufferCounter::Locked: {
+            counters.CurrentLockedRecordsCount++;
+            counters.CurrentLockedBytesCount += byteCount;
+            counters.TotalLockedRecordsCount++;
+            counters.TotalLockedBytesCount += byteCount;
+            break;
+        }
+    }
+}
+
+void TBlocksDirtyMap::DataFromPBufferReleased(
+    ELocation location,
+    EPBufferCounter counter,
+    size_t byteCount)
+{
+    auto& counters = PBufferCounters[location];
+
+    switch (counter) {
+        case IReadyQueue::EPBufferCounter::Total: {
+            counters.CurrentRecordsCount--;
+            counters.CurrentBytesCount -= byteCount;
+            break;
+        }
+        case IReadyQueue::EPBufferCounter::Locked: {
+            counters.CurrentLockedRecordsCount--;
+            counters.CurrentLockedBytesCount -= byteCount;
+            break;
+        }
+    }
 }
 
 TString TBlocksDirtyMap::DebugPrintLockedDDiskRanges()

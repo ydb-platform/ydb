@@ -129,6 +129,15 @@ TString SSAToPrettyString(const NKikimrSSA::TProgram& program) {
                 result << ToString(command.GetGroupBy()) << Endl;
                 break;
             }
+            case NKikimrSSA::TProgram::TCommand::LineCase::kDistinct: {
+                const auto& d = command.GetDistinct();
+                result << "Distinct ColumnId=" << d.GetColumn().GetId();
+                if (d.HasLimit()) {
+                    result << " Limit=" << d.GetLimit();
+                }
+                result << Endl;
+                break;
+            }
             case NKikimrSSA::TProgram::TCommand::LineCase::LINE_NOT_SET: {
                 break;
             }

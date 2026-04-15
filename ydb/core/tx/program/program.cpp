@@ -134,8 +134,14 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
                 }
                 break;
             }
+            case TId::kDistinct: {
+                return TConclusionStatus::Fail("SSA Distinct is not implemented in column shard runtime yet");
+            }
             case TId::LINE_NOT_SET:
                 return TConclusionStatus::Fail("incorrect SSA line case");
+            default:
+                return TConclusionStatus::Fail(TStringBuilder() << "unsupported SSA command line case: "
+                    << static_cast<i32>(cmd.GetLineCase()));
         }
     }
     if (!hasProjection) {

@@ -176,12 +176,21 @@ message TProgram {
         repeated TColumn KeyColumns = 2;
     }
 
+    // Distinct by a single input column on the pushed-down OLAP stream.
+    // Column identifies which SSA column id is compared for uniqueness (not necessarily a table PK).
+    // If optional Limit is unset, all unique values of Column are collected for this read. If set, Limit must be > 0.
+    message TDistinct {
+        optional TColumn Column = 1;
+        optional uint64 Limit = 2;
+    }
+
     message TCommand {
         oneof line {
             TAssignment Assign = 1;
             TProjection Projection = 2;
             TFilter Filter = 3;
             TGroupBy GroupBy = 4;
+            TDistinct Distinct = 5;
             // TODO: ORDER BY, LIMIT
         }
     }

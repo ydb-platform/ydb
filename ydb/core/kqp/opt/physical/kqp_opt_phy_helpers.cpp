@@ -58,6 +58,28 @@ TExprBase BuildReadNode(TPositionHandle pos, TExprContext& ctx, TExprBase input,
             .ExplainPrompt(olapReadTable.ExplainPrompt())
             .Process(olapReadTable.Process())
             .Done();
+    } else if (input.Maybe<TKqpWideReadOlapTableRanges>().IsValid()) {
+        auto olapReadTable = input.Cast<TKqpWideReadOlapTableRanges>();
+
+        return Build<TKqpWideReadOlapTableRanges>(ctx, pos)
+            .Table(olapReadTable.Table())
+            .Ranges(olapReadTable.Ranges())
+            .Columns(olapReadTable.Columns())
+            .Settings(settingsNode)
+            .ExplainPrompt(olapReadTable.ExplainPrompt())
+            .Process(olapReadTable.Process())
+            .Done();
+    } else if (input.Maybe<TKqpBlockReadOlapTableRanges>().IsValid()) {
+        auto olapReadTable = input.Cast<TKqpBlockReadOlapTableRanges>();
+
+        return Build<TKqpBlockReadOlapTableRanges>(ctx, pos)
+            .Table(olapReadTable.Table())
+            .Ranges(olapReadTable.Ranges())
+            .Columns(olapReadTable.Columns())
+            .Settings(settingsNode)
+            .ExplainPrompt(olapReadTable.ExplainPrompt())
+            .Process(olapReadTable.Process())
+            .Done();
     }
 
     YQL_ENSURE(false, "Unknown read table operation: " << input.Ptr()->Content());

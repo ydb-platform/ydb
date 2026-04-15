@@ -20,6 +20,7 @@
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -28,6 +29,9 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 #include <util/generic/bitmap.h>
+#include <util/stream/str.h>
+
+#include <optional>
 
 namespace NKikimr {
 namespace NKqp {
@@ -556,9 +560,59 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
     return resultColNames;
 }
 
+/// When `Take`/`Limit` is lowered to a different DQ stage than the OLAP read, read settings may miss `ItemsLimit`.
+/// For scan transactions, if all literal `Take`/`Limit` counts agree, use that value as a fallback for pushed
+/// `TKqpOlapDistinct` (no IR `Limit` yet) so SSA gets `Distinct.Limit`.
+static std::optional<ui64> TryGetConsensusLiteralTakeLimitAcrossScanTxStages(const TKqpPhysicalTx& tx) {
+    bool conflict = false;
+    ui32 hits = 0;
+    std::optional<ui64> consensus;
+    for (const auto& stage : tx.Stages()) {
+        VisitExpr(stage.Program().Ptr(), [&](const TExprNode::TPtr& n) {
+            if (!TCoTake::Match(n.Get()) && !TCoLimit::Match(n.Get())) {
+                return true;
+            }
+            const auto tb = TExprBase(n).Cast<TCoTakeBase>();
+            const auto maybeLit = tb.Count().Maybe<TCoUint64>();
+            if (!maybeLit) {
+                return true;
+            }
+            const ui64 v = FromString<ui64>(maybeLit.Cast().Literal().Value());
+            ++hits;
+            if (!consensus) {
+                consensus = v;
+            } else if (*consensus != v) {
+                conflict = true;
+            }
+            return true;
+        });
+    }
+    if (conflict || hits == 0) {
+        return {};
+    }
+    return consensus;
+}
+
+std::optional<ui64> TryOlapReadItemsLimitLiteralFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges& readProto) {
+    const auto& phy = readProto.GetItemsLimit();
+    if (phy.GetKindCase() != NKqpProto::TKqpPhyValue::kLiteralValue) {
+        return std::nullopt;
+    }
+    const auto& typed = phy.GetLiteralValue();
+    switch (typed.type().type_id()) {
+        case Ydb::Type::UINT64:
+            return typed.value().uint64_value();
+        case Ydb::Type::UINT32:
+            return typed.value().uint32_value();
+        default:
+            return std::nullopt;
+    }
+}
+
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
-    const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx)
+    const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
+    const std::optional<ui64>& scanTxLiteralTakeLimitConsensus)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -570,7 +624,31 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
+    std::optional<ui64> readItemsLimitLiteral;
+    {
+        const auto settings = TKqpReadTableSettings::Parse(node);
+        if (settings.ItemsLimit) {
+            const NYql::NNodes::TExprBase el(settings.ItemsLimit);
+            if (el.Maybe<NYql::NNodes::TCoUint64>()) {
+                readItemsLimitLiteral = FromString<ui64>(el.Cast<NYql::NNodes::TCoUint64>().Literal().Value());
+            }
+        }
+    }
+    if (!readItemsLimitLiteral) {
+        readItemsLimitLiteral = TryOlapReadItemsLimitLiteralFromProto(readProto);
+    }
+    if (!readItemsLimitLiteral && scanTxLiteralTakeLimitConsensus) {
+        const auto distinctPtr = FindNode(node.Process().Ptr(), [](const TExprNode::TPtr& n) {
+            return TKqpOlapDistinct::Match(n.Get());
+        });
+        if (distinctPtr) {
+            const auto distinct = TExprBase(distinctPtr).Cast<TKqpOlapDistinct>();
+            if (!distinct.Limit()) {
+                readItemsLimitLiteral = scanTxLiteralTakeLimitConsensus;
+            }
+        }
+    }
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, readItemsLimitLiteral);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -959,7 +1037,8 @@ private:
         const TMap<ui64, ui32>& stagesMap,
         TRequestPredictor& rPredictor,
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
-        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID,
+        const std::optional<ui64>& scanTxLiteralTakeLimitConsensus
     ) {
         const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
 
@@ -1045,7 +1124,8 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx,
+                    scanTxLiteralTakeLimitConsensus);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
@@ -1058,7 +1138,8 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx,
+                    scanTxLiteralTakeLimitConsensus);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
@@ -1192,9 +1273,14 @@ private:
         THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
 
         TRequestPredictor rPredictor;
+        std::optional<ui64> scanTxLiteralTakeLimitConsensus;
+        if (txSettings.Type && *txSettings.Type == EPhysicalTxType::Scan) {
+            scanTxLiteralTakeLimitConsensus = TryGetConsensusLiteralTakeLimitAcrossScanTxStages(tx);
+        }
         for (const auto& stage : tx.Stages()) {
             physicalStageByID[stage.Ref().UniqueId()] = txProto.AddStages();
-            CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
+            CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap,
+                physicalStageByID, scanTxLiteralTakeLimitConsensus);
             hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }

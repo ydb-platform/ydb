@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
 
@@ -178,6 +179,33 @@ protected:
     }
 };
 
+/// Injects `TKqpOlapDistinct` limit / `ItemsLimit` when SQL `LIMIT` sits outside `AggregateCombine`
+/// (see `KqpPushOlapDistinctPeephole`). Must run for all block-channel modes: the combined
+/// `TKqpPeepholeNewOperatorTransformer` is only registered under `WithFinalStageRules` (BLOCK_CHANNELS_FORCE).
+class TKqpPeepholeOlapDistinctTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeOlapDistinctTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+        , Config_(std::move(config))
+    {
+#define HNDL(name) "KqpPeepholeOlapDistinct-"#name, Hndl(&TKqpPeepholeOlapDistinctTransformer::name)
+        AddHandler(0, TOptimizeTransformerBase::Or({
+            [](const TExprNode* n) { return TCoTake::Match(n) || TCoLimit::Match(n); },
+            [](const TExprNode* n) { return TCoWideCombiner::Match(n); },
+        }), HNDL(PushOlapDistinctPeephole));
+#undef HNDL
+    }
+
+private:
+    TMaybeNode<TExprBase> PushOlapDistinctPeephole(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpPushOlapDistinctPeephole(node, ctx, Config_);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TKikimrConfiguration::TPtr Config_;
+};
+
 struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     TKqpPeepholePipelineConfigurator(
         TKikimrConfiguration::TPtr config,
@@ -195,6 +223,7 @@ struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
         pipeline->Add(new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts), "KqpPeephole");
+        pipeline->Add(new TKqpPeepholeOlapDistinctTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeOlapDistinct");
     }
 
 private:
@@ -206,17 +235,28 @@ class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
-        , DqHashOperatorsUseBlocks(config->GetDqHashOperatorsUseBlocks())
-        , DqHashCombineExportTypeInfo(config->GetDqHashCombineExportTypeInfo())
+        , Config_(std::move(config))
+        , DqHashOperatorsUseBlocks(Config_->GetDqHashOperatorsUseBlocks())
+        , DqHashCombineExportTypeInfo(Config_->GetDqHashCombineExportTypeInfo())
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
-        if (config->GetUseDqHashCombine()) {
+        AddHandler(0, TOptimizeTransformerBase::Or({
+            [](const TExprNode* n) { return TCoTake::Match(n) || TCoLimit::Match(n); },
+            [](const TExprNode* n) { return TCoWideCombiner::Match(n); },
+        }), HNDL(PushOlapDistinctPeephole));
+        if (Config_->GetUseDqHashCombine()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
         }
-        if (config->GetUseDqHashAggregate()) {
+        if (Config_->GetUseDqHashAggregate()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashAggregator));
         }
 #undef HNDL
+    }
+
+    TMaybeNode<TExprBase> PushOlapDistinctPeephole(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpPushOlapDistinctPeephole(node, ctx, Config_);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
@@ -232,6 +272,7 @@ public:
     }
 
 private:
+    TKikimrConfiguration::TPtr Config_;
     bool DqHashOperatorsUseBlocks;
     bool DqHashCombineExportTypeInfo;
 };

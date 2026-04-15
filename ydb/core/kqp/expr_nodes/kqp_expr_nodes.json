@@ -801,6 +801,15 @@
             ]
         },
         {
+            "Name": "TKqpOlapDistinct",
+            "Base": "TKqpOlapOperationBase",
+            "Match": {"Type": "Callable", "Name": "TKqpOlapDistinct"},
+            "Children": [
+                {"Index": 1, "Name": "Column", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Limit", "Type": "TCoUint64", "Optional": true}
+            ]
+        },
+        {
             "Name": "TKqpOlapExtractMembers",
             "Base": "TKqpOlapOperationBase",
             "Match": {"Type": "Callable", "Name": "TKqpOlapExtractMembers"},

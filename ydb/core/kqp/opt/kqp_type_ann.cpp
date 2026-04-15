@@ -1629,6 +1629,51 @@ TStatus AnnotateOlapAgg(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureMinMaxArgsCount(*node, 2U, 3U, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* input = node->Child(TKqpOlapDistinct::idx_Input);
+    const TTypeAnnotationNode* itemType = nullptr;
+    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* col = node->Child(TKqpOlapDistinct::idx_Column);
+    if (!EnsureAtom(*col, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto structType = itemType->Cast<TStructExprType>();
+    const auto* colType = structType->FindItemType(col->Content());
+    if (!colType) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+            << "Unknown column in OLAP Distinct: " << col->Content()));
+        return TStatus::Error;
+    }
+
+    if (node->ChildrenSize() > static_cast<ui32>(TKqpOlapDistinct::idx_Limit)) {
+        const auto* limitNode = node->Child(TKqpOlapDistinct::idx_Limit);
+        if (!limitNode->IsCallable("Uint64")) {
+            ctx.AddError(TIssue(ctx.GetPosition(limitNode->Pos()), "OLAP Distinct Limit must be a Uint64 literal"));
+            return TStatus::Error;
+        }
+        if (!EnsureArgsCount(*limitNode, 1, ctx)) {
+            return TStatus::Error;
+        }
+    }
+
+    TVector<const TItemExprType*> outItems;
+    outItems.push_back(ctx.MakeType<TItemExprType>(col->Content(), colType));
+    node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TStructExprType>(outItems), ctx));
+    return TStatus::Ok;
+}
+
 
 TStatus AnnotateOlapExtractMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
@@ -2954,6 +2999,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapAgg::Match(input.Get())) {
                 return AnnotateOlapAgg(input, ctx);
+            }
+
+            if (TKqpOlapDistinct::Match(input.Get())) {
+                return AnnotateOlapDistinct(input, ctx);
             }
 
             if (TKqpOlapExtractMembers::Match(input.Get())) {

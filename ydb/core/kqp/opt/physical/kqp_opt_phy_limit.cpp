@@ -3,6 +3,8 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
+#include <yql/essentials/core/yql_opt_utils.h>
+
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -82,31 +84,168 @@ TExprBase KqpDisableOlapBlocksOnLimit(TExprBase node, TTypeAnnotationContext& ty
     return node;
 }
 
-TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TCoTake>()) {
-        return node;
+namespace {
+
+std::optional<ui32> ChildIndexInParent(const TExprNode* parent, const TExprNode* child) {
+    for (ui32 i = 0; i < parent->ChildrenSize(); ++i) {
+        if (parent->Child(i) == child) {
+            return i;
+        }
     }
-    auto take = node.Cast<TCoTake>();
+    return std::nullopt;
+}
 
-    auto maybeSkip = take.Input().Maybe<TCoSkip>();
-    auto input = maybeSkip ? maybeSkip.Cast().Input() : take.Input();
-
-    bool isReadTable = input.Maybe<TKqpReadTable>().IsValid();
-    bool isReadTableRanges = input.Maybe<TKqpReadTableRanges>().IsValid() || input.Maybe<TKqpReadOlapTableRanges>().IsValid();
-
-    if (!isReadTable && !isReadTableRanges) {
-        return node;
+const TExprNode* PickParentOnSpine(const TExprNode* child, const TParentsMap& parents) {
+    auto pit = parents.find(child);
+    if (pit == parents.end()) {
+        return nullptr;
     }
+    for (const TExprNode* cand : pit->second) {
+        if (ChildIndexInParent(cand, child)) {
+            return cand;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+TMaybeNode<TExprBase> KqpTryInjectAncestorTakeItemsLimitIntoReadRanges(
+    TExprBase readNode,
+    const TParentsMap& parents,
+    TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
+{
+    if (!readNode.Maybe<TKqpReadTable>() && !readNode.Maybe<TKqpReadTableRanges>()
+        && !readNode.Maybe<TKqpReadOlapTableRanges>() && !readNode.Maybe<TKqpWideReadOlapTableRanges>()
+        && !readNode.Maybe<TKqpBlockReadOlapTableRanges>()) {
+        return {};
+    }
+
+    const bool isReadTable = readNode.Maybe<TKqpReadTable>().IsValid();
+    const bool isReadTableRanges = !isReadTable;
 
     if (kqpCtx.IsScanQuery()) {
-        auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(input, isReadTableRanges));
+        auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(readNode, isReadTableRanges));
+        if (tableDesc.Metadata->Kind != EKikimrTableKind::Olap) {
+            return {};
+        }
+    }
+
+    auto settings = GetReadTableSettings(readNode, isReadTableRanges);
+    if (settings.ItemsLimit) {
+        return {};
+    }
+
+    const TExprNode* cur = readNode.Raw();
+    THashSet<const TExprNode*> visited;
+    for (ui32 hops = 0; hops < 256u; ++hops) {
+        if (!visited.insert(cur).second) {
+            break;
+        }
+        const TExprNode* parent = PickParentOnSpine(cur, parents);
+        if (!parent) {
+            break;
+        }
+        const auto idx = ChildIndexInParent(parent, cur);
+        YQL_ENSURE(idx.has_value());
+        if (TCoSkip::Match(parent) && *idx == 0) {
+            cur = parent;
+            continue;
+        }
+        if ((TCoTake::Match(parent) || TCoLimit::Match(parent)) && *idx == 0) {
+            const auto takeBase = TExprBase(parent).Cast<TCoTakeBase>();
+            const auto maybeSkip = takeBase.Input().Maybe<TCoSkip>();
+
+            settings.SequentialInFlight = 1;
+
+            TMaybeNode<TExprBase> limitValue;
+            const auto maybeTakeCount = takeBase.Count().Maybe<TCoUint64>();
+            TMaybeNode<TCoUint64> maybeSkipCount;
+            if (maybeSkip) {
+                maybeSkipCount = maybeSkip.Cast().Count().Maybe<TCoUint64>();
+            }
+
+            if (maybeTakeCount && (!maybeSkip || maybeSkipCount)) {
+                ui64 totalLimit = FromString<ui64>(maybeTakeCount.Cast().Literal().Value());
+                if (maybeSkipCount) {
+                    totalLimit += FromString<ui64>(maybeSkipCount.Cast().Literal().Value());
+                }
+                limitValue = Build<TCoUint64>(ctx, readNode.Pos())
+                    .Literal<TCoAtom>()
+                    .Value(ToString(totalLimit)).Build()
+                    .Done();
+            } else {
+                limitValue = takeBase.Count();
+                if (maybeSkip) {
+                    limitValue = Build<TCoAggrAdd>(ctx, readNode.Pos())
+                        .Left(limitValue.Cast())
+                        .Right(maybeSkip.Cast().Count())
+                        .Done();
+                }
+            }
+
+            if (limitValue.Maybe<TCoUint64>()) {
+                settings.SetItemsLimit(limitValue.Cast().Ptr());
+            } else {
+                settings.SetItemsLimit(Build<TDqPrecompute>(ctx, readNode.Pos())
+                    .Input(limitValue.Cast())
+                    .Done().Ptr());
+            }
+
+            return BuildReadNode(readNode.Pos(), ctx, readNode, settings);
+        }
+        cur = parent;
+    }
+
+    return {};
+}
+
+TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TCoTake>() && !node.Maybe<TCoLimit>()) {
+        return node;
+    }
+    const auto takeBase = node.Cast<TCoTakeBase>();
+
+    const auto maybeSkip = takeBase.Input().Maybe<TCoSkip>();
+    const auto outerInput = maybeSkip ? maybeSkip.Cast().Input() : takeBase.Input();
+
+    static const auto readPred = [](const TExprNode::TPtr& n) {
+        return TKqpReadTable::Match(n.Get())
+            || TKqpReadTableRanges::Match(n.Get())
+            || TKqpReadOlapTableRanges::Match(n.Get())
+            || TKqpWideReadOlapTableRanges::Match(n.Get())
+            || TKqpBlockReadOlapTableRanges::Match(n.Get());
+    };
+
+    TExprBase probe = outerInput;
+    TExprNode::TPtr readNodePtr;
+    for (ui32 hop = 0; hop < 32u; ++hop) {
+        readNodePtr = FindNode(probe.Ptr(), readPred);
+        if (readNodePtr) {
+            break;
+        }
+        if (!KqpPeelOneRxMapOrFlowWrapper(probe)) {
+            break;
+        }
+    }
+    if (!readNodePtr) {
+        return node;
+    }
+
+    const TExprBase read(readNodePtr);
+    const bool isReadTable = read.Maybe<TKqpReadTable>().IsValid();
+    const bool isReadTableRanges = !isReadTable;
+
+    if (kqpCtx.IsScanQuery()) {
+        auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(read, isReadTableRanges));
 
         if (tableDesc.Metadata->Kind != EKikimrTableKind::Olap) {
             return node;
         }
     }
 
-    auto settings = GetReadTableSettings(input, isReadTableRanges);
+    auto settings = GetReadTableSettings(read, isReadTableRanges);
     if (settings.ItemsLimit) {
         return node; // already set?
     }
@@ -114,8 +253,11 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
     settings.SequentialInFlight = 1;
 
     TMaybeNode<TExprBase> limitValue;
-    auto maybeTakeCount = take.Count().Maybe<TCoUint64>();
-    auto maybeSkipCount = maybeSkip.Count().Maybe<TCoUint64>();
+    const auto maybeTakeCount = takeBase.Count().Maybe<TCoUint64>();
+    TMaybeNode<TCoUint64> maybeSkipCount;
+    if (maybeSkip) {
+        maybeSkipCount = maybeSkip.Cast().Count().Maybe<TCoUint64>();
+    }
 
     if (maybeTakeCount && (!maybeSkip || maybeSkipCount)) {
         ui64 totalLimit = FromString<ui64>(maybeTakeCount.Cast().Literal().Value());
@@ -129,7 +271,7 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
             .Value(ToString(totalLimit)).Build()
             .Done();
     } else {
-        limitValue = take.Count();
+        limitValue = takeBase.Count();
         if (maybeSkip) {
             limitValue = Build<TCoAggrAdd>(ctx, node.Pos())
                 .Left(limitValue.Cast())
@@ -148,7 +290,11 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
             .Done().Ptr());
     }
 
-    input = BuildReadNode(node.Pos(), ctx, input, settings);
+    const auto newRead = BuildReadNode(node.Pos(), ctx, read, settings);
+    TExprBase input = KqpSubstituteReadPreservingRxWrappers(outerInput, read.Raw(), newRead, ctx, node.Pos());
+    if (input.Raw() == outerInput.Raw()) {
+        return node;
+    }
 
     if (maybeSkip) {
         input = Build<TCoSkip>(ctx, node.Pos())
@@ -157,9 +303,16 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
             .Done();
     }
 
-    return Build<TCoTake>(ctx, take.Pos())
+    if (node.Maybe<TCoTake>()) {
+        return Build<TCoTake>(ctx, takeBase.Pos())
+            .Input(input)
+            .Count(takeBase.Count())
+            .Done();
+    }
+    YQL_ENSURE(node.Maybe<TCoLimit>());
+    return Build<TCoLimit>(ctx, takeBase.Pos())
         .Input(input)
-        .Count(take.Count())
+        .Count(takeBase.Count())
         .Done();
 }
 

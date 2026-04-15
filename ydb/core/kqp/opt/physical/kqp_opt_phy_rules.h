@@ -71,6 +71,26 @@ NYql::NNodes::TExprBase KqpApplyLimitToFullTextIndex(NYql::NNodes::TExprBase nod
 NYql::NNodes::TExprBase KqpApplyLimitToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
+/// `OptimizeExpr` visits children before parents, so `KqpApplyLimitToReadTable` on `Take` may run too late (read is
+/// already wrapped into a DQ stage). When building the read stage, walk ancestors and push `ItemsLimit` like
+/// `KqpApplyLimitToReadTable` would if it saw the read first.
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpTryInjectAncestorTakeItemsLimitIntoReadRanges(
+    NYql::NNodes::TExprBase readNode,
+    const NYql::TParentsMap& parents,
+    NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
+/// Peels one layer of ExtractMembers / flow / block / ExpandMap / Map wrappers (shared by OLAP distinct and limit pushdown).
+bool KqpPeelOneRxMapOrFlowWrapper(NYql::NNodes::TExprBase& probe);
+
+/// Replaces `oldRead` with `newRead` under `root`, preserving the same wrapper stack.
+NYql::NNodes::TExprBase KqpSubstituteReadPreservingRxWrappers(
+    NYql::NNodes::TExprBase root,
+    const NYql::TExprNode* oldReadRaw,
+    NYql::NNodes::TExprBase newRead,
+    NYql::TExprContext& ctx,
+    NYql::TPositionHandle pos);
+
 NYql::NNodes::TExprBase KqpApplyLimitToOlapReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
@@ -90,6 +110,14 @@ NYql::NNodes::TExprBase KqpDisableOlapBlocksOnLimit(NYql::NNodes::TExprBase node
 
 NYql::NNodes::TExprBase KqpPushOlapAggregate(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
+
+NYql::NNodes::TExprBase KqpPushOlapDistinct(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
+/// Physical peephole (post stage-build): `Take` / `Limit` injects `Limit` into an already fused `TKqpOlapDistinct` when
+/// SQL `LIMIT` sits outside the `AggregateCombine` shape handled by `KqpPushOlapDistinct`; `WideCombiner` covers distinct+inner `Take`/`Limit`.
+NYql::NNodes::TExprBase KqpPushOlapDistinctPeephole(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const NYql::TKikimrConfiguration::TPtr& config);
 
 NYql::NNodes::TExprBase KqpPushDownOlapGroupByKeys(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);

@@ -289,7 +289,11 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     if (!node.Maybe<TKqlReadTableRanges>()) {
         return node;
     }
-    const TKqlReadTableRanges& read = node.Cast<TKqlReadTableRanges>();
+    TExprBase readForBuild = node;
+    if (auto injected = KqpTryInjectAncestorTakeItemsLimitIntoReadRanges(node, parents, ctx, kqpCtx)) {
+        readForBuild = injected.Cast();
+    }
+    const TKqlReadTableRanges& read = readForBuild.Cast<TKqlReadTableRanges>();
 
     auto ranges = read.Ranges();
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
@@ -324,9 +328,9 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
         } else {
             TVector<TDqConnection> connections;
             bool isPure;
-            FindDqConnections(node, connections, isPure);
+            FindDqConnections(readForBuild, connections, isPure);
             if (!isPure) {
-                return node;
+                return readForBuild;
             }
             YQL_ENSURE(!connections.empty());
             TVector<TDqConnection> inputs;
@@ -337,11 +341,11 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
             for (auto& cn : connections) {
                 auto input = TDqConnection(cn);
                 if (!input.Maybe<TDqCnUnionAll>()) {
-                    return node;
+                    return readForBuild;
                 }
 
                 if (!IsSingleConsumerConnection(input, parents, true)) {
-                    return node;
+                    return readForBuild;
                 }
 
                 inputs.push_back(input);

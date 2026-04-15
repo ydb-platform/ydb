@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimr {
 namespace NKqp {
@@ -34,7 +35,7 @@ class TKqpOlapCompileContext {
 public:
     TKqpOlapCompileContext(const TCoArgument& row, const TKikimrTableMetadata& tableMeta,
         NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-        TExprContext &exprCtx)
+        TExprContext& exprCtx, const std::optional<ui64>& readItemsLimitLiteral)
         : Row(row)
         , MaxColumnId(0)
         , ReadProto(readProto)
@@ -42,6 +43,7 @@ public:
         , ExprContext(exprCtx)
         , YqlKernelsFuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone())
         , YqlKernelRequestBuilder(nullptr)
+        , ReadItemsLimitLiteral(readItemsLimitLiteral)
     {
         NKikimr::NMiniKQL::FillStaticModules(*YqlKernelsFuncRegistry);
         YqlKernelRequestBuilder = std::make_unique<TKernelRequestBuilder>(*YqlKernelsFuncRegistry);
@@ -86,6 +88,10 @@ public:
 
     TProgram::TGroupBy* CreateGroupBy() {
         return Program.AddCommand()->MutableGroupBy();
+    }
+
+    TProgram::TDistinct* CreateDistinct() {
+        return Program.AddCommand()->MutableDistinct();
     }
 
     TProgram::TProjection* CreateProjection() {
@@ -207,6 +213,14 @@ public:
         return Program.GetCommand().empty();
     }
 
+    const std::optional<ui64>& GetReadItemsLimitLiteral() const {
+        return ReadItemsLimitLiteral;
+    }
+
+    const NKqpProto::TKqpPhyOpReadOlapRanges& GetReadOlapRangesProto() const {
+        return ReadProto;
+    }
+
     TExprContext& ExprCtx() {
         return ExprContext;
     }
@@ -281,6 +295,7 @@ private:
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
     THashMap<std::string, ui32> KqpColumnNameToProjectionId;
+    const std::optional<ui64> ReadItemsLimitLiteral;
 };
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
@@ -941,6 +956,39 @@ std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKq
     return aggColInfos;
 }
 
+std::optional<ui64> TryItemsLimitUint64LiteralFromReadProto(const NKqpProto::TKqpPhyOpReadOlapRanges& readProto) {
+    const auto& phy = readProto.GetItemsLimit();
+    if (phy.GetKindCase() != NKqpProto::TKqpPhyValue::kLiteralValue) {
+        return std::nullopt;
+    }
+    const auto& typed = phy.GetLiteralValue();
+    switch (typed.type().type_id()) {
+        case Ydb::Type::UINT64:
+            return typed.value().uint64_value();
+        case Ydb::Type::UINT32:
+            return typed.value().uint32_value();
+        default:
+            return std::nullopt;
+    }
+}
+
+void CompileDistinct(const TKqpOlapDistinct& distinctNode, TKqpOlapCompileContext& ctx) {
+    auto* distinct = ctx.CreateDistinct();
+    distinct->MutableColumn()->SetId(GetOrCreateColumnId(distinctNode.Column(), ctx));
+    std::optional<ui64> limitVal;
+    if (auto irLimit = distinctNode.Limit()) {
+        limitVal = FromString<ui64>(irLimit.Cast().Literal().Value());
+    } else if (ctx.GetReadItemsLimitLiteral()) {
+        limitVal = ctx.GetReadItemsLimitLiteral();
+    } else if (auto fromProto = TryItemsLimitUint64LiteralFromReadProto(ctx.GetReadOlapRangesProto())) {
+        limitVal = *fromProto;
+    }
+    if (limitVal) {
+        YQL_ENSURE(*limitVal > 0, "OLAP Distinct: SSA Limit must be greater than zero when set");
+        distinct->SetLimit(*limitVal);
+    }
+}
+
 void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) {
     std::vector<TAggColInfo> aggColInfos = CollectAggregationInfos(aggNode, ctx);
     auto* groupBy = ctx.CreateGroupBy();
@@ -1011,6 +1059,8 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
+        } else if (auto maybeDistinct = operation.Maybe<TKqpOlapDistinct>()) {
+            CompileDistinct(maybeDistinct.Cast(), ctx);
         } else if (auto maybeProjections = operation.Maybe<TKqpOlapProjections>()) {
             CompileProjections(maybeProjections.Cast(), ctx);
         }
@@ -1025,11 +1075,11 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx)
+    TExprContext& exprCtx, const std::optional<ui64>& readItemsLimitLiteral)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
-    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx);
+    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, readItemsLimitLiteral);
 
     CompileOlapProgramImpl(lambda.Body(), ctx);
     CompileFinalProjection(ctx);

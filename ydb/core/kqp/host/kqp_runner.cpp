@@ -356,6 +356,13 @@ private:
             physicalOptimizePipeline.Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*typesCtx), "ReplaceWideReadsWithBlock");
         }
 
+        // `BuildPhysicalStages` (PhysicalBuildTxs) lowers `AggregateCombine` to `DqPhyHashCombine`. Run OLAP distinct
+        // pushdown while `AggregateCombine` is still in the tree (after optional block-read rewrite).
+        physicalOptimizePipeline
+            .Add(CreateKqpOlapDistinctPrePhyStagesTransformer(OptimizeCtx, *typesCtx), "KqpOlapDistinctPreBuildPhyStages")
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .AddPostTypeAnnotation(/* forSubgraph */ true);
+
         auto physicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(physicalOptimizePipeline
             .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")

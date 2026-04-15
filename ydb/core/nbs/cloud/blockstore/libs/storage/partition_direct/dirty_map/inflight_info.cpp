@@ -61,6 +61,11 @@ TInflightInfo::~TInflightInfo()
     ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
 }
 
+void TInflightInfo::Detach()
+{
+    ReadyQueue = nullptr;
+}
+
 void TInflightInfo::RestorePBuffer(ELocation location)
 {
     Y_ABORT_UNLESS(IsPBuffer(location));
@@ -278,16 +283,8 @@ void TInflightInfo::ApplyBytes(
     IReadyQueue::EPBufferCounter counter,
     bool add) const
 {
-    if (!ReadyQueue) {
-        return;
-    }
-
     for (auto location: mask) {
-        if (add) {
-            ReadyQueue->DataToPBufferAdded(location, counter, ByteCount);
-        } else {
-            ReadyQueue->DataFromPBufferReleased(location, counter, ByteCount);
-        }
+        ApplyBytes(location, counter, add);
     }
 }
 

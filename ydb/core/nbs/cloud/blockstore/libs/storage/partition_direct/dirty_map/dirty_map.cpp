@@ -220,6 +220,17 @@ TBlocksDirtyMap::TBlocksDirtyMap(ui32 blockSize, ui64 blockCount)
     }
 }
 
+TBlocksDirtyMap::~TBlocksDirtyMap()
+{
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            item.Value.Detach();
+
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+}
+
 void TBlocksDirtyMap::UpdateConfig(
     TLocationMask desired,
     TLocationMask disabled)
@@ -661,11 +672,17 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
 
     switch (counter) {
         case IReadyQueue::EPBufferCounter::Total: {
+            Y_ABORT_UNLESS(counters.CurrentRecordsCount > 0);
+            Y_ABORT_UNLESS(counters.CurrentBytesCount >= byteCount);
+
             counters.CurrentRecordsCount--;
             counters.CurrentBytesCount -= byteCount;
             break;
         }
         case IReadyQueue::EPBufferCounter::Locked: {
+            Y_ABORT_UNLESS(counters.CurrentLockedRecordsCount > 0);
+            Y_ABORT_UNLESS(counters.CurrentLockedBytesCount >= byteCount);
+
             counters.CurrentLockedRecordsCount--;
             counters.CurrentLockedBytesCount -= byteCount;
             break;

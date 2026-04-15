@@ -174,6 +174,7 @@ class TBlocksDirtyMap
 {
 public:
     TBlocksDirtyMap(ui32 blockSize, ui64 blockCount);
+    ~TBlocksDirtyMap() override;
 
     void UpdateConfig(TLocationMask desired, TLocationMask disabled);
 

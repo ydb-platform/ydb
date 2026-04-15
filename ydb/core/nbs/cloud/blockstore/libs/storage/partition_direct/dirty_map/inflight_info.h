@@ -98,6 +98,9 @@ public:
 
     ~TInflightInfo();
 
+    // Detach from ReadyQueue.
+    void Detach();
+
     void RestorePBuffer(ELocation location);
 
     [[nodiscard]] EState GetState() const;

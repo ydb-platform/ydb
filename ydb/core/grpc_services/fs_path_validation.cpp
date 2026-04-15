@@ -48,7 +48,7 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
 
 TString StripTrailingSlashes(const TString& path) {
     size_t end = path.size();
-    while (end > 1 && path[end - 1] == '/') {
+    while (end > 1 && (path[end - 1] == '/' || path[end - 1] == '\\')) {
         --end;
     }
     return path.substr(0, end);

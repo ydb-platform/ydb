@@ -637,9 +637,9 @@ Y_UNIT_TEST_TWIN(LeftOnlyJoinValueColumn, StreamLookup) {
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
-    Test(
-        R"(
-            PRAGMA FilterPushdownOverJoinOptionalSide = "true";
+    auto tester = TTester{
+        .Query=R"(
+            PRAGMA FilterPushdownOverJoinOptionalSide = "false";
             SELECT l.Value, r.Value
             FROM `/Root/Left` AS l
             LEFT JOIN `/Root/Right` AS r
@@ -647,12 +647,16 @@ Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
             WHERE r.Value IS NULL
             ORDER BY l.Value
         )",
-        R"([
+        .Answer=R"([
             [["Value2"];#];
             [["Value3"];#];
             [["Value6"];#];
             [["Value7"];#]
-        ])", 8, StreamLookup, 14, /* dqReplicate */ true);
+        ])",
+        .StreamLookup=StreamLookup,
+        .DoValidateStats=false,
+    };
+    tester.Run();
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {

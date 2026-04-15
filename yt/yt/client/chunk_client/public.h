@@ -223,6 +223,7 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
 
     // Hunk chunks.
     ((HunkDefault)                          (7))
+    ((HunkJournal)                         (10))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

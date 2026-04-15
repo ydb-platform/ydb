@@ -75,4 +75,27 @@ Y_FORCE_INLINE constexpr bool IsBelongToInterval(EInfBoundary InfBoundary, EDire
     }
 }
 
+Y_FORCE_INLINE constexpr bool IsBelongToInterval(EInfBoundary infBoundary,
+                                                 EDirection dir,
+                                                 NYql::NDecimal::TInt128 from,
+                                                 NYql::NDecimal::TInt128 delta,
+                                                 NYql::NDecimal::TInt128 x,
+                                                 ui8 precision)
+{
+    Y_DEBUG_ABORT_UNLESS(NYql::NDecimal::IsNormal(delta));
+    Y_DEBUG_ABORT_UNLESS(NYql::NDecimal::IsComparable(x));
+    Y_DEBUG_ABORT_UNLESS(NYql::NDecimal::IsComparable(from));
+
+    const auto b = (dir == EDirection::Following)
+                       ? NYql::NDecimal::Add(from, delta, precision)
+                       : NYql::NDecimal::Sub(from, delta, precision);
+    Y_DEBUG_ABORT_UNLESS(NYql::NDecimal::IsComparable(b));
+
+    if (infBoundary == EInfBoundary::Right) {
+        return NYql::NDecimal::IsGreaterOrEqual(x, b);
+    } else {
+        return NYql::NDecimal::IsLessOrEqual(x, b);
+    }
+}
+
 } // namespace NKikimr::NMiniKQL

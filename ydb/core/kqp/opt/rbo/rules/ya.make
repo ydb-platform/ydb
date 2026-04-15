@@ -19,6 +19,7 @@ SRCS(
     push_filter_under_map.cpp
     push_limit_into_sort.cpp
     push_map.cpp
+    push_ranges.cpp
     push_olap_filter.cpp
     push_olap_projection.cpp
     remove_extra_renames_stage.cpp

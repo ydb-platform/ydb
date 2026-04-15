@@ -64,32 +64,8 @@ TOpRead::TOpRead(TExprNode::TPtr node)
 }
 
 TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos)
-    : IOperator(EOperator::Source, pos)
-    , Alias(alias)
-    , Columns(columns)
-    , OutputIUs(outputIUs)
-    , StorageType(storageType)
-    , TableCallable(tableCallable)
-    , OlapFilterLambda(olapFilterLambda) {
-}
-
-TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
-                 TPositionHandle pos)
-    : IOperator(EOperator::Source, pos, props)
-    , Alias(alias)
-    , Columns(columns)
-    , OutputIUs(outputIUs)
-    , StorageType(storageType)
-    , TableCallable(tableCallable)
-    , OlapFilterLambda(olapFilterLambda)
-    , Limit(limit) {
-}
-
-TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const ESortDir sortDir,
-                 const TPhysicalOpProps& props, TPositionHandle pos)
+                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+                 const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , Columns(columns)
@@ -98,6 +74,7 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , TableCallable(tableCallable)
     , OlapFilterLambda(olapFilterLambda)
     , Limit(limit)
+    , Ranges(ranges)
     , SortDir(sortDir) {
 }
 
@@ -147,6 +124,9 @@ TString TOpRead::ToString(TExprContext& ctx) {
     res << " (StorageType: " << storageType << ")";
     if (OlapFilterLambda) {
         res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
+    }
+    if (Ranges) {
+        res << " Ranges: (" << PrintRBOExpression(Ranges, ctx) << ")";
     }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");

@@ -335,6 +335,92 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestParams(ColumnStore);
     }
 
+    void TestRangePushdown(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64,
+                primary key(a, b)
+            )
+        )";
+
+        if (columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i)
+                .AddMember("c").Int64(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> results = {
+            R"([[1;1]])",
+            R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8];[9;9]])",
+            R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8]])"
+        };
+
+        std::vector<std::string> queries = {
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a == 1 and t1.b = 1 order by t1.a;
+            )",
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a > 1 order by t1.a;
+            )",
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a > 1 and t1.a < 9 order by t1.a;
+            )",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            if (columnTables) {
+                UNIT_ASSERT_C(ast.find("RangeFinalize") != TString::npos, "Ranges not pushed");
+            }
+
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                         .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RangePushdown, ColumnStore) {
+        TestRangePushdown(ColumnStore);
+    }
+
     void TestConstantFolding(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

@@ -137,6 +137,16 @@ class TPeepholePredicate : public ISimplifiedRule {
 };
 
 /**
+ * Push ranges to read.
+ */
+class TPushRangesRule : public ISimplifiedRule {
+  public:
+      TPushRangesRule() : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Push down filter to olap read.
  */
 class TPushOlapFilterRule : public ISimplifiedRule {

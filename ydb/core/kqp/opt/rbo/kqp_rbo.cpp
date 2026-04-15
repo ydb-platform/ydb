@@ -126,6 +126,10 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }
 
+    ui64 counter = 0;
+    rboCtx.ExecutionJson = root.GetExecutionJson(counter);
+    rboCtx.ExplainJson = root.GetExplainJson(counter);
+
     return ConvertToPhysical(root, rboCtx);
 }
 } // namespace NKqp

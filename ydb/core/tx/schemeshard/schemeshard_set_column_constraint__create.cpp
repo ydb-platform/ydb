@@ -27,7 +27,7 @@ public:
         }
 
         if (!request.HasSettings()) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: There are no columns that need to be updated");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: Missing settings");
         }
 
         const auto& settings = request.GetSettings();
@@ -91,10 +91,6 @@ public:
             }
         }
 
-        if (tablePath.Parent()->IsTableIndex()) {
-            return Reply(NKikimrScheme::StatusPreconditionFailed, "Cannot set constraint on index");
-        }
-
         std::vector<std::string> sortedNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
 
         if (settings.NotNullColumnsSize() == 0) {
@@ -116,7 +112,7 @@ public:
             Y_ABORT_UNLESS(tableInfo);
 
             for (const auto& columnName : sortedNotNullColumns) {
-                auto id = tableInfo->GetColumnIdByName(TString(columnName));
+                auto id = tableInfo->GetColumnIdByNameSlow(TString(columnName));
                 if (id == TTableInfo::InvalidColumnId) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: Column '" << columnName << "' does not exist");
                 }

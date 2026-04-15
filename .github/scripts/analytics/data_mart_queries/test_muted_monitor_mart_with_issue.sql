@@ -100,7 +100,16 @@ SELECT
     mcr.effective_window_days AS effective_rule_window_days,
     mcr.effective_min_runs AS effective_rule_min_runs,
     mcr.rule_source_state AS effective_rule_source_state,
-    mcr.rule_valid_until AS effective_rule_valid_until
+    mcr.rule_valid_until AS effective_rule_valid_until,
+    mcs.lifecycle_state AS control_lifecycle_state,
+    mcs.decision_reason AS control_decision_reason,
+    mcs.state_until AS quarantine_until,
+    CAST(
+        CASE
+            WHEN mcs.policy_type IS NOT NULL AND StartsWith(Cast(mcs.policy_type AS String), 'quarantine_') THEN 1
+            ELSE 0
+        END AS Uint8
+    ) AS quarantine_active
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN $area_fallback AS af
     ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team
@@ -112,6 +121,10 @@ LEFT JOIN `mute_coordinator/effective_rule` AS mcr
     ON tm.full_name = mcr.full_name
     AND tm.branch = mcr.branch
     AND tm.build_type = mcr.build_type
+LEFT JOIN `mute_coordinator/control_state` AS mcs
+    ON tm.full_name = mcs.full_name
+    AND tm.branch = mcs.branch
+    AND tm.build_type = mcs.build_type
 WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
     AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%')
     AND tm.is_test_chunk = 0;

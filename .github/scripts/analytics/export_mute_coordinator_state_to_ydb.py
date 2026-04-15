@@ -17,6 +17,13 @@ from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
 
 
 DEFAULT_CONFIG_REL_PATH = os.path.join("..", "..", "config", "mute_coordinator_thresholds.json")
+VALID_POLICY_TYPES = {
+    "default_unmute",
+    "quarantine_new_test",
+    "quarantine_user_fixed",
+    "quarantine_manual_unmute",
+    "quarantine_manual_mute",
+}
 
 
 def _load_thresholds() -> Dict[str, int]:
@@ -246,6 +253,8 @@ def _rule_window_days(rule_type: str, thresholds: Dict[str, int]) -> int:
         return int(thresholds["quarantine_user_fixed_window_days"])
     if rule_type == "quarantine_manual_unmute":
         return int(thresholds["quarantine_manual_unmute_window_days"])
+    if rule_type == "quarantine_manual_mute":
+        return int(thresholds["quarantine_manual_mute_window_days"])
     return int(thresholds["default_unmute_window_days"])
 
 
@@ -393,6 +402,72 @@ def _fetch_manual_unmute_candidates(
     return sorted(candidates)
 
 
+def _fetch_manual_mute_candidates(
+    ydb_wrapper: YDBWrapper,
+    branch: str,
+    build_type: str,
+) -> List[str]:
+    tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    transition_query = f"""
+        SELECT full_name
+        FROM (
+            SELECT
+                full_name,
+                date_window,
+                is_muted,
+                ROW_NUMBER() OVER (
+                    PARTITION BY full_name
+                    ORDER BY date_window DESC
+                ) AS rn
+            FROM `{tests_monitor_path}`
+            WHERE branch = '{branch}'
+              AND build_type = '{build_type}'
+              AND date_window >= CurrentUtcDate() - 14*Interval("P1D")
+        )
+        GROUP BY full_name
+        HAVING
+            MAX(CASE WHEN rn = 1 THEN is_muted ELSE 0 END) = 1
+            AND MAX(CASE WHEN rn = 2 THEN is_muted ELSE 0 END) = 0
+    """
+    transition_rows = ydb_wrapper.execute_scan_query(
+        transition_query,
+        query_name=f"mute_coordinator_manual_mute_transition_{branch}_{build_type}",
+    )
+    transitioned = sorted(str(row["full_name"]) for row in transition_rows if row.get("full_name"))
+    if not transitioned:
+        return []
+
+    escaped = ", ".join("'" + name.replace("'", "''") + "'" for name in transitioned)
+    stats_query = f"""
+        SELECT
+            full_name,
+            SUM(COALESCE(pass_count, 0)) AS pass_count,
+            SUM(COALESCE(fail_count, 0)) AS fail_count
+        FROM `{tests_monitor_path}`
+        WHERE branch = '{branch}'
+          AND build_type = '{build_type}'
+          AND date_window >= CurrentUtcDate() - 3*Interval("P1D")
+          AND full_name IN ({escaped})
+        GROUP BY full_name
+    """
+    stats_rows = ydb_wrapper.execute_scan_query(
+        stats_query,
+        query_name=f"mute_coordinator_manual_mute_candidate_stats_{branch}_{build_type}",
+    )
+
+    candidates: List[str] = []
+    stats_by_name = {str(row["full_name"]): row for row in stats_rows if row.get("full_name")}
+    for full_name in transitioned:
+        row = stats_by_name.get(full_name, {})
+        pass_count = int(row.get("pass_count") or 0)
+        fail_count = int(row.get("fail_count") or 0)
+        total_runs = pass_count + fail_count
+        passes_default_mute = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
+        if not passes_default_mute:
+            candidates.append(full_name)
+    return sorted(candidates)
+
+
 def _fetch_quarantine_stats(
     ydb_wrapper: YDBWrapper,
     branch: str,
@@ -432,6 +507,29 @@ def _fetch_quarantine_stats(
             "mute_count": int(row.get("mute_count") or 0),
         }
     return out
+
+
+def _fetch_deleted_test_signals(
+    ydb_wrapper: YDBWrapper,
+    *,
+    branch: str,
+    build_type: str,
+    full_names: List[str],
+) -> Dict[str, Dict[str, object]]:
+    """
+    Placeholder for future explicit "test deleted" signal source.
+
+    Expected future return shape:
+    {
+        "<full_name>": {
+            "signal_source": "test_registry|owners_diff|ci_event",
+            "signal_at": "<timestamp-or-date>",
+            "details": {...}
+        }
+    }
+    """
+    _ = (ydb_wrapper, branch, build_type, full_names)
+    return {}
 
 
 def _event_id(seed: str) -> str:
@@ -520,6 +618,42 @@ def _is_expired_quarantine(row: Dict[str, object], now: datetime.datetime) -> bo
     return False
 
 
+def _validate_single_active_rule_invariant(
+    state_map: Dict[str, Dict[str, object]],
+    rule_map: Dict[str, Dict[str, object]],
+    *,
+    branch: str,
+    build_type: str,
+) -> None:
+    state_names = set(state_map.keys())
+    rule_names = set(rule_map.keys())
+    if state_names != rule_names:
+        missing_in_rules = sorted(state_names - rule_names)
+        missing_in_states = sorted(rule_names - state_names)
+        raise RuntimeError(
+            "Invariant violation: state/rule key mismatch "
+            f"(branch={branch}, build_type={build_type}, "
+            f"missing_in_rules={len(missing_in_rules)}, missing_in_states={len(missing_in_states)})"
+        )
+
+    for full_name, state_row in state_map.items():
+        policy_type = str(state_row.get("policy_type") or "")
+        if policy_type not in VALID_POLICY_TYPES:
+            raise RuntimeError(
+                "Invariant violation: unsupported policy type "
+                f"for {full_name} (branch={branch}, build_type={build_type}, policy_type={policy_type})"
+            )
+
+    for full_name, rule_row in rule_map.items():
+        effective_rule_type = str(rule_row.get("effective_rule_type") or "")
+        if effective_rule_type not in VALID_POLICY_TYPES:
+            raise RuntimeError(
+                "Invariant violation: unsupported effective rule type "
+                f"for {full_name} (branch={branch}, build_type={build_type}, "
+                f"effective_rule_type={effective_rule_type})"
+            )
+
+
 def sync_effective_rules(branch: str, build_type: str) -> int:
     thresholds = _load_thresholds()
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -542,6 +676,11 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
             branch=branch,
             build_type=build_type,
             default_min_runs=int(thresholds["default_unmute_min_runs"]),
+        )
+        manual_mute_quarantine_candidates = _fetch_manual_mute_candidates(
+            ydb_wrapper,
+            branch=branch,
+            build_type=build_type,
         )
         new_test_candidates = _fetch_new_test_candidates(
             ydb_wrapper,
@@ -779,12 +918,79 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
                 }
             )
 
-        # 5) Resolve expired quarantines.
+        # 5) quarantine_manual_mute.
+        manual_mute_window_days = int(thresholds["quarantine_manual_mute_window_days"])
+        for full_name in manual_mute_quarantine_candidates:
+            previous = state_map.get(full_name) or existing_state.get(full_name)
+            previous_policy = str((previous or {}).get("policy_type") or "default_unmute")
+            if previous_policy.startswith("quarantine_"):
+                continue
+            state_until = now + datetime.timedelta(days=manual_mute_window_days)
+            state_map[full_name] = _build_state_row(
+                branch=branch,
+                build_type=build_type,
+                full_name=full_name,
+                issue_number=int((previous or {}).get("issue_number") or 0),
+                lifecycle_state="quarantine_manual_mute_active",
+                policy_type="quarantine_manual_mute",
+                policy_snapshot=policy_snapshot,
+                request_source="manual_mute_without_default_criteria",
+                now=now,
+                state_entered_at=now,
+                state_until=state_until,
+            )
+            rule_map[full_name] = _build_effective_row(
+                branch=branch,
+                build_type=build_type,
+                full_name=full_name,
+                issue_number=int((previous or {}).get("issue_number") or 0),
+                lifecycle_state="quarantine_manual_mute_active",
+                policy_type="quarantine_manual_mute",
+                thresholds=thresholds,
+                now=now,
+                state_entered_at=now,
+                state_until=state_until,
+            )
+            event_rows.append(
+                {
+                    "event_date": now.date(),
+                    "event_id": _event_id(
+                        f"manual_mute_quarantine_started:{branch}:{build_type}:{full_name}:{now.date().isoformat()}"
+                    ),
+                    "event_time": now,
+                    "branch": branch,
+                    "build_type": build_type,
+                    "full_name": full_name,
+                    "issue_number": int((previous or {}).get("issue_number") or 0),
+                    "event_type": "manual_mute_quarantine_started",
+                    "before_state": str((previous or {}).get("lifecycle_state") or "unmuted"),
+                    "after_state": "quarantine_manual_mute_active",
+                    "before_policy": previous_policy,
+                    "after_policy": "quarantine_manual_mute",
+                    "actor_login": None,
+                    "actor_type": "system",
+                    "payload_json": json.dumps(
+                        {
+                            "reason": "manual_mute_without_default_criteria",
+                            "quarantine_days": manual_mute_window_days,
+                        },
+                        ensure_ascii=True,
+                    ),
+                }
+            )
+
+        # 6) Resolve expired quarantines.
         expired_quarantine = {
             full_name: row
             for full_name, row in state_map.items()
             if _is_expired_quarantine(row, now)
         }
+        for full_name, row in existing_state.items():
+            if full_name in expired_quarantine:
+                continue
+            if _is_expired_quarantine(row, now):
+                expired_quarantine[full_name] = row
+
         if expired_quarantine:
             grouped: Dict[int, List[str]] = {}
             for full_name, row in expired_quarantine.items():
@@ -801,15 +1007,27 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
                         window_days=window_days,
                     )
                 )
+            deleted_signals = _fetch_deleted_test_signals(
+                ydb_wrapper,
+                branch=branch,
+                build_type=build_type,
+                full_names=list(expired_quarantine.keys()),
+            )
             for full_name, old_row in expired_quarantine.items():
                 stats = stats_by_test.get(full_name, {"pass_count": 0, "fail_count": 0, "mute_count": 0})
                 pass_count = int(stats["pass_count"])
                 fail_count = int(stats["fail_count"])
                 mute_count = int(stats["mute_count"])
                 runs = pass_count + fail_count + mute_count
-                is_stable = runs >= int(thresholds["quarantine_min_runs"]) and (fail_count + mute_count == 0)
-                new_state = "unmuted" if is_stable else "muted_active"
-                reason = "stable_window_passed" if is_stable else "ttl_expired_not_stable"
+                if runs == 0:
+                    new_state = "unmuted"
+                    reason = "no_runs_after_quarantine"
+                    if full_name in deleted_signals:
+                        reason = "test_deleted_confirmed"
+                else:
+                    is_stable = runs >= int(thresholds["quarantine_min_runs"]) and (fail_count + mute_count == 0)
+                    new_state = "unmuted" if is_stable else "muted_active"
+                    reason = "stable_window_passed" if is_stable else "ttl_expired_not_stable"
                 issue_number = int(old_row.get("issue_number") or 0)
                 state_map[full_name] = _build_state_row(
                     branch=branch,
@@ -868,13 +1086,15 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
                     }
                 )
 
-        # 6) Preserve active existing quarantine rows that are outside current muted set.
+        # 7) Preserve active existing quarantine rows that are outside current muted set.
         for full_name, row in existing_state.items():
             if full_name in state_map:
                 continue
             policy_type = str(row.get("policy_type") or "default_unmute")
             lifecycle_state = str(row.get("lifecycle_state") or "muted_active")
             if not policy_type.startswith("quarantine_"):
+                continue
+            if _is_expired_quarantine(row, now):
                 continue
             issue_number = int(row.get("issue_number") or 0)
             state_entered_at = row.get("state_entered_at") or now
@@ -908,6 +1128,12 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
 
         effective_rows = list(rule_map.values())
         state_rows = list(state_map.values())
+        _validate_single_active_rule_invariant(
+            state_map,
+            rule_map,
+            branch=branch,
+            build_type=build_type,
+        )
 
         if not state_rows:
             print(
@@ -945,6 +1171,7 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
             f"new_test_candidates={len(new_test_candidates)}, "
             f"user_fixed_candidates={len(user_fixed_candidates)}, "
             f"manual_quarantine_candidates={len(manual_quarantine_candidates)}, "
+            f"manual_mute_quarantine_candidates={len(manual_mute_quarantine_candidates)}, "
             f"preserved_existing={len(existing_state)}, events={len(event_rows)}"
         )
     return 0

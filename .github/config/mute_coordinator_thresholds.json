@@ -4,5 +4,6 @@
   "quarantine_new_test_window_days": 5,
   "quarantine_user_fixed_window_days": 7,
   "quarantine_manual_unmute_window_days": 7,
+  "quarantine_manual_mute_window_days": 7,
   "quarantine_min_runs": 4
 }

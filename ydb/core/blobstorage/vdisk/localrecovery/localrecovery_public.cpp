@@ -627,7 +627,7 @@ namespace NKikimr {
                         Config->BarrierValidation,
                         Config->HullSstSizeInChunksFresh,
                         Config->HullSstSizeInChunksLevel,
-                        Config->HullCompFreeSpaceThreshold,
+                        static_cast<double>(Config->HullCompFreeSpaceThresholdPerMille) / 1000.0,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,

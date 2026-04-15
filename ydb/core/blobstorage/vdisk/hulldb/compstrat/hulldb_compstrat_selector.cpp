@@ -65,7 +65,7 @@ namespace NKikimr {
                 return action;
             }
 
-            // try to find what to compact base on storage consumption
+            // try to find what to compact based on storage consumption
             action = TStrategyFreeSpace(HullCtx, LevelSnap, Task).Select();
             if (action != ActNothing) {
                 ++HullCtx->CompactionStrategyGroup.BlobsFreeSpace();

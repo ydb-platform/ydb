@@ -1,5 +1,3 @@
-* Renamed the SrcPath option to SrcPathDb (used to specify the database object during NFS imports)
-
 * Added support of describe for scheme objects with type 'secret' via new TSecretClient
 
 * Added support for METRICS_LEVEL for the CreateTable/AlterTable requests.

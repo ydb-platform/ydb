@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         const TString& tablePath,
         const TVector<TString>& notNullColumns)
     {
-        // We cant do `GetRequest`, because it is not implemented at the time of writing the test
+        // We can't do `GetRequest`, because it is not implemented at the time of writing the test
         NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
         settings.SetTablePath(tablePath);
         for (const auto& col : notNullColumns) {

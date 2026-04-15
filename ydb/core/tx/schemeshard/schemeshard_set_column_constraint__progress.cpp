@@ -176,9 +176,9 @@ public:
             auto statusCode = TranslateStatusCode(record.GetStatus());
 
             if (statusCode != Ydb::StatusIds::SUCCESS) {
-                // todo (flown4qqqq): persist issue
-                // todo (flown4qqqq): forget operation on error
-                // todo (flown4qqqq): EraseBuildInfo(operationInfo);
+                // TODO(flown4qqqq): persist issue
+                // TODO(flown4qqqq): forget operation on error
+                // TODO(flown4qqqq): EraseBuildInfo(operationInfo);
             }
 
             ReplyOnCreation(operationInfo, statusCode);

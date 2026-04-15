@@ -35,13 +35,13 @@ public:
 
         if (Self->SetColumnConstraintOperations.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
-                << "Index build with id '" << BuildId << "' already exists");
+                << "SetColumnConstraint operation with id '" << BuildId << "' already exists");
         }
 
         const TString& uid = GetUid(request.GetOperationParams());
         if (uid && Self->SetColumnConstraintOperationsByUid.contains(uid)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
-                << "Index build with uid '" << uid << "' already exists");
+                << "SetColumnConstraint operation with uid '" << uid << "' already exists");
         }
 
         const auto domainPath = TPath::Resolve(request.GetDatabaseName(), Self);

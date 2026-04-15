@@ -1060,6 +1060,7 @@ Only connections with matching [producer and message group](../../concepts/topic
   - The internal buffer exceeds `maxBufferBytes` (default 256 MiB).
   - The periodic flush interval `flushIntervalMs` ticks (default 10 ms).
 
+  ```javascript
   await using writer = createTopicWriter(driver, {
     topic: topicName,
     producer: producerName,

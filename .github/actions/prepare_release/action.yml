@@ -1,0 +1,127 @@
+name: 'Prepare Release'
+description: 'Prepare release branch with version bump, changelog update, and push'
+inputs:
+  version-change:
+    description: 'Version change type: PATCH, MINOR, or MAJOR'
+    required: true
+  version-file:
+    description: 'Path to version.txt file (e.g., ydb/apps/ydb/version.txt)'
+    required: true
+  changelog-file:
+    description: 'Path to CHANGELOG.md file (optional, e.g., ydb/apps/ydb/CHANGELOG.md)'
+    required: false
+    default: ''
+  branch-prefix:
+    description: 'Release branch prefix (e.g., cli-release/)'
+    required: true
+  product-name:
+    description: 'Product name for commit message (e.g., YDB CLI)'
+    required: true
+  version-artifact-name:
+    description: 'Name for the version artifact (e.g., cli-version)'
+    required: true
+outputs:
+  branch-name:
+    description: 'Name of the created release branch'
+    value: ${{ steps.create-branch.outputs.branch-name }}
+  new-version:
+    description: 'New version number'
+    value: ${{ steps.update-version.outputs.new-version }}
+  release-commit-sha:
+    description: 'SHA of the release commit'
+    value: ${{ steps.push-branch.outputs.release-commit-sha }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Read current version
+      id: read-version
+      shell: bash
+      run: |
+        CURRENT_VERSION=$(cat ${{ inputs.version-file }})
+        echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        echo "Current version: $CURRENT_VERSION"
+    - name: Calculate new version
+      id: update-version
+      shell: bash
+      run: |
+        CURRENT_VERSION="${{ steps.read-version.outputs.current-version }}"
+        IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+        MAJOR=${VERSION_PARTS[0]}
+        MINOR=${VERSION_PARTS[1]}
+        PATCH=${VERSION_PARTS[2]}
+        if [ "${{ inputs.version-change }}" = "MAJOR" ]; then
+          MAJOR=$((MAJOR+1))
+          MINOR=0
+          PATCH=0
+        elif [ "${{ inputs.version-change }}" = "MINOR" ]; then
+          MINOR=$((MINOR+1))
+          PATCH=0
+        elif [ "${{ inputs.version-change }}" = "PATCH" ]; then
+          PATCH=$((PATCH+1))
+        fi
+        NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+        echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "New version: $NEW_VERSION"
+    - name: Create release branch
+      id: create-branch
+      shell: bash
+      run: |
+        git fetch origin main
+        git checkout main
+        git reset --hard origin/main
+        BRANCH_NAME="${{ inputs.branch-prefix }}${{ steps.update-version.outputs.new-version }}"
+        git checkout -b "$BRANCH_NAME"
+        echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        echo "Created branch: $BRANCH_NAME"
+    - name: Check CHANGELOG.md format
+      if: ${{ inputs.changelog-file != '' }}
+      shell: bash
+      run: |
+        FIRST_LINE=$(head -n 1 ${{ inputs.changelog-file }})
+        SECOND_LINE=$(head -n 2 ${{ inputs.changelog-file }} | tail -n 1)
+        THIRD_LINE=$(head -n 3 ${{ inputs.changelog-file }} | tail -n 1)
+        if [[ -z "$FIRST_LINE" ]] && [[ "$SECOND_LINE" =~ ^##.*##$ ]] && [[ -z "$THIRD_LINE" ]]; then
+          echo "Error: CHANGELOG has nothing new since last release"
+          exit 1
+        fi
+    - name: Update version file
+      shell: bash
+      run: |
+        echo "${{ steps.update-version.outputs.new-version }}" > ${{ inputs.version-file }}
+        git add ${{ inputs.version-file }}
+    - name: Update CHANGELOG
+      if: ${{ inputs.changelog-file != '' }}
+      shell: bash
+      run: |
+        NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
+        echo "" > /tmp/changelog_header.md
+        echo "## $NEW_VERSION ##" >> /tmp/changelog_header.md
+        echo "" >> /tmp/changelog_header.md
+        cat /tmp/changelog_header.md ${{ inputs.changelog-file }} > /tmp/new_changelog.md
+        mv /tmp/new_changelog.md ${{ inputs.changelog-file }}
+        git add ${{ inputs.changelog-file }}
+    - name: Create version file
+      shell: bash
+      run: |
+        NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
+        echo "$NEW_VERSION" > version_release.txt
+        echo "Created version_release.txt with version: $NEW_VERSION"
+    - name: Upload version artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.version-artifact-name }}
+        path: version_release.txt
+        if-no-files-found: error
+        retention-days: 1
+    - name: Commit changes
+      shell: bash
+      run: |
+        git commit -m "${{ inputs.product-name }} release ${{ steps.update-version.outputs.new-version }}"
+    - name: Push branch
+      id: push-branch
+      shell: bash
+      run: |
+        git push origin "${{ steps.create-branch.outputs.branch-name }}"
+        RELEASE_SHA=$(git rev-parse HEAD)
+        echo "release-commit-sha=$RELEASE_SHA" >> $GITHUB_OUTPUT
+        echo "Release commit SHA: $RELEASE_SHA"

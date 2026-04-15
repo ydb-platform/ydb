@@ -51,15 +51,14 @@ public:
     }
 
     template<typename TMsg>
-    void PutBlob(const TLogoBlobID& id, std::optional<TString> data, TMsg& msg, ui32 payloadIdx) {
+    void PutBlob(const TLogoBlobID& id, TMsg& msg, ui32 payloadIdx) {
         // get data
-        if (!data) {
-            const TRope& rope = msg.GetPayload(payloadIdx);
-            data = TString::Uninitialized(rope.GetSize());
-            rope.Begin().ExtractPlainDataAndAdvance(data->Detach(), data->size());
-        }
+        TString data;
+        const TRope& rope = msg.GetPayload(payloadIdx);
+        data = TString::Uninitialized(rope.GetSize());
+        rope.Begin().ExtractPlainDataAndAdvance(data.Detach(), data.size());
 
-        Y_ABORT_UNLESS(data->size() == Shared->GroupInfo->Type.PartSize(id));
+        Y_ABORT_UNLESS(data.size() == Shared->GroupInfo->Type.PartSize(id));
 
         // write record
         if (auto it = LogoBlobs.find(id); it != LogoBlobs.end()) {
@@ -72,10 +71,10 @@ public:
                 } else {
                     s << " NODATA";
                 }
-                s << " data# " << data->size() << "b";
+                s << " data# " << data.size() << "b";
                 return s;
             };
-            Y_ABORT_UNLESS(!it->second || *it->second == *data, "%s", makeErrorString().data());
+            Y_ABORT_UNLESS(!it->second || *it->second == data, "%s", makeErrorString().data());
         }
         LogoBlobs[id] = std::move(data);
 
@@ -123,7 +122,7 @@ public:
         }
 
         // put the blob in place
-        PutBlob(id, record.HasBuffer() ? std::make_optional(record.GetBuffer()) : std::nullopt, *ev->Get(), 0);
+        PutBlob(id, *ev->Get(), 0);
 
         // report success
         return sendResponse(NKikimrProto::OK, TString());
@@ -160,7 +159,7 @@ public:
             }
 
             // put the blob in place
-            PutBlob(id, item.HasBuffer() ? std::make_optional(item.GetBuffer()) : std::nullopt, *ev->Get(), i);
+            PutBlob(id, *ev->Get(), i);
 
             // report success
             response->AddVPutResult(NKikimrProto::OK, TString(), id, &i);

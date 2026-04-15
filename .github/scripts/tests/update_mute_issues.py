@@ -11,7 +11,7 @@ import re
 
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import parse_body, scan_to_utc_date
+from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body, scan_to_utc_date
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
     normalize_manual_unmute_status,
@@ -582,12 +582,11 @@ def _extract_unmuted_tests_from_comment(comment_body):
     if not comment_body:
         return set()
 
-    if UNMUTE_LIST_START_MARKER not in comment_body or UNMUTE_LIST_END_MARKER not in comment_body:
-        return set()
-
-    start_idx = comment_body.find(UNMUTE_LIST_START_MARKER) + len(UNMUTE_LIST_START_MARKER)
-    end_idx = comment_body.find(UNMUTE_LIST_END_MARKER)
-    payload = comment_body[start_idx:end_idx]
+    payload = comment_body
+    if UNMUTE_LIST_START_MARKER in comment_body and UNMUTE_LIST_END_MARKER in comment_body:
+        start_idx = comment_body.find(UNMUTE_LIST_START_MARKER) + len(UNMUTE_LIST_START_MARKER)
+        end_idx = comment_body.find(UNMUTE_LIST_END_MARKER)
+        payload = comment_body[start_idx:end_idx]
 
     tests = set()
     for line in payload.split('\n'):
@@ -1313,7 +1312,7 @@ def collect_manual_unmute_request_rows(
     stable_unmute_candidates=None,
     delete_candidates=None,
     require_non_bot_close_actor=True,
-    require_linked_development_pr=True,
+    require_linked_development_pr=False,
     add_auto_comment=True,
     updated_since_hours=None,
     sync_issue_comments=True,
@@ -1452,6 +1451,7 @@ def collect_manual_unmute_request_rows(
             continue
 
         linked_prs = _extract_linked_development_pull_requests(content)
+        has_linked_prs = bool(linked_prs)
         is_closed = state == 'CLOSED'
         close_actor_login, close_actor_type = _extract_close_actor(content)
         closed_by_human = is_closed and not _is_bot_actor(close_actor_login, close_actor_type)
@@ -1463,15 +1463,33 @@ def collect_manual_unmute_request_rows(
             if closed_by_human:
                 stats['issues_non_bot_closed'] += 1
 
-        if linked_prs:
+        if has_linked_prs:
             stats['issues_with_linked_pr'] += 1
 
+        auto_enable_manual_on_human_close = (
+            sync_issue_comments
+            and AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE
+            and is_closed
+            and closed_by_human
+            and remaining_tests
+            and (has_linked_prs or not require_linked_development_pr)
+        )
         if (
             sync_issue_comments
             and AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE
             and is_closed
             and closed_by_human
             and remaining_tests
+            and require_linked_development_pr
+            and not has_linked_prs
+        ):
+            print(
+                f"collect_manual_unmute_request_rows: issue #{issue_number} "
+                "manual fast-unmute on human close skipped: no linked development PR"
+            )
+
+        if (
+            auto_enable_manual_on_human_close
         ):
             reopened = reopen_issue(issue_id)
             if reopened:
@@ -1521,7 +1539,7 @@ def collect_manual_unmute_request_rows(
             if item.get('state') == 'resolved':
                 continue
 
-            if AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE and closed_by_human and not item.get('requested'):
+            if auto_enable_manual_on_human_close and not item.get('requested'):
                 item['requested'] = True
                 changed = True
 
@@ -1603,10 +1621,8 @@ def collect_manual_unmute_request_rows(
         if (
             sync_issue_comments
             and add_auto_comment
-            and AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE
-            and is_closed
-            and closed_by_human
-            and linked_prs
+            and auto_enable_manual_on_human_close
+            and has_linked_prs
         ):
             comments = get_issue_comments(issue_id)
             if not _has_fast_unmute_comment(comments):
@@ -1688,18 +1704,13 @@ def collect_manual_unmute_request_rows(
 def generate_github_issue_title_and_body(test_data):
     owner = test_data[0]['owner']
     branch = test_data[0]['branch']
+    build_type = test_data[0].get('build_type') or DEFAULT_BUILD_TYPE
     test_full_names = [f"{d['full_name']}" for d in test_data]
     test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
         f"{d['test_name']}: {d['state']} last {d['days_in_state']} days, at {d['date_window']}: success_rate {d['success_rate']}%, {d['summary']}"
         for d in test_data
     ]
-
-    # Title
-    if len(test_full_names) > 1:
-        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests in {branch}'
-    else:
-        title = f'Mute {test_data[0]["full_name"]} in {branch}'
 
     # Преобразование списка тестов в строку и кодирование
     test_string = "\n".join(test_full_names)
@@ -1717,6 +1728,7 @@ def generate_github_issue_title_and_body(test_data):
     branch_param = f"&branch={branch}"
     test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_name_params}{branch_param}"
 
+    bt_suffix = f" [{build_type}]" if build_type != DEFAULT_BUILD_TYPE else ""
     # owner
     # Тело сообщения и кодирование
     body_template = (
@@ -1726,6 +1738,9 @@ def generate_github_issue_title_and_body(test_data):
         f"Branch:<!--branch_list_start-->\n"
         f"{branch}\n"
         f"<!--branch_list_end-->\n\n"
+        f"Build type:<!--build_type_list_start-->\n"
+        f"{build_type}\n"
+        f"<!--build_type_list_end-->\n\n"
         f"**Add line to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**\n"
         "```\n"
         f"{test_mute_strings_string}\n"
@@ -1742,6 +1757,10 @@ def generate_github_issue_title_and_body(test_data):
         f"**Test run history:** [link]({test_run_history_link})\n\n"
         f"More info in [dashboard]({TEST_HISTORY_DASHBOARD})"
     )
+    if len(test_full_names) > 1:
+        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests in {branch}{bt_suffix}'
+    else:
+        title = f'Mute {test_data[0]["full_name"]} in {branch}{bt_suffix}'
 
     return (
         title,
@@ -1791,6 +1810,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['owner'] = owner
             all_issues_with_contet[content['id']]['tests'] = []
             all_issues_with_contet[content['id']]['branches'] = branches
+            all_issues_with_contet[content['id']]['build_type'] = parsed.build_type
             all_issues_with_contet[content['id']]['project_item_id'] = issue.get('id')
 
             for test in tests:
@@ -1805,13 +1825,15 @@ def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
     
-    # First, collect all issues for each test
+    # First, collect all issues for each (test, build_type)
     for issue in issues:
         if issues[issue]["state"] != 'CLOSED':
+            bt = issues[issue].get('build_type') or DEFAULT_BUILD_TYPE
             for test in issues[issue]['tests']:
-                if test not in muted_tests:
-                    muted_tests[test] = []
-                muted_tests[test].append(
+                key = (test, bt)
+                if key not in muted_tests:
+                    muted_tests[key] = []
+                muted_tests[key].append(
                     {
                         'url': issues[issue]['url'],
                         'createdAt': issues[issue]['createdAt'],
@@ -1819,17 +1841,18 @@ def get_muted_tests_from_issues():
                         'status': issues[issue]['status'],
                         'state': issues[issue]['state'],
                         'branches': issues[issue]['branches'],
+                        'build_type': bt,
                         'id': issue,
                         'project_item_id': issues[issue].get('project_item_id'),
                     }
                 )
     
-    # Then, for each test, keep only the latest issue (by createdAt)
-    for test in muted_tests:
-        if len(muted_tests[test]) > 1:
+    # Then, for each (test, build_type), keep only the latest issue (by createdAt)
+    for key in muted_tests:
+        if len(muted_tests[key]) > 1:
             # Sort by createdAt (most recent first) and keep only the first one
-            muted_tests[test] = sorted(
-                muted_tests[test], 
+            muted_tests[key] = sorted(
+                muted_tests[key], 
                 key=lambda x: x['createdAt'], 
                 reverse=True
             )[:1]
@@ -2121,7 +2144,8 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     
     # First, group tests by issue ID
     tests_by_issue = {}
-    for test_name, issue_data_list in issues.items():
+    for key, issue_data_list in issues.items():
+        test_name = key[0] if isinstance(key, tuple) else key
         for issue_data in issue_data_list:
             issue_id = issue_data['id']
             if issue_id not in tests_by_issue:
@@ -2220,6 +2244,15 @@ def main():
             "and test-history link"
         ),
     )
+    sync_parser.add_argument(
+        "--require-linked-development-pr",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Require linked development PR for auto-enabling manual fast-unmute "
+            "on human-closed issues (default: false)"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -2229,7 +2262,8 @@ def main():
             f"branch={args.branch}, build_type={args.build_type}, "
             f"updated_since_hours={args.updated_since_hours}, "
             f"issue_numbers={args.issue_numbers or 'all'}, "
-            f"post_manual_rules_snapshot_comment={args.post_manual_rules_snapshot_comment}"
+            f"post_manual_rules_snapshot_comment={args.post_manual_rules_snapshot_comment}, "
+            f"require_linked_development_pr={args.require_linked_development_pr}"
         )
         overrides, rows = collect_manual_unmute_request_rows(
             branch=args.branch,
@@ -2240,6 +2274,7 @@ def main():
             sync_issue_comments=True,
             issue_numbers=args.issue_numbers,
             post_manual_rules_snapshot_comment=args.post_manual_rules_snapshot_comment,
+            require_linked_development_pr=args.require_linked_development_pr,
         )
         print(f"Done: overrides={len(overrides)}, rows={len(rows)}")
         return 0

@@ -233,6 +233,7 @@ def load_mute_control_overrides_from_ydb(branch, build_type, ydb_wrapper):
     query_string = f'''
 SELECT
     full_name,
+    issue_number,
     manual_request_active,
     resolved_at,
     resolved_rule,
@@ -256,28 +257,33 @@ WHERE branch = '{branch}'
         return {}
 
     now_utc = datetime.datetime.now(datetime.timezone.utc)
+    epoch_utc = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
     latest_by_test = {}
     for row in rows:
         full_name = row.get('full_name')
-        exported_at = row.get('exported_at')
         if not full_name:
             continue
+
+        exported_at = _coerce_dt(row.get('exported_at')) or epoch_utc
+        try:
+            issue_number = int(row.get('issue_number') or 0)
+        except (TypeError, ValueError):
+            issue_number = 0
+        manual_request_active = int(row.get('manual_request_active') or 0) == 1
+        row_rank = (exported_at, int(manual_request_active), issue_number)
 
         previous = latest_by_test.get(full_name)
         if previous is None:
             latest_by_test[full_name] = {
                 'policy': _compute_effective_unmute_policy(row, now_utc),
-                'exported_at': exported_at,
+                'rank': row_rank,
             }
             continue
 
-        previous_exported_at = previous.get('exported_at')
-        if previous_exported_at is None or (
-            exported_at is not None and exported_at >= previous_exported_at
-        ):
+        if row_rank >= previous.get('rank', (epoch_utc, 0, 0)):
             latest_by_test[full_name] = {
                 'policy': _compute_effective_unmute_policy(row, now_utc),
-                'exported_at': exported_at,
+                'rank': row_rank,
             }
 
     policies = {

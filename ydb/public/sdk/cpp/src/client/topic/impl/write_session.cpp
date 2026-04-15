@@ -174,3 +174,4 @@ bool TSimpleBlockingWriteSession::Close(TDuration closeTimeout) {
 }
 
 } // namespace NYdb::inline Dev::NTopic
+

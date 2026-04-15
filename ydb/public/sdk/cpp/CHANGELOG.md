@@ -1,10 +1,10 @@
+* Renamed the SrcPath option to SrcPathDb (used to specify the database object during NFS imports)
+
 * Added support of describe for scheme objects with type 'secret' via new TSecretClient
 
 * Added support for METRICS_LEVEL for the CreateTable/AlterTable requests.
 
 * Added support for the new alter table compact action in TableClient and compaction operation in OperationClient in SDK
-
-*  Renamed the SrcPath option to SrcPathDb (used to specify the database object during NFS imports)
 
 ## v3.16.0
 

@@ -708,9 +708,15 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
 
+        absl::flat_hash_set<ui32> skipMessageGroups; // TODO: remove after SQS migration finished
+        skipMessageGroups.reserve(ev->Get()->Record.GetSkipMessageGroup().size());
+        for (auto& skipMessageGroup : ev->Get()->Record.GetSkipMessageGroup()) {
+            skipMessageGroups.insert(static_cast<ui32>(Hash(skipMessageGroup)) & 0x7FFFFFFF);
+        }
+
         std::deque<TReadMessage> messages;
         for (; count; --count) {
-            auto result = Storage->Next(visibilityDeadline, position);
+            auto result = Storage->Next(visibilityDeadline, position, skipMessageGroups);
             if (!result) {
                 break;
             }

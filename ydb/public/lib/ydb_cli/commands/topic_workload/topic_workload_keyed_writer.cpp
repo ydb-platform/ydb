@@ -236,4 +236,3 @@ TInstant TTopicWorkloadKeyedWriterWorker::GetCreateTimestampForNextMessage()
 }
 
 } // namespace NYdb::NConsoleClient
-

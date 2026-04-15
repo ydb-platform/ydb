@@ -14,22 +14,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
 
-// TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* request)
-//     : TBase(request, request->GetProtoRequest()->path())
-// {
-// }
-// TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-//     : TBase(request)
-// {
-// }
-
-// void TDropTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-// {
-//     TBase::Bootstrap(ctx);
-//     SendProposeRequest(ctx);
-//     Become(&TDropTopicActor::StateWork);
-// }
-
 TPQDropTopicActor::TPQDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request)
     : TBase(request, request->GetProtoRequest()->path())
 {

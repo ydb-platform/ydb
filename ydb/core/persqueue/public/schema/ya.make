@@ -6,6 +6,7 @@ SRCS(
     common.cpp
     drop_topic.cpp
     schema.cpp
+    schema_int.cpp
     topic_alterer.cpp
     validation.cpp
 )

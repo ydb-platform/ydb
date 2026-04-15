@@ -1,7 +1,10 @@
 #pragma once
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include <library/cpp/threading/future/future.h>
 
@@ -14,6 +17,16 @@
 #include <util/system/defaults.h>
 
 #include <variant>
+
+namespace {
+
+[[noreturn]] void AbortUnimplemented(const char* methodName) {
+    Y_ABORT(
+        "Method %s is not implemented in IClient descendant",
+        methodName);
+}
+
+} // anonymous namespace
 
 namespace NPq::NConfigurationManager {
 
@@ -158,10 +171,235 @@ private:
 
 using TAsyncDescribePathResult = NThreading::TFuture<TDescribePathResult>;
 
+class TOperation {
+public:
+    TOperation(TString id, bool ready, EStatus status)
+        : Id(std::move(id))
+        , Ready(ready)
+        , Status(status)
+    {
+    }
+
+    TOperation(TString id, bool ready, EStatus status, NYql::TIssues issues)
+        : Id(std::move(id))
+        , Ready(ready)
+        , Status(status)
+        , Issues(std::move(issues))
+    {
+    }
+
+    const TString& GetId() const {
+        return Id;
+    }
+
+    bool IsReady() const {
+        return Ready;
+    }
+
+    EStatus GetStatus() const {
+        return Status;
+    }
+
+    const NYql::TIssues& GetIssues() const {
+        return Issues;
+    }
+
+    template <typename... TArgs>
+    void AddIssue(TArgs&&... args) {
+        return Issues.AddIssue(std::forward<TArgs>(args)...);
+    }
+
+    void AddIssues(const NYql::TIssues& issues) {
+        Issues.AddIssues(issues);
+    }
+
+private:
+    // Identifier of the operation, empty value means no active operation object is present (it was forgotten or
+    // not created in the first place, as in SYNC operation mode).
+    TString Id;
+
+    // true - this operation has been finished (doesn't matter successful or not),
+    // so Status field has status code.
+    // false - this operation still running. You can repeat request using operation Id.
+    bool Ready;
+
+    EStatus Status;
+    NYql::TIssues Issues;
+};
+
+using TAsyncGetOperationResult = NThreading::TFuture<TOperation>;
+
+using TAsyncCreateConsumerResult = NThreading::TFuture<TOperation>;
+
+using TAsyncCreateDirectoryResult = NThreading::TFuture<TOperation>;
+
+using TAsyncCreateTopicResult = NThreading::TFuture<TOperation>;
+
+using TAsyncCreateReadRuleResult = NThreading::TFuture<TOperation>;
+
+using TAsyncGrantPermissionsResult = NThreading::TFuture<TOperation>;
+
+enum class ELimitsMode {
+    WAIT /* "wait" */,
+    NOTIFY /* "notify" */,
+};
+
+enum class EPermission {
+    READ_TOPIC /* "ReadTopic" */,
+    WRITE_TOPIC /* "WriteTopic" */,
+    READ_AS_CONSUMER /* "ReadAsConsumer" */,
+    MODIFY_PERMISSIONS /* "ModifyPermissions" */,
+    CREATE_RESOURCES /* "CreateResources" */,
+    MODIFY_RESOURCES /* "ModifyResources" */,
+    LIST_RESOURCES /* "ListResources" */,
+    CREATE_READ_RULES /* "CreateReadRules" */,
+    DESCRIBE_RESOURCES /* "DescribeResources" */,
+};
+
+struct TExtraSettings {
+    TExtraSettings& AddExtraSetting(const TString& name, const TString& value) {
+        auto [iterator, emplaced] = Settings_.emplace(name, value);
+        YQL_ENSURE(emplaced, "Duplicate setting name found: " << name
+            << " (previous value: " << iterator->second << ", new value: " << value);
+
+        return *this;
+    }
+
+    THashMap<TString, TString> Settings_;
+};
+
+template <typename TParent>
+struct TExtraSettingsBuilder {
+    TExtraSettingsBuilder(TParent& parent)
+        : Parent_(parent)
+    {
+    }
+
+    TExtraSettings& AddExtraSetting(const TString& name, const TString& value) {
+        return Settings_.AddExtraSetting(name, value);
+    }
+
+    TParent& EndExtraSettings() {
+        Parent_.ExtraSettings(Settings_);
+        return Parent_;
+    }
+
+private:
+    TExtraSettings Settings_;
+    TParent& Parent_;
+};
+
+struct TCreateConsumerOptions {
+    using TSelf = TCreateConsumerOptions;
+
+    FLUENT_SETTING_OPTIONAL(bool, Important);
+    FLUENT_SETTING_OPTIONAL(ui64, AvailabilityPeriodSec);
+    FLUENT_SETTING_OPTIONAL(ELimitsMode, LimitsMode);
+    FLUENT_SETTING_VECTOR(NYdb::NTopic::ECodec, SupportedCodecs);
+
+    FLUENT_SETTING(TExtraSettings, ExtraSettings);
+
+    TExtraSettingsBuilder<TSelf> BeginExtraSettings() {
+        return TExtraSettingsBuilder(*this);
+    }
+};
+
+struct TCreateDirectoryOptions {
+    using TSelf = TCreateDirectoryOptions;
+
+    FLUENT_SETTING(TExtraSettings, ExtraSettings);
+
+    TExtraSettingsBuilder<TSelf> BeginExtraSettings() {
+        return TExtraSettingsBuilder(*this);
+    }
+};
+
+struct TCreateTopicOptions {
+    using TSelf = TCreateTopicOptions;
+
+    FLUENT_SETTING_OPTIONAL(ui64, PartitionsCount);
+    FLUENT_SETTING_OPTIONAL(ui64, RetentionPeriodSec);
+
+    FLUENT_SETTING_OPTIONAL(bool, AllowUnauthenticatedRead);
+    FLUENT_SETTING_OPTIONAL(bool, AllowUnauthenticatedWrite);
+
+    FLUENT_SETTING_VECTOR(NYdb::NTopic::ECodec, SupportedCodecs);
+    FLUENT_SETTING_OPTIONAL(TString, FederationAccount);
+
+    FLUENT_SETTING_OPTIONAL(ui64, MaxPartitionsCount);
+    FLUENT_SETTING_OPTIONAL(ui64, AutoPartitioningStabilizationWindowSeconds);
+    FLUENT_SETTING_OPTIONAL(ui64, AutoPartitioningUpUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL(ui64, AutoPartitioningDownUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL(TString, AutoPartitioningStrategy);
+
+    FLUENT_SETTING_OPTIONAL(bool, PartitionMetricsEnabled);
+
+    FLUENT_SETTING(TExtraSettings, ExtraSettings);
+
+    TExtraSettingsBuilder<TSelf> BeginExtraSettings() {
+        return TExtraSettingsBuilder(*this);
+    }
+};
+
+struct TCreateReadRuleOptions {
+    using TSelf = TCreateReadRuleOptions;
+
+    // Read all data in this cluster or use 'all original' read rule type.
+    FLUENT_SETTING(TString, MirrorToCluster);
+};
+
+struct TPermission {
+    using TSelf = TPermission;
+
+    FLUENT_SETTING_VECTOR(EPermission, PermissionNames);
+    FLUENT_SETTING(TString, Subject);
+
+    // Subject type and name used only in describe
+    FLUENT_SETTING_OPTIONAL(TString, SubjectType);
+    // Printable subject name
+    FLUENT_SETTING_OPTIONAL(TString, SubjectName);
+};
+
+struct TGrantPermissionsOptions {
+    using TSelf = TGrantPermissionsOptions;
+
+    FLUENT_SETTING_VECTOR(TPermission, Permissions);
+};
+
 struct IClient : public TThrRefBase {
     using TPtr = TIntrusivePtr<IClient>;
 
-    virtual TAsyncDescribePathResult DescribePath(const TString& path) const = 0;
+    virtual TAsyncDescribePathResult DescribePath(const TString& /*path*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
+
+    virtual TAsyncCreateConsumerResult CreateConsumer(const TString& /*path*/, const TCreateConsumerOptions& /*options*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
+
+    virtual TAsyncCreateDirectoryResult CreateDirectory(const TString& /*path*/, const TCreateDirectoryOptions& /*options*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
+
+    virtual TAsyncCreateTopicResult CreateTopic(const TString& /*path*/, const TCreateTopicOptions& /*options*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
+
+    virtual TAsyncCreateReadRuleResult CreateReadRule(const TString& /*topicPath*/, const TString& /*consumerPath*/,
+        const TCreateReadRuleOptions& /*options*/) const
+    {
+        AbortUnimplemented(__FUNCTION__);
+    }
+
+    virtual TAsyncGrantPermissionsResult GrantPermissions(const TString& /*path*/,
+        const TGrantPermissionsOptions& /*options*/) const
+    {
+        AbortUnimplemented(__FUNCTION__);
+    }
+
+    virtual TAsyncGetOperationResult GetOperation(const TString& /*operationId*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
     // TODO: If you need other methods, add them.
 };

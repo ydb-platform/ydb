@@ -906,6 +906,20 @@
             ]
         },
         {
+            "Name": "TKqpOpJoinFilter",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpJoinFilter"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TKqpOpJoinFilterList",
+            "ListBase" : "TKqpOpJoinFilter"
+        },
+        {
             "Name": "TKqpOpJoin",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpJoin"},
@@ -913,7 +927,8 @@
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
                 {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
                 {"Index": 2, "Name": "JoinKind", "Type":"TCoAtom"},
-                {"Index": 3, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"}
+                {"Index": 3, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"},
+                {"Index": 4, "Name": "JoinFilters", "Type": "TKqpOpJoinFilterList"}
             ]
         },
         {

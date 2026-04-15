@@ -207,6 +207,15 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return res->Get()->Record.GetFreeSpace();
         }
 
+        ui32 GetPBInMemoryCacheSize() {
+            Cerr << "get persistent buffer info \n";
+
+            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo());
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvPersistentBufferInfo>(Edge, false);
+            return res->Get()->InMemoryCacheSize;
+        }
+
         void ReadPB(ui32 repeat = 1) {
             std::vector<ui64> lsns;
             lsns.reserve(PersistentBuffers.size());
@@ -553,14 +562,20 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.ChangeTestingNode(node);
         for (ui32 i = 1; i < 2000; ++i) {
             f.WritePB(0, 128); // Max size records to overfill in memory buffer
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
         }
         for (ui32 i = 1; i < 1000; ++i) {
             f.ReadPB(2);
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
         }
         f.RestartNode();
         f.ListPB();
         for (ui32 i = 1; i < 1000; ++i) {
             f.ReadPB(2);
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
         }
     }
 

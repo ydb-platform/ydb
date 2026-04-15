@@ -189,7 +189,7 @@ public:
         if (auto* opt = SavedOpts.FindPtr(optName); opt && (*opt)->ParsedOption) {
             return (*opt)->ParsedOption.GetRef();
         }
-        ythrow yexception() << "option " << optName.Quote() << " undefined";
+        throw TMisuseException() << "option " << optName.Quote() << " undefined";
     }
 
     TMap<TString, TSimpleSharedPtr<TFileConfigOptions>> SavedOpts;

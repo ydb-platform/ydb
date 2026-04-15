@@ -198,6 +198,7 @@ namespace NLs {
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc StreamUserSIDs(bool value);
+    TCheckFunc StreamTraceIds(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);

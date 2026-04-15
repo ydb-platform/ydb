@@ -333,6 +333,8 @@ TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& t
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
+    Y_ENSURE(join->JoinFilters.empty(), "Type inference for join filters not supported");
+    
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
 

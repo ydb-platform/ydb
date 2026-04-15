@@ -417,8 +417,13 @@ class TOpJoin: public IBinaryOperator {
 public:
     TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
             const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+
+    TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
+            const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -429,6 +434,7 @@ public:
 
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+    TVector<TExpression> JoinFilters;
 };
 
 class TOpUnionAll: public IBinaryOperator {

@@ -1582,7 +1582,11 @@ Y_UNIT_TEST(TableChangefeeds) {
                 PRIMARY KEY (Key)
             );
             ALTER TABLE test_show_create
-                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', USER_SIDS = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', TRACE_IDS = TRUE);
         )", "test_show_create",
         R"(
             CREATE TABLE `test_show_create` (
@@ -1592,7 +1596,15 @@ Y_UNIT_TEST(TableChangefeeds) {
             );
 
             ALTER TABLE `test_show_create`
-                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+            ;
+
+            ALTER TABLE `test_show_create`
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', USER_SIDS = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+            ;
+
+            ALTER TABLE `test_show_create`
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', TRACE_IDS = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
             ;
         )"
     );

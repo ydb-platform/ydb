@@ -25,7 +25,7 @@
 
 namespace NKikimr::NColumnShard {
 
-LWTRACE_USING(YDB_CS_SCAN);
+LWTRACE_USING(YDB_CS);
 
 }
 

@@ -14,7 +14,6 @@ RECURSE(
     reconfig_state_storage_workload
     result_set_format
     s3_backups
-    scheme_board
     show_create/view
     show_create/table
     simple_queue

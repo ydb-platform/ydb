@@ -84,6 +84,9 @@ void TPutImpl::FillInterpilePut(TEvInterpilePut& ev) {
         if (item.AlreadyEncrypted) {
             pb->SetAlreadyEncrypted(item.AlreadyEncrypted);
         }
+        if (item.IsZeroEntry) {
+            pb->SetIsZeroEntry(item.IsZeroEntry);
+        }
         for (const auto& [tabletId, generation] : item.ExtraBlockChecks) {
             auto *check = pb->AddExtraBlockChecks();
             check->SetTabletId(tabletId);

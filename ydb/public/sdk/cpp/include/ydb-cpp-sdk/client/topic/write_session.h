@@ -373,7 +373,6 @@ public:
 //! Generic write session with all capabilities.
 class IWriteSession {
 public:
-
     //! Future that is set when next event is available.
     virtual NThreading::TFuture<void> WaitEvent() = 0;
 

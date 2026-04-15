@@ -1894,8 +1894,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
-                if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
+                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&

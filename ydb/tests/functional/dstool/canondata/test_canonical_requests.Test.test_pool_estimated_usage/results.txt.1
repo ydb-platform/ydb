@@ -18,6 +18,8 @@ Exit Status: 0
   }
 ]
 ===== mock_base_config =====
+
+TBaseConfig {
 PDisk {
   NodeId: 1
   PDiskId: 1001
@@ -25,6 +27,9 @@ PDisk {
     ExpectedSlotCount: 16
     SlotSizeInUnits: 2
   }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 16
   PDiskMetrics {
     EnforcedDynamicSlotSize: 400000000000
     SlotCount: 16
@@ -64,10 +69,12 @@ Node {
     IcPort: 19001
   }
 }
+}
 
-===== DefineStoragePool =====
+DefineStoragePool {
 BoxId: 1
 StoragePoolId: 1
 Name: "test-pool"
 ErasureSpecies: "none"
 Kind: "hdd"
+}

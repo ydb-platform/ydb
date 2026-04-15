@@ -178,6 +178,7 @@ namespace {
 
         STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
         if (IsPersistentBufferActor) {
+            InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
             StartRestorePersistentBuffer();

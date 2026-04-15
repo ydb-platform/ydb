@@ -66,6 +66,27 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
 
+        if (Graph.IsSourceStageColumnType(id)) {
+            auto readPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpBlockReadOlapTableRanges>(node); });
+            if (readPtr) {
+                auto read = TExprBase(readPtr).Cast<TKqpBlockReadOlapTableRanges>();
+                if (!read.Ranges().Maybe<TCoVoid>()) {
+                    auto precomputeResult = BuildPrecompute(read.Ranges().Ptr());
+                    // clang-fomrat off
+                    auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, readPtr->Pos())
+                        .Table(read.Table())
+                        .Ranges(precomputeResult)
+                        .Columns(read.Columns())
+                        .Settings(read.Settings())
+                        .ExplainPrompt(read.ExplainPrompt())
+                        .Process(read.Process())
+                    .Done().Ptr();
+                    // clang-format on
+                    stage = ctx.ReplaceNode(std::move(stage), read.Ref(), newRead);
+                }
+            }
+        }
+
         finalizedStages[id] = stage;
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
@@ -77,6 +98,68 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
     }
 
     return phyStages;
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::BuildPrecompute(TExprNode::TPtr node) {
+    auto& ctx = RBOCtx.ExprCtx;
+
+    TExprNode::TPtr afterPeephole;
+    auto status =
+        ::PeepHoleOptimize(TExprBase(node), afterPeephole, ctx, RBOCtx.PeepholeTypeAnnTransformer, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, true, {});
+    if (status != IGraphTransformer::TStatus::Ok) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Peephole optimization failed for precompute in NEW RBO"));
+        return nullptr;
+    }
+
+    // clang-format off
+    auto rangesProgram = Build<TCoToStream>(ctx, node->Pos())
+        .Input<TCoJust>()
+            .Input<TExprList>()
+                .Add({afterPeephole})
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    auto phyStage = BuildDqPhyStage({}, {}, rangesProgram, NYql::NDq::TDqStageSettings().BuildNode(ctx, node->Pos()), ctx, node->Pos());
+    // clang-format off
+    auto result = Build<TDqCnValue>(ctx, node->Pos())
+        .Output()
+            .Stage(phyStage)
+            .Index().Build("0")
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    TypeAnnotate(result);
+    Y_ENSURE(result->GetTypeAnn());
+
+    TKqpPhyTxSettings txSettings;
+    txSettings.Type = EPhysicalTxType::Compute;
+    // clang-format off
+    auto precompute = Build<TKqpPhysicalTx>(ctx, Root.Pos)
+        .Stages()
+            .Add({phyStage})
+        .Build()
+        .Results()
+            .Add({result})
+        .Build()
+        .ParamBindings().Build()
+        .Settings(txSettings.BuildNode(ctx, Root.Pos))
+    .Done().Ptr();
+    // clang-format on
+
+    // clang-format off
+    auto param = Build<TCoParameter>(ctx, node->Pos())
+        .Name<TCoAtom>()
+            .Value(ParamBindingName + ToString(UniqueParamsId++))
+        .Build()
+        .Type(ExpandType(node->Pos(), *result->GetTypeAnn(), ctx))
+    .Done().Ptr();
+    // clang-format on
+    Precomputes.push_back({param, precompute});
+
+    return param;
 }
 
 TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {
@@ -127,7 +210,7 @@ TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TVec
         const auto params = FindNodes(physicalStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
         for (const auto& param : params) {
             const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
-            if (!paramsCollected.contains(paramName)) {
+            if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
                 // clang-format off
                 const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
                     .Name<TCoAtom>()
@@ -148,7 +231,30 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     Y_ENSURE(physicalStages.size());
     auto& ctx = RBOCtx.ExprCtx;
 
-    const auto paramBindings = CollectParamBindings(physicalStages);
+    TVector<TExprBase> physTxs;
+    auto paramBindings = CollectParamBindings(physicalStages);
+    for (ui32 i = 0; i < Precomputes.size(); ++i) {
+        auto param = TExprBase(Precomputes[i].first).Cast<TCoParameter>();
+        auto physTx = TExprBase(Precomputes[i].second).Cast<TKqpPhysicalTx>();
+        // clang-format off
+        auto resultBinding = Build<TKqpTxResultBinding>(ctx, Root.Pos)
+            .Type(ExpandType(Root.Pos, *physTx.Results().Item(0).Ptr()->GetTypeAnn(), ctx))
+            .TxIndex().Build(ToString(i))
+            .ResultIndex().Build("0")
+        .Done();
+        // clang-format on
+
+        // clang-format off
+        auto paramBinding = Build<TKqpParamBinding>(ctx, Root.Pos)
+            .Name(param.Name())
+            .Binding(resultBinding.Ptr())
+        .Done();
+        // clang-format on
+
+        physTxs.emplace_back(physTx);
+        paramBindings.emplace_back(paramBinding);
+    }
+
     TVector<TCoAtom> columnAtomList;
     for (const auto& column : Root.ColumnOrder) {
         columnAtomList.push_back(Build<TCoAtom>(ctx, Root.Pos).Value(column).Done());
@@ -166,12 +272,13 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     .Done().Ptr();
     // clang-format on
 
-    // TODO: Add support for multiple txs in one query.
     auto phyTxSettings = GetPhysicalTxSettings();
-    // clang-format off
+
     TypeAnnotate(dqResult);
+    YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
+
     // Build PhysicalTx
-    auto physTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
+    auto mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
         .Stages()
             .Add(physicalStages)
         .Build()
@@ -184,26 +291,26 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
     .Done().Ptr();
     // clang-format on
-
-    YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
+    physTxs.emplace_back(mainTx);
 
     // clang-format off
-    auto binding = Build<TKqpTxResultBinding>(ctx, Root.Pos)
+    auto mainTxResultBinding = Build<TKqpTxResultBinding>(ctx, Root.Pos)
         .Type(ExpandType(Root.Pos, *dqResult->GetTypeAnn(), ctx))
-        .TxIndex().Build("0")
+        .TxIndex().Build(ToString(Precomputes.size()))
         .ResultIndex().Build("0")
-    .Done();
+    .Done().Ptr();
     // clang-format on
 
     auto phyQuerySettings = GetPhysicalQuerySettings();
+
     // Build Physical query
     // clang-format off
     return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
         .Transactions()
-            .Add({physTx})
+            .Add(physTxs)
         .Build()
         .Results()
-            .Add({binding})
+            .Add({mainTxResultBinding})
         .Build()
         .Settings(phyQuerySettings.BuildNode(ctx, Root.Pos))
     .Done().Ptr();

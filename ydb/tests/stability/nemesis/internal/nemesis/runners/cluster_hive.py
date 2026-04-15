@@ -39,6 +39,7 @@ class ClusterKickTabletsFromNodeNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("KickTabletsFromNode failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload
@@ -66,6 +67,7 @@ class ClusterReBalanceTabletsNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("rebalance_all_tablets failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload

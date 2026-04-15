@@ -30,6 +30,7 @@ PEERDIR(
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
+    yql/essentials/core/extract_predicate
 )
 
 YQL_LAST_ABI_VERSION()

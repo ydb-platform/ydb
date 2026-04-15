@@ -77,7 +77,7 @@ private:
     void OnWriteBlocksResponse(
         TTracedPromise<TWriteBlocksLocalResponse> promise,
         TBlockRange64 range,
-        const TWriteRequestExecutor::TResponse& response,
+        const TBaseWriteRequestExecutor::TResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
     void DoFlush();

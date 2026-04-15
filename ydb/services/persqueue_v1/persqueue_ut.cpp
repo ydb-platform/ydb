@@ -5779,7 +5779,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::AlterTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), statusCode, response.operation().DebugString());
         };
 
         Ydb::Topic::AlterTopicRequest request;

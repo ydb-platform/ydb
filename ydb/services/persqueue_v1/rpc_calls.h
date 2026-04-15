@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 #include <ydb/services/persqueue_v1/actors/commit_offset_actor.h>
 
 #include <ydb/core/grpc_services/rpc_calls.h>
@@ -31,7 +32,7 @@ IActor* TEvCommitOffsetRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOp
 
 template<>
 IActor* TEvRpcAlterTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new NGRpcProxy::V1::TAlterTopicActor(msg);
+    return NGRpcProxy::V1::NTopic::CreateAlterTopicActor(msg);
 }
 
 template<>

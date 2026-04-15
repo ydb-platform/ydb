@@ -3178,7 +3178,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStream::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStream::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStream::State>())
-                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStream::UserSIDs>(false));
+                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStream::UserSIDs>(false))
+                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStream::TraceIds>(false));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3225,7 +3226,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>())
-                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::UserSIDs>(false));
+                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::UserSIDs>(false))
+                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::TraceIds>(false));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);

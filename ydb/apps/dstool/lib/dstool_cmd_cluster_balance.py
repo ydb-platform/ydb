@@ -4,7 +4,21 @@ import sys
 import random
 from collections import defaultdict, Counter
 
-description = 'Move vdisks out from overpopulated pdisks.'
+description = '''Balance VDisks across PDisks in a storage pool by invoking ReassignGroupDisk BSC command.
+It can operate in several modes:
+
+1. Overpopulated PDisk mode (--only-from-overpopulated-pdisks):
+   Moves VDisks from PDisks that exceed their expected slot count to less populated PDisks.
+
+2. Slot-based balancing (--sort-by=slots, default):
+   Redistributes VDisks to equalize slot usage across PDisks.
+
+3. Space-based balancing (--sort-by=space_ratio):
+   Redistributes VDisks based on available free space ratios.
+
+Use --storage-pool to limit balancing to a specific storage pool, or --group-ids to target
+specific groups. The tool runs iteratively until balance is achieved or no more moves are possible.
+'''
 
 
 class Constants:
@@ -37,6 +51,7 @@ def add_options(p):
     p.add_argument('--with-attention-to-replication', action='store_true', help='Take into account replicating vdisks picking node and pdisk with less amount of them')
     p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait when there are no vdisks to reassign')
     p.add_argument('--time-between-reassignings', type=int, default=Constants.TIME_BERWEEN_REASSIGNINGS, help='Time to wait between reassignings')
+    p.add_argument('--max-iterations', type=int, default=0, help='Maximum number of balancing iterations (0 = unlimited)')
     common.add_basic_format_options(p)
 
 
@@ -639,6 +654,8 @@ def do(args):
 
     iteration_number = 1
     while True:
+        if args.max_iterations > 0 and iteration_number > args.max_iterations:
+            break
         common.print_if_not_quiet(args, f"\nStart balancing iteration {iteration_number}", file=sys.stdout)
         if groups_info.unhealthy_groups:
             common.print_if_verbose(args, f'Skipping vdisks from unhealthy groups: {groups_info.unhealthy_groups}', file=sys.stdout)

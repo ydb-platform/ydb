@@ -171,9 +171,7 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
     settings.DirectWriteToPartition(Params.Direct);
 
     if (Params.UseTransactions) {
-        settings.AppendSessionMeta(
-            std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX},
-            Params.TrackProducerIdInTx ? "true" : "false");
+        settings.SetTrackProducerIdInTx(Params.TrackProducerIdInTx);
     }
 
     producer->SetWriteSession(topicClient.CreateWriteSession(settings));

@@ -181,6 +181,8 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+
+    void SetTrackProducerIdInTx(bool value);
 };
 
 template<class T>
@@ -371,6 +373,7 @@ public:
 //! Generic write session with all capabilities.
 class IWriteSession {
 public:
+
     //! Future that is set when next event is available.
     virtual NThreading::TFuture<void> WaitEvent() = 0;
 

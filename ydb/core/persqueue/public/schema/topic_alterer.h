@@ -4,7 +4,6 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 

@@ -1,6 +1,5 @@
 #include "topic_alterer.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>

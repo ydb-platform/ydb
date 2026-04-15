@@ -6,7 +6,6 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/topic_description.h>
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 namespace NKikimr::NPQ::NSchema {

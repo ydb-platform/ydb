@@ -1,7 +1,6 @@
 #include "schema.h"
 
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 

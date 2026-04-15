@@ -59,7 +59,11 @@ TResult IAlterTopicStrategy::BuildTransaction(
         applyIf->SetPathVersion(topicInfo.Self->Info.GetPathVersion());
     }
 
-    return ApplyChanges(*config, topicInfo.Info->Description, topicInfo.CdcStream);
+    auto result = ApplyChanges(*config, topicInfo.Info->Description, topicInfo.CdcStream);
+
+    ModifyScheme = modifyScheme;
+
+    return result;
 }
 
 IEventBase* IAlterTopicStrategy::CreateSuccessResponse() {
@@ -98,7 +102,7 @@ TResult IDropTopicStrategy::BuildTransaction(
 
     auto* config = modifyScheme.MutableDrop();
     config->SetName(topicInfo.Info->Description.name());
-    
+
     return {};
 }
 

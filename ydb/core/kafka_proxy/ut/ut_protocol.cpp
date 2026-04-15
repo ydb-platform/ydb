@@ -884,17 +884,17 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto data = record.Value.value();
             auto dataStr = TString(data.data(), data.size());
             UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
-            auto key = record.Key.value();
-            auto keyStr = TString(key.data(), key.size());
+            auto recordKey = record.Key.value();
+            auto keyStr = TString(recordKey.data(), recordKey.size());
             UNIT_ASSERT_VALUES_EQUAL(keyStr, key);
 
-            auto headerKey = record.Headers[0].Key.value();
-            auto headerKeyStr = TString(headerKey.data(), headerKey.size());
-            UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+            auto headerKeyBytes = record.Headers[0].Key.value();
+            auto headerKeyStr = TString(headerKeyBytes.data(), headerKeyBytes.size());
+            UNIT_ASSERT_VALUES_EQUAL(headerKeyStr, headerKey);
 
-            auto headerValue = record.Headers[0].Value.value();
-            auto headerValueStr = TString(headerValue.data(), headerValue.size());
-            UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+            auto headerValueBytes = record.Headers[0].Value.value();
+            auto headerValueStr = TString(headerValueBytes.data(), headerValueBytes.size());
+            UNIT_ASSERT_VALUES_EQUAL(headerValueStr, headerValue);
         }
 
         {

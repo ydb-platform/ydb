@@ -141,6 +141,21 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
     ui64 topicInd = 0;
     std::vector<std::pair<TString, ui64>> unknownTopicPartitionResponses;
+
+    bool anyCommittedMetadata = false;
+    for (const auto& topicReq : Message->Topics) {
+        for (const auto& partitionRequest : topicReq.Partitions) {
+            if (partitionRequest.CommittedMetadata.has_value()) {
+                anyCommittedMetadata = true;
+                break;
+            }
+        }
+        if (anyCommittedMetadata) {
+            break;
+        }
+    }
+    const bool useKqpCommit = Message->GenerationId != -1 && !anyCommittedMetadata;
+
     for (auto topicReq: Message->Topics) {
         auto topicIt = TopicAndTablets.find(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
         ui64 partitionReqInd = 0;
@@ -160,7 +175,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                 unknownTopicPartitionResponses.push_back({topicReq.Name.value(), partitionRequest.PartitionIndex});
                 continue;
             }
-            if (Message->GenerationId == -1) {
+            if (!useKqpCommit) {
                 ui64 tabletId = tabletIdIt->second.TabletId;
 
                 if (!TabletIdToPipe.contains(tabletId)) {
@@ -219,7 +234,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     for (auto [topicName, partitionInd] : unknownTopicPartitionResponses) {
         AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicName, partitionInd, ctx);
     }
-    if (Message->GenerationId != -1) {
+    if (useKqpCommit && !commits.empty()) {
         NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = static_cast<ui64>(Message->GenerationId),
                                                                                                         .TopicDatabasePath = Context->DatabasePath,
                                                                                                         .ConsumerMetadataTablePath = NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath)};
@@ -244,6 +259,7 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
     auto& record = ev->Get()->Record;
     Error = ConvertErrorCode(record.GetYdbStatus());
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        Kqp->CloseKqpSession(ctx);
         auto kqpQueryError = TStringBuilder() << "Kqp error. Status# " << record.GetYdbStatus() << ", ";
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);

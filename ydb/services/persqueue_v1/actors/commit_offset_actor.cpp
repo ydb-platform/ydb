@@ -108,6 +108,10 @@ void TCommitOffsetActor::Die(const TActorContext& ctx) {
     if (PipeClient)
         NTabletPipe::CloseClient(ctx, PipeClient);
 
+    if (Kqp) {
+        Kqp->CloseKqpSession(ctx);
+    }
+
     ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
 
     TActorBootstrapped<TCommitOffsetActor>::Die(ctx);
@@ -187,6 +191,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
 
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     if (!Kqp->Handle(ev, ctx)) {
+        Kqp->CloseKqpSession(ctx);
         AnswerError(ev->Get()->Record.GetError(), PersQueue::ErrorCode::ERROR, ctx);
     }
 }

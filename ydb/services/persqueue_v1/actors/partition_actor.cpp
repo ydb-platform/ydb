@@ -245,6 +245,8 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, c
 
     if (!kqpIt->second->Handle(ev, ctx)) {
         const auto& record = ev->Get()->Record;
+        kqpIt->second->CloseKqpSession(ctx);
+        Kqps.erase(kqpIt);
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + record.GetError(), PersQueue::ErrorCode::ERROR));
     }
 }
@@ -265,6 +267,8 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
         kqpQueryError << issues.ToString();
 
+        kqpIt->second->CloseKqpSession(ctx);
+        Kqps.erase(kqpIt);
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(kqpQueryError, PersQueue::ErrorCode::ERROR));
         return;
     }

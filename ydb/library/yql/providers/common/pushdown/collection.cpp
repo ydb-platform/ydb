@@ -382,7 +382,7 @@ public:
                 && CheckExpressionNodeForPushdown(sqlIf.ThenValue())
                 && CheckExpressionNodeForPushdown(sqlIf.ElseValue());
         }
-        if (auto apply = node.Maybe<TCoApply>()) {
+        if (auto apply = node.Maybe<TCoApply>(); apply && Settings.IsEnabled(EFlag::PredicateAsExpression)) {
             return ApplyCanBePushed(apply.Cast());
         }
         if (auto flatMap = node.Maybe<TCoFlatMap>()) {

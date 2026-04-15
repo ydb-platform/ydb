@@ -410,7 +410,7 @@ message TExpression {
         TMaxOf max_of = 10;
 
         TCurrentUtcTimestamp current_utc_timestamp = 11;
-        
+
         TPredicate predicate = 12;
     }
 }
@@ -497,7 +497,6 @@ message TPredicate {
         EOperation operation = 1;
         TExpression left_value = 2;
         TExpression right_value = 3;
-
     }
 
     // "$column REGEXP $pattern"

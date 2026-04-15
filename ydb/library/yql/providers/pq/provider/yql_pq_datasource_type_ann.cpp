@@ -46,7 +46,6 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::JustPassthroughOperators |
             EFlag::UnaryOperators |
             EFlag::MinMax |
-            EFlag::PredicateAsExpression |
             EFlag::IsDistinctOperator |
             EFlag::ToBytesFromStringExpressions |
             EFlag::ToStringFromStringExpressions |

@@ -2,8 +2,12 @@
 
 MANUAL_FAST_UNMUTE_STATUS = "manual_fast_unmute"
 IDLE_STATUS = "idle"
+RESOLVED_RULE_MANUAL = "manual"
+RESOLVED_RULE_DEFAULT = "default"
+STATUS_SOURCE_CONTROL_COMMENT = "control_comment"
+STATUS_SOURCE_LEGACY = "legacy"
 
-# Canonical schema for test_results/analytics/manual_unmute_requests.
+# Canonical schema for test_results/analytics/mute_control_state.
 # Tuple format: (column_name, ydb_primitive_type, nullable)
 MANUAL_UNMUTE_TABLE_SCHEMA = [
     ("issue_number", "Uint64", False),
@@ -16,6 +20,12 @@ MANUAL_UNMUTE_TABLE_SCHEMA = [
     ("linked_pr_count", "Uint32", True),
     ("manual_unmute_status", "Utf8", True),
     ("manual_request_active", "Uint8", True),
+    ("manual_requested_at", "Timestamp", True),
+    ("resolved_at", "Timestamp", True),
+    ("resolved_rule", "Utf8", True),
+    ("resolved_window_days", "Uint32", True),
+    ("last_status_change_at", "Timestamp", True),
+    ("status_source", "Utf8", True),
     ("effective_unmute_window_days", "Uint32", True),
     ("default_unmute_window_days", "Uint32", True),
     ("manual_fast_unmute_window_days", "Uint32", True),
@@ -59,11 +69,23 @@ def build_manual_unmute_row_payload(
     state,
     requested,
     resolution_reason,
+    manual_requested_at=None,
+    resolved_at=None,
+    resolved_rule=None,
+    resolved_window_days=None,
+    last_status_change_at=None,
+    status_source=None,
 ):
     normalized_status = normalize_manual_unmute_status(status, requested=requested)
     is_active_requested = int(state == "active" and bool(requested))
     return {
         "manual_unmute_status": normalized_status,
         "manual_request_active": is_active_requested,
+        "manual_requested_at": manual_requested_at,
+        "resolved_at": resolved_at,
+        "resolved_rule": resolved_rule,
+        "resolved_window_days": resolved_window_days,
+        "last_status_change_at": last_status_change_at,
+        "status_source": status_source,
         "resolution_reason": resolution_reason,
     }

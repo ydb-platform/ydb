@@ -64,7 +64,7 @@ $mru_latest = (
                 PARTITION BY m.full_name, m.branch, m.build_type
                 ORDER BY m.exported_at DESC, m.issue_number DESC
             ) AS rn
-        FROM `test_results/analytics/manual_unmute_requests` AS m
+        FROM `test_results/analytics/mute_control_state` AS m
     ) AS m_rnk
     WHERE m_rnk.rn = 1
 );

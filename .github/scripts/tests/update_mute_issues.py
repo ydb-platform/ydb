@@ -1526,8 +1526,8 @@ def collect_manual_unmute_request_rows(
                 changed = True
 
             if item.get('requested'):
-                if item.get('requested_at'):
-                    item['requested_at'] = ''
+                if not item.get('requested_at'):
+                    item['requested_at'] = _isoformat_z(now)
                     changed = True
                 normalized_status = normalize_manual_unmute_status(
                     item.get('status'),

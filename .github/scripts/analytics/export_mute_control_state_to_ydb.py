@@ -24,6 +24,10 @@ from update_mute_issues import (
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
     MANUAL_UNMUTE_TABLE_SCHEMA,
+    RESOLVED_RULE_DEFAULT,
+    RESOLVED_RULE_MANUAL,
+    STATUS_SOURCE_CONTROL_COMMENT,
+    STATUS_SOURCE_LEGACY,
     build_manual_unmute_row_payload,
     render_manual_unmute_create_table_sql,
 )
@@ -91,9 +95,39 @@ def _is_updated_within_last_day(issue, now):
     return updated_at >= (now - datetime.timedelta(days=1))
 
 
-def _effective_unmute_window(requested, state, default_window_days, fast_window_days):
+def _resolve_rule_for_item(state, reason):
+    if state != "resolved":
+        return None
+    if (reason or "").strip() == "stable_manual_fast_window":
+        return RESOLVED_RULE_MANUAL
+    return RESOLVED_RULE_DEFAULT
+
+
+def _days_since(ts, now):
+    dt = _to_dt(ts)
+    if dt is None:
+        return 0
+    delta = now.date() - dt.date()
+    return max(0, int(delta.days))
+
+
+def _effective_unmute_window(
+    *,
+    requested,
+    state,
+    resolved_rule,
+    resolved_at,
+    default_window_days,
+    fast_window_days,
+    now,
+):
     is_manual_active = bool(requested) and (state == "active")
-    return int(fast_window_days if is_manual_active else default_window_days)
+    if is_manual_active:
+        return int(fast_window_days)
+    if resolved_rule == RESOLVED_RULE_MANUAL:
+        days_since_resolved = _days_since(resolved_at, now)
+        return int(min(int(default_window_days), int(fast_window_days) + days_since_resolved))
+    return int(default_window_days)
 
 
 def _is_open_issue(issue):
@@ -197,6 +231,7 @@ def collect_rows(default_window_days, fast_window_days, incremental_only):
         total_tests_processed += len(all_tests)
         issue_rows_before = len(rows)
         for full_name in all_tests:
+            has_control_item = full_name in control_items
             item = control_items.get(
                 full_name,
                 {
@@ -208,6 +243,17 @@ def collect_rows(default_window_days, fast_window_days, incremental_only):
                     "resolved_at": "",
                 },
             )
+            state = item.get("state", "active")
+            requested = bool(item.get("requested"))
+            reason = item.get("reason", "") or None
+            manual_requested_at = _to_dt(item.get("requested_at"))
+            resolved_at = _to_dt(item.get("resolved_at"))
+            resolved_rule = _resolve_rule_for_item(state, reason)
+            resolved_window_days = (
+                int(fast_window_days) if resolved_rule == RESOLVED_RULE_MANUAL else int(default_window_days)
+            ) if resolved_rule else None
+            last_status_change_at = resolved_at or manual_requested_at or now
+            status_source = STATUS_SOURCE_CONTROL_COMMENT if has_control_item else STATUS_SOURCE_LEGACY
 
             for branch in branches:
                 row = {
@@ -220,10 +266,13 @@ def collect_rows(default_window_days, fast_window_days, incremental_only):
                     "issue_closed_by_type": close_actor_type,
                     "linked_pr_count": len(linked_pr_numbers),
                     "effective_unmute_window_days": _effective_unmute_window(
-                        bool(item.get("requested")),
-                        item.get("state", "active"),
-                        default_window_days,
-                        fast_window_days,
+                        requested=requested,
+                        state=state,
+                        resolved_rule=resolved_rule,
+                        resolved_at=resolved_at,
+                        default_window_days=default_window_days,
+                        fast_window_days=fast_window_days,
+                        now=now,
                     ),
                     "default_unmute_window_days": int(default_window_days),
                     "manual_fast_unmute_window_days": int(fast_window_days),
@@ -233,9 +282,15 @@ def collect_rows(default_window_days, fast_window_days, incremental_only):
                 row.update(
                     build_manual_unmute_row_payload(
                         status=item.get("status", "idle"),
-                        state=item.get("state", "active"),
-                        requested=bool(item.get("requested")),
-                        resolution_reason=item.get("reason", "") or None,
+                        state=state,
+                        requested=requested,
+                        resolution_reason=reason,
+                        manual_requested_at=manual_requested_at,
+                        resolved_at=resolved_at,
+                        resolved_rule=resolved_rule,
+                        resolved_window_days=resolved_window_days,
+                        last_status_change_at=last_status_change_at,
+                        status_source=status_source,
                     )
                 )
 

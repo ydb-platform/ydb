@@ -172,43 +172,101 @@ def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, y
         raise
 
 
-def load_fast_unmute_overrides_from_ydb(branch, build_type, ydb_wrapper):
-    """Load ready-for-fast-unmute overrides from analytics/mute_control_state."""
+def _coerce_dt(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=datetime.timezone.utc)
+        return value.astimezone(datetime.timezone.utc)
+    if isinstance(value, datetime.date):
+        return datetime.datetime(
+            value.year,
+            value.month,
+            value.day,
+            tzinfo=datetime.timezone.utc,
+        )
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        dt = datetime.datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc)
+
+
+def _compute_effective_unmute_policy(row, now_utc):
+    default_window = int(row.get('default_unmute_window_days') or UNMUTE_DAYS)
+    manual_window = int(row.get('manual_fast_unmute_window_days') or FAST_UNMUTE_DAYS)
+    manual_request_active = int(row.get('manual_request_active') or 0) == 1
+    resolved_rule = str(row.get('resolved_rule') or '').strip().lower()
+    resolved_at = _coerce_dt(row.get('resolved_at'))
+
+    if manual_request_active:
+        return {
+            'window_days': manual_window,
+            'mode': 'manual_active',
+        }
+
+    if resolved_rule == 'manual':
+        days_since_resolved = 0
+        if resolved_at is not None:
+            days_since_resolved = max(0, (now_utc.date() - resolved_at.date()).days)
+        return {
+            'window_days': min(default_window, manual_window + days_since_resolved),
+            'mode': 'manual_transition',
+        }
+
+    return {
+        'window_days': default_window,
+        'mode': 'default',
+    }
+
+
+def load_mute_control_overrides_from_ydb(branch, build_type, ydb_wrapper):
+    """Load per-test unmute policy from analytics/mute_control_state."""
     table_path = ydb_wrapper.get_table_path("mute_control_state")
     query_string = f'''
 SELECT
     full_name,
-    effective_unmute_window_days,
+    manual_request_active,
+    resolved_at,
+    resolved_rule,
+    default_unmute_window_days,
+    manual_fast_unmute_window_days,
     exported_at
 FROM `{table_path}`
 WHERE branch = '{branch}'
     AND build_type = '{build_type}'
-    AND manual_request_active = 1
 '''
     try:
         rows = ydb_wrapper.execute_scan_query(
             query_string,
-            query_name=f"load_manual_fast_unmute_overrides_{branch}_{build_type}",
+            query_name=f"load_mute_control_state_overrides_{branch}_{build_type}",
         )
     except Exception as exc:
         logging.warning(
-            "Failed to load manual fast-unmute overrides from YDB table "
+            "Failed to load mute control overrides from YDB table "
             f"{table_path}: {exc}"
         )
         return {}
 
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
     latest_by_test = {}
     for row in rows:
         full_name = row.get('full_name')
-        window_days = row.get('effective_unmute_window_days')
         exported_at = row.get('exported_at')
-        if not full_name or window_days in (None, 0):
+        if not full_name:
             continue
 
         previous = latest_by_test.get(full_name)
         if previous is None:
             latest_by_test[full_name] = {
-                'window_days': int(window_days),
+                'policy': _compute_effective_unmute_policy(row, now_utc),
                 'exported_at': exported_at,
             }
             continue
@@ -218,19 +276,26 @@ WHERE branch = '{branch}'
             exported_at is not None and exported_at >= previous_exported_at
         ):
             latest_by_test[full_name] = {
-                'window_days': int(window_days),
+                'policy': _compute_effective_unmute_policy(row, now_utc),
                 'exported_at': exported_at,
             }
 
-    overrides = {
-        full_name: payload['window_days']
+    policies = {
+        full_name: payload['policy']
         for full_name, payload in latest_by_test.items()
     }
-    logging.info(
-        "FAST_UNMUTE_OVERRIDES_FROM_YDB: "
-        f"raw_rows={len(rows)}, unique_tests={len(overrides)}"
+    manual_active_count = sum(
+        1 for payload in policies.values() if payload.get('mode') == 'manual_active'
     )
-    return overrides
+    manual_transition_count = sum(
+        1 for payload in policies.values() if payload.get('mode') == 'manual_transition'
+    )
+    logging.info(
+        "UNMUTE_POLICIES_FROM_YDB: "
+        f"raw_rows={len(rows)}, unique_tests={len(policies)}, "
+        f"manual_active={manual_active_count}, manual_transition={manual_transition_count}"
+    )
+    return policies
 
 
 def add_lines_to_file(file_path, lines_to_add):
@@ -433,13 +498,15 @@ def is_mute_candidate(test):
 
     return result
 
-def is_unmute_candidate(test, aggregated_data=None, fast_aggregated_data=None, fast_override_days_by_test=None):
-    """Check whether a test is an unmute candidate with optional fast-window override."""
+def is_unmute_candidate(test, aggregated_data=None, aggregated_by_window=None, unmute_policy_by_test=None):
+    """Check whether a test is an unmute candidate with per-test unmute policy."""
     full_name = test.get('full_name')
-    fast_override_days_by_test = fast_override_days_by_test or {}
-    use_fast_window = full_name in fast_override_days_by_test and fast_aggregated_data is not None
-
-    source = fast_aggregated_data if use_fast_window else aggregated_data
+    unmute_policy_by_test = unmute_policy_by_test or {}
+    policy = unmute_policy_by_test.get(full_name) or {}
+    policy_window = int(policy.get('window_days') or UNMUTE_DAYS)
+    policy_mode = policy.get('mode') or 'default'
+    aggregated_by_window = aggregated_by_window or {}
+    source = aggregated_by_window.get(policy_window, aggregated_data)
     test_data = test
     if source is not None:
         if isinstance(source, dict):
@@ -453,30 +520,25 @@ def is_unmute_candidate(test, aggregated_data=None, fast_aggregated_data=None, f
 
         if not test_data:
             if test.get('is_muted', False):
-                mode = "FAST" if use_fast_window else "DEFAULT"
-                if use_fast_window:
-                    logging.debug(
-                        f"UNMUTE_CHECK[{mode}]: {full_name} - skipped, no rows in fast window"
-                    )
-                else:
-                    logging.debug(
-                        f"UNMUTE_CHECK[{mode}]: {full_name} - skipped, no rows in selected window"
-                    )
+                logging.debug(
+                    f"UNMUTE_CHECK[{policy_mode.upper()}]: {full_name} - "
+                    f"skipped, no rows in window={policy_window}"
+                )
             return False
 
     pass_count = test_data.get('pass_count', 0)
     total_runs = pass_count + test_data.get('fail_count', 0) + test_data.get('mute_count', 0)
     total_fails = test_data.get('fail_count', 0) + test_data.get('mute_count', 0)
 
-    if use_fast_window:
+    if policy_mode == 'manual_active':
         result = pass_count > FAST_UNMUTE_MIN_PASSES and total_fails == 0
     else:
         result = pass_count > DEFAULT_UNMUTE_MIN_PASSES and total_fails == 0
 
     if test_data.get('is_muted', False):
-        mode = "FAST" if use_fast_window else "DEFAULT"
         logging.debug(
-            f"UNMUTE_CHECK[{mode}]: {full_name} - pass:{pass_count}, runs:{total_runs}, fails:{total_fails}, "
+            f"UNMUTE_CHECK[{policy_mode.upper()}]: {full_name} - "
+            f"window:{policy_window}, pass:{pass_count}, runs:{total_runs}, fails:{total_fails}, "
             f"mute_count:{test_data.get('mute_count')}, state:{test_data.get('state')}, "
             f"muted:{test_data.get('is_muted')}, result:{result}"
         )
@@ -577,8 +639,8 @@ def apply_and_add_mutes(
     aggregated_for_mute,
     aggregated_for_unmute,
     aggregated_for_delete,
-    aggregated_for_fast_unmute=None,
-    fast_override_days_by_test=None,
+    aggregated_for_unmute_by_window=None,
+    unmute_policy_by_test=None,
 ):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
@@ -599,13 +661,18 @@ def apply_and_add_mutes(
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
         # 2. Unmute candidates.
-        fast_override_days_by_test = fast_override_days_by_test or {}
+        unmute_policy_by_test = unmute_policy_by_test or {}
+        aggregated_for_unmute_by_window = aggregated_for_unmute_by_window or {}
         aggregated_for_unmute_index = {
             test.get('full_name'): test for test in (aggregated_for_unmute or []) if test.get('full_name')
         }
-        aggregated_for_fast_unmute_index = {
-            test.get('full_name'): test for test in (aggregated_for_fast_unmute or []) if test.get('full_name')
-        }
+        aggregated_for_unmute_index_by_window = {}
+        for window_days, tests in aggregated_for_unmute_by_window.items():
+            aggregated_for_unmute_index_by_window[int(window_days)] = {
+                test.get('full_name'): test
+                for test in (tests or [])
+                if test.get('full_name')
+            }
 
         def is_unmute_non_chunk(test):
             if is_chunk_test(test):
@@ -613,8 +680,8 @@ def apply_and_add_mutes(
             return is_unmute_candidate(
                 test,
                 aggregated_data=aggregated_for_unmute_index,
-                fast_aggregated_data=aggregated_for_fast_unmute_index,
-                fast_override_days_by_test=fast_override_days_by_test,
+                aggregated_by_window=aggregated_for_unmute_index_by_window,
+                unmute_policy_by_test=unmute_policy_by_test,
             )
 
         to_unmute, to_unmute_debug = create_file_set(
@@ -630,8 +697,8 @@ def apply_and_add_mutes(
             lambda chunk: is_unmute_candidate(
                 chunk,
                 aggregated_data=aggregated_for_unmute_index,
-                fast_aggregated_data=aggregated_for_fast_unmute_index,
-                fast_override_days_by_test=fast_override_days_by_test,
+                aggregated_by_window=aggregated_for_unmute_index_by_window,
+                unmute_policy_by_test=unmute_policy_by_test,
             ),
         )
         wildcard_unmute_patterns = [p for p, d in wildcard_unmute]
@@ -1167,17 +1234,12 @@ def mute_worker(args):
         # Use unified aggregation for different periods.
         aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS for mute
         aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS for unmute
-        aggregated_for_unmute_index = {
-            test.get('full_name'): test for test in aggregated_for_unmute if test.get('full_name')
-        }
-        aggregated_for_fast_unmute = aggregate_test_data(all_data, FAST_UNMUTE_DAYS)
         aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS for delete
     
         logging.info(
             "Aggregated data: "
             f"mute={len(aggregated_for_mute)}, "
             f"unmute={len(aggregated_for_unmute)}, "
-            f"fast_unmute={len(aggregated_for_fast_unmute)}, "
             f"delete={len(aggregated_for_delete)}"
         )
     
@@ -1185,10 +1247,22 @@ def mute_worker(args):
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-            fast_override_days_by_test = load_fast_unmute_overrides_from_ydb(
+            unmute_policy_by_test = load_mute_control_overrides_from_ydb(
                 branch=args.branch,
                 build_type=build_type,
                 ydb_wrapper=ydb_wrapper,
+            )
+            requested_windows = {
+                int(policy.get('window_days') or UNMUTE_DAYS)
+                for policy in unmute_policy_by_test.values()
+            }
+            requested_windows.discard(int(UNMUTE_DAYS))
+            aggregated_for_unmute_by_window = {}
+            for window_days in sorted(requested_windows):
+                aggregated_for_unmute_by_window[window_days] = aggregate_test_data(all_data, window_days)
+            logging.info(
+                "UNMUTE_WINDOW_CACHE: "
+                f"default={UNMUTE_DAYS}, extras={sorted(requested_windows)}"
             )
 
             apply_and_add_mutes(
@@ -1198,8 +1272,8 @@ def mute_worker(args):
                 aggregated_for_mute,
                 aggregated_for_unmute,
                 aggregated_for_delete,
-                aggregated_for_fast_unmute=aggregated_for_fast_unmute,
-                fast_override_days_by_test=fast_override_days_by_test,
+                aggregated_for_unmute_by_window=aggregated_for_unmute_by_window,
+                unmute_policy_by_test=unmute_policy_by_test,
             )
 
         elif args.mode == 'create_issues':

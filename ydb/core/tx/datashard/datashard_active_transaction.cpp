@@ -7,6 +7,7 @@
 #include "key_conflicts.h"
 
 #include <ydb/core/tx/locks/locks.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/util/memory_track.h>
 
 namespace NKikimr {

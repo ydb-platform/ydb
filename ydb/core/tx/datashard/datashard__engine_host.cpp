@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/cast.h>

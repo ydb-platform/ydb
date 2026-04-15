@@ -25,6 +25,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/wilson_ids/wilson.h>

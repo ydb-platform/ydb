@@ -7,6 +7,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -68,7 +69,7 @@ private:
     }
 
 public:
-    TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
+    TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
         const TIntrusivePtr<TTxProxyMon>& mon,
         NACLib::TUserContext::TPtr userCtx)
         : Services(services)
@@ -1032,7 +1033,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
+IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
     const TIntrusivePtr<TTxProxyMon>& mon, NACLib::TUserContext::TPtr userCtx)
 {
     const auto& record = ev->Get()->Record;

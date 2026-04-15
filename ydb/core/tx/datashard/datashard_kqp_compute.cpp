@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <yql/essentials/minikql/mkql_node.h>
 
 namespace NKikimr {

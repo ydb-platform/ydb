@@ -8,6 +8,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 #include <ydb/library/signals/object_counter.h>
@@ -53,10 +54,10 @@ protected:
 
 public:
     TLongTxWriteBase(
-        const TString& databaseName, 
-        const TString& path, 
-        const TString& token, 
-        const TLongTxId& longTxId, 
+        const TString& databaseName,
+        const TString& path,
+        const TString& token,
+        const TLongTxId& longTxId,
         const TString& dedupId,
         NACLib::TUserContext::TPtr userCtx)
         : DatabaseName(databaseName)

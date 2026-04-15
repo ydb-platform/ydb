@@ -94,7 +94,7 @@ std::vector<CompactionTask<TKey, TPortion>> LastLevel<TKey, TPortion, TCounter>:
             }
         }
         if (success) {
-            return {CompactionTask<TKey, TPortion>{result}};
+            return {CompactionTask<TKey, TPortion>{result, 1}};
         }
     }
     AFL_VERIFY(!DoGetUsefulMetric().IsCritical());
@@ -154,6 +154,7 @@ std::vector<CompactionTask<TKey, TPortion>> Accumulator<TKey, TPortion, TCounter
         result.Portions.push_back(it);
         currentBlobBytes += it->GetTotalBlobBytes();
         if (currentBlobBytes > Settings.Compaction.Bytes || result.Portions.size() > Settings.Compaction.Portions) {
+            result.TargetLevel = 0;
             return {result};
         }
     }
@@ -229,6 +230,7 @@ std::vector<CompactionTask<TKey, TPortion>> MiddleLevel<TKey, TPortion, TCounter
     if (result.Portions.size() < 2) {
         return {};
     }
+    result.TargetLevel = LevelIdx;
     return {result};
 }
 

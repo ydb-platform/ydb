@@ -11,6 +11,7 @@ template <std::totally_ordered TKey, typename TPortion>
     requires CPortionInfoSlice<TKey, TPortion>
 struct CompactionTask {
     std::vector<typename TPortion::TConstPtr> Portions;
+    ui8 TargetLevel;
 };
 
 template <std::totally_ordered TKey, typename TPortion, typename TCounter>

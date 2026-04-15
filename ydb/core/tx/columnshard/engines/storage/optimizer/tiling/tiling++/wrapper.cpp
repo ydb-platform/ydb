@@ -259,27 +259,10 @@ private:
         if (tasks.empty()) {
             return {};
         }
-        const auto& portionPtrs = tasks.front().Portions;
+        const auto& task = tasks.front();
 
-        const auto accumulatorPriority = Core.Accumulator.DoGetUsefulMetric();
-        const auto lastLevelPriority = Core.LastLevel.DoGetUsefulMetric();
-        const auto middleLevelsPriority = Core.GetMiddleUsefulMetric().first;
-
-        const bool pickAccumulator = lastLevelPriority < accumulatorPriority && middleLevelsPriority < accumulatorPriority;
-        const bool pickMiddle = !pickAccumulator && lastLevelPriority < middleLevelsPriority;
-
-        if (pickAccumulator || pickMiddle) {
-            if (portionPtrs.size() <= 1) {
-                return {};
-            }
-            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portionPtrs, TSaverContext(StoragesManager));
-            result->SetTargetCompactionLevel(0);
-            result->SetPortionExpectedSize(Settings.PortionExpectedSize);
-            return {result};
-        }
-
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portionPtrs, TSaverContext(StoragesManager));
-        result->SetTargetCompactionLevel(1);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task.Portions, TSaverContext(StoragesManager));
+        result->SetTargetCompactionLevel(task.TargetLevel);
         result->SetPortionExpectedSize(Settings.PortionExpectedSize);
         return {result};
     }

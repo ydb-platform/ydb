@@ -10,7 +10,6 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/blobs_action/abstract
-    ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/changes/abstract
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner

@@ -13,9 +13,11 @@ struct CompactionTask {
     std::vector<typename TPortion::TConstPtr> Portions;
 };
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
 struct ICompactionUnit {
+    using TLevelCounters = NTiling::TLevelCounters;
+
     const TLevelCounters& Counters;
 
     ICompactionUnit(const TLevelCounters& counters)
@@ -23,11 +25,11 @@ struct ICompactionUnit {
     }
 
     virtual void AddPortion(typename TPortion::TConstPtr p) {
-        Counters.Portions->AddPortion(p);
+        Counters.AddPortion(p);
         DoAddPortion(p);
     }
     virtual void RemovePortion(typename TPortion::TConstPtr p) {
-        Counters.Portions->RemovePortion(p);
+        Counters.RemovePortion(p);
         DoRemovePortion(p);
     }
 
@@ -39,7 +41,7 @@ struct ICompactionUnit {
     virtual void DoActualize() = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
 
-private:
+protected:
     virtual void DoAddPortion(typename TPortion::TConstPtr p) = 0;
     virtual void DoRemovePortion(typename TPortion::TConstPtr p) = 0;
 };

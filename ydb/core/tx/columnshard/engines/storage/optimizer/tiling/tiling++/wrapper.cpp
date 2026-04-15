@@ -18,7 +18,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
 
-using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
+using TCoreCounters = TCounters<TPortionInfo>;
+using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo, TCoreCounters>;
 
 /// JSON layout matches TTilingOptimizer in tiling++.cpp (same proto blob).
 struct TPlannerSettings {
@@ -41,16 +42,16 @@ struct TPlannerSettings {
     ui64 MiddleLevelTriggerHeight = 10;
     ui64 MiddleLevelOverloadHeight = 15;
 
-    LastLevel<NArrow::TSimpleRow, TPortionInfo>::LastLevelSettings MakeLastLevelSettings() const {
-        LastLevel<NArrow::TSimpleRow, TPortionInfo>::LastLevelSettings s;
+    TCoreTiling::TLastLevelSettings MakeLastLevelSettings() const {
+        TCoreTiling::TLastLevelSettings s;
         s.Compaction.Portions = LastLevelCompactionPortions;
         s.Compaction.Bytes = LastLevelCompactionBytes;
         s.CandidatePortionsOverload = LastLevelCandidatePortionsOverload;
         return s;
     }
 
-    Accumulator<NArrow::TSimpleRow, TPortionInfo>::AccumulatorSettings MakeAccumulatorSettings() const {
-        Accumulator<NArrow::TSimpleRow, TPortionInfo>::AccumulatorSettings s;
+    TCoreTiling::TAccumulatorSettings MakeAccumulatorSettings() const {
+        TCoreTiling::TAccumulatorSettings s;
         s.Compaction.Portions = AccumulatorCompactionPortions;
         s.Compaction.Bytes = AccumulatorCompactionBytes;
         s.Trigger.Portions = AccumulatorTriggerPortions;
@@ -60,8 +61,8 @@ struct TPlannerSettings {
         return s;
     }
 
-    MiddleLevel<NArrow::TSimpleRow, TPortionInfo>::MiddleLevelSettings MakeMiddleLevelSettings() const {
-        MiddleLevel<NArrow::TSimpleRow, TPortionInfo>::MiddleLevelSettings s;
+    TCoreTiling::TMiddleLevelSettings MakeMiddleLevelSettings() const {
+        TCoreTiling::TMiddleLevelSettings s;
         s.TriggerHight = MiddleLevelTriggerHeight;
         s.OverloadHight = MiddleLevelOverloadHeight;
         return s;
@@ -213,8 +214,7 @@ public:
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
         const TPlannerSettings& settings)
         : IOptimizerPlanner(pathId, std::nullopt)
-        , Counters(std::make_shared<TCounters>())
-        , Core(MakeCoreSettings(settings), Counters)
+        , Core(MakeCoreSettings(settings))
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
         , Settings(settings) {
@@ -231,7 +231,6 @@ public:
     }
 
 private:
-    std::shared_ptr<TCounters> Counters;
     TCoreTiling Core;
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<arrow::Schema> PrimaryKeysSchema;

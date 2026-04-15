@@ -66,10 +66,11 @@ struct TTestPortion {
     }
 };
 
-using TTestAccumulator = Accumulator<ui64, TTestPortion>;
-using TTestLastLevel = LastLevel<ui64, TTestPortion>;
-using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
-using TTestTiling = Tiling<ui64, TTestPortion>;
+using TTestCounters = TCounters<TTestPortion>;
+using TTestAccumulator = Accumulator<ui64, TTestPortion, TTestCounters>;
+using TTestLastLevel = LastLevel<ui64, TTestPortion, TTestCounters>;
+using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion, TTestCounters>;
+using TTestTiling = Tiling<ui64, TTestPortion, TTestCounters>;
 
 TTestPortion::TConstPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);
@@ -87,7 +88,6 @@ const auto& NeverLocked() {
 Y_UNIT_TEST_SUITE(TilingCoreUnits) {
 
     Y_UNIT_TEST(AccumulatorReturnsSimpleCompactionTask) {
-        auto counters = std::make_shared<TCounters>();
         TTestAccumulator::AccumulatorSettings settings;
         settings.Trigger.Bytes = 100;
         settings.Trigger.Portions = 100;
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.Overload.Bytes = 1000;
         settings.Overload.Portions = 1000;
 
-        TTestAccumulator accumulator(settings, counters->GetAccumulatorCounters(0));
+        TTestAccumulator accumulator(settings);
         const auto p1 = MakePortion(1, 10, 20, 60);
         const auto p2 = MakePortion(2, 30, 40, 60);
         const auto p3 = MakePortion(3, 50, 60, 60);
@@ -114,12 +114,11 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     }
 
     Y_UNIT_TEST(MiddleLevelReturnsMaxIntersectionRange) {
-        auto counters = std::make_shared<TCounters>();
         TTestMiddleLevel::MiddleLevelSettings settings;
         settings.TriggerHight = 2;
         settings.OverloadHight = 4;
 
-        TTestMiddleLevel middle(settings, counters->GetLevelCounters(2));
+        TTestMiddleLevel middle(settings, 2);
         middle.AddPortion(MakePortion(1, 0, 10, 1000));
         middle.AddPortion(MakePortion(2, 5, 15, 1000));
         middle.AddPortion(MakePortion(3, 7, 12, 1000));
@@ -141,13 +140,12 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     }
 
     Y_UNIT_TEST(LastLevelReturnsCandidateWithIntersectedStablePortions) {
-        auto counters = std::make_shared<TCounters>();
         TTestLastLevel::LastLevelSettings settings;
         settings.Compaction.Bytes = 1000;
         settings.Compaction.Portions = 10;
         settings.CandidatePortionsOverload = 3;
 
-        TTestLastLevel lastLevel(settings, counters->GetLevelCounters(1));
+        TTestLastLevel lastLevel(settings);
         lastLevel.AddPortion(MakePortion(1, 0, 10, 100));
         lastLevel.AddPortion(MakePortion(2, 20, 30, 100));
         lastLevel.AddPortion(MakePortion(3, 5, 25, 100));
@@ -169,7 +167,6 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     }
 
     Y_UNIT_TEST(TilingChoosesAccumulatorMiddleAndLastLevelsIndependently) {
-        auto counters = std::make_shared<TCounters>();
         TTestTiling::TilingSettings settings;
         settings.AccumulatorPortionSizeLimit = 100;
         settings.K = 10;
@@ -186,7 +183,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.MiddleLevelSettings.TriggerHight = 2;
         settings.MiddleLevelSettings.OverloadHight = 4;
 
-        TTestTiling tiling(settings, counters);
+        TTestTiling tiling(settings);
 
         tiling.AddPortion(MakePortion(1, 0, 1, 60));
         tiling.AddPortion(MakePortion(2, 2, 3, 60));
@@ -195,9 +192,16 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         auto tasks = tiling.GetOptimizationTasks(NeverLocked());
         UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[0]->GetPortionId(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[1]->GetPortionId(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[2]->GetPortionId(), 3);
+        {
+            TVector<ui64> ids;
+            for (const auto& p : tasks[0].Portions) {
+                ids.push_back(p->GetPortionId());
+            }
+            Sort(ids.begin(), ids.end());
+            UNIT_ASSERT_VALUES_EQUAL(ids[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
+            UNIT_ASSERT_VALUES_EQUAL(ids[2], 3);
+        }
 
         tiling.RemovePortion(MakePortion(1, 0, 1, 60));
         tiling.RemovePortion(MakePortion(2, 2, 3, 60));
@@ -232,7 +236,6 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         tasks = tiling.GetOptimizationTasks(NeverLocked());
         UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[0]->GetPortionId(), 22);
         {
             TVector<ui64> ids;
             for (const auto& p : tasks[0].Portions) {

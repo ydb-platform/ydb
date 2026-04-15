@@ -494,7 +494,8 @@ struct TLevel {
 
 class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
     using TBase = IOptimizerPlanner;
-    std::shared_ptr<TCounters> Counters;
+    using TCountersImpl = TCounters<TPortionInfo>;
+    std::shared_ptr<TCountersImpl> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
     mutable bool LastTaskWasImportant = false;
     size_t MaxPortionPromotion = 100;
@@ -532,7 +533,7 @@ public:
             const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TSettings& settings = {})
         : TBase(pathId, settings.NodePortionsCountLimit)
         , TSettings(settings)
-        , Counters(std::make_shared<TCounters>())
+        , Counters(std::make_shared<TCountersImpl>())
         , PortionsInfo(std::make_shared<TSimplePortionsGroupInfo>())
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
@@ -643,7 +644,7 @@ private:
     TLevel& EnsureLevel(ui32 level) {
         while (level >= Levels.size()) {
             ui32 next = Levels.size();
-            Levels.emplace_back(next, Counters->GetLevelCounters(next));
+            Levels.emplace_back(next, TCountersImpl::GetLevelCounter(next));
             if (next > 0) {
                 Levels[next - 1].Next = &Levels.back();
             }
@@ -685,7 +686,7 @@ private:
     TAccumulator& EnsureAccumulator(ui32 level) {
         while (level >= Accumulator.size()) {
             ui32 next = Accumulator.size();
-            Accumulator.emplace_back(next, Counters->GetAccumulatorCounters(next));
+            Accumulator.emplace_back(next, TCountersImpl::GetAccumulatorCounter(next));
         }
         return Accumulator[level];
     }

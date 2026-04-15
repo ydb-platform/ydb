@@ -10,23 +10,21 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-Tiling<TKey, TPortion>::Tiling(typename Tiling<TKey, TPortion>::TilingSettings settings, std::shared_ptr<TCounters> counters)
-    : ICompactionUnit<TKey, TPortion>(counters->GetLevelCounters(0))
+Tiling<TKey, TPortion, TCounter>::Tiling(typename Tiling<TKey, TPortion, TCounter>::TilingSettings settings)
+    : TBase(TCounter::GetMainCounter())
     , Settings(std::move(settings))
-    , Accumulator(Settings.AccumulatorSettings, counters->GetAccumulatorCounters(0))
-    , LastLevel(Settings.LastLevelSettings, counters->GetLevelCounters(1))
-    , SharedCounters(std::move(counters))
-    , PortionsInfo(std::make_shared<NLBuckets::TSimplePortionsGroupInfo>()) {
-    for (ui64 i = 2; i < TILING_LAYERS_COUNT; ++i) {
-        MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion>(Settings.MiddleLevelSettings, SharedCounters->GetLevelCounters(i)));
+    , Accumulator(Settings.AccumulatorSettings)
+    , LastLevel(Settings.LastLevelSettings) {
+    for (ui64 i = 2; i < Settings.MiddleLevelCount; ++i) {
+        MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion, TCounter>(Settings.MiddleLevelSettings, i));
     }
 }
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-void Tiling<TKey, TPortion>::DoActualize() {
+void Tiling<TKey, TPortion, TCounter>::DoActualize() {
     Accumulator.DoActualize();
     LastLevel.DoActualize();
     for (auto& middleLevel : MiddleLevels) {
@@ -34,9 +32,9 @@ void Tiling<TKey, TPortion>::DoActualize() {
     }
 }
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-void Tiling<TKey, TPortion>::DoAddPortion(typename TPortion::TConstPtr p) {
+void Tiling<TKey, TPortion, TCounter>::DoAddPortion(typename TPortion::TConstPtr p) {
     switch (p->GetProduced()) {
         case NPortion::EVICTED:
         case NPortion::INACTIVE:
@@ -50,11 +48,11 @@ void Tiling<TKey, TPortion>::DoAddPortion(typename TPortion::TConstPtr p) {
             break;
     }
 
-    PortionsInfo->AddPortion(p);
+    // PortionsInfo.AddPortion(p);
 
     if (p->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
         Accumulator.AddPortion(p);
-        InternalLevel[p->GetPortionId()] = 0;
+        InternalLevel[p->GetPortionId()] = {.Level = 0, .Width = 0};
     } else {
         const ui64 measure = LastLevel.Measure(p);
         ui8 level = 1;
@@ -67,18 +65,21 @@ void Tiling<TKey, TPortion>::DoAddPortion(typename TPortion::TConstPtr p) {
         }
         if (level <= 1) {
             LastLevel.AddPortion(p);
-            InternalLevel[p->GetPortionId()] = 1;
+            LastLevel.Counters.Portions->AddWidth(measure);
+            InternalLevel[p->GetPortionId()] = {.Level = 1, .Width = measure};
         } else {
             level = std::min(level, static_cast<ui8>(Settings.MiddleLevelCount - 1));
             MiddleLevels.at(level).AddPortion(p);
-            InternalLevel[p->GetPortionId()] = level;
+            MiddleLevels.at(level).Counters.Portions->AddWidth(measure);
+            MiddleLevels.at(level).WidthByPortionId[p->GetPortionId()] = measure;
+            InternalLevel[p->GetPortionId()] = {.Level = level, .Width = measure};
         }
     }
 }
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-void Tiling<TKey, TPortion>::DoRemovePortion(typename TPortion::TConstPtr p) {
+void Tiling<TKey, TPortion, TCounter>::DoRemovePortion(typename TPortion::TConstPtr p) {
     switch (p->GetProduced()) {
         case NPortion::EVICTED:
         case NPortion::INACTIVE:
@@ -90,20 +91,23 @@ void Tiling<TKey, TPortion>::DoRemovePortion(typename TPortion::TConstPtr p) {
             break;
     }
 
-    PortionsInfo->RemovePortion(p);
+    // PortionsInfo.RemovePortion(p);
 
     auto lit = InternalLevel.find(p->GetPortionId());
     if (lit == InternalLevel.end()) {
         AFL_VERIFY(false)("reason", "Remove unknown portion");
         return;
     }
-    if (lit->second == 0) {
+    if (lit->second.Level == 0) {
         Accumulator.RemovePortion(p);
-    } else if (lit->second == 1) {
+    } else if (lit->second.Level == 1) {
+        LastLevel.Counters.Portions->RemoveWidth(lit->second.Width);
         LastLevel.RemovePortion(p);
     } else {
-        auto mit = MiddleLevels.find(lit->second);
+        auto mit = MiddleLevels.find(lit->second.Level);
         if (mit != MiddleLevels.end()) {
+            mit->second.Counters.Portions->RemoveWidth(lit->second.Width);
+            mit->second.WidthByPortionId[p->GetPortionId()] = lit->second.Width;
             mit->second.RemovePortion(p);
         } else {
             AFL_VERIFY(false)("reason", "Bad level info");
@@ -112,9 +116,9 @@ void Tiling<TKey, TPortion>::DoRemovePortion(typename TPortion::TConstPtr p) {
     InternalLevel.erase(lit);
 }
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-std::pair<TOptimizationPriority, ui64> Tiling<TKey, TPortion>::GetMiddleUsefulMetric() const {
+std::pair<TOptimizationPriority, ui64> Tiling<TKey, TPortion, TCounter>::GetMiddleUsefulMetric() const {
     auto middleLevelsPriority = TOptimizationPriority::Zero();
     ui64 maxMiddleLevelKey = 0;
     for (const auto& [level, middleLevel] : MiddleLevels) {
@@ -127,9 +131,9 @@ std::pair<TOptimizationPriority, ui64> Tiling<TKey, TPortion>::GetMiddleUsefulMe
     return {middleLevelsPriority, maxMiddleLevelKey};
 }
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-std::vector<CompactionTask<TKey, TPortion>> Tiling<TKey, TPortion>::DoGetOptimizationTasks(
+std::vector<CompactionTask<TKey, TPortion>> Tiling<TKey, TPortion, TCounter>::DoGetOptimizationTasks(
     TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
     const auto accumulatorPriority = Accumulator.DoGetUsefulMetric();
     const auto lastLevelPriority = LastLevel.DoGetUsefulMetric();
@@ -146,9 +150,9 @@ std::vector<CompactionTask<TKey, TPortion>> Tiling<TKey, TPortion>::DoGetOptimiz
     return {};
 }
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-TOptimizationPriority Tiling<TKey, TPortion>::DoGetUsefulMetric() const {
+TOptimizationPriority Tiling<TKey, TPortion, TCounter>::DoGetUsefulMetric() const {
     return std::max(Accumulator.DoGetUsefulMetric(), std::max(LastLevel.DoGetUsefulMetric(), GetMiddleUsefulMetric().first));
 }
 

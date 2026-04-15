@@ -6,9 +6,11 @@
 #include <ydb/library/intersection_tree/intersection_tree.h>
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-struct LastLevel : ICompactionUnit<TKey, TPortion> {
+struct LastLevel : ICompactionUnit<TKey, TPortion, TCounter> {
+    using TBase = ICompactionUnit<TKey, TPortion, TCounter>;
+    using TLevelCounters = typename TBase::TLevelCounters;
     struct LastLevelSettings {
         struct Limit {
             ui64 Portions;
@@ -21,7 +23,7 @@ struct LastLevel : ICompactionUnit<TKey, TPortion> {
 
     LastLevelSettings Settings;
 
-    LastLevel(LastLevelSettings settings, const TLevelCounters& counters);
+    LastLevel(LastLevelSettings settings);
 
     struct TPortionByIndexKeyEndComparator {
         using is_transparent = void; // Enable heterogeneous lookup
@@ -43,6 +45,8 @@ struct LastLevel : ICompactionUnit<TKey, TPortion> {
     PortionsEndSorted Portions;
     PortionsEndSorted Candidates;
 
+    THashMap<ui64, ui64> WidthByPortionId;
+
     void DoActualize() override;
     void DoAddPortion(typename TPortion::TConstPtr) override;
     void DoRemovePortion(typename TPortion::TConstPtr) override;
@@ -52,9 +56,11 @@ struct LastLevel : ICompactionUnit<TKey, TPortion> {
     ui64 Measure(typename TPortion::TConstPtr p) const;
 };
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-struct Accumulator : ICompactionUnit<TKey, TPortion> {
+struct Accumulator : ICompactionUnit<TKey, TPortion, TCounter> {
+    using TBase = ICompactionUnit<TKey, TPortion, TCounter>;
+    using TLevelCounters = typename TBase::TLevelCounters;
     struct AccumulatorSettings {
         struct Limit {
             ui64 Portions;
@@ -68,7 +74,7 @@ struct Accumulator : ICompactionUnit<TKey, TPortion> {
 
     AccumulatorSettings Settings;
 
-    Accumulator(AccumulatorSettings settings, const TLevelCounters& counters);
+    Accumulator(AccumulatorSettings settings, ui32 accIdx = 0);
 
     void DoActualize() override;
     void DoAddPortion(typename TPortion::TConstPtr) override;
@@ -83,21 +89,24 @@ struct Accumulator : ICompactionUnit<TKey, TPortion> {
 // template <std::totally_ordered T>
 // struct MiddleLevels : ICompactionUnit<T> {
 
-template <std::totally_ordered TKey, typename TPortion>
+template <std::totally_ordered TKey, typename TPortion, typename TCounter>
     requires CPortionInfoSlice<TKey, TPortion>
-struct MiddleLevel : ICompactionUnit<TKey, TPortion> {
+struct MiddleLevel : ICompactionUnit<TKey, TPortion, TCounter> {
+    using TBase = ICompactionUnit<TKey, TPortion, TCounter>;
+    using TLevelCounters = typename TBase::TLevelCounters;
     struct MiddleLevelSettings {
         ui64 TriggerHight = 10;
         ui64 OverloadHight = 15;
     };
 
     MiddleLevelSettings Settings;
-    const TLevelCounters& Counters;
+    ui32 LevelIdx;
 
-    MiddleLevel(MiddleLevelSettings settings, const TLevelCounters& counters);
+    MiddleLevel(MiddleLevelSettings settings, ui32 levelIdx);
 
     TIntersectionTree<TKey, ui64> Intersections;
     THashMap<ui64, typename TPortion::TConstPtr> PortionById;
+    THashMap<ui64, ui64> WidthByPortionId;
 
     void DoActualize() override;
     void DoAddPortion(typename TPortion::TConstPtr) override;

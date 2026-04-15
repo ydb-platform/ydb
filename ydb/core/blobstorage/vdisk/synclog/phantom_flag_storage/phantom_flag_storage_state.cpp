@@ -282,6 +282,8 @@ void TPhantomFlagStorageState::UpdatePersistentData(std::optional<TPhantomFlagSt
 void TPhantomFlagStorageState::Terminate() {
     if (ProcessorId != TActorId{}) {
         TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, new TEvents::TEvPoisonPill));
+        WriteBuffer.clear();
+        WriteBufferSize = 0;
     }
 }
 

@@ -250,12 +250,14 @@ private:
             return;
         }
 
-        ui32 nextItemSize = (WriteQueue.empty() ? 0 : WriteQueue.front().SerializedSize());
-        ui32 minRequiredSize = PendingWrite.size() + nextItemSize + Ctx.AppendBlockSize;
+        if (!WriteQueue.empty()) {
+            ui32 nextItemSize = WriteQueue.front().SerializedSize();
+            ui32 minRequiredSize = PendingWrite.size() + nextItemSize + Ctx.AppendBlockSize;
 
-        if (TailAvailableSize < minRequiredSize + Ctx.AppendBlockSize) {
-            AllocateNewChunk();
-            return;
+            if (TailAvailableSize < minRequiredSize + Ctx.AppendBlockSize) {
+                AllocateNewChunk();
+                return;
+            }
         }
 
         while (!WriteQueue.empty()) {

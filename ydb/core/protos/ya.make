@@ -105,6 +105,7 @@ SRCS(
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto
+    kqp_lookup_source.proto
     labeled_counters.proto
     load_test.proto
     local.proto

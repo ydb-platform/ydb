@@ -4,9 +4,11 @@
 
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/protos/kqp_lookup_source.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -15,8 +17,10 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
 #include <util/generic/is_in.h>
@@ -539,6 +543,24 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
+class TKikimrDqIntegration : public NYql::TDqIntegrationBase {
+    void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+        const TDqLookupSourceWrap wrap(&node);
+        Cerr << wrap.Settings().Raw()->Dump() << Endl;
+        const auto settings = wrap.Settings().Cast<TCoAtomList>();
+        //(KqlReadTableRanges (KqpTable '"/Root/db" '"72057594046644480:38" '"" '1) (Void) ('"k" '"k2" '"v") '() '())
+        //
+        const auto& path = settings.Item(0).StringValue();
+
+        NKqpProto::TKikimrLookupSource source;
+        source.set_path(path);
+
+        // preserve source description for read actor
+        protoSettings.PackFrom(source);
+        sourceType = KikimrProviderName;
+    }
+};
+
 class TKikimrDataSource : public TDataProviderBase {
 public:
     TKikimrDataSource(
@@ -968,6 +990,10 @@ public:
         return TString(KikimrProviderName);
     }
 
+    NYql::IDqIntegration *GetDqIntegration() override {
+        return KikimrDqIntegration.Get();
+    }
+
 private:
     const NKikimr::NMiniKQL::IFunctionRegistry& FunctionRegistry;
     TTypeAnnotationContext& Types;
@@ -982,6 +1008,7 @@ private:
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
     const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
+    THolder<IDqIntegration> KikimrDqIntegration = MakeHolder<TKikimrDqIntegration>();
 };
 
 } // anonymous namespace

@@ -4,8 +4,8 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/topic_description.h>
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -343,8 +343,10 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
 
     return TResult();
 }
-    
-struct TAlterTopicStrategy : public ITopicAltererStrategy {
+
+namespace {
+
+struct TAlterTopicStrategy: public IAlterTopicStrategy {
     TAlterTopicStrategy(Ydb::Topic::AlterTopicRequest&& request)
         : Request(std::move(request))
     {
@@ -365,6 +367,8 @@ struct TAlterTopicStrategy : public ITopicAltererStrategy {
     Ydb::Topic::AlterTopicRequest Request;
 };
 
+} // namespace
+
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings) {
     return CreateTopicAlterer(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC, TTopicAltererSettings{
         .ParentId = parentId,
@@ -374,7 +378,6 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .Cookie = settings.Cookie,
-        .IsCdcStreamCompatible = true,
     });
 }
 

@@ -15,9 +15,13 @@ namespace NKikimr::NPQ::NSchema {
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
     EvAlterTopicResponse,
+    EvDropTopicResponse,
     EvEnd
 };
 
+//
+// Alter Topic
+//
 struct TAlterTopicResponse {
     Ydb::StatusIds::StatusCode Status;
     TString ErrorMessage;
@@ -36,7 +40,6 @@ struct TEvAlterTopicResponse : public NActors::TEventLocal<TEvAlterTopicResponse
     }
 };
 
-
 struct TAlterTopicSettings {
     TString Database;
     TString PeerName;
@@ -50,15 +53,43 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
 NActors::IActor* CreateAlterTopicActor(NThreading::TPromise<TAlterTopicResponse>&& promise, TAlterTopicSettings&& settings);
 
 
+//
+// Create Topic
+//
 struct TCreateTopicSettings {
     Ydb::Topic::CreateTopicRequest Request;
 };
 
 NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCreateTopicSettings&& settings);
 
+//
+// Drop Topic
+//
+struct TDropTopicResponse {
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorMessage;
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+};
+
+struct TEvDropTopicResponse : public NActors::TEventLocal<TEvDropTopicResponse, EEv::EvDropTopicResponse>
+                             , public TDropTopicResponse {
+    TEvDropTopicResponse(
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
+        TString&& errorMessage = {},
+        NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
+    )
+        : TDropTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
+    {
+    }
+};
 
 struct TDropTopicSettings {
+    TString Database;
+    TString PeerName;
     Ydb::Topic::DropTopicRequest Request;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool IfExists = false;
+    ui64 Cookie = 0;
 };
 
 NActors::IActor* CreateDropTopicActor(const NActors::TActorId& parentId, TDropTopicSettings&& settings);

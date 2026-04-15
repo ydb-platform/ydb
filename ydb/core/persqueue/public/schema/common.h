@@ -2,9 +2,7 @@
 
 #include "schema.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
 #include <expected>

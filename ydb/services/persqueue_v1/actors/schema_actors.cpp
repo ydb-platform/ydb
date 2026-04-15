@@ -14,45 +14,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
 
-TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-}
-TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-    : TBase(request)
-{
-}
-
-void TDropTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-    SendProposeRequest(ctx);
-    Become(&TDropTopicActor::StateWork);
-}
-
-TPQDropTopicActor::TPQDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-}
-
-void TPQDropTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-    SendProposeRequest(ctx);
-    Become(&TPQDropTopicActor::StateWork);
-}
-
-
-void TDropPropose::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-                                         const TString& workingDir, const TString& name)
-{
-    Y_UNUSED(ctx);
-    NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-    modifyScheme.SetWorkingDir(workingDir);
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
-    modifyScheme.MutableDrop()->SetName(name);
-}
-
 TPQDescribeTopicActor::TPQDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescribeTopicRequest* request)
     : TBase(request, request->GetProtoRequest()->path())
 {

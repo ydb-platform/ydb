@@ -117,6 +117,10 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
 {% endif %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 ## Enabling TTL for a newly created table {#enable-for-new-table}

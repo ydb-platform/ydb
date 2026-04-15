@@ -2231,11 +2231,7 @@ public:
             if (buildInfo.UnlockTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
-                TVector<TPath> additionalUnlockPaths;
-                if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
-                    additionalUnlockPaths.emplace_back(GetBuildPath(Self, buildInfo, NTableIndex::ImplTable));
-                }
-                Send(Self->SelfId(), UnlockPropose(Self, buildInfo, std::move(additionalUnlockPaths)), 0, ui64(BuildId));
+                Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
@@ -2276,11 +2272,7 @@ public:
             if (buildInfo.UnlockTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
-                TVector<TPath> additionalUnlockPaths;
-                if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
-                    additionalUnlockPaths.emplace_back(GetBuildPath(Self, buildInfo, NTableIndex::ImplTable));
-                }
-                Send(Self->SelfId(), UnlockPropose(Self, buildInfo, std::move(additionalUnlockPaths)), 0, ui64(BuildId));
+                Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
@@ -2326,11 +2318,7 @@ public:
             if (buildInfo.UnlockTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
-                TVector<TPath> additionalUnlockPaths;
-                if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
-                    additionalUnlockPaths.emplace_back(GetBuildPath(Self, buildInfo, NTableIndex::ImplTable));
-                }
-                Send(Self->SelfId(), UnlockPropose(Self, buildInfo, std::move(additionalUnlockPaths)), 0, ui64(BuildId));
+                Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {

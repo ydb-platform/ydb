@@ -316,7 +316,7 @@ void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopic
     topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
 }
 
-// TODO (flown4qqqq): rework this into a fast way.
+// TODO(flown4qqqq):: rework this into a fast way.
 ui32 TTableInfo::GetColumnIdByNameSlow(const TString& columnName) const {
     for (const auto& [id, col] : Columns) {
         if (!col.IsDropped() && col.Name == columnName) {

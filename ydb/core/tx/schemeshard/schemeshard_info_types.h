@@ -737,7 +737,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     }
 
     static constexpr ui32 InvalidColumnId = Max<ui32>();
-    // TODO (flown4qqqq): rework this into a fast way.
+    // TODO(flown4qqqq):: rework this into a fast way.
     ui32 GetColumnIdByNameSlow(const TString& columnName) const;
 
 private:

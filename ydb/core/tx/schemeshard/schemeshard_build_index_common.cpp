@@ -29,7 +29,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TVector<TPath> additionalPaths)
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
@@ -39,15 +39,21 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
         modifyScheme.SetInternal(true);
         modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+
         modifyScheme.SetWorkingDir(path.Parent().PathString());
-        modifyScheme.MutableLockConfig()->SetName(path.LeafName());
+
+        auto& lockConfig = *modifyScheme.MutableLockConfig();
+        lockConfig.SetName(path.LeafName());
     };
 
     addUnlock(TPath::Init(buildInfo.TablePathId, ss));
 
-    if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
+    if (buildInfo.IsValidatingUniqueIndex()
+        || buildInfo.IsFlatRelevanceFulltext())
+    {
+        // Unlock also indexImplTable
         TPath indexImplTablePath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
-        if (indexImplTablePath.IsResolved() && indexImplTablePath.IsLocked()) {
+        if (indexImplTablePath.IsResolved() && !indexImplTablePath.IsDeleted() && indexImplTablePath.IsLocked()) {
             addUnlock(std::move(indexImplTablePath));
         }
     }

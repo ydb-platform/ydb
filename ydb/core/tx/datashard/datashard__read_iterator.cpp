@@ -3779,7 +3779,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         auto readIt = SchedulableReads.find(record.GetPoolId());
         if (readIt == SchedulableReads.end()) {
             readIt = SchedulableReads.emplace(record.GetPoolId(), SchedulableReadFactory->Get(record.GetPoolId())).first;
-            YQL_ENSURE(readIt->second);
+            Y_ENSURE(readIt->second);
         }
     }
 

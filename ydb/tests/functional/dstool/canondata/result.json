@@ -12,7 +12,19 @@
             "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.1"
         }
     ],
+<<<<<<< HEAD
 >>>>>>> 8b9e2730796 (New command dstool group resize (#35643))
+=======
+    "test_canonical_requests.Test.test_cluster_balance": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.0"
+        }
+    ],
+>>>>>>> 3b7df014826 (Add test for dstool cluster balance (#38081))
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"

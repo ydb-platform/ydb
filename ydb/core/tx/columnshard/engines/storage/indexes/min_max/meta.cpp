@@ -120,15 +120,15 @@ NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const T
             break;
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Datetime64:
-            targetType = arrow::timestamp(arrow::TimeUnit::SECOND);
+            targetType = arrow::timestamp(arrow::TimeUnit::MICRO);
             break;
         default:
             break;
     }
 
     if (targetType) {
-        minmax.Min() = arrow::compute::Cast(*minmax.Min(), targetType).ValueOrDie().scalar();
-        minmax.Max() = arrow::compute::Cast(*minmax.Max(), targetType).ValueOrDie().scalar();
+        minmax.Min() = minmax.Min()->CastTo(targetType).ValueOrDie();
+        minmax.Max() = minmax.Max()->CastTo(targetType).ValueOrDie();
     }
 
     return minmax.ToJson();

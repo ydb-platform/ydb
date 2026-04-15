@@ -79,8 +79,7 @@ namespace NKikimr {
     TCostModel::TMessageCostEssence::TMessageCostEssence(const TEvBlobStorage::TEvVPut& ev)
         : HandleClass(ev.Record.GetHandleClass())
     {
-        PutBufferSizes.push_back(ev.Record.HasBuffer() ?
-                ev.Record.GetBuffer().size() : ev.GetPayload(0).GetSize());
+        PutBufferSizes.push_back(ev.GetBufferBytes());
     }
 
     TCostModel::TMessageCostEssence::TMessageCostEssence(const TEvBlobStorage::TEvVMultiPut& ev)
@@ -179,7 +178,7 @@ namespace NKikimr {
     ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPut &ev, bool *logPutInternalQueue) const {
         const auto &record = ev.Record;
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
-        const ui64 bufSize = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
+        const ui64 bufSize = ev.GetBufferBytes();
 
         NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, bufSize);
         if (handleType == NPriPut::Log) {

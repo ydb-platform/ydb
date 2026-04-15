@@ -1165,7 +1165,7 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     }
 
     if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetNbsConfig().GetEnabled()) {
-        auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
+        const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
         if (storageConfig.HasGlobalDDiskConfig()) {
             nodeWardenConfig->DDiskConfig = storageConfig.GetGlobalDDiskConfig();
         }

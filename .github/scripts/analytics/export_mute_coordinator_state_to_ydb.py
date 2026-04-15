@@ -276,6 +276,7 @@ def _fetch_user_fixed_candidates(
         SELECT issue_number, body
         FROM `{issues_path}`
         WHERE state = 'CLOSED'
+          AND closed_by_type = 'User'
           AND closed_at IS NOT NULL
           AND Cast(closed_at AS Date) >= CurrentUtcDate() - 2*Interval("P1D")
     """

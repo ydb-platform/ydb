@@ -1505,15 +1505,34 @@ void TLongTxServiceActor::RunDeadlockDetection() {
         }
     }
 
+    bool hasNew = false;
     for (auto edge : toBreak) {
         if (Broken.insert(edge->Id).second) {
-            TXLOG_DEBUG("Breaking new wait edge id: " << edge->Id
+            hasNew = true;
+            TXLOG_DEBUG("Breaking the wait edge id: " << edge->Id
                 << ", awaiter: " << edge->Awaiter.LockInfo(SelfId())
                 << ", blocker: " << edge->Blocker.LockInfo(SelfId()));
             Send(
                 edge->Id.OwnerId,
                 new TEvLongTxService::TEvWaitingLockDeadlock(edge->Id.RequestId));
         }
+    }
+
+    if (hasNew) {
+        TVector<std::tuple<ui64, ui32, ui64, ui32, ui32>> edges;
+        for (const auto& [id, edge] : WaitEdges) {
+            edges.emplace_back(
+                edge.Awaiter.LockId(), edge.Awaiter.LockNodeId(SelfId()),
+                edge.Blocker.LockId(), edge.Blocker.LockNodeId(SelfId()),
+                id.OwnerId.NodeId());
+        }
+        std::sort(edges.begin(), edges.end());
+
+        TStringBuilder sb;
+        for (const auto& [al, an, bl, bn, en] : edges) {
+            sb << "(" << al << "," << an << ") -> (" << bl << "," << bn << ") (en:" << en << ")\n";
+        }
+        TXLOG_DEBUG("FFF WG\n" << sb);
     }
 }
 

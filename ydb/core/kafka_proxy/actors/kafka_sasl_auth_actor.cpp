@@ -249,7 +249,7 @@ void TKafkaSaslAuthActor::SendResponse() {
     Send(Context->ConnectionId, evResponse.release());
 }
 
-void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::StatusIds_StatusCode status,
+void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::StatusIds::StatusCode status,
     const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx)
 {
     auto isFailed = errorCode != EKafkaErrors::NONE_ERROR;

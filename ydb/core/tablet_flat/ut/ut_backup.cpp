@@ -14,6 +14,7 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <cmath>
+#include <limits>
 
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 

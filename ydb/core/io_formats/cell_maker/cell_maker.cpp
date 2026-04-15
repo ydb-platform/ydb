@@ -20,6 +20,7 @@
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
 
+#include <limits>
 #include <typeinfo>
 
 namespace NKikimr::NFormats {

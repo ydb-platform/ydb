@@ -29,6 +29,8 @@
 #include <util/stream/file.h>
 #include <util/system/hp_timer.h>
 
+#include <limits>
+
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)

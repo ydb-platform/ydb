@@ -1096,6 +1096,7 @@ struct TEvBlobStorage {
         const bool IgnoreBlock = false;
         const bool AlreadyEncrypted = false; // when set to true, no encryption is required
         const bool ReduceInterpileTraffic = false;
+        const bool IsZeroEntry = false;
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
@@ -1110,6 +1111,7 @@ struct TEvBlobStorage {
             bool IgnoreBlock = false;
             bool AlreadyEncrypted = false;
             bool ReduceInterpileTraffic = false;
+            bool IsZeroEntry = false;
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
@@ -1123,6 +1125,7 @@ struct TEvBlobStorage {
             , IgnoreBlock(origin.IgnoreBlock)
             , AlreadyEncrypted(origin.AlreadyEncrypted)
             , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
+            , IsZeroEntry(origin.IsZeroEntry)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
             , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}
@@ -1137,6 +1140,7 @@ struct TEvBlobStorage {
             , IgnoreBlock(parameters.IgnoreBlock)
             , AlreadyEncrypted(parameters.AlreadyEncrypted)
             , ReduceInterpileTraffic(parameters.ReduceInterpileTraffic)
+            , IsZeroEntry(parameters.IsZeroEntry)
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());

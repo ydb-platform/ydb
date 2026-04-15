@@ -21,6 +21,12 @@ struct IReadyQueue
         Erase,
     };
 
+    enum class EPBufferCounter
+    {
+        Total,
+        Locked,
+    };
+
     virtual ~IReadyQueue() = default;
 
     // Registers an Lsn ready for cloning, flushing, or erasing.
@@ -30,6 +36,17 @@ struct IReadyQueue
 
     // Removes all registrations from Lsn.
     virtual void UnRegister(ui64 lsn) = 0;
+
+    // Notification about the change of byte counters in PBuffer
+    virtual void DataToPBufferAdded(
+        ELocation location,
+        EPBufferCounter counter,
+        size_t byteCount) = 0;
+    // Notification about the change of byte counters in PBuffer
+    virtual void DataFromPBufferReleased(
+        ELocation location,
+        EPBufferCounter counter,
+        size_t byteCount) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,16 +82,24 @@ public:
         PBufferErased,
     };
 
-    TInflightInfo(IReadyQueue* readyQueues, ui64 lsn, ELocation location);
     TInflightInfo(
         IReadyQueue* readyQueues,
         ui64 lsn,
+        size_t byteCount,
+        ELocation location);
+    TInflightInfo(
+        IReadyQueue* readyQueues,
+        ui64 lsn,
+        size_t byteCount,
         TLocationMask writeRequested,
         TLocationMask writeConfirmed);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
     ~TInflightInfo();
+
+    // Detach from ReadyQueue.
+    void Detach();
 
     void RestorePBuffer(ELocation location);
 
@@ -107,10 +132,20 @@ public:
     void UnlockPBuffer();
 
 private:
+    void ApplyBytes(
+        ELocation location,
+        IReadyQueue::EPBufferCounter counter,
+        bool add) const;
+    void ApplyBytes(
+        TLocationMask mask,
+        IReadyQueue::EPBufferCounter counter,
+        bool add) const;
+
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
     ui64 Lsn = 0;
+    size_t ByteCount = 0;
     TInstant StartAt;
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;

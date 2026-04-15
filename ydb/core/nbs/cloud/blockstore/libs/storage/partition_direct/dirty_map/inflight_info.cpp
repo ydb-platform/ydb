@@ -9,36 +9,43 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TInflightInfo::TInflightInfo(
     IReadyQueue* readyQueues,
     ui64 lsn,
+    size_t byteCount,
     ELocation location)
     : State(EState::PBufferIncompleteWrite)
     , ReadyQueue(readyQueues)
     , Lsn(lsn)
+    , ByteCount(byteCount)
 {
     WriteRequested.Set(location);
     WriteConfirmed.Set(location);
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Clone);
+    ApplyBytes(location, IReadyQueue::EPBufferCounter::Total, true);
 }
 
 TInflightInfo::TInflightInfo(
     IReadyQueue* readyQueue,
     ui64 lsn,
+    size_t byteCount,
     TLocationMask writeRequested,
     TLocationMask writeConfirmed)
     : State(EState::PBufferWritten)
     , ReadyQueue(readyQueue)
     , Lsn(lsn)
+    , ByteCount(byteCount)
     , WriteRequested(writeRequested)
     , WriteConfirmed(writeConfirmed)
 {
     Y_ABORT_UNLESS(WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
 
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
+    ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, true);
 }
 
 TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     : State(other.State)
     , ReadyQueue(other.ReadyQueue)
     , Lsn(other.Lsn)
+    , ByteCount(other.ByteCount)
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
     , FlushRequested(other.FlushRequested)
@@ -50,6 +57,13 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
 TInflightInfo::~TInflightInfo()
 {
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
+
+    ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
+}
+
+void TInflightInfo::Detach()
+{
+    ReadyQueue = nullptr;
 }
 
 void TInflightInfo::RestorePBuffer(ELocation location)
@@ -63,6 +77,8 @@ void TInflightInfo::RestorePBuffer(ELocation location)
 
     WriteRequested.Set(location);
     WriteConfirmed.Set(location);
+
+    ApplyBytes(location, IReadyQueue::EPBufferCounter::Total, true);
 
     if (WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount) {
         if (QuorumReadyPromise.Initialized()) {
@@ -224,6 +240,7 @@ void TInflightInfo::LockPBuffer()
 
     if (PBuffersLockCount == 1) {
         ReadyQueue->UnRegister(Lsn);
+        ApplyBytes(WriteConfirmed, IReadyQueue::EPBufferCounter::Locked, true);
     }
 }
 
@@ -236,8 +253,38 @@ void TInflightInfo::UnlockPBuffer()
 
     --PBuffersLockCount;
 
+    if (PBuffersLockCount == 0) {
+        ApplyBytes(WriteConfirmed, IReadyQueue::EPBufferCounter::Locked, false);
+    }
+
     if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
         ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+    }
+}
+
+void TInflightInfo::ApplyBytes(
+    ELocation location,
+    IReadyQueue::EPBufferCounter counter,
+    bool add) const
+{
+    if (!ReadyQueue) {
+        return;
+    }
+
+    if (add) {
+        ReadyQueue->DataToPBufferAdded(location, counter, ByteCount);
+    } else {
+        ReadyQueue->DataFromPBufferReleased(location, counter, ByteCount);
+    }
+}
+
+void TInflightInfo::ApplyBytes(
+    TLocationMask mask,
+    IReadyQueue::EPBufferCounter counter,
+    bool add) const
+{
+    for (auto location: mask) {
+        ApplyBytes(location, counter, add);
     }
 }
 

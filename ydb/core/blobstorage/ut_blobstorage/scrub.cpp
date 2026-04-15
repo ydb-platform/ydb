@@ -497,7 +497,8 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
                     auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
                     TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
                     if (PartCorruptionMask & (1 << partId.PartId())) {
-                        vput->Record.SetBuffer(MakeData(vput->GetBuffer().size(), 2));
+                        vput->StripPayload();
+                        vput->AddPayload(TRope(MakeData(vput->GetBuffer().size(), 2)));
                         nodesWithCorruptedPartsMask |= (1 << (ev->Recipient.NodeId() - 1));
                     }
                 }

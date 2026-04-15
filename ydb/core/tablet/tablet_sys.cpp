@@ -229,7 +229,8 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
 
     const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, 0, 0, 0, 0);
     TVector<TEvTablet::TLogEntryReference> refs;
-    Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency, Info.Get(), Relevance));
+    Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency,
+        Info.Get(), Relevance, /*isZeroEntry=*/ true));
 
     BLOG_D(" TTablet::WriteZeroEntry. logid# " << logid.ToString(), "TSYS01");
 
@@ -1319,7 +1320,8 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
 
     entry->StateStorageConfirmed = true; // todo: do real query against state-storage (optionally?)
     entry->Task = Register(
-        CreateTabletReqWriteLog(SelfId(), logid, x.release(), msg->References, msg->CommitTactic, Info.Get(), Relevance, std::move(ev->TraceId))
+        CreateTabletReqWriteLog(SelfId(), logid, x.release(), msg->References, msg->CommitTactic, Info.Get(), Relevance,
+            /*isZeroEntry=*/ false, std::move(ev->TraceId))
     );
 
     Graph.StepsInFlight += 1;
@@ -1690,9 +1692,8 @@ void TTablet::ProgressSendSyncCommit() {
         }
 
         TVector<TEvTablet::TLogEntryReference> refs;
-        Register(
-            CreateTabletReqWriteLog(SelfId(), entryId, entry.Release(), refs, TEvBlobStorage::TEvPut::ETactic::TacticMinLatency, Info.Get(), Relevance)
-        );
+        Register(CreateTabletReqWriteLog(SelfId(), entryId, entry.Release(), refs, TEvBlobStorage::TEvPut::ETactic::TacticMinLatency,
+            Info.Get(), Relevance, /*isZeroEntry=*/ false));
     }
 }
 
@@ -2226,7 +2227,8 @@ void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev) {
 
         const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, 0, 0, 0, 0);
         TVector<TEvTablet::TLogEntryReference> refs;
-        Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency, Info.Get(), Relevance));
+        Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency,
+            Info.Get(), Relevance, /*isZeroEntry=*/ false));
 
         ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
 
@@ -2381,7 +2383,8 @@ void TTablet::ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorI
     entry->SetZeroTailSz(0);
     TLogoBlobID logid(info->TabletID, gen, 0, 0, 0, 0);
     TVector<TEvTablet::TLogEntryReference> refs;
-    TActivationContext::Register(CreateTabletReqWriteLog(owner, logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticDefault, info, std::move(relevance)));
+    TActivationContext::Register(CreateTabletReqWriteLog(owner, logid, entry.Release(), refs,
+        TEvBlobStorage::TEvPut::TacticDefault, info, std::move(relevance), /*isZeroEntry=*/ true));
 }
 
 TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, TActorIdentity owner) {

@@ -56,7 +56,6 @@ namespace NKikimr {
         std::optional<NYdb::NBS::NProto::TDDiskConfig> DDiskConfig;
         std::optional<NYdb::NBS::NProto::TPBufferConfig> PBufferConfig;
 
-
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)
             , AllVDiskKinds(new TAllVDiskKinds)

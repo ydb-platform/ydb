@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ConfigPreprocessor = [&](ui32, TNodeWardenConfig& cfg){
+                .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
                     NYdb::NBS::NProto::TPBufferConfig pbCfg;
                     pbCfg.SetMaxInMemoryCache(inMemCache);
                     cfg.PBufferConfig = pbCfg;

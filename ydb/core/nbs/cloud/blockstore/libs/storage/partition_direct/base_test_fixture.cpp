@@ -49,7 +49,7 @@ void TBaseFixture::Init()
          ui8 hostIndex,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
-         NWilson::TTraceId traceId)
+         const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
 
@@ -70,7 +70,7 @@ void TBaseFixture::Init()
          ui8 hostIndex,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
-         NWilson::TTraceId traceId)
+         const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
 

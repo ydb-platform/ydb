@@ -142,6 +142,21 @@ void TDirectBlockGroup::Schedule(TDuration delay, TCallback callback)
         std::move(callback));
 }
 
+std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
+    const NWilson::TTraceId& traceId,
+    TStringBuf name)
+{
+    if (!traceId) {
+        return nullptr;
+    }
+    return std::make_shared<NWilson::TSpan>(
+        NKikimr::TWilsonNbs::NbsBasic,
+        traceId.Clone(),
+        TString(name),
+        NWilson::EFlags::AUTO_END,
+        ActorSystem);
+}
+
 void TDirectBlockGroup::EstablishConnections()
 {
     Executor->ExecuteSimple(
@@ -160,7 +175,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
     ui8 hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -173,12 +188,8 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                  MakeError(E_REJECTED, "Connections are not established")});
     }
 
-    auto childSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(traceId),
-        "NbsPartition.ReadBlocks.ReadDDisk",
-        NWilson::EFlags::NONE,
-        ActorSystem);
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.ReadBlocks.ReadDDisk");
 
     auto startAt = TMonotonic::Now();
     auto promise = NewPromise<TDBGReadBlocksResponse>();
@@ -191,10 +202,11 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
             range.Size() * DefaultBlockSize),
         NKikimr::NDDisk::TReadInstruction(true),
         guardedSglist,
-        childSpan);
+        childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         childSpan = std::move(childSpan),
          hostIndex,
          startAt,
          executor = Executor,
@@ -206,6 +218,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
             executor->ExecuteSimple(
                 [weakSelf,
                  promise = std::move(promise),
+                 childSpan = std::move(childSpan),
                  hostIndex,
                  startAt,
                  threadChecker,
@@ -243,7 +256,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -258,12 +271,8 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
                  MakeError(E_REJECTED, "Connections are not established")});
     }
 
-    auto childSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(traceId),
-        "NbsPartition.ReadBlocks.ReadPBuffer",
-        NWilson::EFlags::NONE,
-        ActorSystem);
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.ReadBlocksFromPBuffer");
 
     auto promise = NewPromise<TDBGReadBlocksResponse>();
     auto result = promise.GetFuture();
@@ -276,10 +285,11 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
         lsn,
         NKikimr::NDDisk::TReadInstruction(true),
         guardedSglist,
-        childSpan);
+        childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         childSpan = std::move(childSpan),
          hostIndex,
          startAt,
          executor = Executor,
@@ -291,6 +301,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
             executor->ExecuteSimple(
                 [weakSelf,
                  promise = std::move(promise),
+                 childSpan = std::move(childSpan),
                  hostIndex,
                  startAt,
                  threadChecker,
@@ -327,7 +338,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
     ui8 hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -342,12 +353,8 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                  MakeError(E_REJECTED, "Connections are not established")});
     }
 
-    auto childSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(traceId),
-        "NbsPartition.WriteBlocks.WriteDDisk",
-        NWilson::EFlags::NONE,
-        ActorSystem);
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.WriteBlocksToDDisk");
 
     auto promise = NewPromise<TDBGWriteBlocksResponse>();
     auto result = promise.GetFuture();
@@ -359,10 +366,11 @@ TDirectBlockGroup::WriteBlocksToDDisk(
             range.Size() * DefaultBlockSize),
         NKikimr::NDDisk::TWriteInstruction(0),
         guardedSglist,
-        childSpan);
+        childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         childSpan = std::move(childSpan),
          hostIndex,
          startAt,
          executor = Executor,
@@ -374,6 +382,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
             executor->ExecuteSimple(
                 [weakSelf,
                  promise = std::move(promise),
+                 childSpan = std::move(childSpan),
                  hostIndex,
                  startAt,
                  threadChecker,
@@ -411,7 +420,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -426,12 +435,8 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
                  MakeError(E_REJECTED, "Connections are not established")});
     }
 
-    auto childSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(traceId),
-        "NbsPartition.WriteBlocks.WritePBuffer",
-        NWilson::EFlags::NONE,
-        ActorSystem);
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.WriteBlocksToPBuffer");
 
     auto promise = NewPromise<TDBGWriteBlocksResponse>();
     auto result = promise.GetFuture();
@@ -444,10 +449,11 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
         lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         guardedSglist,
-        childSpan);
+        childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         childSpan = std::move(childSpan),
          hostIndex,
          startAt,
          executor = Executor,
@@ -459,6 +465,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
             executor->ExecuteSimple(
                 [weakSelf,
                  promise = std::move(promise),
+                 childSpan = std::move(childSpan),
                  hostIndex,
                  startAt,
                  threadChecker,
@@ -497,7 +504,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     TBlockRange64 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.size() > 0);
@@ -523,12 +530,8 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
                 "Connections are not established"));
     }
 
-    auto childSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(traceId),
-        "NbsPartition.WriteBlocks.WritePBuffers",
-        NWilson::EFlags::NONE,
-        ActorSystem);
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.WriteBlocksToManyPBuffers");
 
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
@@ -544,10 +547,11 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         std::move(disksIds),
         replyTimeout,
         guardedSglist,
-        childSpan);
+        childSpan.get());
 
     future.Subscribe(
         [promise = std::move(promise),
+         childSpan = std::move(childSpan),
          startAt,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
@@ -558,6 +562,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
             executor->ExecuteSimple(
                 [promise = std::move(promise),
+                 childSpan = std::move(childSpan),
                  startAt,
                  threadChecker,
                  f,
@@ -631,7 +636,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     ui8 pbufferHostIndex,
     ui8 ddiskHostIndex,
     const TVector<TPBufferSegment>& segments,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -650,19 +655,14 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         lsns.push_back(segment.Lsn);
     }
 
-    auto childSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(traceId),
-        "NbsPartition.Flush.SyncWithPBuffer",
-        NWilson::EFlags::NONE,
-        ActorSystem);
+    auto childSpan = CreateChildSpan(traceId, "NbsPartition.SyncWithPBuffer");
 
     auto future = StorageTransport->SyncWithPBuffer(
         PBufferConnections[pbufferHostIndex].HostConnection,
         DDiskConnections[ddiskHostIndex].HostConnection,
         std::move(selectors),
         std::move(lsns),
-        childSpan);
+        childSpan.get());
 
     auto promise = NewPromise<TDBGFlushResponse>();
     auto result = promise.GetFuture();
@@ -670,6 +670,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         childSpan = std::move(childSpan),
          pbufferHostIndex,
          ddiskHostIndex,
          startAt,
@@ -708,6 +709,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
             executor->ExecuteSimple(
                 [weakSelf,
                  promise = std::move(promise),
+                 childSpan = std::move(childSpan),
                  pbufferHostIndex,
                  ddiskHostIndex,
                  startAt,
@@ -736,7 +738,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
     ui32 vChunkIndex,
     ui8 hostIndex,
     const TVector<TPBufferSegment>& segments,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -755,18 +757,13 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         lsns.push_back(segment.Lsn);
     }
 
-    auto childSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(traceId),
-        "NbsPartition.Erase.ErasePBuffers",
-        NWilson::EFlags::NONE,
-        ActorSystem);
+    auto childSpan = CreateChildSpan(traceId, "NbsPartition.EraseFromPBuffer");
 
     auto future = StorageTransport->EraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
         std::move(selectors),
         std::move(lsns),
-        childSpan);
+        childSpan.get());
 
     auto promise = NewPromise<TDBGEraseResponse>();
     auto result = promise.GetFuture();
@@ -774,6 +771,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         childSpan = std::move(childSpan),
          hostIndex,
          startAt,
          executor = Executor,
@@ -786,6 +784,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
             executor->ExecuteSimple(
                 [weakSelf,
                  promise = std::move(promise),
+                 childSpan = std::move(childSpan),
                  hostIndex,
                  startAt,
                  threadChecker,

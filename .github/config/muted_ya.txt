@@ -37,8 +37,6 @@ ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithData
 ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/quoter/ut TQuoterServiceTest.KesusResourceSpeed
-ydb/core/tx/long_tx_service/ut LongTxService.SimpleSnapshotsManyNodes-HasTable
-ydb/core/tx/long_tx_service/ut unittest.sole chunk
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_extsubdomain_reboots unittest.[*/*] chunk

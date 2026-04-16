@@ -13,6 +13,7 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/core/persqueue/public
+    ydb/library/persqueue
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 )
 

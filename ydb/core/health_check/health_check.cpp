@@ -3126,7 +3126,11 @@ public:
                     && it->IssueLog.message() == similar.begin()->IssueLog.message()
                     && it->IssueLog.level() == similar.begin()->IssueLog.level();
                 if (isSimilar && similar.begin()->Tag == ETags::VDiskState) {
-                    isSimilar = it->IssueLog.location().storage().node(0).id() == similar.begin()->IssueLog.location().storage().node(0).id();
+                    const auto& itStorage = it->IssueLog.location().storage();
+                    const auto& similarStorage = similar.begin()->IssueLog.location().storage();
+                    isSimilar = itStorage.node_size() > 0
+                        && similarStorage.node_size() > 0
+                        && itStorage.node(0).id() == similarStorage.node(0).id();
                 }
                 if (isSimilar && similar.begin()->IssueLog.location().storage().pool().group().has_pile()) {
                     isSimilar = it->IssueLog.location().storage().pool().group().pile().name()

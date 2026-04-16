@@ -84,6 +84,7 @@ public:
 
     struct TFunctionProperties {
         bool IsTypeAwareness = false;
+        TMaybe<TString> PolyArgs;
     };
 
     using TFunctionsMap = std::map<TString, TFunctionProperties>;

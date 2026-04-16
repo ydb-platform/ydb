@@ -56,7 +56,11 @@ public:
     ) override {
         const auto& mapOperationParams = std::get<TMapOperationParams>(context.OperationParams);
 
-        YQL_CLOG(INFO, FastMapReduce) << "Starting Map operation";
+        if (mapOperationParams.IsOrdered) {
+            YQL_CLOG(INFO, FastMapReduce) << "Starting Ordered Map operation";
+        } else {
+            YQL_CLOG(INFO, FastMapReduce) << "Starting Map operation";
+        }
 
         TGenerateTasksResult result;
         std::vector<TGeneratedTaskInfo> generatedTasks;

@@ -23,9 +23,10 @@ namespace {
 constexpr TStringBuf PredicateCmdAttribute = "cmd";
 constexpr TStringBuf VerCmd = "ver";
 constexpr TStringBuf TypeCmd = "type";
+constexpr TStringBuf KindCmd = "kind";
 constexpr TStringBuf OrCmd = "or";
 
-constexpr TStringBuf TypeArgAttribute = "arg";
+constexpr TStringBuf ArgAttribute = "arg";
 constexpr TStringBuf ValueAttribute = "value";
 
 constexpr TStringBuf VerAction = "ver";
@@ -46,7 +47,7 @@ public:
     TMaybe<TUnresolvedInput> GetUnresolvedInput(ui32 index) const final {
         Y_ENSURE(index < Parsed_.size());
         const auto& action = Parsed_[index].second;
-        if (!action.LangVer && !action.Args) {
+        if (action.Type) {
             return Nothing();
         }
 
@@ -84,12 +85,17 @@ private:
         NYT::TNode Value;
     };
 
+    struct TKindPredicate {
+        TString Arg;
+        TString Value;
+    };
+
     struct TVerPredicate {
         TLangVersion LangVer = MinLangVersion;
     };
 
     struct TPredicate {
-        std::variant<TTypePredicate, TVerPredicate, TAndPredicate, TOrPredicate> Value;
+        std::variant<TTypePredicate, TKindPredicate, TVerPredicate, TAndPredicate, TOrPredicate> Value;
     };
 
     struct TAction {
@@ -129,6 +135,10 @@ private:
             return ParseTypePredicate(predicate);
         }
 
+        if (it->second.AsString() == KindCmd) {
+            return ParseKindPredicate(predicate);
+        }
+
         if (it->second.AsString() == VerCmd) {
             return ParseVerPredicate(predicate);
         }
@@ -165,13 +175,28 @@ private:
     static TPredicate ParseTypePredicate(const NYT::TNode& predicate) {
         TTypePredicate ret;
         const auto& map = predicate.AsMap();
-        auto itArg = map.find(TypeArgAttribute);
+        auto itArg = map.find(ArgAttribute);
         CHECK_CONFIG(itArg != map.end());
         CHECK_CONFIG(itArg->second.IsString());
         auto valueArg = map.find(ValueAttribute);
         CHECK_CONFIG(valueArg != map.end());
         ret.Arg = itArg->second.AsString();
         ret.Value = valueArg->second;
+        return TPredicate{
+            .Value = ret};
+    }
+
+    static TPredicate ParseKindPredicate(const NYT::TNode& predicate) {
+        TKindPredicate ret;
+        const auto& map = predicate.AsMap();
+        auto itArg = map.find(ArgAttribute);
+        CHECK_CONFIG(itArg != map.end());
+        CHECK_CONFIG(itArg->second.IsString());
+        auto valueArg = map.find(ValueAttribute);
+        CHECK_CONFIG(valueArg != map.end());
+        ret.Arg = itArg->second.AsString();
+        CHECK_CONFIG(valueArg->second.IsString());
+        ret.Value = valueArg->second.AsString() + "Type";
         return TPredicate{
             .Value = ret};
     }
@@ -234,6 +259,18 @@ private:
         return it->second == predicate.Value;
     }
 
+    static bool MatchKindPredicate(const TKindPredicate& predicate, const TArgs& args) {
+        auto it = args.find(predicate.Arg);
+        if (it == args.end()) {
+            return false;
+        }
+
+        CHECK_CONFIG(it->second.IsList());
+        CHECK_CONFIG(it->second.AsList()[0].IsString());
+        const auto& str = it->second.AsList()[0].AsString();
+        return str == predicate.Value;
+    }
+
     static bool MatchVerPredicate(const TVerPredicate& predicate, TLangVersion version) {
         return version >= predicate.LangVer;
     }
@@ -262,6 +299,7 @@ private:
         return std::visit(
             TOverloaded{
                 [&](const TTypePredicate& p) { return MatchTypePredicate(p, args); },
+                [&](const TKindPredicate& p) { return MatchKindPredicate(p, args); },
                 [&](const TVerPredicate& p) { return MatchVerPredicate(p, version); },
                 [&](const TAndPredicate& p) { return MatchAndPredicate(p, args, version); },
                 [&](const TOrPredicate& p) { return MatchOrPredicate(p, args, version); }},

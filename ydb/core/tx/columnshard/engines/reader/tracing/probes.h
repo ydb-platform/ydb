@@ -4,20 +4,36 @@
 
 namespace NKikimr::NOlap::NReader {
 
-#define YDB_CS_READER(PROBE, EVENT, GROUPS, TYPES, NAMES) \
+#define YDB_CS_SCAN(PROBE, EVENT, GROUPS, TYPES, NAMES) \
+    PROBE(StartScan, \
+        GROUPS("Orbit", "Scan"), \
+        TYPES(ui64, ui64, ui64, ui64), \
+        NAMES("pathId", "tabletId", "txId", "scanId")) \
+    PROBE(ScanFinished, \
+        GROUPS("Scan"), \
+        TYPES(ui64, ui64, ui64, ui64, TDuration, ui64, ui64, ui64, ui64), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "totalDurationMs", "totalRowsCount", "totalPartialSourcesCount", "totalBlobBytes", "totalRawBytes")) \
     PROBE(SendResult, \
-        GROUPS("Reader"), \
-        TYPES(ui64, ui64, ui64, ui64, ui64, TDuration, TDuration, TDuration, bool), \
-        NAMES("tabletId", "txId", "scanId", "rows", "bytes", "cpuTimeMs", "waitTimeMs", "elapsedMs", "finished")) \
+        GROUPS("Scan"), \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, TDuration, TDuration, TDuration, bool), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "rows", "bytes", "cpuTimeMs", "waitTimeMs", "elapsedMs", "finished")) \
     PROBE(AckReceived, \
-        GROUPS("Reader"), \
-        TYPES(ui64, ui64, ui64, TDuration), \
-        NAMES("tabletId", "txId", "scanId", "elapsedMs")) \
-    PROBE(TaskProcessed, \
-        GROUPS("Reader"), \
-        TYPES(ui64, ui64, ui64, TDuration), \
-        NAMES("tabletId", "txId", "scanId", "elapsedMs")) \
+        GROUPS("Scan"), \
+        TYPES(ui64, ui64, ui64, ui64, TDuration), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "elapsedMs")) \
+    PROBE(ScanStartSource, \
+        GROUPS("Scan"), \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, TString, TString, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "minPk", "maxPk", "minSnapshot", "maxSnapshot")) \
+    PROBE(ScanFinishSource, \
+        GROUPS("Scan"), \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui32, ui32, ui64), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "filteredRows", "totalRows", "totalReservedBytes")) \
+    PROBE(ColumnEngineForLogsSelect, \
+        GROUPS("Scan"), \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "timeOfInsertedSelectMs", "timeOfCommittedSelectMs", "totalPortionsCount", "totalFilteredPortionsCount", "totalResultSize")) \
 
-LWTRACE_DECLARE_PROVIDER(YDB_CS_READER)
+LWTRACE_DECLARE_PROVIDER(YDB_CS_SCAN)
 
 }

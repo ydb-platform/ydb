@@ -4,9 +4,12 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
+
+LWTRACE_USING(YDB_CS_SCAN);
 
 void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
@@ -31,6 +34,7 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
 void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
+    auto orbit = std::make_shared<NLWTrace::TOrbit>();
     auto scanComputeActor = Ev->Sender;
     TSnapshot snapshot = TSnapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
     if (snapshot.IsZero()) {
@@ -62,6 +66,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
         "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout)("cpu_limits", cpuLimits.DebugString());
 
+    ui64 rawPathId = 0;
     TReadMetadataPtr readMetadataRange;
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
@@ -69,7 +74,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
+        read.Orbit = orbit;
         read.TxId = txId;
+        read.ScanId = scanId;
         read.SetLock(
             request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
             request.HasLockNodeId() ? std::make_optional(request.GetLockNodeId()) : std::nullopt,
@@ -88,10 +95,13 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 read.TableMetadataAccessor = accConclusion.DetachResult();
             }
             if (auto pathId = read.TableMetadataAccessor->GetPathId()) {
+                auto internalPathId = pathId->GetInternalPathIdOptional().value_or(TInternalPathId::FromRawValue(0));
+                rawPathId = internalPathId.GetRawValue();
                 Self->Counters.GetColumnTablesCounters()
-                    ->GetPathIdCounter(pathId->GetInternalPathIdOptional().value_or(TInternalPathId::FromRawValue(0)))
+                    ->GetPathIdCounter(internalPathId)
                     ->OnReadEvent();
             }
+            LWTRACK(StartScan, *orbit, rawPathId, Self->TabletID(), request.GetTxId(), request.GetScanId());
         }
 
         const TString defaultReader = [&]() {
@@ -211,7 +221,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
     auto scanActorId =
         ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
             Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId,
-            scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits));
+            scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits,
+            std::move(orbit), rawPathId));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

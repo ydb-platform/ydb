@@ -1567,7 +1567,7 @@ private:
     IKqpTableWriterCallbacks* Callbacks;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::shared_ptr<const TPartitioning> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     ui64 ResolveAttempts = 0;
 
     IKqpTransactionManagerPtr TxManager;

@@ -73,7 +73,7 @@ TOpRead::TOpRead(TExprNode::TPtr node)
 
 TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
                  const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
-                 const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , Columns(columns)
@@ -83,6 +83,7 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , OlapFilterLambda(olapFilterLambda)
     , Limit(limit)
     , Ranges(ranges)
+    , OriginalPredicate(originalPredicate)
     , SortDir(sortDir) {
 }
 
@@ -140,6 +141,10 @@ TString TOpRead::ToString(TExprContext& ctx) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
         res << ")";
     }
+    if (OriginalPredicate.has_value()) {
+        res << " Original predicate: (" << PrintRBOExpression(OriginalPredicate->Node, ctx) << ")";
+    }
+
     return res;
 }
 

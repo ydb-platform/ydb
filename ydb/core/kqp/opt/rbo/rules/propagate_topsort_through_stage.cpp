@@ -187,8 +187,8 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
     } else if (CanPushSortToOlapRead(sort, sortInput, ctx, sortDirecion)) {
         auto read = CastOperator<TOpRead>(sortInput);
         const auto limitCond = sort->LimitCond->Node->ChildPtr(1);
-        return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond, read->GetRanges(),
-                                      static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
+        return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
+                                      read->GetRanges(), read->OriginalPredicate, static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
     }
 
     return input;

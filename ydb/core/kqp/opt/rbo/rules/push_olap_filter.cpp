@@ -13,8 +13,12 @@ bool IsSuitableToPushPredicateToColumnTables(const TIntrusivePtr<IOperator>& inp
 
     const auto filter = CastOperator<TOpFilter>(input);
     const auto maybeRead = filter->GetInput();
-    return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) &&
-            filter->GetTypeAnn());
+    if (maybeRead->Kind != EOperator::Source){
+        return false;
+    }
+
+    const auto read = CastOperator<TOpRead>(maybeRead);
+    return read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && !read->OlapFilterLambda;
 }
 }
 
@@ -36,6 +40,7 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     const auto filter = CastOperator<TOpFilter>(input);
     const auto read = CastOperator<TOpRead>(filter->GetInput());
     const auto lambda = TCoLambda(filter->FilterExpr.Node);
+    const auto originalLambda = ctx.ExprCtx.DeepCopyLambda(*lambda.Ptr());
     const auto& lambdaArg = lambda.Args().Arg(0).Ref();
     TExprBase predicate = lambda.Body();
 
@@ -94,9 +99,10 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     // clang-format on
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
 
+    std::optional<TExpression> originalPredicate = read->OriginalPredicate.has_value() ? read->OriginalPredicate : TExpression(originalLambda, &ctx.ExprCtx);
     // FIXME: We should add a filter anyway because of coalesce in physical plan.
     return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(),
-                                  read->Limit, read->GetRanges(), read->SortDir, read->Props, read->Pos);
+                                  read->Limit, read->GetRanges(), originalPredicate, read->SortDir, read->Props, read->Pos);
 }
 }
 }

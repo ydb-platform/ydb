@@ -91,6 +91,11 @@ ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 
 После выполнения запроса для колонки снова действует алгоритм сжатия по умолчанию (см. описание опции `COMPRESSION` выше).
 
+Включить словарное кодирование на колонке
+
+```yql
+ALTER TABLE movies ALTER COLUMN genre SET ENCODING(DICT);
+```
 
 ## DROP COLUMN
 

@@ -184,6 +184,10 @@ public:
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
 
+        if (ndv >= 0.8 * n) {
+            return TPtr{};
+        }
+
         const double eps = (RELATIVE_ERROR - 1) * (1 + std::log10(n / ndv)) / ndv;
         ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
         if (cmsWidth > MAX_WIDTH - 1) {

@@ -1062,6 +1062,9 @@ public:
     ui32 ActiveCount() const { return ActiveCount_; }
 
     EDqFillLevel GetFillLevel() const {
+        if (!InactiveQueue_.empty()) {
+            return NoLimit;
+        }
         bool anySoft = false;
         for (ui32 j = 0; j < ChannelCount_; ++j) {
             if (!IsActive_[j]) continue;
@@ -1122,7 +1125,8 @@ private:
 
 class TDqOutputScatterConsumer : public IDqOutputConsumer {
 public:
-    TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryChannelIdx = 0)
+    TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth,
+                             ui32 primaryChannelIdx = 0)
         : Outputs(std::move(outputs))
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
@@ -1150,6 +1154,10 @@ public:
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
+        if (Outputs.size() == 1) {
+            Outputs[0]->Push(std::move(value));
+            return;
+        }
         auto [idx, level] = Router_.PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         Outputs[idx]->Push(std::move(value));
@@ -1157,6 +1165,10 @@ public:
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
+        if (Outputs.size() == 1) {
+            Outputs[0]->WidePush(values, count);
+            return;
+        }
         auto [idx, level] = Router_.PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         std::copy(values, values + count, Tmp.begin());

@@ -2,8 +2,6 @@
 #include "topic_workload_keyed_writer_producer.h"
 #include "topic_workload_writer_worker_common.h"
 
-#include <ydb/core/persqueue/public/constants.h>
-
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 
@@ -151,9 +149,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     settings.DirectWriteToPartition(Params.Direct);
 
     if (Params.UseTransactions) {
-        settings.AppendSessionMeta(
-            std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX},
-            Params.TrackProducerIdInTx ? "true" : "false");
+        settings.SetTrackProducerIdInTx(Params.TrackProducerIdInTx);
     }
 
     producer->SetWriteSession(topicClient.CreateKeyedWriteSession(settings));

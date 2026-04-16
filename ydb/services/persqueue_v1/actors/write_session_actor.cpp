@@ -6,6 +6,7 @@
 #include <ydb/services/metadata/manager/common.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/library/persqueue/constants.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -119,7 +120,7 @@ inline void FillExtraFieldsForDataChunk(
             logType = item.second;
         } else if (item.first == "file") {
             file = item.second;
-        } else if (item.first == WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+        } else if (item.first == NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
             continue;
         } else {
             auto res = data.MutableExtraFields()->AddItems();
@@ -750,12 +751,12 @@ bool TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
 
     if constexpr (!UseMigrationProtocol) {
         for (const auto& item : InitRequest.write_session_meta()) {
-            if (item.first == WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+            if (item.first == NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
                 bool trackProducerId = opts.TrackProducerId;
                 if (!TryFromString<bool>(item.second, trackProducerId)) {
                     CloseSession(
                         Sprintf("invalid value for write_session_meta key '%s': expected boolean, got '%s'",
-                                TString{WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}.c_str(),
+                                TString{NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}.c_str(),
                                 item.second.c_str()),
                         PersQueue::ErrorCode::BAD_REQUEST,
                         ctx);

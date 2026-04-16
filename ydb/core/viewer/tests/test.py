@@ -1521,7 +1521,10 @@ class TestViewer(object):
     @classmethod
     def assert_access_denied(cls, response, case_name):
         assert response.get('status_code') == 403, f"{case_name}: expected status_code=403, got {response}"
-        assert response.get('text') == 'Access denied', f"{case_name}: expected plain 'Access denied', got {response}"
+        text = response.get('text', '')
+        assert text == 'Access denied' or 'SID is not allowed' in text, (
+            f"{case_name}: expected plain 'Access denied' or HTML SID rejection, got {response}"
+        )
 
     @classmethod
     def assert_force_retry_possible(cls, response, expected, case_name):

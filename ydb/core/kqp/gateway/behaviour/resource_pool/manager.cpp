@@ -40,6 +40,12 @@ struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
     if (objectId.find('/') != TString::npos) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Resource pool id should not contain '/' symbol");
     }
+
+    if (objectId.StartsWith('_')) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+            "Resource pool id should not start with '_', names starting with underscore are reserved for system use");
+    }
+
     return TYqlConclusionStatus::Success();
 }
 

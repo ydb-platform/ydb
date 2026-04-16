@@ -339,6 +339,20 @@ void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config,
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = permitWithoutCalls ? 1 : 0;
 }
 
+void TGRpcConnectionsImpl::SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm) {
+    switch (algorithm) {
+        case EGrpcCompressionAlgorithm::None:
+            config.CompressionAlgorithm = GRPC_COMPRESS_NONE;
+            break;
+        case EGrpcCompressionAlgorithm::Deflate:
+            config.CompressionAlgorithm = GRPC_COMPRESS_DEFLATE;
+            break;
+        case EGrpcCompressionAlgorithm::Gzip:
+            config.CompressionAlgorithm = GRPC_COMPRESS_GZIP;
+            break;
+    }
+}
+
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {
     Ydb::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});

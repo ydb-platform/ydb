@@ -142,9 +142,9 @@ public:
     TDriverConfig& SetGRpcLoadBalancingPolicy(const std::string& policy);
 
     //! Set grpc compression algorithm
-    //! algorithm - grpc_compression_algorithm enum value, see grpc documentation for available algorithms
-    //! default: GRPC_COMPRESS_NONE
-    TDriverConfig& SetGRpcCompressionAlgorithm(grpc_compression_algorithm algorithm);
+    //! algorithm - EGrpcCompressionAlgorithm enum value, see grpc documentation for available algorithms
+    //! default: EGrpcCompressionAlgorithm::None
+    TDriverConfig& SetGRpcCompressionAlgorithm(EGrpcCompressionAlgorithm algorithm);
 
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.

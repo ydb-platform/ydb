@@ -46,7 +46,7 @@ public:
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     std::string GetGRpcLoadBalancingPolicy() const override { return GRpcLoadBalancingPolicy; }
-    grpc_compression_algorithm GetGRpcCompressionAlgorithm() const override { return GRpcCompressionAlgorithm; }
+    EGrpcCompressionAlgorithm GetGRpcCompressionAlgorithm() const override { return GRpcCompressionAlgorithm; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     uint64_t GetMemoryQuota() const override { return MemoryQuota; }
     uint64_t GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
@@ -80,7 +80,7 @@ public:
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
     std::string GRpcLoadBalancingPolicy = "round_robin";
-    grpc_compression_algorithm GRpcCompressionAlgorithm = GRPC_COMPRESS_NONE;
+    EGrpcCompressionAlgorithm GRpcCompressionAlgorithm = EGrpcCompressionAlgorithm::None;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
     uint64_t MaxInboundMessageSize = 0;
@@ -219,7 +219,7 @@ TDriverConfig& TDriverConfig::SetGRpcLoadBalancingPolicy(const std::string& poli
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetGRpcCompressionAlgorithm(grpc_compression_algorithm algorithm) {
+TDriverConfig& TDriverConfig::SetGRpcCompressionAlgorithm(EGrpcCompressionAlgorithm algorithm) {
     Impl_->GRpcCompressionAlgorithm = algorithm;
     return *this;
 }

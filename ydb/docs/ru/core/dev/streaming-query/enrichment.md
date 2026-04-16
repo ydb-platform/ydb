@@ -30,7 +30,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 
 Где:
 
-- `<ydb_endpoint>` — эндпоинт {{ ydb-short-name }}, например `grpcs://<ydb_host>:2135`
+- `<ydb_endpoint>` — эндпоинт {{ ydb-short-name }}, например `grpcs://<ydb_host>:2135`.
 - `<db_name>` — путь к базе данных {{ ydb-short-name }}, например `/Root/database`.
 
 ## Потоковые запросы для обогащения данных

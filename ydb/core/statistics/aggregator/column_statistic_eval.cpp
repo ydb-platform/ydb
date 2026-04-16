@@ -164,8 +164,8 @@ class TCMSEval : public IStage2ColumnStatisticEval {
     std::optional<ui32> Seq;
     std::unique_ptr<TCountMinSketch> IntermediateState;
 
-    // current upper limit is 4_MB per columnar statistics
-    static constexpr ui64 MAX_WIDTH = 131072;
+    // current upper limit is 8_MB per columnar statistics
+    static constexpr ui64 MAX_WIDTH = 262144;
     static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
     static constexpr double RELATIVE_ERROR = 10;
@@ -186,7 +186,9 @@ public:
 
         const double eps = (RELATIVE_ERROR - 1) * (1 + std::log10(n / ndv)) / ndv;
         ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
-        if (cmsWidth >= MAX_WIDTH) {
+        if (cmsWidth > MAX_WIDTH - 1) {
+            // to accommodate for the other class variables' memory consumption,
+            //  negative 1 from width at each depth.
             cmsWidth = MAX_WIDTH - 1;
         }
         return std::make_unique<TCMSEval>(cmsWidth);
@@ -265,8 +267,8 @@ private:
         return NAggFuncs::TEWHAggFunc::CreateState(ColumnType.GetTypeId(), params);
     }
 
-    // current upper limit is 4_MB per columnar statistics
-    static constexpr ui32 MAX_BUCKETS = 524288;
+    // current upper limit is 8_MB per columnar statistics
+    static constexpr ui32 MAX_BUCKETS = 1048576;
     static constexpr ui32 MIN_BUCKETS = 1;
 
 public:
@@ -372,8 +374,9 @@ public:
             : std::numeric_limits<ui32>::max());
         if (numBuckets == 0) {
             numBuckets = MIN_BUCKETS;
-        } else if (numBuckets >= MAX_BUCKETS) {
-            numBuckets = MAX_BUCKETS - 1;
+        } else if (numBuckets > MAX_BUCKETS - 24) {
+            // to accommodate for the other class variables' memory consumption.
+            numBuckets = MAX_BUCKETS - 24;
         }
 
         auto domainRange = GetDomainRange(

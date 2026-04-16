@@ -63,6 +63,252 @@ NFSv4 использует расширенную модель прав вмес
 
 Поскольку файлы создаются процессом `ydbd` в ходе экспорта, права на них нельзя задать заранее. В NFSv4 для этого используется **наследование ACE** — флаги `f` (file-inherit) и `d` (directory-inherit) на ACE родительской директории. При создании нового файла или поддиректории ACE с этими флагами автоматически копируются на новый объект.
 
+{% cut "Пошаговая настройка NFS-сервера и клиентов" %}
+
+Ниже приведены инструкции по настройке NFS-сервера и клиентских узлов {{ ydb-short-name }} для двух вариантов управления правами: стандартные POSIX-права и расширенные NFSv4 ACL.
+
+#### Вариант 1: POSIX-права
+
+##### Настройка NFS-сервера
+
+1. Установите пакет NFS-сервера:
+
+    ```bash
+    sudo apt install nfs-kernel-server
+    ```
+
+2. Создайте директорию для экспорта и назначьте владельца:
+
+    ```bash
+    sudo mkdir -p /mnt/ydb-backup
+    sudo chown ydb:ydb /mnt/ydb-backup
+    sudo chmod 755 /mnt/ydb-backup
+    ```
+
+    Опции команды `chmod`:
+    - `7` (rwx) — владелец (`ydb`) может читать, писать и переходить в директорию.
+    - `5` (r-x) — группа и остальные могут читать и переходить, но не писать.
+
+3. Добавьте директорию в `/etc/exports`:
+
+    ```text
+    /mnt/ydb-backup ydb-node-*.example.com(rw,sync,root_squash)
+    ```
+
+    Опции экспорта:
+    - `rw` — разрешить чтение и запись.
+    - `sync` — синхронная запись (данные записываются на диск до подтверждения клиенту).
+    - `root_squash` — преобразовать `root` на клиенте в анонимного пользователя (безопасность).
+
+4. Примените изменения и запустите NFS-сервер:
+
+    ```bash
+    sudo exportfs -arv
+    sudo systemctl enable --now nfs-server
+    ```
+
+    Опции `exportfs`:
+    - `-a` — экспортировать все директории из `/etc/exports`.
+    - `-r` — переэкспортировать все директории (синхронизация с `/etc/exports`).
+    - `-v` — подробный вывод.
+
+##### Настройка клиентов (узлов {{ ydb-short-name }})
+
+1. Установите пакет NFS-клиента:
+
+    ```bash
+    sudo apt install nfs-common
+    ```
+
+2. Создайте точку монтирования:
+
+    ```bash
+    sudo mkdir -p /mnt/ydb-backup
+    ```
+
+3. Смонтируйте NFS-директорию:
+
+    ```bash
+    sudo mount -t nfs -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
+    ```
+
+    Опции монтирования:
+    - `-t nfs` — тип файловой системы NFS.
+    - `-o rw` — монтировать с правом чтения и записи.
+
+    В данном примере хост сервер не принадлежит кластеру {{ ydb-short-name }}, при этом резервное копирование и восстановление будут корректно работать в случае, если один из хостов кластера назначен NFS-сервером.
+
+4. Для автоматического монтирования при загрузке добавьте строку в `/etc/fstab`:
+
+    ```text
+    nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup nfs rw,hard,timeo=600,retrans=2,_netdev 0 0
+    ```
+
+    Опции `fstab`:
+    - `rw` — чтение и запись.
+    - `hard` — при недоступности сервера повторять запросы бесконечно (не терять данные).
+    - `timeo=600` — таймаут запроса в десятых долях секунды (60 секунд).
+    - `retrans=2` — количество повторных попыток перед сообщением об ошибке.
+    - `_netdev` — монтировать только после инициализации сети.
+
+##### Проверка работоспособности
+
+На сервере (или любом клиенте) создайте тестовый файл от имени пользователя `ydb`:
+
+```bash
+sudo -u ydb touch /mnt/ydb-backup/test-file
+```
+
+На всех клиентских узлах проверьте, что файл виден:
+
+```bash
+sudo -u ydb ls /mnt/ydb-backup/test-file
+```
+
+После проверки удалите тестовый файл:
+
+```bash
+sudo -u ydb rm /mnt/ydb-backup/test-file
+```
+
+#### Вариант 2: NFSv4 ACL
+
+NFSv4 ACL позволяют задать более гранулярные права доступа, а также настроить наследование прав для вновь создаваемых файлов и директорий.
+
+##### Настройка NFS-сервера
+
+1. Установите пакет NFS-сервера и утилиты для работы с NFSv4 ACL:
+
+    ```bash
+    sudo apt install nfs-kernel-server nfs4-acl-tools
+    ```
+
+2. Создайте директорию для экспорта:
+
+    ```bash
+    sudo mkdir -p /mnt/ydb-backup
+    ```
+
+3. Добавьте директорию в `/etc/exports`:
+
+    ```text
+    /mnt/ydb-backup ydb-node-*.example.com(rw,sync,no_subtree_check,root_squash)
+    ```
+
+4. Примените изменения:
+
+    ```bash
+    sudo exportfs -arv
+    sudo systemctl enable --now nfs-server
+    ```
+
+5. Определите UID пользователя `ydb`:
+
+    ```bash
+    id -u ydb
+    ```
+
+    Пример вывода: `1971`
+
+6. Настройте NFSv4 ACL на директории:
+
+    ```bash
+    sudo nfs4_setfacl -s "A::1971:rwatTnNcCoy,A:fdi:1971:rwatTnNcCoy,A:fd:OWNER@:rwatTnNcCoy" /mnt/ydb-backup
+    ```
+
+    Структура ACE (`A:flags:who:permissions`):
+    - `A` — тип ACE: Allow (разрешить).
+    - Флаги наследования:
+        - `f` (file-inherit) — наследовать на создаваемые файлы.
+        - `d` (directory-inherit) — наследовать на создаваемые поддиректории.
+        - `i` (inherit-only) — применять только к потомкам, не к самой директории.
+    - `who` — кому предоставляются права:
+        - `1971` — UID пользователя `ydb`.
+        - `OWNER@` — владелец объекта.
+    - Разрешения:
+        - `r` — read-data / list-directory.
+        - `w` — write-data / create-file.
+        - `a` — append-data / create-subdirectory.
+        - `t` — read-attributes.
+        - `T` — write-attributes.
+        - `n` — read-named-attributes.
+        - `N` — write-named-attributes.
+        - `c` — read-ACL.
+        - `C` — write-ACL.
+        - `o` — write-owner.
+        - `y` — synchronize.
+
+    Данная команда устанавливает:
+    - Права для пользователя `ydb` на саму директорию.
+    - Наследуемые права для файлов и поддиректорий (`fdi`), которые будут применяться только к потомкам.
+    - Права владельца (`OWNER@`) с наследованием на файлы и директории.
+
+##### Настройка клиентов (узлов {{ ydb-short-name }})
+
+1. Установите утилиты для работы с NFSv4 ACL:
+
+    ```bash
+    sudo apt install nfs4-acl-tools
+    ```
+
+2. Создайте точку монтирования:
+
+    ```bash
+    sudo mkdir -p /mnt/ydb-backup
+    ```
+
+3. Смонтируйте NFS-директорию по протоколу NFSv4:
+
+    ```bash
+    sudo mount -t nfs4 -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
+    ```
+
+    Опции:
+    - `-t nfs4` — явно указать протокол NFSv4 (необходимо для корректной работы ACL).
+    - `-o rw` — монтировать с правом чтения и записи.
+
+4. Для автоматического монтирования добавьте строку в `/etc/fstab`:
+
+    ```text
+    nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
+    ```
+
+    Обратите внимание на тип файловой системы `nfs4` вместо `nfs`.
+
+##### Проверка работоспособности
+
+Проверьте установленные ACL:
+
+```bash
+nfs4_getfacl /mnt/ydb-backup
+```
+
+Создайте тестовый файл от имени пользователя `ydb`:
+
+```bash
+sudo -u ydb touch /mnt/ydb-backup/test-file
+```
+
+Проверьте, что файл унаследовал ACL:
+
+```bash
+nfs4_getfacl /mnt/ydb-backup/test-file
+```
+
+На всех клиентских узлах проверьте доступ:
+
+```bash
+sudo -u ydb ls /mnt/ydb-backup/test-file
+```
+
+После проверки удалите тестовый файл:
+
+```bash
+sudo -u ydb rm /mnt/ydb-backup/test-file
+```
+
+{% endcut %}
+
 ### Feature flags {#nfs-feature-flags}
 
 Для использования экспорта и импорта через NFS необходимо включить feature flag `enable_fs_backups` в [конфигурации](../../reference/configuration/feature_flags.md) кластера. По умолчанию этот флаг **выключен**.

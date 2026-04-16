@@ -396,6 +396,15 @@ std::string GetCurrentProcessName()
 #endif
 }
 
+std::string GetCurrentProcessCommandLine()
+{
+#ifdef __linux__
+    return std::string(Trim(TUnbufferedFileInput("/proc/self/cmdline").ReadAll(), "\n"));
+#else
+    return "(unknown)";
+#endif
+}
+
 void ChownChmodDirectory(const std::string& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_

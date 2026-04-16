@@ -144,10 +144,16 @@ NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const T
             json.InsertValue("max", maxSecs >= 0 ? TInstant::Seconds(maxSecs).ToString() : TString(minmax.Max()->ToString()));
             break;
         }
-        case NScheme::NTypeIds::Timestamp:
-        case NScheme::NTypeIds::Timestamp64: {
+        case NScheme::NTypeIds::Timestamp: {
             const i64 minMicros = static_cast<const arrow::TimestampScalar*>(minmax.Min().get())->value;
             const i64 maxMicros = static_cast<const arrow::TimestampScalar*>(minmax.Max().get())->value;
+            json.InsertValue("min", minMicros >= 0 ? TInstant::MicroSeconds(minMicros).ToString() : TString(minmax.Min()->ToString()));
+            json.InsertValue("max", maxMicros >= 0 ? TInstant::MicroSeconds(maxMicros).ToString() : TString(minmax.Max()->ToString()));
+            break;
+        }
+        case NScheme::NTypeIds::Timestamp64: {
+            const i64 minMicros = static_cast<const arrow::Int64Scalar*>(minmax.Min().get())->value;
+            const i64 maxMicros = static_cast<const arrow::Int64Scalar*>(minmax.Max().get())->value;
             json.InsertValue("min", minMicros >= 0 ? TInstant::MicroSeconds(minMicros).ToString() : TString(minmax.Min()->ToString()));
             json.InsertValue("max", maxMicros >= 0 ? TInstant::MicroSeconds(maxMicros).ToString() : TString(minmax.Max()->ToString()));
             break;

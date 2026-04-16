@@ -133,81 +133,101 @@ jobs:
                 }
               }
             }
+      - name: Checkout workflow repo
+        if: steps.check-ownership-membership.outputs.result == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/scripts/prepare_merge_ref.py
+          sparse-checkout-cone-mode: false
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+
       - name: check is mergeable
         id: check-is-mergeable
         if: steps.check-ownership-membership.outputs.result == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          set +e
+          python3 .github/scripts/prepare_merge_ref.py "${{ github.event.pull_request.number }}" --verbose --json-out merge_info.json
+          script_exit=$?
+          set -e
+
+          if [[ $script_exit -eq 1 ]]; then
+            echo "prepare_merge_ref.py failed to collect merge info"
+            exit 1
+          fi
+
+          if [[ ! -f merge_info.json ]]; then
+            echo "merge_info.json was not created"
+            exit 1
+          fi
+
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          info = json.loads(Path("merge_info.json").read_text(encoding="utf-8"))
+          mergeable = bool(info.get("mergeable"))
+          commit_sha = info.get("merge_commit_sha") or ""
+
+          print(f"result={'true' if mergeable else 'false'}")
+          print(f"commit_sha={commit_sha}")
+          PY
+
+      - name: update mergeability comment
+        if: steps.check-ownership-membership.outputs.result == 'true'
         uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
-          result-encoding: string
           script: |
-            let pr = context.payload.pull_request;
-            const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-            const header = `<!-- merge pr=${pr.number} -->\n`;
-            
-            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
-                + 'Please rebase or merge it with the base branch.'
-            
-            let i = 0;
-            
-            while (pr.mergeable == null && i < 60) {
-                console.log("get pull-request status");
-    
-                let result = await github.rest.pulls.get({
-                    ...context.repo,
-                    pull_number: pr.number
-                })
-            
-                pr = result.data;
-              
-                if (pr.mergeable == null) {
-                  await delay(5000);
-                }
-            
-                i += 1;
-            }
-            
-            console.log("pr.mergeable=%o", pr.mergeable);
-            
-            if (pr.mergeable === null) {
-                core.setFailed("Unable to check if the PR is mergeable, please re-run the check.");
-                return false;
-            }
-            
+            const header = `<!-- merge pr=${context.payload.pull_request.number} -->\n`;
+            const failMsg = header + ':red_circle: Unable to merge your PR into the base branch. '
+                + 'Please rebase or merge it with the base branch.\n'
+                + `[View failed merge attempt](${process.env.RUN_URL})`;
+            const isMergeable = '${{ steps.check-is-mergeable.outputs.result }}' === 'true';
+
             const { data: comments } = await github.rest.issues.listComments({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
             });
-            
+
             const commentToUpdate = comments.find(comment => comment.body.startsWith(header));
-            
-            if (!pr.mergeable) {
-                let commentParams = {
-                    ...context.repo,
-                    issue_number: context.issue.number,
-                    body: fail_msg
-                };
-            
-                if (commentToUpdate) {
-                    await github.rest.issues.updateComment({
-                        ...commentParams,
-                        comment_id: commentToUpdate.id,
-                    });
-                } else {
-                    await github.rest.issues.createComment({...commentParams});
-                }
-                core.setFailed("Merge conflict detected");
-                return false;
-            } else if (commentToUpdate) {
-                await github.rest.issues.deleteComment({
-                    ...context.repo,
-                    issue_number: context.issue.number,
-                    comment_id: commentToUpdate.id,
+
+            if (!isMergeable) {
+              const commentParams = {
+                ...context.repo,
+                issue_number: context.issue.number,
+                body: failMsg,
+              };
+
+              if (commentToUpdate) {
+                await github.rest.issues.updateComment({
+                  ...commentParams,
+                  comment_id: commentToUpdate.id,
                 });
+              } else {
+                await github.rest.issues.createComment(commentParams);
+              }
+            } else if (commentToUpdate) {
+              await github.rest.issues.deleteComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                comment_id: commentToUpdate.id,
+              });
             }
-            core.info(`commit_sha=${pr.commit_sha}`);
-            core.setOutput('commit_sha', pr.merge_commit_sha);
-            return true;
+
+      - name: fail when merge is not possible
+        if: steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result != 'true'
+        run: |
+          echo "Merge conflict detected"
+          exit 1
   build_and_test:
     needs:
       - check-running-allowed

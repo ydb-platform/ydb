@@ -384,15 +384,28 @@ namespace NKikimr::NBsController {
 
                         int numPersistentBuffers = cmd.GetNumPersistentBuffers();
                         while (persistentBufferDDiskId->size() < numPersistentBuffers) { // create missing persistent buffers
-                            std::vector<TNodeId> preferredNodeIds;
+                            std::optional<TDDiskId> ddId;
                             if (persistentBufferDDiskId->size() < ddiskRecord->size()) {
                                 const auto& rec = ddiskRecord->Get(persistentBufferDDiskId->size());
                                 if (rec.HasDDiskId()) {
-                                    preferredNodeIds.push_back(rec.GetDDiskId().GetNodeId());
+                                    ddId = rec.GetDDiskId();
                                 }
                             }
-                            if (!getPersistentBufferPool().AllocatePersistentBuffer(persistentBufferIds, preferredNodeIds)) {
-                                throw TExError() << "failed to allocate persistent buffer";
+                            bool found = false;
+                            if (ddId) {
+                                for (auto pbId : persistentBufferIds) {
+                                    if (ddId == pbId) {
+                                        found = true;
+                                    }
+                                }
+                                if (!found) {
+                                    persistentBufferIds.push_back(*ddId);
+                                }
+                            }
+                            if (!ddId || found) {
+                                if (!getPersistentBufferPool().AllocatePersistentBuffer(persistentBufferIds, {})) {
+                                    throw TExError() << "failed to allocate persistent buffer";
+                                }
                             }
                             persistentBufferIds.back().Serialize(persistentBufferDDiskId->Add());
                             auto& [chunks, refs] = vslotUpdates[persistentBufferIds.back().GetKey()];

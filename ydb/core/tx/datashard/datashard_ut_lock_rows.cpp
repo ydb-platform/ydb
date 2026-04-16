@@ -68,6 +68,11 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             Reopen();
         }
 
+        TTestPipe(const TTestPipe&) = delete;
+        TTestPipe& operator=(const TTestPipe&) = delete;
+        TTestPipe(TTestPipe&&) = delete;
+        TTestPipe& operator=(TTestPipe&&) = delete;
+
         ~TTestPipe() {
             Close();
         }

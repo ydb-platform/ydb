@@ -2,7 +2,6 @@
 
 #include "persqueue_utils.h"
 
-#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>

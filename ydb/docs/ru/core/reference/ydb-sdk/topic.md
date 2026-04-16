@@ -458,6 +458,10 @@
                   .build());
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -545,6 +549,10 @@
           .join();
   TopicDescription description = topicDescriptionResult.getValue();
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -1103,7 +1111,7 @@
         });
   ```
 
-- С#
+- C#
 
   Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
 
@@ -1211,6 +1219,10 @@
           .build();
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -1270,6 +1282,10 @@
   В **ydb-go-sdk** при создании писателя, если не передавать `topicoptions.WithWriterProducerID`, SDK всё равно подставляет идентификатор производителя (генерирует его автоматически). Режим записи без дедупликации, эквивалентный отсутствию `ProducerId` в примере для C++ выше, в текущей версии SDK недоступен.
 
 - Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -1655,6 +1671,10 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1832,7 +1852,7 @@
 
   {% endlist %}
 
-- С#
+- C#
 
   ```c#
   await using var reader = new ReaderBuilder<string>(connectionString)
@@ -2491,7 +2511,7 @@
 
   {% endlist %}
 
-- С#
+- C#
 
   ```c#
   try
@@ -2660,6 +2680,10 @@
   });
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2743,6 +2767,10 @@
       event_handler=CustomEventHandler(),
   )
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -2951,6 +2979,10 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3065,6 +3097,10 @@
 
   {% endlist %}
 
+- C#
+
+  Специальной обработки не требуется.
+
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3175,6 +3211,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -3413,6 +3453,10 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3520,6 +3564,10 @@
           .build()
   ).join().expectSuccess("Error commit!");
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 

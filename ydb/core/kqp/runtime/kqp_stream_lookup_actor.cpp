@@ -903,7 +903,7 @@ private:
     TReads Reads;
     bool SentResultsAvailable = false;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
-    std::shared_ptr<const TPartitioning> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TVector<NKikimrDataEvents::TLock> Locks;

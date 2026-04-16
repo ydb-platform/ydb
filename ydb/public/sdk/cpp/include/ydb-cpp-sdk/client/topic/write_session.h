@@ -182,7 +182,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
 
-    void SetTrackProducerIdInTx(bool value);
+    TWriteSessionSettings& SetTrackProducerIdInTx(bool value);
 };
 
 template<class T>

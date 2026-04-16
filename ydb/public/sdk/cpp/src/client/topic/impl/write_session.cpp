@@ -17,11 +17,11 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-void TWriteSessionSettings::SetTrackProducerIdInTx(bool value)
+TWriteSessionSettings& TWriteSessionSettings::SetTrackProducerIdInTx(bool value)
 {
     const auto& key = NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;
-    AppendSessionMeta({key.data(), key.size()},
-                      value ? "true" : "false");
+    return AppendSessionMeta({key.data(), key.size()},
+                             value ? "true" : "false");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

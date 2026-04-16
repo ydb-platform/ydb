@@ -333,17 +333,17 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
     settingsProto.set_base_path(TStringType{settings.BasePath_});
 
     for (const auto& item : settings.Item_) {
-        if (!item.Src.empty() && !item.SrcPath.empty()) {
+        if (!item.Src.empty() && !item.SrcPathDb.empty()) {
             throw TContractViolation(
-                TStringBuilder() << "Invalid item: both source path and source path db are set: \"" << item.Src << "\" and \"" << item.SrcPath << "\"");
+                TStringBuilder() << "Invalid item: both Src and SrcPathDb are set: \"" << item.Src << "\" and \"" << item.SrcPathDb << "\"");
         }
 
         auto& protoItem = *settingsProto.mutable_items()->Add();
         if (!item.Src.empty()) {
             protoItem.set_source_path(item.Src);
         }
-        if (!item.SrcPath.empty()) {
-            protoItem.set_source_path_db(item.SrcPath);
+        if (!item.SrcPathDb.empty()) {
+            protoItem.set_source_path_db(item.SrcPathDb);
         }
         protoItem.set_destination_path(item.Dst);
     }
@@ -366,6 +366,10 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
 
     if (settings.DestinationPath_) {
         settingsProto.set_destination_path(TStringType{settings.DestinationPath_.value()});
+    }
+
+    if (settings.SymmetricKey_) {
+        settingsProto.mutable_encryption_settings()->mutable_symmetric_key()->set_key(*settings.SymmetricKey_);
     }
 
     settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));

@@ -292,7 +292,7 @@ void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Se
 
 void TCommandImportFromS3::FillItemsFromIncludeParam(NYdb::NImport::TImportFromS3Settings& settings) const {
     for (const TString& path : IncludePaths) {
-        settings.AppendItem({.Src = {}, .Dst = {}, .SrcPath = path});
+        settings.AppendItem({{} /*Src*/, {} /*Dst*/, path /*SrcPath / SrcPathDb*/});
     }
 }
 

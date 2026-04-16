@@ -274,6 +274,7 @@ void TPortionAccessorFetchedStep::ReportTracing(const std::shared_ptr<NCommon::I
     LWTRACK(PortionAccessorFetched, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
             step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
 
 TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {

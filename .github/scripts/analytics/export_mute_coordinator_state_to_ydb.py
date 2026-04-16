@@ -34,6 +34,16 @@ def _load_thresholds() -> Dict[str, int]:
     return {k: int(v) for k, v in payload.items()}
 
 
+def _parse_date(value: str) -> datetime.date:
+    return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _date_expr(as_of_date: Optional[datetime.date]) -> str:
+    if as_of_date is None:
+        return "CurrentUtcDate()"
+    return f"Date('{as_of_date.isoformat()}')"
+
+
 def _create_control_state_table(ydb_wrapper: YDBWrapper, table_path: str) -> None:
     create_sql = f"""
         CREATE TABLE IF NOT EXISTS `{table_path}` (
@@ -123,21 +133,29 @@ def _create_tables(ydb_wrapper: YDBWrapper) -> Dict[str, str]:
     return paths
 
 
-def _fetch_current_muted_tests(ydb_wrapper: YDBWrapper, branch: str, build_type: str) -> List[str]:
+def _fetch_current_muted_tests(
+    ydb_wrapper: YDBWrapper,
+    branch: str,
+    build_type: str,
+    as_of_date: Optional[datetime.date] = None,
+) -> List[str]:
     tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    anchor_date = _date_expr(as_of_date)
     query = f"""
-        $latest_date = (
-            SELECT MAX(date_window) AS d
+        $latest = (
+            SELECT MAX(date_window) AS latest_date
             FROM `{tests_monitor_path}`
-            WHERE branch = '{branch}' AND build_type = '{build_type}'
+            WHERE branch = '{branch}'
+              AND build_type = '{build_type}'
+              AND date_window <= {anchor_date}
         );
 
-        SELECT DISTINCT full_name
-        FROM `{tests_monitor_path}`
-        WHERE branch = '{branch}'
-          AND build_type = '{build_type}'
-          AND date_window = (SELECT d FROM $latest_date)
-          AND is_muted = 1
+        SELECT DISTINCT tm.full_name AS full_name
+        FROM `{tests_monitor_path}` AS tm
+        INNER JOIN $latest AS l ON tm.date_window = l.latest_date
+        WHERE tm.branch = '{branch}'
+          AND tm.build_type = '{build_type}'
+          AND tm.is_muted = 1
     """
     rows = ydb_wrapper.execute_scan_query(query, query_name=f"mute_coordinator_current_muted_{branch}_{build_type}")
     return sorted(str(r["full_name"]) for r in rows if r.get("full_name"))
@@ -277,22 +295,48 @@ def _fetch_user_fixed_candidates(
     branch: str,
     build_type: str,
     muted_tests: List[str],
+    as_of_date: Optional[datetime.date] = None,
 ) -> Dict[str, int]:
     if not muted_tests:
         return {}
     issues_path = ydb_wrapper.get_table_path("issues")
-    query = f"""
+    anchor_date = _date_expr(as_of_date)
+    query_with_actor = f"""
         SELECT issue_number, body
         FROM `{issues_path}`
         WHERE state = 'CLOSED'
           AND closed_by_type = 'User'
           AND closed_at IS NOT NULL
-          AND Cast(closed_at AS Date) >= CurrentUtcDate() - 2*Interval("P1D")
+          AND Cast(closed_at AS Date) >= {anchor_date} - 2*Interval("P1D")
+          AND Cast(closed_at AS Date) <= {anchor_date}
     """
-    rows = ydb_wrapper.execute_scan_query(
-        query,
-        query_name=f"mute_coordinator_user_fixed_candidates_{branch}_{build_type}",
-    )
+    query_legacy = f"""
+        SELECT issue_number, body
+        FROM `{issues_path}`
+        WHERE state = 'CLOSED'
+          AND closed_at IS NOT NULL
+          AND Cast(closed_at AS Date) >= {anchor_date} - 2*Interval("P1D")
+          AND Cast(closed_at AS Date) <= {anchor_date}
+    """
+    try:
+        rows = ydb_wrapper.execute_scan_query(
+            query_with_actor,
+            query_name=f"mute_coordinator_user_fixed_candidates_{branch}_{build_type}",
+        )
+    except Exception as exc:
+        msg = str(exc).lower()
+        missing_actor_column = "member not found: closed_by_type" in msg
+        if not missing_actor_column:
+            raise
+        print(
+            "Warning: issues.closed_by_type is unavailable, "
+            "falling back to legacy closed-issue filter "
+            f"(branch={branch}, build_type={build_type})"
+        )
+        rows = ydb_wrapper.execute_scan_query(
+            query_legacy,
+            query_name=f"mute_coordinator_user_fixed_candidates_legacy_{branch}_{build_type}",
+        )
     muted_set = set(muted_tests)
     result: Dict[str, int] = {}
     for row in rows:
@@ -308,23 +352,44 @@ def _fetch_user_fixed_candidates(
     return result
 
 
-def _fetch_new_test_candidates(ydb_wrapper: YDBWrapper, branch: str, build_type: str) -> List[str]:
+def _fetch_new_test_candidates(
+    ydb_wrapper: YDBWrapper,
+    branch: str,
+    build_type: str,
+    as_of_date: Optional[datetime.date] = None,
+) -> List[str]:
     tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    anchor_date = _date_expr(as_of_date)
     query = f"""
-        $latest_date = (
-            SELECT MAX(date_window) AS d
+        $latest = (
+            SELECT MAX(date_window) AS latest_date
             FROM `{tests_monitor_path}`
-            WHERE branch = '{branch}' AND build_type = '{build_type}'
+            WHERE branch = '{branch}'
+              AND build_type = '{build_type}'
+              AND date_window <= {anchor_date}
         );
 
-        SELECT DISTINCT full_name
-        FROM `{tests_monitor_path}`
-        WHERE branch = '{branch}'
-          AND build_type = '{build_type}'
-          AND date_window = (SELECT d FROM $latest_date)
-          AND is_muted = 0
-          AND previous_state = 'no_runs'
-          AND (COALESCE(pass_count, 0) + COALESCE(fail_count, 0) + COALESCE(mute_count, 0)) > 0
+        $first_seen = (
+            SELECT
+                full_name,
+                MIN(date_window) AS first_seen_date
+            FROM `{tests_monitor_path}`
+            WHERE branch = '{branch}'
+              AND build_type = '{build_type}'
+              AND date_window <= {anchor_date}
+            GROUP BY full_name
+        );
+
+        SELECT DISTINCT tm.full_name AS full_name
+        FROM `{tests_monitor_path}` AS tm
+        INNER JOIN $latest AS l ON tm.date_window = l.latest_date
+        INNER JOIN $first_seen AS fs ON tm.full_name = fs.full_name
+        WHERE tm.branch = '{branch}'
+          AND tm.build_type = '{build_type}'
+          AND tm.is_muted = 0
+          AND tm.previous_state = 'no_runs'
+          AND tm.date_window = fs.first_seen_date
+          AND (COALESCE(tm.pass_count, 0) + COALESCE(tm.fail_count, 0) + COALESCE(tm.mute_count, 0)) > 0
     """
     rows = ydb_wrapper.execute_scan_query(
         query,
@@ -338,8 +403,10 @@ def _fetch_manual_unmute_candidates(
     branch: str,
     build_type: str,
     default_min_runs: int,
+    as_of_date: Optional[datetime.date] = None,
 ) -> List[str]:
     tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    anchor_date = _date_expr(as_of_date)
     transition_query = f"""
         SELECT full_name
         FROM (
@@ -354,7 +421,8 @@ def _fetch_manual_unmute_candidates(
             FROM `{tests_monitor_path}`
             WHERE branch = '{branch}'
               AND build_type = '{build_type}'
-              AND date_window >= CurrentUtcDate() - 14*Interval("P1D")
+              AND date_window >= {anchor_date} - 14*Interval("P1D")
+              AND date_window <= {anchor_date}
         )
         GROUP BY full_name
         HAVING
@@ -379,7 +447,8 @@ def _fetch_manual_unmute_candidates(
         FROM `{tests_monitor_path}`
         WHERE branch = '{branch}'
           AND build_type = '{build_type}'
-          AND date_window >= CurrentUtcDate() - 6*Interval("P1D")
+          AND date_window >= {anchor_date} - 6*Interval("P1D")
+          AND date_window <= {anchor_date}
           AND full_name IN ({escaped})
         GROUP BY full_name
     """
@@ -406,8 +475,10 @@ def _fetch_manual_mute_candidates(
     ydb_wrapper: YDBWrapper,
     branch: str,
     build_type: str,
+    as_of_date: Optional[datetime.date] = None,
 ) -> List[str]:
     tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    anchor_date = _date_expr(as_of_date)
     transition_query = f"""
         SELECT full_name
         FROM (
@@ -422,7 +493,8 @@ def _fetch_manual_mute_candidates(
             FROM `{tests_monitor_path}`
             WHERE branch = '{branch}'
               AND build_type = '{build_type}'
-              AND date_window >= CurrentUtcDate() - 14*Interval("P1D")
+              AND date_window >= {anchor_date} - 14*Interval("P1D")
+              AND date_window <= {anchor_date}
         )
         GROUP BY full_name
         HAVING
@@ -446,7 +518,8 @@ def _fetch_manual_mute_candidates(
         FROM `{tests_monitor_path}`
         WHERE branch = '{branch}'
           AND build_type = '{build_type}'
-          AND date_window >= CurrentUtcDate() - 3*Interval("P1D")
+          AND date_window >= {anchor_date} - 3*Interval("P1D")
+          AND date_window <= {anchor_date}
           AND full_name IN ({escaped})
         GROUP BY full_name
     """
@@ -474,10 +547,12 @@ def _fetch_quarantine_stats(
     build_type: str,
     full_names: List[str],
     window_days: int,
+    as_of_date: Optional[datetime.date] = None,
 ) -> Dict[str, Dict[str, int]]:
     if not full_names:
         return {}
     tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    anchor_date = _date_expr(as_of_date)
     escaped = ", ".join("'" + name.replace("'", "''") + "'" for name in sorted(set(full_names)))
     query = f"""
         SELECT
@@ -488,7 +563,8 @@ def _fetch_quarantine_stats(
         FROM `{tests_monitor_path}`
         WHERE branch = '{branch}'
           AND build_type = '{build_type}'
-          AND date_window >= CurrentUtcDate() - {int(window_days) - 1}*Interval("P1D")
+          AND date_window >= {anchor_date} - {int(window_days) - 1}*Interval("P1D")
+          AND date_window <= {anchor_date}
           AND full_name IN ({escaped})
         GROUP BY full_name
     """
@@ -654,9 +730,19 @@ def _validate_single_active_rule_invariant(
             )
 
 
-def sync_effective_rules(branch: str, build_type: str) -> int:
+def sync_effective_rules(
+    branch: str,
+    build_type: str,
+    as_of_date: Optional[datetime.date] = None,
+) -> int:
     thresholds = _load_thresholds()
-    now = datetime.datetime.now(datetime.timezone.utc)
+    if as_of_date is None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+    else:
+        now = datetime.datetime.combine(
+            as_of_date,
+            datetime.time(12, 0, tzinfo=datetime.timezone.utc),
+        )
     policy_snapshot = json.dumps(thresholds, ensure_ascii=True)
 
     with YDBWrapper() as ydb_wrapper:
@@ -664,7 +750,12 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
             return 1
 
         paths = _create_tables(ydb_wrapper)
-        muted_tests = _fetch_current_muted_tests(ydb_wrapper, branch, build_type)
+        muted_tests = _fetch_current_muted_tests(
+            ydb_wrapper,
+            branch,
+            build_type,
+            as_of_date=as_of_date,
+        )
         existing_state = _fetch_existing_control_state(
             ydb_wrapper,
             paths["control_state"],
@@ -676,22 +767,26 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
             branch=branch,
             build_type=build_type,
             default_min_runs=int(thresholds["default_unmute_min_runs"]),
+            as_of_date=as_of_date,
         )
         manual_mute_quarantine_candidates = _fetch_manual_mute_candidates(
             ydb_wrapper,
             branch=branch,
             build_type=build_type,
+            as_of_date=as_of_date,
         )
         new_test_candidates = _fetch_new_test_candidates(
             ydb_wrapper,
             branch=branch,
             build_type=build_type,
+            as_of_date=as_of_date,
         )
         user_fixed_candidates = _fetch_user_fixed_candidates(
             ydb_wrapper,
             branch=branch,
             build_type=build_type,
             muted_tests=muted_tests,
+            as_of_date=as_of_date,
         )
 
         state_map: Dict[str, Dict[str, object]] = {}
@@ -1005,6 +1100,7 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
                         build_type=build_type,
                         full_names=names,
                         window_days=window_days,
+                        as_of_date=as_of_date,
                     )
                 )
             deleted_signals = _fetch_deleted_test_signals(
@@ -1167,7 +1263,8 @@ def sync_effective_rules(branch: str, build_type: str) -> int:
 
         print(
             "Mute coordinator sync complete: "
-            f"branch={branch}, build_type={build_type}, muted_tests={len(muted_tests)}, "
+            f"branch={branch}, build_type={build_type}, as_of_date={(as_of_date.isoformat() if as_of_date else 'current')}, "
+            f"muted_tests={len(muted_tests)}, "
             f"new_test_candidates={len(new_test_candidates)}, "
             f"user_fixed_candidates={len(user_fixed_candidates)}, "
             f"manual_quarantine_candidates={len(manual_quarantine_candidates)}, "
@@ -1186,22 +1283,103 @@ def bootstrap_only() -> int:
     return 0
 
 
+def run_backfill(
+    *,
+    branches: List[str],
+    build_types: List[str],
+    backfill_days: int,
+    end_date: Optional[datetime.date],
+) -> int:
+    if backfill_days <= 0:
+        raise ValueError("backfill_days must be > 0")
+    end = end_date or datetime.datetime.now(datetime.timezone.utc).date()
+    start = end - datetime.timedelta(days=backfill_days - 1)
+    print(
+        "Starting mute coordinator backfill: "
+        f"start={start.isoformat()}, end={end.isoformat()}, "
+        f"branches={branches}, build_types={build_types}"
+    )
+    for day_offset in range(backfill_days):
+        as_of_date = start + datetime.timedelta(days=day_offset)
+        for branch in branches:
+            for build_type in build_types:
+                print(
+                    "Backfill tick: "
+                    f"date={as_of_date.isoformat()}, branch={branch}, build_type={build_type}"
+                )
+                rc = sync_effective_rules(
+                    branch=branch,
+                    build_type=build_type,
+                    as_of_date=as_of_date,
+                )
+                if rc != 0:
+                    return rc
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export mute coordinator state into YDB")
     parser.add_argument(
         "command",
-        choices=["bootstrap", "sync-effective-rules"],
+        choices=["bootstrap", "sync-effective-rules", "backfill"],
         nargs="?",
         default="sync-effective-rules",
         help="Command to execute",
     )
     parser.add_argument("--branch", default="main", help="Target branch")
     parser.add_argument("--build-type", dest="build_type", default="relwithdebinfo", help="Target build type")
+    parser.add_argument(
+        "--as-of-date",
+        dest="as_of_date",
+        default=None,
+        help="Anchor date YYYY-MM-DD for sync-effective-rules",
+    )
+    parser.add_argument(
+        "--branches",
+        default="main",
+        help="Comma-separated branches for backfill mode",
+    )
+    parser.add_argument(
+        "--build-types",
+        dest="build_types",
+        default="relwithdebinfo",
+        help="Comma-separated build types for backfill mode",
+    )
+    parser.add_argument(
+        "--backfill-days",
+        dest="backfill_days",
+        type=int,
+        default=30,
+        help="Number of days for backfill mode",
+    )
+    parser.add_argument(
+        "--backfill-end-date",
+        dest="backfill_end_date",
+        default=None,
+        help="Backfill end date YYYY-MM-DD (default today UTC)",
+    )
     args = parser.parse_args()
 
     if args.command == "bootstrap":
         return bootstrap_only()
-    return sync_effective_rules(branch=args.branch, build_type=args.build_type)
+
+    if args.command == "backfill":
+        branches = [x.strip() for x in args.branches.split(",") if x.strip()]
+        build_types = [x.strip() for x in args.build_types.split(",") if x.strip()]
+        end_date = _parse_date(args.backfill_end_date) if args.backfill_end_date else None
+        return run_backfill(
+            branches=branches,
+            build_types=build_types,
+            backfill_days=args.backfill_days,
+            end_date=end_date,
+        )
+
+    as_of_date = _parse_date(args.as_of_date) if args.as_of_date else None
+    return sync_effective_rules(
+        branch=args.branch,
+        build_type=args.build_type,
+        as_of_date=as_of_date,
+    )
 
 
 if __name__ == "__main__":

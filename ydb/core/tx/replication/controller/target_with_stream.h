@@ -82,7 +82,7 @@ public:
     void Shutdown(const TActorContext& ctx) override;
 
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
-    void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
+    bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
 
     const TReplication::ITargetStats* GetStats() override;
 

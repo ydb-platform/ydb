@@ -109,7 +109,7 @@ public:
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
         virtual const TMaybe<TDuration> GetLag() const = 0;
 
-        virtual void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
+        virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
         virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
         virtual const ITargetStats* GetStats() = 0;
 

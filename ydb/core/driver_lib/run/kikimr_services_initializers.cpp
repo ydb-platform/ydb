@@ -3176,6 +3176,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         TString serverCert = readFile(settings.CertificateFile);
         TString serverPrivateKey = readFile(settings.PrivateKeyFile);
         TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+        serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
 
         {
             TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));

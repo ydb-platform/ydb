@@ -2870,6 +2870,7 @@ message TKafkaProxyConfig {
     optional string Cert = 8 [(Ydb.sensitive) = true];
     optional string Key = 9 [(Ydb.sensitive) = true];
     optional string CA = 17 [(Ydb.sensitive) = true];
+    optional bool EnableSelfSignedCerts = 19 [default = false];
     optional bool MtlsEnable = 18 [default = false];
 
     optional uint64 MaxMessageSize = 4 [default = 16777216];

@@ -35,6 +35,7 @@ private:
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
     std::shared_ptr<IScanCursor> ScanCursor;
     YDB_READONLY_DEF(std::optional<TPartialSourceAddress>, NotFinishedInterval);
+    YDB_READONLY(ui64, SourceId, 0);
     const NColumnShard::TCounterGuard Guard;
     bool Extracted = false;
 
@@ -75,12 +76,17 @@ public:
     explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
         const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, NArrow::TShardedRecordBatch&& batch,
         std::shared_ptr<IScanCursor>&& scanCursor, const std::shared_ptr<TReadContext>& context,
-        const std::optional<TPartialSourceAddress> notFinishedInterval);
+        const std::optional<TPartialSourceAddress> notFinishedInterval, const ui64 sourceId = 0);
 
     explicit TPartialReadResult(NArrow::TShardedRecordBatch&& batch, std::shared_ptr<IScanCursor>&& scanCursor,
+<<<<<<< HEAD
         const std::shared_ptr<TReadContext>& context, const std::optional<TPartialSourceAddress> notFinishedInterval)
         : TPartialReadResult({}, nullptr, std::move(batch), std::move(scanCursor), context, notFinishedInterval)
     {
+=======
+        const std::shared_ptr<TReadContext>& context, const std::optional<TPartialSourceAddress> notFinishedInterval, const ui64 sourceId = 0)
+        : TPartialReadResult({}, nullptr, std::move(batch), std::move(scanCursor), context, notFinishedInterval, sourceId) {
+>>>>>>> 50ef5ffce30 (more traces (#37833))
     }
 };
 

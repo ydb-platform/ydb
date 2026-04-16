@@ -108,10 +108,7 @@ public:
         }
     }
 
-    void ClearMemoryGuards() {
-        ResourceGuards.clear();
-        SourceGroupGuard.reset();
-    }
+    void ClearMemoryGuards();
 
     ui32 GetPurposeSyncPointIndex() const {
         AFL_VERIFY(PurposeSyncPointIndex);
@@ -144,6 +141,10 @@ public:
         return *UsedRawBytes;
     }
 
+    virtual ui64 GetUsedRawBytesOptional() const override {
+        return UsedRawBytes.value_or(0);
+    }
+
     void SetUsedRawBytes(const ui64 value) {
         AFL_VERIFY(!UsedRawBytes);
         UsedRawBytes = value;
@@ -174,8 +175,7 @@ public:
         ClearStageData();
         MutableExecutionContext().Stop();
         StageResult.reset();
-        ResourceGuards.clear();
-        SourceGroupGuard = nullptr;
+        ClearMemoryGuards();
     }
 
     void SetIsStartedByCursor() {
@@ -334,6 +334,10 @@ public:
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return Schema;
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
         return Schema;
     }
 

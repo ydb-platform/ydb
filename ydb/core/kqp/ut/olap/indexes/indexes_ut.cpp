@@ -132,6 +132,36 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     << csController->GetIndexesSkippingOnSelect().Val());
         }
     }
+    TString scriptChunkDetailsMinMax = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "field"}`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        ------
+        ONE_ACTUALIZATION
+        ------
+        READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[["{\"max\":\"x\",\"min\":\"x\"}"]]]
+    )";
+    Y_UNIT_TEST(ChunkDetailsMinMax) {
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+    }
+
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(MinMaxIndexUsedInQueries, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);

@@ -342,6 +342,11 @@ TActorId TUrlHandler::GetHandler(const TString& url) const {
 }
 
 bool IsIPv6(const TString& host) {
+    if (host.find('%') != TString::npos) {
+        // zone_id is probably used. This is a valid ipv6 format, but unacceptable in our context.
+        return false;
+    }
+
     bool isValid = false;
     const auto ip = TIpv6Address::FromString(host, isValid);
     return isValid && ip.IsIpv6();

@@ -13,7 +13,6 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT(IsIPv6("::ffff:192.0.2.1"));                        // IPv4-mapped IPv6 address
         UNIT_ASSERT(IsIPv6("::"));                                      // all-zeros unspecified address
         UNIT_ASSERT(IsIPv6("fe80::1"));                                 // link-local address
-        UNIT_ASSERT(IsIPv6("fe80::1%eth0"));                            // zone ID is accepted
         UNIT_ASSERT(IsIPv6("ff02::1"));                                 // multicast all-nodes
         UNIT_ASSERT(IsIPv6("::ffff:127.0.0.1"));                        // IPv4-mapped IPv6 (loopback)
         UNIT_ASSERT(IsIPv6("::ffff:0:0"));                              // IPv4-mapped with zeros
@@ -41,6 +40,7 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT(!IsIPv6("::ffff:999.0.0.1"));                             // invalid IPv4 part in mapped address
         UNIT_ASSERT(!IsIPv6("::ffff:192.168.1"));                             // incomplete IPv4 part in mapped address
         UNIT_ASSERT(!IsIPv6("2001:db8::g"));                                  // single invalid hex char
+        UNIT_ASSERT(!IsIPv6("fe80::1%eth0"));                                 // zone ID is not acceptable for us
     }
 
     Y_UNIT_TEST(TestIsIPv4) {
@@ -84,6 +84,7 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT(!IsIPv4("localhost"));           // localhost is not an IPv4 address
         UNIT_ASSERT(!IsIPv4("0x7f.0x00.0x00.0x01")); // hex notation
         UNIT_ASSERT(!IsIPv4("1000.0.0.1"));          // 4-digit octet
+        UNIT_ASSERT(!IsIPv4("198.51.100.1%eeth0"));  // correct ipv4 with ipv6 zone ID
     }
 }
 

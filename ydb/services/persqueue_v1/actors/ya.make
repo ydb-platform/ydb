@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/persqueue
     ydb/library/persqueue/topic_parser
     ydb/library/cloud_permissions
     ydb/public/api/protos
@@ -25,6 +26,7 @@ PEERDIR(
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/metadata
+    ydb/services/persqueue_v1/actors/schema
 )
 
 SRCS(

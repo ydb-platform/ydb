@@ -16,18 +16,20 @@
 #include "opentelemetry/sdk/configuration/batch_span_processor_configuration.h"
 #include "opentelemetry/sdk/configuration/boolean_array_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/boolean_attribute_value_configuration.h"
+#include "opentelemetry/sdk/configuration/cardinality_limits_configuration.h"
 #include "opentelemetry/sdk/configuration/configuration.h"
-#include "opentelemetry/sdk/configuration/configuration_parser.h"
 #include "opentelemetry/sdk/configuration/console_log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/console_push_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/console_span_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/default_aggregation_configuration.h"
 #include "opentelemetry/sdk/configuration/default_histogram_aggregation.h"
+#include "opentelemetry/sdk/configuration/distribution_configuration.h"
 #include "opentelemetry/sdk/configuration/document.h"
 #include "opentelemetry/sdk/configuration/document_node.h"
 #include "opentelemetry/sdk/configuration/double_array_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/double_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/drop_aggregation_configuration.h"
+#include "opentelemetry/sdk/configuration/exemplar_filter.h"
 #include "opentelemetry/sdk/configuration/explicit_bucket_histogram_aggregation_configuration.h"
 #include "opentelemetry/sdk/configuration/extension_log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/extension_log_record_processor_configuration.h"
@@ -48,7 +50,9 @@
 #include "opentelemetry/sdk/configuration/log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_limits_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_processor_configuration.h"
+#include "opentelemetry/sdk/configuration/logger_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/logger_provider_configuration.h"
+#include "opentelemetry/sdk/configuration/meter_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/meter_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_producer_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_reader_configuration.h"
@@ -72,6 +76,7 @@
 #include "opentelemetry/sdk/configuration/push_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/resource_configuration.h"
 #include "opentelemetry/sdk/configuration/sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/severity_number.h"
 #include "opentelemetry/sdk/configuration/simple_log_record_processor_configuration.h"
 #include "opentelemetry/sdk/configuration/simple_span_processor_configuration.h"
 #include "opentelemetry/sdk/configuration/span_exporter_configuration.h"
@@ -83,12 +88,12 @@
 #include "opentelemetry/sdk/configuration/sum_aggregation_configuration.h"
 #include "opentelemetry/sdk/configuration/temporality_preference.h"
 #include "opentelemetry/sdk/configuration/trace_id_ratio_based_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/tracer_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/tracer_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/translation_strategy.h"
 #include "opentelemetry/sdk/configuration/view_configuration.h"
 #include "opentelemetry/sdk/configuration/view_selector_configuration.h"
 #include "opentelemetry/sdk/configuration/view_stream_configuration.h"
-#include "opentelemetry/sdk/configuration/zipkin_span_exporter_configuration.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -102,6 +107,9 @@ class ConfigurationParser
 public:
   OtlpHttpEncoding ParseOtlpHttpEncoding(const std::unique_ptr<DocumentNode> &node,
                                          const std::string &name) const;
+
+  SeverityNumber ParseSeverityNumber(const std::unique_ptr<DocumentNode> &node,
+                                     const std::string &name) const;
 
   std::unique_ptr<StringArrayConfiguration> ParseStringArrayConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
@@ -159,6 +167,15 @@ public:
   std::unique_ptr<LoggerProviderConfiguration> ParseLoggerProviderConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
+  LoggerConfigConfiguration ParseLoggerConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  LoggerMatcherAndConfigConfiguration ParseLoggerMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<LoggerConfiguratorConfiguration> ParseLoggerConfiguratorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
   DefaultHistogramAggregation ParseDefaultHistogramAggregation(
       const std::unique_ptr<DocumentNode> &node,
       const std::string &name) const;
@@ -208,6 +225,9 @@ public:
   std::unique_ptr<MetricProducerConfiguration> ParseMetricProducerConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
+  std::unique_ptr<CardinalityLimitsConfiguration> ParseCardinalityLimitsConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
   std::unique_ptr<PeriodicMetricReaderConfiguration> ParsePeriodicMetricReaderConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
@@ -218,6 +238,9 @@ public:
       const std::unique_ptr<DocumentNode> &node) const;
 
   InstrumentType ParseInstrumentType(const std::unique_ptr<DocumentNode> &node,
+                                     const std::string &name) const;
+
+  ExemplarFilter ParseExemplarFilter(const std::unique_ptr<DocumentNode> &node,
                                      const std::string &name) const;
 
   std::unique_ptr<ViewSelectorConfiguration> ParseViewSelectorConfiguration(
@@ -253,6 +276,15 @@ public:
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<MeterProviderConfiguration> ParseMeterProviderConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  MeterConfigConfiguration ParseMeterConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  MeterMatcherAndConfigConfiguration ParseMeterMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<MeterConfiguratorConfiguration> ParseMeterConfiguratorConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<PropagatorConfiguration> ParsePropagatorConfiguration(
@@ -302,9 +334,6 @@ public:
   std::unique_ptr<ConsoleSpanExporterConfiguration> ParseConsoleSpanExporterConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
-  std::unique_ptr<ZipkinSpanExporterConfiguration> ParseZipkinSpanExporterConfiguration(
-      const std::unique_ptr<DocumentNode> &node) const;
-
   std::unique_ptr<ExtensionSpanExporterConfiguration> ParseExtensionSpanExporterConfiguration(
       const std::string &name,
       std::unique_ptr<DocumentNode> node) const;
@@ -326,6 +355,15 @@ public:
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<TracerProviderConfiguration> ParseTracerProviderConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  TracerConfigConfiguration ParseTracerConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  TracerMatcherAndConfigConfiguration ParseTracerMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<TracerConfiguratorConfiguration> ParseTracerConfiguratorConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<StringAttributeValueConfiguration> ParseStringAttributeValueConfiguration(
@@ -356,6 +394,9 @@ public:
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<ResourceConfiguration> ParseResourceConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<DistributionConfiguration> ParseDistributionConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<Configuration> Parse(std::unique_ptr<Document> doc);

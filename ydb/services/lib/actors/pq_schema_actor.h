@@ -1,6 +1,9 @@
 #pragma once
 
+#include "consumers_advanced_monitoring_settings.h"
+
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
+#include <ydb/core/persqueue/public/schema/common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
@@ -36,6 +39,9 @@ namespace Ydb::Topic {
 
 namespace NKikimr::NGRpcProxy::V1 {
 
+    using namespace NKikimr::NPQ;
+    using namespace NKikimr::NPQ::NSchema;
+
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
         const TString& name,
         const Ydb::PersQueue::V1::TopicSettings& settings,
@@ -68,24 +74,19 @@ namespace NKikimr::NGRpcProxy::V1 {
     );
 
 
-    struct TClientServiceType {
-        TString Name;
-        ui32 MaxCount;
-        TVector<TString> PasswordHashes;
-    };
-    typedef std::map<TString, TClientServiceType> TClientServiceTypes;
     TClientServiceTypes GetSupportedClientServiceTypes(const NKikimrPQ::TPQConfig& pqConfig);
 
     // Returns true if have duplicated read rules
     Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes,
                                             TString& error, const NKikimrPQ::TPQConfig& pqConfig,
-                                            const Ydb::StatusIds::StatusCode dubsStatus = Ydb::StatusIds::BAD_REQUEST);
+                                            const EOperation operation = EOperation::Create);
 
     TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig *config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
         const TClientServiceTypes& supportedReadRuleServiceTypes,
-        const NKikimrPQ::TPQConfig& pqConfig
+        const NKikimrPQ::TPQConfig& pqConfig,
+        const TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings /* nullable */
     );
 
     TString RemoveReadRuleFromConfig(
@@ -250,7 +251,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             default:
-                Y_ABORT();
+                ALOG_WARN(NKikimrServices::PERSQUEUE, "unhandled eventType=" << ev->GetTypeRewrite() << " event=" << ev->GetTypeName());
+                AFL_VERIFY_DEBUG(false)("eventType", ev->GetTypeRewrite())("event", ev->GetTypeName());
             }
         }
 
@@ -416,7 +418,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, TActorBase::Handle);
-            default: TBase::StateWork(ev);
+            default:
+                TBase::StateWork(ev);
             }
         }
 
@@ -652,7 +655,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
         TMaybe<TString> PrivateTopicName;
         TMaybe<TString> CdcStreamName;
-
     };
 
 }

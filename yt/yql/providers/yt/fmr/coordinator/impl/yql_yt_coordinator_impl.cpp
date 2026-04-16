@@ -1,12 +1,13 @@
+#include <algorithm>
+#include <queue>
 #include <thread>
 #include <library/cpp/resource/resource.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_fmr_partitioner.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_ordered_partitioner.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/yql_yt_default_stage_operation_manager.h>
 #include "yql_yt_coordinator_impl.h"
 
 namespace NYql::NFmr {
@@ -16,15 +17,41 @@ TFmrCoordinatorSettings::TFmrCoordinatorSettings() {
     WorkersNum = 1;
     RandomProvider = CreateDefaultRandomProvider();
     TimeProvider = CreateDefaultTimeProvider();
-    IdempotencyKeyStoreTime = TDuration::Seconds(10);
-    TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
-    WorkerDeadlineLease = TDuration::Seconds(5);
-    TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(1);
-    SessionInactivityTimeout = TDuration::Minutes(5);
-    HealthCheckInterval = TDuration::Seconds(1);
+
+    if (DefaultFmrOperationSpec.IsMap() && DefaultFmrOperationSpec.HasKey("coordinator")) {
+        auto& coord = DefaultFmrOperationSpec["coordinator"];
+        if (coord.HasKey("idempotency_key_store_time_sec")) {
+            IdempotencyKeyStoreTime = TDuration::Seconds(coord["idempotency_key_store_time_sec"].AsInt64());
+        }
+        if (coord.HasKey("time_to_sleep_between_clear_key_requests_sec")) {
+            TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(coord["time_to_sleep_between_clear_key_requests_sec"].AsInt64());
+        }
+        if (coord.HasKey("worker_deadline_lease_sec")) {
+            WorkerDeadlineLease = TDuration::Seconds(coord["worker_deadline_lease_sec"].AsInt64());
+        }
+        if (coord.HasKey("time_to_sleep_between_check_worker_status_requests_sec")) {
+            TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(coord["time_to_sleep_between_check_worker_status_requests_sec"].AsInt64());
+        }
+        if (coord.HasKey("session_inactivity_timeout_sec")) {
+            SessionInactivityTimeout = TDuration::Seconds(coord["session_inactivity_timeout_sec"].AsInt64());
+        }
+        if (coord.HasKey("health_check_interval_sec")) {
+            HealthCheckInterval = TDuration::Seconds(coord["health_check_interval_sec"].AsInt64());
+        }
+    }
 }
 
 namespace {
+
+template <typename TResponse>
+NThreading::TFuture<TResponse> MakeFailedResponse(TResponse response, const TFmrError& error, TStringBuf logPrefix) {
+    if (error.Reason == EFmrErrorReason::FallbackOperation) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << error.ErrorMessage;
+    }
+    YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
+    response.ErrorMessages.emplace_back(error);
+    return NThreading::MakeFuture(std::move(response));
+}
 
 class TFmrCoordinator: public IFmrCoordinator {
 public:
@@ -48,6 +75,7 @@ public:
         StartClearingIdempotencyKeys();
         CheckWorkersAliveStatus();
         CheckGatewaySessionsActivity();
+        StartGcThread();
         GcService_->ClearAll();
     }
 
@@ -56,6 +84,7 @@ public:
         ClearIdempotencyKeysThread_.join();
         CheckWorkersAliveStatusThread_.join();
         CheckGatewaySessionsActivityThread_.join();
+        GcThread_.join();
     }
 
     NThreading::TFuture<TStartOperationResponse> StartOperation(const TStartOperationRequest& request) override {
@@ -78,42 +107,97 @@ public:
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
 
-        TString partitionId;
+        auto stageManager = MakeStageOperationManager(request.OperationType, RandomProvider_);
 
-        try {
-            if (auto distUploadParams = std::get_if<TSortedUploadOperationParams>(&request.OperationParams)) {
-                partitionId = distUploadParams->PartitionId;
-                YQL_ENSURE(OperationPartitions_.contains(partitionId), "Partition " << partitionId << " should to be prepered before starting operation");
-            } else {
-                partitionId = PartitionOperationIntoSeveralTasks(request.OperationParams, fmrOperationSpec, request.ClusterConnections);
-            }
-        } catch (const std::exception& e) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation with exception: " << e.what();
-            return NThreading::MakeFuture(TStartOperationResponse(EOperationStatus::Failed, e.what()));
+        Operations_[operationId] = TOperationInfo{
+            .TaskIds = {},
+            .OperationStatus = EOperationStatus::Accepted,
+            .SessionId = request.SessionId,
+            .StageManager = stageManager,
+            .OperationParams = request.OperationParams,
+            .ClusterConnections = request.ClusterConnections,
+            .Files = request.Files,
+            .YtResources = request.YtResources,
+            .FmrResources = request.FmrResources,
+            .FmrOperationSpec = fmrOperationSpec,
+        };
+
+        auto stageError = ExecuteCurrentStage(operationId);
+        if (stageError) {
+            Operations_.erase(operationId);
+            return MakeFailedResponse(
+                TStartOperationResponse(EOperationStatus::Failed, stageError->ErrorMessage),
+                *stageError,
+                "Failed to start operation: "
+            );
         }
 
-        std::vector<TTaskParams> taskParams = GetOutputTaskParams(OperationPartitions_.at(partitionId), request.OperationParams);
+        auto& operationInfo = Operations_[operationId];
+        operationInfo.OperationStatus = GetOperationStatus(operationId);
 
-        std::unordered_set<TString> taskIds;
-        for (auto& currentTaskParams: taskParams) {
-            TString taskId = GenerateId();
-            auto fmrResourceTasks = PartitionFmrResourcesIntoTasks(request.FmrResources, fmrOperationSpec);
-
-            TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, currentTaskParams, request.SessionId, request.ClusterConnections, request.Files, request.YtResources, fmrResourceTasks, fmrOperationSpec);
-            Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId, .NumRetries = 0};
-            TasksToRun_.emplace(createdTask, taskId);
-            taskIds.emplace(taskId);
-        }
-
-        Operations_[operationId] = {.TaskIds = taskIds, .OperationStatus = EOperationStatus::Accepted, .SessionId = request.SessionId};
-
-        if (std::holds_alternative<TSortedUploadOperationParams>(request.OperationParams)) {
-            InitializeSortedUploadOperation(operationId, taskIds.size(), request.ClusterConnections);
+        if (operationInfo.OperationStatus == EOperationStatus::Completed) {
+            HandleOperationCompleted(operationId);
         }
 
         YQL_CLOG(DEBUG, FastMapReduce) << "Starting operation with id " << operationId;
-        OperationPartitions_.erase(partitionId);
         return NThreading::MakeFuture(TStartOperationResponse(EOperationStatus::Accepted, operationId));
+    }
+
+    TMaybe<TFmrError> ExecuteCurrentStage(const TString& operationId) {
+        auto& operationInfo = Operations_[operationId];
+        auto& operationParams = operationInfo.OperationParams;
+        auto& fmrOperationSpec = operationInfo.FmrOperationSpec;
+        auto& clusterConnections = operationInfo.ClusterConnections;
+
+        TPartitionResult partitionResult;
+
+        if (auto distUploadParams = std::get_if<TSortedUploadOperationParams>(&operationParams)) {
+            auto partitionId = distUploadParams->PartitionId;
+            YQL_ENSURE(OperationPartitions_.contains(partitionId), "Partition " << partitionId << " should to be prepered before starting operation");
+            partitionResult = std::move(OperationPartitions_.at(partitionId));
+            OperationPartitions_.erase(partitionId);
+        } else {
+            auto prepareResult = operationInfo.StageManager->PrepareOperationStage(TPrepareOperationStageContext{
+                .OperationParams = operationParams,
+                .FmrOperationSpec = fmrOperationSpec,
+                .ClusterConnections = clusterConnections,
+                .PartIdsForTables = PartIdsForTables_,
+                .PartIdStats = PartIdStats_,
+                .YtCoordinatorService = YtCoordinatorService_,
+            });
+            if (prepareResult.Error) {
+                return prepareResult.Error;
+            }
+            partitionResult = std::move(prepareResult.PartitionResult);
+        }
+
+        auto generateResult = operationInfo.StageManager->GenerateTasksForCurrentStage(TGenerateTasksContext{
+            .PartitionResult = std::move(partitionResult),
+            .OperationParams = operationParams,
+            .FmrResources = operationInfo.FmrResources,
+            .FmrOperationSpec = fmrOperationSpec,
+            .PartIdsForTables = PartIdsForTables_,
+            .PartIdStats = PartIdStats_
+        });
+        if (generateResult.Error) {
+            return generateResult.Error;
+        }
+
+        for (auto& [tableId, partIds]: generateResult.PartIdsToUpdate) {
+            PartIdsForTables_[tableId].insert(PartIdsForTables_[tableId].end(), partIds.begin(), partIds.end());
+        }
+
+        for (auto& generatedTask: generateResult.Tasks) {
+            TString taskId = GenerateId();
+
+            TTask::TPtr createdTask = MakeTask(generatedTask.TaskType, taskId, generatedTask.TaskParams, operationInfo.SessionId, clusterConnections, operationInfo.Files, operationInfo.YtResources, generateResult.FmrResourceTasks, fmrOperationSpec);
+            Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId, .NumRetries = 0};
+            TasksToRun_.emplace(createdTask, taskId);
+            operationInfo.TaskIds.emplace(taskId);
+            operationInfo.AllTaskIds.emplace(taskId);
+        }
+
+        return Nothing();
     }
 
     NThreading::TFuture<TGetOperationResponse> GetOperation(const TGetOperationRequest& request) override {
@@ -131,11 +215,16 @@ public:
         std::vector<TTableStats> outputTablesStats;
         std::vector<TString> result;
         if (operationStatus == EOperationStatus::Completed) {
-            // Calculating output table stats only in case of successful completion of opereation
-            for (auto& tableId : operationInfo.OutputTableIds) {
-                outputTablesStats.emplace_back(CalculateTableStats(tableId));
+            // Calculating output table stats only in case of successful completion of operation
+            auto expectedOutputTableIds = operationInfo.StageManager->GetExpectedOutputTableIds(operationInfo.OperationParams);
+            for (auto& tableId : expectedOutputTableIds) {
+                if (operationInfo.OutputTableIds.contains(tableId)) {
+                    outputTablesStats.emplace_back(CalculateTableStats(tableId));
+                } else {
+                    outputTablesStats.emplace_back(TTableStats{});
+                }
             }
-            result = GetOperationToProcessAfterResult(operationId);
+            result = operationInfo.StageManager->GetOperationResult();
         }
         return NThreading::MakeFuture(TGetOperationResponse(operationStatus, errorMessages, outputTablesStats, result));
     }
@@ -149,9 +238,11 @@ public:
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
         UpdateSessionActivity(Operations_[operationId].SessionId);
         YQL_CLOG(DEBUG, FastMapReduce) << "Deleting operation with id " << operationId;
-        auto taskIds = Operations_[operationId].TaskIds;
+        auto taskIds = Operations_[operationId].AllTaskIds;
         for (auto& taskId: taskIds){
-            YQL_ENSURE(Tasks_.contains(taskId));
+            if (!Tasks_.contains(taskId)) {
+                continue;
+            }
             auto taskStatus = Tasks_[taskId].TaskStatus;
             if (taskStatus == ETaskStatus::InProgress) {
                 TaskToDeleteIds_.insert(taskId); // Task is currently running, send signal to worker to cancel
@@ -234,34 +325,46 @@ public:
             TString taskId;
             with_lock(Mutex_) {
                 taskId = requestTaskState->TaskId;
-                Workers_[request.WorkerId].TaskIds.emplace(taskId);
-                YQL_ENSURE(Tasks_.contains(taskId));
-                auto operationId = Tasks_[taskId].OperationId;
-                YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
-                auto taskStatus = requestTaskState->TaskStatus;
-                YQL_ENSURE(taskStatus != ETaskStatus::Accepted);
-                if (taskStatus != ETaskStatus::InProgress) {
-                    // TODO - refactor the whole function
-                    Workers_[request.WorkerId].TaskIds.erase(taskId);
-                    // Task finished in some status, removing info from worker
-                }
-                SetUnfinishedTaskStatus(taskId, taskStatus, requestTaskState->TaskErrorMessage);
-                isTaskToDelete = (TaskToDeleteIds_.contains(taskId) && Tasks_[taskId].TaskStatus != ETaskStatus::InProgress);
-                auto statistics = requestTaskState->Stats;
-                YQL_CLOG(TRACE, FastMapReduce) << " Task with id " << taskId << " has current status " << taskStatus << Endl;
-                bool isOperationCompleted = (GetOperationStatus(operationId) == EOperationStatus::Completed);
-                for (auto& [fmrTableId, tableStats]: statistics.OutputTables) {
-                    Operations_[operationId].OutputTableIds.emplace(fmrTableId.TableId);
-                    PartIdStats_[fmrTableId.PartId] = tableStats.PartIdChunkStats;
-                    if (isOperationCompleted) {
-                        YQL_CLOG(INFO, FastMapReduce) << "Operation with id " << operationId << " has finished successfully";
-                        CalculateTableStats(fmrTableId.TableId, true);
+                if (Tasks_.contains(taskId)) {
+                    Workers_[request.WorkerId].TaskIds.emplace(taskId);
+                    auto operationId = Tasks_[taskId].OperationId;
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
+                    auto taskStatus = requestTaskState->TaskStatus;
+                    YQL_ENSURE(taskStatus != ETaskStatus::Accepted);
+                    if (taskStatus != ETaskStatus::InProgress) {
+                        // TODO - refactor the whole function
+                        Workers_[request.WorkerId].TaskIds.erase(taskId);
+                        // Task finished in some status, removing info from worker
                     }
-                    // TODO - проверка на валидность возвращаемой воркером статистики?
-                }
+                    SetUnfinishedTaskStatus(taskId, taskStatus, requestTaskState->TaskErrorMessage);
+                    isTaskToDelete = (TaskToDeleteIds_.contains(taskId) && Tasks_[taskId].TaskStatus != ETaskStatus::InProgress);
+                    auto statistics = requestTaskState->Stats;
+                    YQL_CLOG(TRACE, FastMapReduce) << " Task with id " << taskId << " has current status " << taskStatus << Endl;
+                    bool isOperationCompleted = (GetOperationStatus(operationId) == EOperationStatus::Completed);
+                    for (auto& [fmrTableId, tableStats]: statistics.OutputTables) {
+                        Operations_[operationId].OutputTableIds.emplace(fmrTableId.TableId);
+                        PartIdStats_[fmrTableId.PartId] = tableStats.PartIdChunkStats;
+                        if (isOperationCompleted) {
+                            YQL_CLOG(INFO, FastMapReduce) << "Operation with id " << operationId << " has finished successfully";
+                            CalculateTableStats(fmrTableId.TableId, true);
+                        }
+                        // TODO - проверка на валидность возвращаемой воркером статистики?
+                    }
 
-                if (OperationsToProcessAfter_.contains(operationId) &&taskStatus == ETaskStatus::Completed) {
-                    HandleOperationToProcessAfterTaskCompleted(operationId, requestTaskState);
+                    if (taskStatus == ETaskStatus::Completed) {
+                        Operations_[operationId].StageManager->OnTaskCompleted(requestTaskState->Stats);
+                    }
+
+                    if (isOperationCompleted) {
+                        HandleOperationCompleted(operationId);
+                    }
+                } else {
+                    YQL_CLOG(DEBUG, FastMapReduce) << "Skipping heartbeat update for already cleared task " << taskId;
+                    if (requestTaskState->TaskStatus == ETaskStatus::InProgress) {
+                        TaskToDeleteIds_.insert(taskId);
+                    } else {
+                        TaskToDeleteIds_.erase(taskId);
+                    }
                 }
             }
             if (isTaskToDelete) {
@@ -291,8 +394,15 @@ public:
                 SetUnfinishedTaskStatus(taskId, ETaskStatus::InProgress);
             }
             ClearPreviousPartIdsForTask(task);
+            bool canRunTask = true;
             with_lock(Mutex_) {
-                SetNewPartIdsForTask(task);
+                if (auto error = SetNewPartIdsForTask(task, taskId)) {
+                    YQL_CLOG(ERROR, FastMapReduce) << error->ErrorMessage << ", taskId: " << taskId;
+                    SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed, *error);
+                    canRunTask = false;
+                }
+            }
+            if (canRunTask) {
                 currentTasksToRun.emplace_back(task);
                 ++filledSlots;
             }
@@ -390,35 +500,30 @@ public:
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
 
-        try {
-            auto partitionId = PartitionOperationIntoSeveralTasks(
-                request.OperationParams,
-                fmrOperationSpec,
-                request.ClusterConnections
+        auto stageManager = MakeStageOperationManager(request.OperationType, RandomProvider_);
+
+        auto prepareResult = stageManager->PrepareOperationStage(TPrepareOperationStageContext{
+            .OperationParams = request.OperationParams,
+            .FmrOperationSpec = fmrOperationSpec,
+            .ClusterConnections = request.ClusterConnections,
+            .PartIdsForTables = PartIdsForTables_,
+            .PartIdStats = PartIdStats_,
+            .YtCoordinatorService = YtCoordinatorService_,
+        });
+
+        if (prepareResult.Error) {
+            return MakeFailedResponse(
+                TPrepareOperationResponse{},
+                *prepareResult.Error,
+                "Failed to prepare operation: "
             );
-
-            YQL_CLOG(DEBUG, FastMapReduce) << "Successfully prepared operation with partitionId=" << partitionId
-                << ", tasksNum=" << OperationPartitions_[partitionId].TaskInputs.size();
-            return NThreading::MakeFuture(TPrepareOperationResponse{.PartitionId = partitionId, .TasksNum = OperationPartitions_[partitionId].TaskInputs.size()});
-        } catch (const std::exception& e) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Failed to prepare operation: " << e.what();
-            return NThreading::MakeErrorFuture<TPrepareOperationResponse>(std::current_exception());
         }
-    }
 
-    std::vector<TString> GetOperationToProcessAfterResult(TString operationId) {
-        std::vector<TString> result;
-
-        if (!OperationsToProcessAfter_.contains(operationId)) {
-            return result;
-        }
-        auto& distributedOpInfo = OperationsToProcessAfter_[operationId];
-
-        if (auto* uploadMeta = std::get_if<TSortedUploadOperatonMeta>(&distributedOpInfo)) {
-            result = std::move(uploadMeta->FragmentResultsYson);
-            OperationsToProcessAfter_.erase(operationId);
-        }
-        return result;
+        auto partitionId = GenerateId();
+        OperationPartitions_[partitionId] = std::move(prepareResult.PartitionResult);
+        YQL_CLOG(DEBUG, FastMapReduce) << "Successfully prepared operation with partitionId=" << partitionId
+            << ", tasksNum=" << OperationPartitions_[partitionId].TaskInputs.size();
+        return NThreading::MakeFuture(TPrepareOperationResponse{.PartitionId = partitionId, .TasksNum = OperationPartitions_[partitionId].TaskInputs.size()});
     }
 
 private:
@@ -457,6 +562,10 @@ private:
                             }
                             workerInfo.NeedsToRestart = true;
                             for (auto& taskId: workerInfo.TaskIds) {
+                                if (!Tasks_.contains(taskId)) {
+                                    // Task was already cleaned up (e.g., by session or operation cleanup)
+                                    continue;
+                                }
                                 // resetting task, TODO - add max retry
                                 SetUnfinishedTaskStatus(taskId, ETaskStatus::Accepted);
                                 YQL_ENSURE(Tasks_.contains(taskId));
@@ -500,6 +609,51 @@ private:
         CheckGatewaySessionsActivityThread_ = std::thread(checkFunc);
     }
 
+    void StartGcThread() {
+        auto gcFunc = [this] {
+            while (!StopCoordinator_) {
+                TGcTask gcTask;
+                bool hasTask = false;
+                with_lock(GcQueueMutex_) {
+                    if (!GcQueue_.empty()) {
+                        gcTask = std::move(GcQueue_.front());
+                        GcQueue_.pop();
+                        hasTask = true;
+                    }
+                }
+                if (hasTask) {
+                    try {
+                        GcService_->ClearGarbage(gcTask.TableGroupsToClear).GetValueSync();
+                    } catch (...) {
+                        YQL_CLOG(ERROR, FastMapReduce) << "GC thread error during ClearGarbage: " << CurrentExceptionMessage();
+                    }
+                    with_lock(Mutex_) {
+                        for (const auto& group : gcTask.GroupsToClear) {
+                            if (gcTask.PartIdsToKeep.contains(GetTableDataServiceGroup(group.TableId, group.PartId))) {
+                                continue;
+                            }
+                            PartIdStats_.erase(group.PartId);
+                            auto tableIt = PartIdsForTables_.find(group.TableId);
+                            if (tableIt != PartIdsForTables_.end()) {
+                                auto& partIds = tableIt->second;
+                                auto partIdPosition = std::find(partIds.begin(), partIds.end(), group.PartId);
+                                if (partIdPosition != partIds.end()) {
+                                    partIds.erase(partIdPosition);
+                                }
+                                if (partIds.empty()) {
+                                    PartIdsForTables_.erase(tableIt);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Sleep(TDuration::MilliSeconds(100));
+                }
+            }
+        };
+        GcThread_ = std::thread(gcFunc);
+    }
+
     void UpdateSessionActivity(const TString& sessionId) {
         if (Sessions_.contains(sessionId)) {
             Sessions_[sessionId].LastActivity = TimeProvider_->Now();
@@ -516,7 +670,7 @@ private:
             auto& sessionInfo = Sessions_[sessionId];
             for (auto& operationId: sessionInfo.OperationIds) {
                 auto& operationInfo = Operations_[operationId];
-                std::unordered_set<TString> taskIdsToClear = operationInfo.TaskIds;
+                std::unordered_set<TString> taskIdsToClear = operationInfo.AllTaskIds;
                 for (auto& taskId: taskIdsToClear) {
                     tasks.push_back(taskId);
                 }
@@ -524,7 +678,9 @@ private:
             Sessions_.erase(sessionId);
         }
 
+        YQL_CLOG(INFO, FastMapReduce) << "ClearSessionImpl: clearing " << tasks.size() << " tasks for session " << sessionId;
         for (auto& taskId: tasks) {
+            YQL_CLOG(DEBUG, FastMapReduce) << "ClearSessionImpl: clearing taskId=" << taskId;
             ClearTaskAndPartIds(taskId);
         }
     }
@@ -551,10 +707,16 @@ private:
     void ClearTaskAndPartIds(const TString& taskId) {
         TTask::TPtr task;
         with_lock(Mutex_) {
+            if (!Tasks_.contains(taskId)) {
+                return;
+            }
             task = Tasks_[taskId].Task;
         }
         ClearPreviousPartIdsForTask(task);
         with_lock(Mutex_) {
+            if (!Tasks_.contains(taskId)) {
+                return;
+            }
             ClearTask(taskId);
         }
     }
@@ -572,6 +734,39 @@ private:
         if (taskErrorMessage) {
             auto& errorMessages = operationInfo.ErrorMessages;
             errorMessages.emplace_back(*taskErrorMessage);
+        }
+    }
+
+    void HandleOperationCompleted(const TString& operationId) {
+        auto& opInfo = Operations_[operationId];
+
+        auto expectedOutputTableIds = opInfo.StageManager->GetExpectedOutputTableIds(opInfo.OperationParams);
+        for (const auto& tableId : expectedOutputTableIds) {
+            if (!PartIdsForTables_.contains(tableId)) {
+                PartIdsForTables_[tableId] = {};
+            }
+        }
+
+        auto advanceResult = opInfo.StageManager->AdvanceToNextStage();
+        if (advanceResult.Error) {
+            if (advanceResult.Error->Reason == EFmrErrorReason::FallbackOperation) {
+                YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << advanceResult.Error->ErrorMessage;
+            }
+            opInfo.OperationStatus = EOperationStatus::Failed;
+            opInfo.ErrorMessages.emplace_back(*advanceResult.Error);
+        } else if (advanceResult.HasNextStage) {
+            opInfo.TaskIds.clear();
+            opInfo.OutputTableIds.clear();
+            auto stageError = ExecuteCurrentStage(operationId);
+            if (stageError) {
+                if (stageError->Reason == EFmrErrorReason::FallbackOperation) {
+                    YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << stageError->ErrorMessage;
+                }
+                opInfo.OperationStatus = EOperationStatus::Failed;
+                opInfo.ErrorMessages.emplace_back(*stageError);
+            } else {
+                opInfo.OperationStatus = GetOperationStatus(operationId);
+            }
         }
     }
 
@@ -602,119 +797,6 @@ private:
         return EOperationStatus::Completed;
     }
 
-    TFmrPartitionerSettings GetFmrPartitionerSettings(const NYT::TNode& fmrOperationSpec) {
-        TFmrPartitionerSettings settings;
-        auto& fmrPartitionSettings = fmrOperationSpec["partition"]["fmr_table"];
-        settings.MaxDataWeightPerPart = fmrPartitionSettings["max_data_weight_per_part"].AsInt64();
-        settings.MaxParts = fmrPartitionSettings["max_parts"].AsInt64();
-        return settings;
-    }
-
-    TYtPartitionerSettings GetYtPartitionerSettings(const NYT::TNode& fmrOperationSpec) {
-        TYtPartitionerSettings settings;
-        auto& ytPartitionSettings = fmrOperationSpec["partition"]["yt_table"];
-        settings.MaxDataWeightPerPart = ytPartitionSettings["max_data_weight_per_part"].AsInt64();
-        settings.MaxParts = ytPartitionSettings["max_parts"].AsInt64();
-        return settings;
-    }
-
-    TOrderedPartitionSettings GetOrderedPartitionerSettings(const NYT::TNode& fmrOperationSpec) {
-        TOrderedPartitionSettings settings;
-        settings.FmrPartitionSettings = GetFmrPartitionerSettings(fmrOperationSpec);
-        settings.YtPartitionSettings = GetYtPartitionerSettings(fmrOperationSpec);
-        settings.YtPartitionSettings.PartitionMode = NYT::ETablePartitionMode::Ordered;
-        return settings;
-    }
-
-    bool CheckIsOperationOrdered(const TOperationParams& operationParams) {
-        if (auto mapOptions = std::get_if<TMapOperationParams>(&operationParams)) {
-            return mapOptions->IsOrdered;
-        } else if (auto reduceOptions = std::get_if<TSortedUploadOperationParams>(&operationParams)) {
-            return reduceOptions->IsOrdered;
-        }
-        return false;
-    }
-
-    TString PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
-        bool isOrdered = CheckIsOperationOrdered(operationParams);
-        auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
-        auto partitionId = GenerateId();
-        YQL_CLOG(TRACE, FastMapReduce)
-        << "PartitionOperationIntoSeveralTasks: partitionId=" << partitionId
-        << ", isOrdered=" << isOrdered
-        << ", opIndex=" << operationParams.index();
-
-        TPartitionResult partitionResult;
-        if (!isOrdered) {
-            auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
-            auto fmrPartitioner = TFmrPartitioner(PartIdsForTables_,PartIdStats_, fmrPartitionerSettings);
-            std::vector<TYtTableRef> ytInputTables;
-            std::vector<TFmrTableRef> fmrInputTables;
-            GetOperationInputTables(ytInputTables, fmrInputTables, operationParams);
-            partitionResult = PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, YtCoordinatorService_, clusterConnections, ytPartitionerSettings);
-        } else {
-            auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
-            auto orderedPartitioner = TOrderedPartitioner(PartIdsForTables_, PartIdStats_, orderedPartitionerSettings);
-
-            TOperationInputTablesGetter tablesGetter{};
-            std::visit(tablesGetter, operationParams);
-            auto& inputTables = tablesGetter.OperationTableRef;
-            partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, YtCoordinatorService_, clusterConnections);
-        }
-        if (!partitionResult.PartitionStatus) {
-            ythrow yexception() << "Failed to partition input tables into tasks";
-            // TODO - return FAILED_PARTITIONING status instead.
-        }
-        OperationPartitions_[partitionId] = partitionResult;
-        return partitionId;
-    }
-
-    std::vector<TFmrResourceTaskInfo> PartitionFmrResourcesIntoTasks(const std::vector<TFmrResourceOperationInfo>& fmrResources, const NYT::TNode& fmrOperationSpec) {
-        // need to split fmrResources into tasks and pass to JobPreparer, for simpliclty split each fmr table separately.
-        std::vector<TFmrResourceTaskInfo> fmrResourceTasks;
-
-        auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
-        auto fmrPartitioner = TFmrPartitioner(PartIdsForTables_,PartIdStats_, fmrPartitionerSettings);
-        for (auto& fmrResource: fmrResources) {
-            TFmrResourceTaskInfo curFmrResourceTaskInfo;
-            auto [partition, partitionSuccess] = fmrPartitioner.PartitionFmrTablesIntoTasks({fmrResource.FmrTable});
-            if (!partitionSuccess) {
-                throw yexception() << "Failed to partition fmrResources into tasks";
-            }
-
-            for (auto& partitionTable: partition) {
-                YQL_ENSURE(partitionTable.Inputs.size() == 1);
-                TFmrTableInputRef fmrTableInputRef = std::get<TFmrTableInputRef>(partitionTable.Inputs[0]);
-                curFmrResourceTaskInfo.FmrResourceTasks.emplace_back(fmrTableInputRef);
-            }
-
-            curFmrResourceTaskInfo.Alias = fmrResource.Alias;
-            fmrResourceTasks.emplace_back(curFmrResourceTaskInfo);
-        }
-        return fmrResourceTasks;
-    }
-
-    void GetOperationInputTables(std::vector<TYtTableRef>& ytInputTables, std::vector<TFmrTableRef>& fmrInputTables, const TOperationParams& operationParams) {
-        TOperationInputTablesGetter tablesGetter{};
-        std::visit(tablesGetter, operationParams);
-
-        auto& inputTables = tablesGetter.OperationTableRef;
-        for (auto& table: inputTables) {
-            auto ytTable = std::get_if<TYtTableRef>(&table);
-            auto fmrTable = std::get_if<TFmrTableRef>(&table);
-            if (ytTable) {
-                ytInputTables.emplace_back(*ytTable);
-            } else {
-                fmrInputTables.emplace_back(*fmrTable);
-            }
-        }
-    }
-
-    TOperationPartitions GetOutputTaskParams(const TPartitionResult& partitionResult, const TOperationParams& operationParams) {
-        TOutputTaskParamsGetter taskGetter{.PartitionResult = partitionResult};
-        std::visit(taskGetter, operationParams);
-        return taskGetter.TaskParams;
-    }
 
     NYT::TNode GetMergedFmrOperationSpec(const TMaybe<NYT::TNode>& currentFmrOperationSpec) {
         // just pass whole merged operation spec for simplicity here
@@ -726,60 +808,42 @@ private:
         return resultFmrOperationSpec;
     }
 
-    void SetNewPartIdsForTask(TTask::TPtr task) {
-        // TODO - remove code duplication
-        TString newPartId = GenerateId();
+    TMaybe<TFmrError> SetNewPartIdsForTask(TTask::TPtr task, const TString& taskId) {
 
-        auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
-        auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
-        auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
-        if (downloadTaskParams) {
-            TString tableId = downloadTaskParams->Output.TableId;
-            downloadTaskParams->Output.PartId = newPartId;
-            PartIdsForTables_[tableId].emplace_back(newPartId);
-        } else if (mergeTaskParams) {
-            TString tableId = mergeTaskParams->Output.TableId;
-            mergeTaskParams->Output.PartId = newPartId;
-            PartIdsForTables_[tableId].emplace_back(newPartId);
-        } else if (mapTaskParams) {
-            for (auto& fmrTableOutputRef: mapTaskParams->Output) {
-                TString tableId = fmrTableOutputRef.TableId;
-                fmrTableOutputRef.PartId = newPartId;
-                PartIdsForTables_[tableId].emplace_back(newPartId);
-            }
+        TGetNewPartIdsForTaskContext context{
+            .Task = task,
+            .TaskId = taskId,
+            .OperationId = Tasks_[taskId].OperationId,
+            .PartIdsForTables = PartIdsForTables_
+        };
+
+        TGetNewPartIdsForTaskResult result = Operations_[context.OperationId].StageManager->GetNewPartIdsForTask(context);
+
+        if (result.Error) {
+            return result.Error;
         }
+
+        for (auto& [tableId, partIds]: result.NewPartIdsForTables) {
+            PartIdsForTables_[tableId].insert(PartIdsForTables_[tableId].end(), partIds.begin(), partIds.end());
+        }
+
+        return Nothing();
     }
 
     std::vector<TPartIdInfo> CollectPreviousPartIdsForTask(TTask::TPtr task) {
-        // TODO - remove code duplication, templates?
-        std::vector<TPartIdInfo> groupsToClear; // (TableId, PartId)
-
-        auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
-        auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
-        auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
-
-        if (downloadTaskParams) {
-            TString tableId = downloadTaskParams->Output.TableId;
-            if (!downloadTaskParams->Output.PartId.empty()) {
-                auto prevPartId = downloadTaskParams->Output.PartId;
-                groupsToClear.emplace_back(tableId, prevPartId);
-            }
-        } else if (mergeTaskParams) {
-            TString tableId = mergeTaskParams->Output.TableId;
-            if (!mergeTaskParams->Output.PartId.empty()) {
-                auto prevPartId = mergeTaskParams->Output.PartId;
-                groupsToClear.emplace_back(tableId, prevPartId);
-            }
-        } else if (mapTaskParams) {
-            for (auto& fmrTableOutputRef: mapTaskParams->Output) {
-                TString tableId = fmrTableOutputRef.TableId;
-                if (!fmrTableOutputRef.PartId.empty()) {
-                    auto prevPartId = fmrTableOutputRef.PartId;
-                    groupsToClear.emplace_back(tableId, prevPartId);
-                }
-            }
+        if (!Tasks_.contains(task->TaskId)) {
+            return {};
         }
-        return groupsToClear;
+        TString operationId = Tasks_[task->TaskId].OperationId;
+        auto opIt = Operations_.find(operationId);
+        if (opIt == Operations_.end() || !opIt->second.StageManager) {
+            return {};
+        }
+        GetPartIdsForTaskContext context{
+            .Task = task,
+            .PartIdStats = PartIdStats_
+        };
+        return opIt->second.StageManager->GetPartIdsForTask(context);
     }
 
     std::vector<TString> GetTableGroupsToClear(const std::vector<TPartIdInfo>& groupsToClear) {
@@ -790,30 +854,41 @@ private:
         return tableGroupsToClear;
     }
 
+    std::unordered_set<TString> GetPartIdsToKeepForTask(TTask::TPtr task) {
+        std::unordered_set<TString> partIdsToKeep; // encoded as table data service group id
+        if (auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&task->TaskParams)) {
+            if (!sortedMergeTaskParams->Output.PartId.empty()) {
+                partIdsToKeep.emplace(GetTableDataServiceGroup(sortedMergeTaskParams->Output.TableId, sortedMergeTaskParams->Output.PartId));
+            }
+        }
+        return partIdsToKeep;
+    }
+
     void ClearPreviousPartIdsForTask(TTask::TPtr task) {
         std::vector<TString> tableGroupsToClear;
         std::vector<TPartIdInfo> groupsToClear;
+        auto partIdsToKeep = GetPartIdsToKeepForTask(task);
         with_lock(Mutex_) {
             groupsToClear = CollectPreviousPartIdsForTask(task);
             tableGroupsToClear = GetTableGroupsToClear(groupsToClear);
         }
 
-        GcService_->ClearGarbage(tableGroupsToClear).GetValueSync();
+        if (tableGroupsToClear.empty() && groupsToClear.empty()) {
+            return;
+        }
 
-        with_lock(Mutex_) {
-            for (const auto& group : groupsToClear) {
-                auto tableIt = PartIdsForTables_.find(group.TableId);
-                if (tableIt != PartIdsForTables_.end()) {
-                    auto& partIds = tableIt->second;
-                    auto partIdPosition = std::find(partIds.begin(), partIds.end(), group.PartId);
-                    if (partIdPosition != partIds.end()) {
-                        partIds.erase(partIdPosition);
-                    }
-                    if (partIds.empty()) {
-                        PartIdsForTables_.erase(tableIt);
-                    }
-                }
-            }
+        YQL_CLOG(INFO, FastMapReduce) << "ClearPreviousPartIdsForTask: taskId=" << task->TaskId
+            << " groupsToClear=" << tableGroupsToClear.size();
+        for (const auto& group : tableGroupsToClear) {
+            YQL_CLOG(DEBUG, FastMapReduce) << "ClearPreviousPartIdsForTask: clearing group=" << group;
+        }
+
+        with_lock(GcQueueMutex_) {
+            GcQueue_.push(TGcTask{
+                .TableGroupsToClear = std::move(tableGroupsToClear),
+                .GroupsToClear = std::move(groupsToClear),
+                .PartIdsToKeep = std::move(partIdsToKeep),
+            });
         }
     }
 
@@ -840,37 +915,6 @@ private:
         return tableStats;
     }
 
-    void InitializeSortedUploadOperation(
-        const TString& operationId,
-        ui64 tasksNum,
-        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections
-    ) {
-        YQL_ENSURE(clusterConnections.size() == 1, "SortedUpload should have exactly one cluster connection");
-
-        TSortedUploadOperatonMeta uploadMeta{
-            .FragmentResultsYson = std::vector<TString>(tasksNum)
-        };
-
-        OperationsToProcessAfter_[operationId] = uploadMeta;
-
-        YQL_CLOG(DEBUG, FastMapReduce) << "Initialized SortedUpload operation " << operationId
-            << " with " << tasksNum << " tasks";
-    }
-
-    void HandleOperationToProcessAfterTaskCompleted(const TString& operationId, TTaskState::TPtr taskState) {
-        if (!OperationsToProcessAfter_.contains(operationId)) {
-            return;
-        }
-
-        auto& distributedOpInfo = OperationsToProcessAfter_[operationId];
-
-        if (auto* taskSortedUploadResult = std::get_if<TTaskSortedUploadResult>(&taskState->Stats.TaskResult)) {
-            if (auto* uploadMeta = std::get_if<TSortedUploadOperatonMeta>(&distributedOpInfo)) {
-                uploadMeta->FragmentResultsYson[taskSortedUploadResult->FragmentOrder] = taskSortedUploadResult->FragmentResultYson;
-            }
-        }
-    }
-
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TCoordinatorTaskInfo {
@@ -880,19 +924,29 @@ private:
         ui64 NumRetries;
     };
 
-
-    struct TSortedUploadOperatonMeta {
-        std::vector<TString> FragmentResultsYson;  // order -> YSON-serialized fragment result
-    };
-
-    using TOperationsToProcessAfterMeta = std::variant<TSortedUploadOperatonMeta>;
-
-    struct TOperationInfo {
-        std::unordered_set<TString> TaskIds;
+   struct TOperationInfo {
+        std::unordered_set<TString> TaskIds;          // Task IDs for the current stage
         EOperationStatus OperationStatus;
         std::vector<TFmrError> ErrorMessages;
         TString SessionId;
         std::unordered_set<TString> OutputTableIds = {};
+
+        // Stage management
+        IFmrStageOperationManager::TPtr StageManager;
+        TOperationParams OperationParams;
+        std::unordered_set<TString> AllTaskIds;       // All task IDs across all stages (for cleanup)
+
+        // Operation-level context (constant across stages)
+        std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
+        std::vector<TFileInfo> Files;
+        std::vector<TYtResourceInfo> YtResources;
+        std::vector<TFmrResourceOperationInfo> FmrResources;
+        NYT::TNode FmrOperationSpec;
+    };
+
+    struct TSessionInfo {
+        std::vector<TString> OperationIds;  // List of Operation Ids
+        TInstant LastActivity;
     };
 
     struct TIdempotencyKeyInfo {
@@ -907,16 +961,11 @@ private:
         bool NeedsToRestart = false;
     };
 
-    struct TSessionInfo {
-        std::vector<TString> OperationIds;  // List of Operation Ids
-        TInstant LastActivity;
-    };
 
     std::unordered_map<TString, TCoordinatorTaskInfo> Tasks_; // TaskId -> current info about it
     std::queue<std::pair<TTask::TPtr, TString>> TasksToRun_; // Task, and TaskId
     std::unordered_set<TString> TaskToDeleteIds_; // TaskIds we want to pass to worker for deletion
     std::unordered_map<TString, TOperationInfo> Operations_; // OperationId -> current info about it
-    std::unordered_map<TString, TOperationsToProcessAfterMeta> OperationsToProcessAfter_; // OperationId -> distributed operation tracking
     std::unordered_map<TString, TIdempotencyKeyInfo> IdempotencyKeys_; // IdempotencyKey -> current info about it
     std::unordered_map<TString, TSessionInfo> Sessions_; // SessionId -> Session info (operations and activity)
     std::unordered_map<TString, TPartitionResult> OperationPartitions_; // PartitionId -> TaskParamsPartition
@@ -944,91 +993,18 @@ private:
     IYtCoordinatorService::TPtr YtCoordinatorService_; // Needed for partitioning of yt tables
     IFmrGcService::TPtr GcService_;
 
+    struct TGcTask {
+        std::vector<TString> TableGroupsToClear;
+        std::vector<TPartIdInfo> GroupsToClear;
+        std::unordered_set<TString> PartIdsToKeep;
+    };
+
+    TMutex GcQueueMutex_;
+    std::queue<TGcTask> GcQueue_;
+    std::thread GcThread_;
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    struct TOperationInputTablesGetter {
-        std::vector<TOperationTableRef> OperationTableRef; // will be filled when std::visit is called
-
-        void operator()(const TUploadOperationParams& uploadOperationParams) {
-            OperationTableRef.emplace_back(uploadOperationParams.Input);
-        }
-        void operator()(const TDownloadOperationParams& downloadOperationParams) {
-            OperationTableRef.emplace_back(downloadOperationParams.Input);
-        }
-        void operator()(const TMergeOperationParams& mergeOperationParams) {
-            OperationTableRef = mergeOperationParams.Input;
-        }
-        void operator()(const TMapOperationParams& mapOperationParams) {
-            OperationTableRef = mapOperationParams.Input;
-        }
-        void operator()(const TSortedUploadOperationParams& SortedUploadOperationParams) {
-            OperationTableRef.emplace_back(SortedUploadOperationParams.Input);
-        }
-    };
-
-    struct TOutputTaskParamsGetter {
-        std::vector<TTaskParams> TaskParams; // Will be filled when std::visit is called
-        TPartitionResult PartitionResult;
-
-        void operator()(const TUploadOperationParams& uploadOperationParams) {
-            for (auto& task: PartitionResult.TaskInputs) {
-                TUploadTaskParams uploadTaskParams;
-                YQL_ENSURE(task.Inputs.size() == 1, "Upload task should have exactly one fmr table partition input");
-                auto& fmrTablePart = task.Inputs[0];
-                uploadTaskParams.Input = std::get<TFmrTableInputRef>(fmrTablePart);
-                uploadTaskParams.Output = uploadOperationParams.Output;
-                TaskParams.emplace_back(uploadTaskParams);
-            }
-        }
-        void operator()(const TSortedUploadOperationParams& SortedUploadOperationParams) {
-            ui64 taskOrder = 0;
-            for (auto& task: PartitionResult.TaskInputs) {
-                TSortedUploadTaskParams SortedUploadTaskParams;
-                YQL_ENSURE(task.Inputs.size() == 1, "Distributed upload task should have exactly one fmr table partition input");
-                auto& fmrTablePart = task.Inputs[0];
-                SortedUploadTaskParams.Input = std::get<TFmrTableInputRef>(fmrTablePart);
-                SortedUploadTaskParams.Output = SortedUploadOperationParams.Output;
-                SortedUploadTaskParams.CookieYson = SortedUploadOperationParams.Cookies[taskOrder];
-                SortedUploadTaskParams.Order = taskOrder;
-                TaskParams.emplace_back(SortedUploadTaskParams);
-                taskOrder++;
-            }
-        }
-        void operator()(const TDownloadOperationParams& downloadOperationParams) {
-            for (auto& task: PartitionResult.TaskInputs) {
-                TDownloadTaskParams downloadTaskParams;
-                YQL_ENSURE(task.Inputs.size() == 1, "Download task should have exactly one yt table partition input");
-                auto& ytTablePart = task.Inputs[0];
-                downloadTaskParams.Input = std::get<TYtTableTaskRef>(ytTablePart);
-                downloadTaskParams.Output = TFmrTableOutputRef(downloadOperationParams.Output);
-                // PartId for tasks which write to table data service will be set later
-                TaskParams.emplace_back(downloadTaskParams);
-            }
-        }
-        void operator()(const TMergeOperationParams& mergeOperationParams) {
-            for (auto& task: PartitionResult.TaskInputs) {
-                TMergeTaskParams mergeTaskParams;
-                mergeTaskParams.Input = task;
-                mergeTaskParams.Output = TFmrTableOutputRef(mergeOperationParams.Output);
-                TaskParams.emplace_back(mergeTaskParams);
-            }
-        }
-        void operator()(const TMapOperationParams& mapOperationParams) {
-            for (auto& task: PartitionResult.TaskInputs) {
-                TMapTaskParams mapTaskParams;
-                mapTaskParams.Input = task;
-                std::vector<TFmrTableOutputRef> fmrTableOutputRefs;
-                std::transform(mapOperationParams.Output.begin(), mapOperationParams.Output.end(), std::back_inserter(fmrTableOutputRefs), [] (const TFmrTableRef& fmrTableRef) {
-                    return TFmrTableOutputRef(fmrTableRef);
-                });
-
-                mapTaskParams.Output = fmrTableOutputRefs;
-                mapTaskParams.SerializedMapJobState = mapOperationParams.SerializedMapJobState;
-                mapTaskParams.IsOrdered = mapOperationParams.IsOrdered;
-                TaskParams.emplace_back(mapTaskParams);
-            }
-        }
-    };
 };
 
 } // namespace

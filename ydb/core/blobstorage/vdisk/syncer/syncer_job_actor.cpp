@@ -62,10 +62,12 @@ namespace NKikimr {
 
             if (outcome.Die) {
                 // if full sync, notify AnubisRunner about it
+#ifndef USE_MERGE_FULL_SYNC_SCHEME
                 if (Task->IsFullRecoveryTask()) {
                     TVDiskIdShort vd = Task->VDiskId;
                     ctx.Send(SyncerCtx->AnubisRunnerId, new TEvFullSyncedWith(vd));
                 }
+#endif
                 ctx.Send(NotifyId, new TEvSyncerJobDone(std::move(Task)));
                 Die(ctx);
             }

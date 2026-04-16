@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import (
@@ -45,7 +47,7 @@ class QuerySessionPool:
         self._driver = driver
         self._size = size
         self._should_stop = asyncio.Event()
-        self._queue = asyncio.Queue()
+        self._queue: asyncio.Queue[QuerySession] = asyncio.Queue()
         self._current_size = 0
         self._waiters = 0
         self._loop = asyncio.get_running_loop() if loop is None else loop
@@ -105,7 +107,8 @@ class QuerySessionPool:
         try:
             session = await self._create_new_session()
         except Exception as e:
-            logger.error("Failed to create new session")
+            # TODO: this exception could be retried via retrier, so no need to log error here. Probably we should retry this right in create_new_session method.
+            logger.warning("Failed to create new session")
             self._current_size -= 1
             raise e
 
@@ -251,6 +254,8 @@ class QuerySessionPool:
 
 
 class SimpleQuerySessionCheckoutAsync:
+    _session: Optional[QuerySession]
+
     def __init__(self, pool: QuerySessionPool):
         self._pool = pool
         self._session = None
@@ -259,5 +264,6 @@ class SimpleQuerySessionCheckoutAsync:
         self._session = await self._pool.acquire()
         return self._session
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._pool.release(self._session)
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._session is not None:
+            await self._pool.release(self._session)

@@ -112,5 +112,17 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         kernel_version_other.go
         syscall.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        at_wasip1.go
+        constants.go
+        fcntl_wasip1.go
+        kernel_version_other.go
+        net_wasip1.go
+        nofollow_posix.go
+        nonblocking_wasip1.go
+        syscall.go
+        utimes_wasip1.go
+    )
 ENDIF()
 END()

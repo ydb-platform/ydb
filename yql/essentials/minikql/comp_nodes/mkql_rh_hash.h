@@ -17,8 +17,7 @@
 
 #define MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <class TKey>
 struct TRobinHoodDefaultSettings {
@@ -380,7 +379,8 @@ private:
     Y_NO_INLINE void Grow() {
         auto newCapacity = Capacity_ * CalculateRHHashTableGrowFactor(Capacity_);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
-        char *newData, *newDataEnd;
+        char* newData;
+        char* newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {
             Allocator_.deallocate(newData, newDataEnd - newData);
@@ -653,5 +653,4 @@ public:
     }
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -4,8 +4,7 @@
 #include <library/cpp/regex/hyperscan/hyperscan.h>
 #include <util/charset/utf8.h>
 
-namespace NReWrapper {
-namespace NHyperscan {
+namespace NReWrapper::NHyperscan {
 
 namespace {
 
@@ -67,5 +66,4 @@ IRePtr Deserialize(const TSerialization& proto) {
 
 REGISTER_RE_LIB(TSerialization::kHyperscan, Compile, Deserialize)
 
-} // namespace NHyperscan
-} // namespace NReWrapper
+} // namespace NReWrapper::NHyperscan

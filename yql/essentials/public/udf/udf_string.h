@@ -10,8 +10,7 @@
 
 #include <new>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TStringValue
@@ -270,5 +269,4 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(TStringValue, 8);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

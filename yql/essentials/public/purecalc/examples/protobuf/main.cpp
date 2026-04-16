@@ -47,9 +47,14 @@ int main(int argc, char** argv) {
         Cout << Endl;
         Cout << "Pull stream with pre-compilation:" << Endl;
         PrecompileExample(factory);
+        return 0;
     } catch (const TCompileError& err) {
         Cerr << err.GetIssues() << Endl;
         Cerr << err.what() << Endl;
+        return 1;
+    } catch (...) {
+        Cerr << "Error: " << CurrentExceptionMessage() << Endl;
+        return 1;
     }
 }
 

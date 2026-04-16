@@ -251,6 +251,7 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
+                OPTIONAL(AppliedGroupGeneration)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
@@ -376,7 +377,7 @@ public:
             while (!table.EndOfSet()) {
                 const TPDiskId pdiskId(table.GetValue<Table::NodeID>(), table.GetValue<Table::PDiskID>());
                 if (TPDiskInfo *pdisk = Self->FindPDisk(pdiskId)) {
-                    pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    pdisk->PersistedMetrics = pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
                 } else {
                     pdiskMetricsToDelete.push_back(table.GetKey());
                 }
@@ -406,7 +407,8 @@ public:
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
                     slot.GetValue<T::FailDomainIdx>(), slot.GetValue<T::VDiskIdx>(), slot.GetValueOrDefault<T::Mood>(),
                     Self->FindGroup(groupId), &Self->VSlotReadyTimestampQ, slot.GetValue<T::LastSeenReady>(),
-                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0));
+                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0),
+                    slot.GetValueOrDefault<T::PersistentBufferRefs>(0));
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
@@ -448,7 +450,7 @@ public:
                 const TVDiskID key(TGroupId::FromValue(table.GetValue<Table::GroupID>()), table.GetValue<Table::GroupGeneration>(),
                     table.GetValue<Table::Ring>(), table.GetValue<Table::FailDomain>(), table.GetValue<Table::VDisk>());
                 if (TVSlotInfo *slot = Self->FindVSlot(key)) {
-                    slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    slot->PersistedMetrics = slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
                     slot->UpdateVDiskMetrics();
                 } else {
                     vdiskMetricsToDelete.push_back(table.GetKey());
@@ -707,16 +709,8 @@ public:
                 kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
                 kvp->SetGeneration(groupInfo->Generation);
 
-                TMaybe<TKikimrScopeId> scopeId;
-                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
-                if (info.SchemeshardId && info.PathItemId) {
-                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
-                } else {
-                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
-                }
-
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, info, scopeId);
+                SerializeGroupInfo(&proto, *groupInfo, Self->StoragePools);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }
@@ -756,7 +750,11 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (Self->EnableConfigV2) {
+            Self->PendingV2MigrationCheck = true;
+        }
         if (!Self->SelfManagementEnabled) {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE05, "TTxLoadEverything StartConsoleInteraction");
             Self->ConsoleInteraction->Start();
         }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");

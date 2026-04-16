@@ -34,7 +34,7 @@ Y_UNIT_TEST(ReloadPQTablet) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
 
@@ -48,7 +48,7 @@ Y_UNIT_TEST(ReloadPQTablet) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
 
@@ -190,7 +190,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
         GetReadResponse(runtime);
@@ -246,7 +246,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
 
@@ -264,7 +264,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
 
@@ -285,7 +285,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
 
@@ -367,6 +367,112 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Unprocessed));
 
         break;
+    }
+}
+
+Y_UNIT_TEST(CommitNonExistentMessage) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(17)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    Cerr << ">>>>> BEGIN COMMIT" << Endl;
+    {
+        CreateCommitterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    }
+}
+
+Y_UNIT_TEST(UnlockNonExistentMessage) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(17)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    Cerr << ">>>>> BEGIN UNLOCK" << Endl;
+    {
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    }
+}
+
+Y_UNIT_TEST(ChangeMessageDeadlineNonExistentMessage) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(17)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    Cerr << ">>>>> BEGIN CHANGE MESSAGE DEADLINE" << Endl;
+    {
+        CreateMessageDeadlineChangerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) },
+            .Deadlines = { TInstant::Seconds(1000) }
+        });
+
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     }
 }
 

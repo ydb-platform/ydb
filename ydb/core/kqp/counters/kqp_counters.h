@@ -347,6 +347,7 @@ public:
     void ReportCompileQueueWaitTime(const TDuration& duration);
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
+    ::NMonitoring::TDynamicCounterPtr GetRootCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters() const;
@@ -363,6 +364,8 @@ public:
 public:
     ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
     ::NMonitoring::TDynamicCounterPtr ChannelGroup;
+
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
 
@@ -381,6 +384,12 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
     ::NMonitoring::THistogramPtr CompileQueueWaitTime;
+
+    // Warmup
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesFetched;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesCompiled;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesEmptyQueryType;
 
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;

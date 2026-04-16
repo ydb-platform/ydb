@@ -186,6 +186,7 @@ enum EClientLabeledCounters {
 
     METRIC_READ_QUOTA_PER_CONSUMER_USAGE = 26                        [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.read.throttled_microseconds_max"}];
     METRIC_TOTAL_COMMIT_MESSAGE_LAG = 27                             [(LabeledCounterOpts) = {Name: "TotalMessageLagByCommitted" AggrFunc : EAF_SUM SVName: "topic.committed_lag_messages"}];
+    METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS = 28                  [(LabeledCounterOpts) = {Name: "InFlightLimitReachedDurationMs" AggrFunc : EAF_MAX SVName: "topic.partition.read.inflight_limit_reached_duration_milliseconds"}];
 }
 
 

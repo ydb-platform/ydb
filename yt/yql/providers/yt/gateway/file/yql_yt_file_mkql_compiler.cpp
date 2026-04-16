@@ -670,12 +670,17 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
     compiler.OverrideCallable(TYtBlockTableContent::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtBlockTableContent tableContent(&node);
-
-            auto origItemStructType = (
+            auto typeAnn =
                 tableContent.Input().Maybe<TYtOutput>()
                     ? tableContent.Input().Ref().GetTypeAnn()
-                    : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()
-            )->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    : static_cast<TCheckedDerefPtr<const TTypeAnnotationNode>>(
+                          tableContent.Input()
+                              .Ref()
+                              .GetTypeAnn()
+                              ->Cast<TTupleExprType>()
+                              ->GetItems()
+                              .back());
+            auto origItemStructType = typeAnn->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
             TMaybe<ui64> itemsCount;
             if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {

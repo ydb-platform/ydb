@@ -363,7 +363,8 @@ public:
 };
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
-                                                      bool dml = true);
+                                                      bool dml = true,
+                                                      NACLib::TUserContext::TPtr userCtx = nullptr);
 
 class TLambdaActor : public IActorCallback {
 public:
@@ -452,6 +453,8 @@ struct TShardedTableOptions {
         TMaybe<TString> AwsRegion;
         bool TopicAutoPartitioning = false;
         bool SchemaChanges = false;
+        bool UserSIDs = true;
+        bool TraceIds = false;
     };
 
     struct TFamily {
@@ -537,7 +540,7 @@ ui64 AsyncCreateCopyTable(Tests::TServer::TPtr server,
                           bool isBackup = false);
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
-    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false, ui64 cookie = 0);
 
 NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId);
@@ -615,6 +618,13 @@ ui64 AsyncDropTable(
         TActorId sender,
         const TString& workingDir,
         const TString& name);
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& path,
+        ui64 sourceTablet,
+        NKikimrMiniKQL::TValue&& splitKey);
 
 ui64 AsyncSplitTable(
         Tests::TServer::TPtr server,
@@ -811,7 +821,14 @@ void ExecSQL(Tests::TServer::TPtr server,
              const TString &sql,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
-             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext());
+             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext(),
+             NACLib::TUserContext::TPtr userCtx = nullptr);
+
+void ExecSQL(Tests::TServer::TPtr server,
+             TActorId sender,
+             const TString &sql,
+             bool dml,
+             NACLib::TUserContext::TPtr userCtx);
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 

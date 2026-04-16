@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/formats/arrow/switch
     yql/essentials/core
+    ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
     ydb/core/util
@@ -31,6 +32,8 @@ PEERDIR(
     yql/essentials/public/udf
     ydb/public/api/protos
 )
+
+GENERATE_ENUM_SERIALIZATION(table_description.h)
 
 YQL_LAST_ABI_VERSION()
 

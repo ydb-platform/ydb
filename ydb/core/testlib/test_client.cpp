@@ -83,6 +83,7 @@
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
@@ -106,6 +107,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
@@ -576,7 +578,6 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
-#undef MERGE_CFG_FROM_SETTINGS
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
@@ -1398,9 +1399,13 @@ namespace Tests {
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
 
+                if (FederatedQuerySetupDriver_) {
+                    FederatedQuerySetupDriver_.reset();
+                }
+
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-                auto driver = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
-                auto pqGateway = NKqp::MakePqGateway(driver, NKqp::TLocalTopicClientSettings{
+                FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
                     .ActorSystem = Runtime->GetActorSystem(nodeIdx),
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
@@ -1415,14 +1420,13 @@ namespace Tests {
                     queryServiceConfig.GetYt(),
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
                     queryServiceConfig.GetSolomon(),
-                    Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory,
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? Settings->PqGateway : pqGateway,
+                    Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
                     actorSystemPtr,
-                    driver);
+                    FederatedQuerySetupDriver_);
             }
 
             const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
@@ -1435,6 +1439,7 @@ namespace Tests {
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
+                                                                  Settings->AppConfig->GetTliConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
@@ -1465,6 +1470,7 @@ namespace Tests {
         }
 
         {
+            Runtime->GetAppData(nodeIdx).SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
             IActor* longTxService = NLongTxService::CreateLongTxService();
             TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx, userPoolId);
             Runtime->RegisterService(NLongTxService::MakeLongTxServiceID(Runtime->GetNodeId(nodeIdx)), longTxServiceId, nodeIdx);
@@ -1489,7 +1495,10 @@ namespace Tests {
             Runtime->RegisterService(NIcNodeCache::CreateICNodesInfoCacheServiceId(), icCacheId, nodeIdx);
         }
         {
-            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
+            TString endpoint = "localhost:" + ToString(Settings->GrpcPort);
+            auto driverConfig = NYdb::TDriverConfig()
+                .SetEndpoint(endpoint);
+
             if (!Driver) {
                 Driver.Reset(new NYdb::TDriver(driverConfig));
             }
@@ -1825,11 +1834,6 @@ namespace Tests {
         return Runtime->GetAppData().FunctionRegistry;
     }
 
-    const NYdb::TDriver& TServer::GetDriver() const {
-        Y_ABORT_UNLESS(Driver);
-        return *Driver;
-    }
-
     const NYdbGrpc::TGRpcServer& TServer::GetGRpcServer() const {
         return GetTenantGRpcServer(Settings->DomainName);
     }
@@ -1870,6 +1874,12 @@ namespace Tests {
             WaitFinalization();
             SysViewsRosterUpdateObserver.Remove();
             Runtime.Destroy();
+        }
+
+        if (FederatedQuerySetupDriver_) {
+            // Stop is inside a destruction proccess
+            // see MakeSharedYdbDriverWithStop
+            FederatedQuerySetupDriver_.reset();
         }
 
         if (Bus) {
@@ -2185,8 +2195,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf) {
+    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetWorkingDir(parent);
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
@@ -2404,8 +2417,11 @@ namespace Tests {
         return event->Record;
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         op->SetWorkingDir(parent);
@@ -2493,11 +2509,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout) {
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout, const TString& userToken) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
         UNIT_ASSERT(parseOk);
-        return CreateTable(parent, table, timeout);
+        return CreateTable(parent, table, timeout, userToken);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateKesus(const TString& parent, const TString& name) {
@@ -2796,8 +2812,11 @@ namespace Tests {
         Y_ABORT_UNLESS(ev);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);
@@ -2814,8 +2833,11 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);
@@ -3527,6 +3549,75 @@ namespace Tests {
             Sleep(TDuration::MilliSeconds(100));
         }
         ythrow yexception() << "Waiting tenant status RUNNING timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ". Last tenant description:\n" << getTenantResult.DebugString();
+    }
+
+    void TTenants::RemoveTenant(Ydb::Cms::RemoveDatabaseRequest request, TDuration timeout) {
+        const TString path = request.path();
+        auto& runtime = *Server->GetRuntime();
+
+        // Check if serverless
+        bool isServerless = false;
+        {
+            auto getStatusRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getStatusRequest->Record.MutableRequest()->set_path(path);
+            const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getStatusRequest.release(), 0, GetPipeConfigWithRetries());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+
+            if (response && response->Get()->Record.GetResponse().operation().status() == Ydb::StatusIds::SUCCESS) {
+                Ydb::Cms::GetDatabaseStatusResult status;
+                response->Get()->Record.GetResponse().operation().result().UnpackTo(&status);
+                // Serverless if serverless_resources is set
+                isServerless = status.has_serverless_resources();
+            }
+        }
+
+        // Stop dedicated nodes
+        if (!isServerless) {
+            Stop(path);
+        }
+
+        // Remove
+        const auto result = NKikimr::NRpcService::DoLocalRpc<
+            NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Cms::RemoveDatabaseRequest, Ydb::Cms::RemoveDatabaseResponse>
+        >(std::move(request), "", "", runtime.GetActorSystem(0), true).ExtractValueSync();
+
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(result.operation().issues(), issues);
+            ythrow yexception() << "Failed to remove tenant " << path
+                << ", status: " << result.operation().status()
+                << ", reason:\n" << issues.ToString();
+        }
+
+        // Wait for NOT_FOUND
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+        const TInstant start = TInstant::Now();
+
+        while (TInstant::Now() - start <= timeout) {
+            auto getStatusRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getStatusRequest->Record.MutableRequest()->set_path(path);
+
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getStatusRequest.release(), 0, GetPipeConfigWithRetries());
+
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+            if (response) {
+                auto status = response->Get()->Record.GetResponse().operation().status();
+                if (status == Ydb::StatusIds::NOT_FOUND) {
+                    return;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        ythrow yexception() << "Waiting tenant removal timeout for " << path;
+    }
+
+    void TTenants::RemoveTenant(const TString& path, TDuration timeout) {
+        Ydb::Cms::RemoveDatabaseRequest request;
+        request.set_path(path);
+        RemoveTenant(std::move(request), timeout);
     }
 
     TVector<ui32> &TTenants::Nodes(const TString &name) {

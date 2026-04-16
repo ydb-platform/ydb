@@ -17,6 +17,7 @@ TFmrTableDataServiceSortedWriter::TFmrTableDataServiceSortedWriter(
 )
     : TFmrTableDataServiceBaseWriter(tableId, partId, tableDataService, columnGroupSpec, settings)
     , KeyColumns_(std::move(keyColumns))
+    , SkipSortedCheck_(settings.SkipSortedCheck)
 {
 }
 
@@ -26,27 +27,17 @@ void TFmrTableDataServiceSortedWriter::PutRows() {
     }
     auto currentYsonContent = TString(TableContent_.Data(), TableContent_.Size());
 
-    const auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
-
     auto parserKeyIndexes = TParserFragmentListIndex(currentYsonContent, KeyColumns_.Columns);
     parserKeyIndexes.Parse();
     const auto& chunkIndexes = parserKeyIndexes.GetRows();
 
-    CheckIsSorted(currentYsonContent, chunkIndexes);
+    if (!SkipSortedCheck_) {
+        CheckIsSorted(currentYsonContent, chunkIndexes);
+    }
+
     auto sortedChunkStats = GetSortedChunkStats(currentYsonContent, chunkIndexes);
 
-    PutYsonByColumnGroups(currentYsonContent).GetValueSync();
-
-    if (ColumnGroupSpec_.IsEmpty()) {
-        TSortedRowMetadata metadata{chunkIndexes, KeyColumns_.Columns};
-        TStringStream metadataStream;
-        metadata.Save(&metadataStream);
-        TableDataService_->Put(
-            tableDataServiceGroup,
-            GetTableDataServiceMetaChunkId(ChunkCount_),
-            metadataStream.Str()
-        ).GetValueSync();
-    }
+    PutYsonByColumnGroups(currentYsonContent);
 
     PartIdChunkStats_.emplace_back(TChunkStats{
         .Rows = CurrentChunkRows_,
@@ -60,7 +51,7 @@ TString TFmrTableDataServiceSortedWriter::GetIndexValue(TStringBuf currentYsonCo
     return TString(currentYsonContent.SubStr(index.StartOffset, index.EndOffset - index.StartOffset));
 };
 
-NYT::TNode TFmrTableDataServiceSortedWriter::GetKeyRowByIndexes(TStringBuf currentYsonContent, const TVector<TColumnOffsetRange>& indexes) const {
+NYT::TNode TFmrTableDataServiceSortedWriter::GetKeyRowByIndexes(TStringBuf currentYsonContent, const std::vector<TColumnOffsetRange>& indexes) const {
     NYT::TNode result = NYT::TNode::CreateMap();
 
     for (size_t i = 0; i < KeyColumns_.Columns.size(); ++i) {
@@ -76,7 +67,7 @@ NYT::TNode TFmrTableDataServiceSortedWriter::GetKeyRowByIndexes(TStringBuf curre
     return result;
 };
 
-TSortedChunkStats TFmrTableDataServiceSortedWriter::GetSortedChunkStats(TStringBuf currentYsonContent, const TVector<TRowIndexMarkup>& chunkIndexes) const {
+TSortedChunkStats TFmrTableDataServiceSortedWriter::GetSortedChunkStats(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const {
     if (chunkIndexes.empty()) {
         return TSortedChunkStats{.IsSorted = true};
     }
@@ -91,7 +82,7 @@ TSortedChunkStats TFmrTableDataServiceSortedWriter::GetSortedChunkStats(TStringB
     return {.IsSorted = true, .FirstRowKeys = downBoundaryKeys, .LastRowKeys = upBoundaryKeys};
 }
 
-void TFmrTableDataServiceSortedWriter::CheckIsSorted(TStringBuf currentYsonContent, const TVector<TRowIndexMarkup>& chunkIndexes) const {
+void TFmrTableDataServiceSortedWriter::CheckIsSorted(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const {
     TBinaryYsonComparator comparator(currentYsonContent, KeyColumns_.SortOrders);
     for (ui64 i = 0; i < chunkIndexes.size() - 1; ++i) {
         const auto& curRowKeys = chunkIndexes[i];

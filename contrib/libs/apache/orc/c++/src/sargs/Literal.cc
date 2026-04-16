@@ -293,6 +293,11 @@ namespace orc {
     return std::string(value_.Buffer, size_);
   }
 
+  std::string_view Literal::getStringView() const {
+    validate(isNull_, type_, PredicateDataType::STRING);
+    return std::string_view(value_.Buffer, size_);
+  }
+
   bool Literal::getBool() const {
     validate(isNull_, type_, PredicateDataType::BOOLEAN);
     return value_.BooleanVal;

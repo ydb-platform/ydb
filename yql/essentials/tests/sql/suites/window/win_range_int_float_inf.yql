@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 /* custom error: Inf is not allowed for RANGE frame bounds */
 
 $data = [
@@ -29,7 +28,7 @@ $str = ($x) -> {
 };
 
 SELECT
-    Ensure(count, count IS NOT DISTINCT FROM actual_count, $str(actual_count))
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count, $str(actual_count))
 FROM
     $win_result
 ;

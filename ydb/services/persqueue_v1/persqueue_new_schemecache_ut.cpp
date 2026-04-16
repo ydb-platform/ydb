@@ -550,7 +550,7 @@ namespace NKikimr::NPersQueueTests {
                 TTestServer server(false);
                 server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
                 server.StartServer();
-                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE});
+                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER});
 
                 const TString topicName{"account2/topic2"};
                 const TString fullTopicName{"/Root/account2/topic2"};
@@ -596,7 +596,7 @@ namespace NKikimr::NPersQueueTests {
                         .EndAddConsumer()
                     );
                     res.Wait();
-                    UNIT_ASSERT(res.GetValue().IsSuccess());
+                    UNIT_ASSERT_C(res.GetValue().IsSuccess(), res.GetValue().GetIssues().ToString());
                 }
 
                 auto checkCounters =

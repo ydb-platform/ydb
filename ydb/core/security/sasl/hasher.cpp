@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/login/hashes_checker/hash_types.h>
 #include <ydb/library/login/hashes_checker/hashes_checker.h>
+#include <ydb/library/login/sasl/saslprep.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -35,6 +36,28 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         auto response = std::make_unique<TEvSasl::TEvComputedHashes>();
 
+        std::string prepUsername;
+        auto saslPrepRC = NLogin::NSasl::SaslPrep(StaticCreds.Username, prepUsername);
+        if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
+            response->Error = "Unsupported characters in username";
+            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
+                "Hasher# " << ctx.SelfID.ToString() <<
+                ", username check failed" <<
+                ", reason: " << response->Error
+            );
+
+            LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
+                "Hasher# " << ctx.SelfID.ToString() <<
+                ", Send TEvComputedHashes: " <<
+                "{ error: " << response->Error << " }"
+            );
+
+            Send(Sender, response.release());
+            return Die(ctx);
+        }
+
+        response->PreparedUsername = std::move(prepUsername);
+
         auto passwordCheckResult = PasswordChecker.Check(StaticCreds.Username, StaticCreds.Password);
         if (!passwordCheckResult.Success) {
             response->Error = passwordCheckResult.Error;
@@ -48,9 +71,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
                 "Hasher# " << ctx.SelfID.ToString() <<
                 ", Send TEvComputedHashes: " <<
-                "{ error: " << response->Error <<
-                ", hashes: " << Base64StrictDecode(response->Hashes) <<
-                ", argon hash: " << response->ArgonHash << " }"
+                "{ error: " << response->Error << " }"
             );
 
             Send(Sender, response.release());
@@ -112,6 +133,7 @@ public:
             "Hasher# " << ctx.SelfID.ToString() <<
             ", Send TEvComputedHashes: " <<
             "{ error: " << response->Error <<
+            ", username: " << response->PreparedUsername <<
             ", hashes: " << Base64StrictDecode(response->Hashes) <<
             ", argon hash: " << response->ArgonHash << " }"
         );

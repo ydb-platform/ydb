@@ -186,7 +186,7 @@ class _TLSContentType:
 class _TLSAlertType:
     """Alert types for TLSContentType.ALERT messages
 
-    See RFC 8466, section B.2
+    See RFC 8446, section B.2
     """
     CLOSE_NOTIFY = 0
     UNEXPECTED_MESSAGE = 10
@@ -543,7 +543,8 @@ class SSLContext(_SSLContext):
         if not isinstance(purpose, _ASN1Object):
             raise TypeError(purpose)
 
-        self.load_verify_locations(cadata=builtin_cadata())
+        if os.getenv("SSL_CERT_FILE") is None and os.getenv("SSL_CERT_DIR") is None:
+            self.load_verify_locations(cadata=builtin_cadata())
 
         if sys.platform == "win32":
             for storename in self._windows_cert_stores:

@@ -66,6 +66,9 @@ enum class EBackupFileType : unsigned char {
 
     // External table
     ExternalTableCreate = 10,
+
+    // System view
+    SysViewDescription = 10,
 };
 
 struct TEncryptionIV {

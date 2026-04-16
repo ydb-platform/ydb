@@ -5,14 +5,17 @@
 """Routines common to all posix systems."""
 
 import enum
+import errno
 import glob
 import os
+import select
 import signal
 import time
 
 from . import _ntuples as ntp
 from ._common import MACOS
 from ._common import TimeoutExpired
+from ._common import debug
 from ._common import memoize
 from ._common import usage_percent
 
@@ -58,10 +61,40 @@ def negsig_to_enum(num):
         return num
 
 
-def wait_pid(
+def convert_exit_code(status):
+    """Convert a os.waitpid() status to an exit code."""
+    if os.WIFEXITED(status):
+        # Process terminated normally by calling exit(3) or _exit(2),
+        # or by returning from main(). The return value is the
+        # positive integer passed to *exit().
+        return os.WEXITSTATUS(status)
+    if os.WIFSIGNALED(status):
+        # Process exited due to a signal. Return the negative value
+        # of that signal.
+        return negsig_to_enum(-os.WTERMSIG(status))
+    # if os.WIFSTOPPED(status):
+    #     # Process was stopped via SIGSTOP or is being traced, and
+    #     # waitpid() was called with WUNTRACED flag. PID is still
+    #     # alive. From now on waitpid() will keep returning (0, 0)
+    #     # until the process state doesn't change.
+    #     # It may make sense to catch/enable this since stopped PIDs
+    #     # ignore SIGTERM.
+    #     interval = sleep(interval)
+    #     continue
+    # if os.WIFCONTINUED(status):
+    #     # Process was resumed via SIGCONT and waitpid() was called
+    #     # with WCONTINUED flag.
+    #     interval = sleep(interval)
+    #     continue
+
+    # Should never happen.
+    msg = f"unknown process exit status {status!r}"
+    raise ValueError(msg)
+
+
+def wait_pid_posix(
     pid,
     timeout=None,
-    proc_name=None,
     _waitpid=os.waitpid,
     _timer=getattr(time, 'monotonic', time.time),  # noqa: B008
     _min=min,
@@ -82,33 +115,33 @@ def wait_pid(
 
     If PID does not exist at all return None immediately.
 
-    If *timeout* != None and process is still alive raise TimeoutExpired.
-    timeout=0 is also possible (either return immediately or raise).
+    If timeout is specified and process is still alive raise
+    TimeoutExpired.
+
+    If timeout=0 either return immediately or raise TimeoutExpired
+    (non-blocking).
     """
-    if pid <= 0:
-        # see "man waitpid"
-        msg = "can't wait for PID 0"
-        raise ValueError(msg)
     interval = 0.0001
+    max_interval = 0.04
     flags = 0
+    stop_at = None
+
     if timeout is not None:
         flags |= os.WNOHANG
-        stop_at = _timer() + timeout
+        if timeout != 0:
+            stop_at = _timer() + timeout
 
-    def sleep(interval):
+    def sleep_or_timeout(interval):
         # Sleep for some time and return a new increased interval.
-        if timeout is not None:
-            if _timer() >= stop_at:
-                raise TimeoutExpired(timeout, pid=pid, name=proc_name)
+        if timeout == 0 or (stop_at is not None and _timer() >= stop_at):
+            raise TimeoutExpired(timeout)
         _sleep(interval)
-        return _min(interval * 2, 0.04)
+        return _min(interval * 2, max_interval)
 
     # See: https://linux.die.net/man/2/waitpid
     while True:
         try:
             retpid, status = os.waitpid(pid, flags)
-        except InterruptedError:
-            interval = sleep(interval)
         except ChildProcessError:
             # This has two meanings:
             # - PID is not a child of os.getpid() in which case
@@ -117,41 +150,165 @@ def wait_pid(
             # In both cases we'll eventually return None as we
             # can't determine its exit status code.
             while _pid_exists(pid):
-                interval = sleep(interval)
+                interval = sleep_or_timeout(interval)
             return None
         else:
             if retpid == 0:
                 # WNOHANG flag was used and PID is still running.
-                interval = sleep(interval)
-                continue
-
-            if os.WIFEXITED(status):
-                # Process terminated normally by calling exit(3) or _exit(2),
-                # or by returning from main(). The return value is the
-                # positive integer passed to *exit().
-                return os.WEXITSTATUS(status)
-            elif os.WIFSIGNALED(status):
-                # Process exited due to a signal. Return the negative value
-                # of that signal.
-                return negsig_to_enum(-os.WTERMSIG(status))
-            # elif os.WIFSTOPPED(status):
-            #     # Process was stopped via SIGSTOP or is being traced, and
-            #     # waitpid() was called with WUNTRACED flag. PID is still
-            #     # alive. From now on waitpid() will keep returning (0, 0)
-            #     # until the process state doesn't change.
-            #     # It may make sense to catch/enable this since stopped PIDs
-            #     # ignore SIGTERM.
-            #     interval = sleep(interval)
-            #     continue
-            # elif os.WIFCONTINUED(status):
-            #     # Process was resumed via SIGCONT and waitpid() was called
-            #     # with WCONTINUED flag.
-            #     interval = sleep(interval)
-            #     continue
+                interval = sleep_or_timeout(interval)
             else:
-                # Should never happen.
-                msg = f"unknown process exit status {status!r}"
-                raise ValueError(msg)
+                return convert_exit_code(status)
+
+
+def _waitpid(pid, timeout):
+    """Wrapper around os.waitpid(). PID is supposed to be gone already,
+    it just returns the exit code.
+    """
+    try:
+        retpid, status = os.waitpid(pid, 0)
+    except ChildProcessError:
+        # PID is not a child of os.getpid().
+        return wait_pid_posix(pid, timeout)
+    else:
+        assert retpid != 0
+        return convert_exit_code(status)
+
+
+def wait_pid_pidfd_open(pid, timeout=None):
+    """Wait for PID to terminate using pidfd_open() + poll(). Linux >=
+    5.3 + Python >= 3.9 only.
+    """
+    try:
+        pidfd = os.pidfd_open(pid, 0)
+    except OSError as err:
+        if err.errno == errno.ESRCH:
+            # No such process. os.waitpid() may still be able to return
+            # the status code.
+            return wait_pid_posix(pid, timeout)
+        if err.errno in {errno.EMFILE, errno.ENFILE, errno.ENODEV}:
+            # EMFILE, ENFILE: too many open files
+            # ENODEV: anonymous inode filesystem not supported
+            debug(f"pidfd_open() failed ({err!r}); use fallback")
+            return wait_pid_posix(pid, timeout)
+        raise
+
+    try:
+        # poll() / select() have the advantage of not requiring any
+        # extra file descriptor, contrary to epoll() / kqueue().
+        # select() crashes if process opens > 1024 FDs, so we use
+        # poll().
+        poller = select.poll()
+        poller.register(pidfd, select.POLLIN)
+        timeout_ms = None if timeout is None else int(timeout * 1000)
+        events = poller.poll(timeout_ms)  # wait
+
+        if not events:
+            raise TimeoutExpired(timeout)
+        return _waitpid(pid, timeout)
+    finally:
+        os.close(pidfd)
+
+
+def wait_pid_kqueue(pid, timeout=None):
+    """Wait for PID to terminate using kqueue(). macOS and BSD only."""
+    try:
+        kq = select.kqueue()
+    except OSError as err:
+        if err.errno in {errno.EMFILE, errno.ENFILE}:  # too many open files
+            debug(f"kqueue() failed ({err!r}); use fallback")
+            return wait_pid_posix(pid, timeout)
+        raise
+
+    try:
+        kev = select.kevent(
+            pid,
+            filter=select.KQ_FILTER_PROC,
+            flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+            fflags=select.KQ_NOTE_EXIT,
+        )
+        try:
+            events = kq.control([kev], 1, timeout)  # wait
+        except OSError as err:
+            if err.errno in {errno.EACCES, errno.EPERM, errno.ESRCH}:
+                debug(f"kqueue.control() failed ({err!r}); use fallback")
+                return wait_pid_posix(pid, timeout)
+            raise
+        else:
+            if not events:
+                raise TimeoutExpired(timeout)
+            return _waitpid(pid, timeout)
+    finally:
+        kq.close()
+
+
+@memoize
+def can_use_pidfd_open():
+    # Availability: Linux >= 5.3, Python >= 3.9
+    if not hasattr(os, "pidfd_open"):
+        return False
+    try:
+        pidfd = os.pidfd_open(os.getpid(), 0)
+    except OSError as err:
+        if err.errno in {errno.EMFILE, errno.ENFILE}:  # noqa: SIM103
+            # transitory 'too many open files'
+            return True
+        # likely blocked by security policy like SECCOMP (EPERM,
+        # EACCES, ENOSYS)
+        return False
+    else:
+        os.close(pidfd)
+        return True
+
+
+@memoize
+def can_use_kqueue():
+    # Availability: macOS, BSD
+    names = (
+        "kqueue",
+        "KQ_EV_ADD",
+        "KQ_EV_ONESHOT",
+        "KQ_FILTER_PROC",
+        "KQ_NOTE_EXIT",
+    )
+    if not all(hasattr(select, x) for x in names):
+        return False
+    kq = None
+    try:
+        kq = select.kqueue()
+        kev = select.kevent(
+            os.getpid(),
+            filter=select.KQ_FILTER_PROC,
+            flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+            fflags=select.KQ_NOTE_EXIT,
+        )
+        kq.control([kev], 1, 0)
+        return True
+    except OSError as err:
+        if err.errno in {errno.EMFILE, errno.ENFILE}:  # noqa: SIM103
+            # transitory 'too many open files'
+            return True
+        return False
+    finally:
+        if kq is not None:
+            kq.close()
+
+
+def wait_pid(pid, timeout=None):
+    # PID 0 passed to waitpid() waits for any child of the current
+    # process to change state.
+    assert pid > 0
+    if timeout is not None:
+        assert timeout >= 0
+
+    if can_use_pidfd_open():
+        return wait_pid_pidfd_open(pid, timeout)
+    elif can_use_kqueue():
+        return wait_pid_kqueue(pid, timeout)
+    else:
+        return wait_pid_posix(pid, timeout)
+
+
+wait_pid.__doc__ = wait_pid_posix.__doc__
 
 
 def disk_usage(path):

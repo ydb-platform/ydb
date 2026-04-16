@@ -27,7 +27,7 @@ def _fixup_find_links(find_links):
     return find_links
 
 
-def fetch_build_egg(dist, req):
+def fetch_build_egg(dist, req) -> metadata.Distribution | metadata.PathDistribution:
     """Fetch an egg needed for building.
 
     Use pip/wheel to fetch/build a wheel."""
@@ -127,7 +127,7 @@ def _fetch_build_egg_no_warn(dist, req):  # noqa: C901  # is too complex (16)  #
         return metadata.Distribution.at(dist_location + '/EGG-INFO')
 
 
-def strip_marker(req):
+def strip_marker(req) -> packaging.requirements.Requirement:
     """
     Return a new requirement without the environment marker to avoid
     calling pip with something like `babel; extra == "i18n"`, which

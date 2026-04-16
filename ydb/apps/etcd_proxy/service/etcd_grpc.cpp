@@ -165,20 +165,12 @@ private:
     }
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
-        // res->data() pointer is used inside grpc code.
-        // So this object should be destroyed during grpc_slice destroying routine
-        auto res = new TString;
-        res->swap(in);
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
+        Ctx_->Reply(&data, status, flag);
+    }
 
-        static auto freeResult = [](void* p) -> void {
-            TString* toDelete = reinterpret_cast<TString*>(p);
-            delete toDelete;
-        };
-
-        grpc_slice slice = grpc_slice_new_with_user_data(
-                    (void*)(res->data()), res->size(), freeResult, res);
-        grpc::Slice sl = grpc::Slice(slice, grpc::Slice::STEAL_REF);
-        auto data = grpc::ByteBuffer(&sl, 1);
+    void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
         Ctx_->Reply(&data, status, flag);
     }
 

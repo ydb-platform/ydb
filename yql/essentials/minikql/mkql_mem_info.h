@@ -8,13 +8,11 @@
 
 #ifndef NDEBUG
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TMkqlLocation = TSourceLocation;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
     #define __MKQL_LOCATION__ __LOCATION__
     #define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
@@ -57,8 +55,7 @@ using TMkqlLocation = int;
 #define GET_MKQL_MEM_TAKE(_1, _2, _3, _4, IMPL, ...) IMPL
 #define MKQL_MEM_TAKE(...) Y_PASS_VA_ARGS(GET_MKQL_MEM_TAKE(__VA_ARGS__, MKQL_MEM_TAKE4, MKQL_MEM_TAKE3)(__VA_ARGS__))
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TMemoryUsageInfo: public TThrRefBase {
 public:
@@ -145,8 +142,7 @@ inline void Return(TMemoryUsageInfo* memInfo, const void* mem)
 }
 #endif
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 template <>
 inline void Out<NKikimr::NMiniKQL::TMemoryUsageInfo>(

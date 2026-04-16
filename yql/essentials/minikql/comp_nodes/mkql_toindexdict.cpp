@@ -35,14 +35,9 @@ public:
         const auto factory = new LoadInst(structPtrType, first, "factory", block);
         const auto builder = new LoadInst(structPtrType, fourth, "builder", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::ToIndexDict>());
-
         const auto list = GetNodeValue(List, ctx, block);
 
-        const auto funType = FunctionType::get(list->getType(), {factory->getType(), builder->getType(), list->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        const auto result = CallInst::Create(funType, funcPtr, {factory, builder, list}, "result", block);
-        return result;
+        return EmitFunctionCall<&THolderFactory::ToIndexDict>(list->getType(), {factory, builder, list}, ctx, block);
     }
 #endif
 private:

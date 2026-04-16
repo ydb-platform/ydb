@@ -146,6 +146,7 @@ bool IsReplicaReallySync(
     const std::vector<TReplicaHistoryItem>& replicaHistory);
 NTabletClient::ETableReplicaMode GetTargetReplicaMode(NTabletClient::ETableReplicaMode mode);
 NTabletClient::ETableReplicaState GetTargetReplicaState(NTabletClient::ETableReplicaState state);
+bool IsTargetReplicaModeSync(NTabletClient::ETableReplicaMode mode);
 
 void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicationProgress& update);
 
@@ -200,6 +201,8 @@ bool IsReplicaLocationValid(
     const std::string& clusterName);
 
 TReplicationProgress BuildMaxProgress(const TReplicationProgress& progress1, const TReplicationProgress& progress2);
+
+TReplicationProgress BuildMaxSyncProgress(const THashMap<TReplicaId, TReplicaInfo>& replicas);
 
 TDuration ComputeReplicationProgressLag(
     const TReplicationProgress& maxProgress,

@@ -7,16 +7,18 @@
 
 #include <library/cpp/charset/ci_string.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
 
 class TSubqueryNode: public INode {
 public:
-    TSubqueryNode(TSourcePtr&& source, const TString& alias, bool inSubquery, int ensureTupleSize)
+    TSubqueryNode(TSourcePtr&& source, TString alias, bool inSubquery, int ensureTupleSize)
         : INode(source->GetPos())
         , Source_(std::move(source))
-        , Alias_(alias)
+        , Alias_(std::move(alias))
         , InSubquery_(inSubquery)
         , EnsureTupleSize_(ensureTupleSize)
     {
@@ -214,9 +216,9 @@ TSourcePtr BuildFakeSource(TPosition pos) {
 
 class TNodeSource: public ISource {
 public:
-    TNodeSource(TPosition pos, const TNodePtr& node)
+    TNodeSource(TPosition pos, TNodePtr node)
         : ISource(pos)
-        , Node_(node)
+        , Node_(std::move(node))
     {
         YQL_ENSURE(Node_);
         FakeSource_ = BuildFakeSource(pos);
@@ -492,10 +494,10 @@ TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources) {
 
 class TSubqueryRefNode: public IRealSource {
 public:
-    TSubqueryRefNode(const TNodePtr& subquery, const TString& alias, int tupleIndex)
+    TSubqueryRefNode(const TNodePtr& subquery, TString alias, int tupleIndex)
         : IRealSource(subquery->GetPos())
         , Subquery_(subquery)
-        , Alias_(alias)
+        , Alias_(std::move(alias))
         , TupleIndex_(tupleIndex)
     {
         YQL_ENSURE(subquery->GetSource());
@@ -661,7 +663,7 @@ class TInnerSource: public IProxySource {
 public:
     TInnerSource(TPosition pos, TNodePtr node, const TString& label)
         : IProxySource(pos, nullptr)
-        , Node_(node)
+        , Node_(std::move(node))
     {
         SetLabel(label);
     }
@@ -734,16 +736,16 @@ public:
         TVector<TNodePtr>&& args,
         TNodePtr udf,
         TNodePtr having,
-        const TWriteSettings& settings)
+        TWriteSettings settings)
         : IRealSource(pos)
         , Mode_(mode)
         , Source_(std::move(source))
         , OrderBy_(std::move(orderBy))
         , Keys_(std::move(keys))
         , Args_(std::move(args))
-        , Udf_(udf)
-        , Having_(having)
-        , Settings_(settings)
+        , Udf_(std::move(udf))
+        , Having_(std::move(having))
+        , Settings_(std::move(settings))
     {
         YQL_ENSURE(!Keys_.empty());
         YQL_ENSURE(Source_);
@@ -918,10 +920,10 @@ TSourcePtr BuildReduce(TPosition pos,
 
 class TCompositeSelect: public IRealSource {
 public:
-    TCompositeSelect(TPosition pos, TSourcePtr source, const TWriteSettings& settings)
+    TCompositeSelect(TPosition pos, TSourcePtr source, TWriteSettings settings)
         : IRealSource(pos)
         , Source_(std::move(source))
-        , Settings_(settings)
+        , Settings_(std::move(settings))
     {
         YQL_ENSURE(Source_);
     }
@@ -1054,21 +1056,21 @@ public:
         bool distinct,
         const TVector<TNodePtr>& without,
         bool stream,
-        const TWriteSettings& settings
+        TWriteSettings settings
     )
         : IRealSource(pos)
         , Source_(std::move(source))
         , GroupByExpr_(groupByExpr)
         , GroupBy_(groupBy)
         , OrderBy_(orderBy)
-        , Having_(having)
+        , Having_(std::move(having))
         , WinSpecs_(winSpecs)
         , Terms_(terms)
         , Without_(without)
         , Distinct_(distinct)
-        , HoppingWindowSpec_(hoppingWindowSpec)
+        , HoppingWindowSpec_(std::move(hoppingWindowSpec))
         , Stream_(stream)
-        , Settings_(settings)
+        , Settings_(std::move(settings))
     {
     }
 
@@ -1663,15 +1665,15 @@ public:
         TVector<TNodePtr>&& terms,
         bool listCall,
         bool stream,
-        const TWriteSettings& settings
+        TWriteSettings settings
     )
         : IRealSource(pos)
         , Source_(std::move(source))
-        , With_(with)
+        , With_(std::move(with))
         , Terms_(std::move(terms))
         , ListCall_(listCall)
         , Stream_(stream)
-        , Settings_(settings)
+        , Settings_(std::move(settings))
     {
     }
 
@@ -2086,9 +2088,9 @@ TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources) {
 
 class TOverWindowSource: public IProxySource {
 public:
-    TOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource)
+    TOverWindowSource(TPosition pos, TString windowName, ISource* origSource)
         : IProxySource(pos, origSource)
-        , WindowName_(windowName)
+        , WindowName_(std::move(windowName))
     {
         Source_->SetLabel(origSource->GetLabel());
     }
@@ -2171,7 +2173,7 @@ public:
     TSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake)
         : IProxySource(pos, source.Get())
         , Source_(std::move(source))
-        , SkipTake_(skipTake)
+        , SkipTake_(std::move(skipTake))
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {

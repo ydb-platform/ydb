@@ -6,8 +6,7 @@
 #include <util/system/hp_timer.h>
 #include <util/system/yassert.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct IStatsRegistry;
 
@@ -180,5 +179,4 @@ private:
     ui64 Counter_ = 0;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

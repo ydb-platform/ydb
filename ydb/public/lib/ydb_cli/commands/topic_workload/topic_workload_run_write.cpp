@@ -87,6 +87,9 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Optional()
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
+    config.Opts->AddLongOption("no-producer-id-track", "Disable ProducerId tracking in tx (only applies with --use-tx).")
+        .Optional()
+        .StoreTrue(&Scenario.NoTrackProducerIdInTx);
     config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. Waiting time between commit in seconds. Default - 1 second")
         .Optional()
         .Hidden()
@@ -109,6 +112,17 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
+    config.Opts->AddLongOption("keyed-writes", "Use keyed writes. This mode will write messages to topic, choosing partition by random generated keys.")
+        .DefaultValue(false)
+        .Hidden()
+        .StoreTrue(&Scenario.KeyedWrites);
+    config.Opts->AddLongOption("producer-keys-count", "The number of different keys to generate.")
+        .DefaultValue(0)
+        .Hidden()
+        .StoreResult(&Scenario.ProducerKeysCount);
+
+    Scenario.ConfigMetadataMonitoringOptions(config);
+
     config.IsNetworkIntensive = true;
 }
 

@@ -1,5 +1,6 @@
 #include "plan2svg.h"
 
+#include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 
 constexpr ui32 INDENT_X = 8;
@@ -264,6 +265,22 @@ void TMetricHistory::Load(const NJson::TJsonValue& node, ui64 explicitMinTime, u
     Load(times, values, explicitMinTime, explicitMaxTime);
 }
 
+void TMetricHistory::Load(std::vector<ui64>& times, const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime) {
+    std::vector<ui64> values;
+
+    for (const auto& subNode : node.GetArray()) {
+        values.push_back(subNode.GetIntegerSafe());
+    }
+
+    if (values.size() > times.size()) {
+        values.resize(times.size());
+    } else while (values.size() && values.size() < times.size()) {
+        values.push_back(values.back());
+    }
+
+    Load(times, values, explicitMinTime, explicitMaxTime);
+}
+
 void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime) {
     if (times.size() < 2) {
         return;
@@ -338,6 +355,22 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
     }
 }
 
+ui64 TMetricHistory::Integrate() {
+    ui64 result = 0;
+    for (ui32 i = 1; i < Values.size(); i++) {
+        result += (Values[i - 1].second + Values[i].second) / 2 * (Values[i].first - Values[i - 1].first);
+    }
+    return result;
+}
+
+ui64 TMetricHistory::Average() {
+    if (!AvgValue) {
+        ui64 dt = Values.empty() ? 0 : Values.back().first - Values.front().first;
+        AvgValue = dt ? Integrate() / dt : 0;
+    }
+    return AvgValue;
+}
+
 void Min0(ui64& m, ui64 v) {
     if (v) {
         m = m ? std::min(m, v) : v;
@@ -368,16 +401,16 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJso
 
     if (waitTimeUsNode) {
         WaitTime.Load(*waitTimeUsNode, MinTime, MaxTime);
-        MinTime = WaitTime.MinTime;
-        MaxTime = WaitTime.MaxTime;
+        Min0(MinTime, WaitTime.MinTime);
+        Max0(MaxTime, WaitTime.MaxTime);
     }
 
     if (Details.Load(node)) {
         Summary->Add(Details.Sum);
         if (auto* historyNode = node.GetValueByPath("History")) {
             History.Load(*historyNode, MinTime, MaxTime);
-            MinTime = History.MinTime;
-            MaxTime = History.MaxTime;
+            Min0(MinTime, History.MinTime);
+            Max0(MaxTime, History.MaxTime);
         }
     }
 }
@@ -524,7 +557,122 @@ void TPlan::Load(const NJson::TJsonValue& node) {
     if (!TotalCpuTimes.empty()) {
         TotalCpuTime.Load(TotalCpuTimes, TotalCpuValues, TotalCpuTimes.front(), TotalCpuTimes.back());
     }
+
+    if (auto* subNode = node.GetValueByPath("Nodes")) {
+        for (auto& node : subNode->GetArray()) {
+            LoadNode(node);
+        }
+        std::sort(Nodes.begin(), Nodes.end(),
+            [](std::shared_ptr<TClusterNode>& a, std::shared_ptr<TClusterNode>& b) {
+                return a->NodeId < b->NodeId;
+            }
+        );
+    }
 }
+
+void TPlan::LoadNode(const NJson::TJsonValue& node) {
+    if (auto* nodeIdNode = node.GetValueByPath("NodeId")) {
+        auto clusterNode = std::make_shared<TClusterNode>(nodeIdNode->GetIntegerSafe());
+        if (auto* tasksNode = node.GetValueByPath("Tasks")) {
+            clusterNode->Tasks = tasksNode->GetIntegerSafe();
+        }
+        if (auto* finishedTasksNode = node.GetValueByPath("FinishedTasks")) {
+            clusterNode->FinishedTasks = finishedTasksNode->GetIntegerSafe();
+        }
+        /*
+        if (auto* outputBytesNode = node.GetValueByPath("OutputBytes")) {
+            clusterNode->OutputBytes = std::make_shared<TSingleMetric>(NodeOutputBytes, *outputBytesNode);
+            clusterNode->OutputBytes->FirstMessage.Min = clusterNode->OutputBytes->History.MinTime;
+            clusterNode->OutputBytes->FirstMessage.Max = clusterNode->OutputBytes->FirstMessage.Min;
+            clusterNode->OutputBytes->LastMessage.Max = clusterNode->OutputBytes->History.MaxTime;
+            clusterNode->OutputBytes->LastMessage.Min = clusterNode->OutputBytes->LastMessage.Max;
+        }
+        */
+        if (auto* maxMemoryUsageNode = node.GetValueByPath("MaxMemoryUsage")) {
+            clusterNode->MaxMemoryUsage = std::make_shared<TSingleMetric>(NodeMaxMemoryUsage, *maxMemoryUsageNode);
+            clusterNode->MaxMemoryUsage->MinMaxDistribution = false;
+        }
+        if (auto* memoryUsageNode = node.GetValueByPath("MemoryUsageMB")) {
+            clusterNode->MemoryUsage = std::make_shared<TSingleMetric>(NodeMemoryUsage, *memoryUsageNode);
+            clusterNode->MemoryUsage->MinMaxDistribution = false;
+        }
+        if (auto* cpuTimeNode = node.GetValueByPath("CpuTimeUs")) {
+            clusterNode->CpuTime = std::make_shared<TSingleMetric>(NodeCpuTime, *cpuTimeNode);
+            clusterNode->CpuTime->MinMaxDistribution = false;
+        }
+        if (auto* globNode = node.GetValueByPath("GlobalMemoryUsageMB")) {
+            if (auto* timeNode = globNode->GetValueByPath("TimeMs")) {
+                if (timeNode->GetType() == NJson::JSON_ARRAY) {
+                    std::vector<ui64> times;
+                    for (const auto& subNode : timeNode->GetArray()) {
+                        times.push_back(subNode.GetIntegerSafe());
+                    }
+                    // arrow + mkqlAllocated
+                    if (auto* physical = globNode->GetValueByPath("MemPhysicalUsage")) {
+                        clusterNode->MemPhysicalUsage.Load(times, *physical, 0, 0);
+                    }
+                    if (auto* sysAlloc = globNode->GetValueByPath("MemSysAllocated")) {
+                        clusterNode->MemSysAllocated.Load(times, *sysAlloc, 0, 0);
+                    }
+                    if (auto* sysFragm = globNode->GetValueByPath("MemSysFragmented")) {
+                        clusterNode->MemSysFragmented.Load(times, *sysFragm, 0, 0);
+                    }
+                    if (auto* arrow = globNode->GetValueByPath("MemArrowDefault")) {
+                        clusterNode->MemArrowDefault.Load(times, *arrow, 0, 0);
+                    }
+                    if (auto* mkqlAlloc = globNode->GetValueByPath("MemMkqlAllocated")) {
+                        clusterNode->MemMkqlAllocated.Load(times, *mkqlAlloc, 0, 0);
+                    }
+                    if (auto* mkqlFree = globNode->GetValueByPath("MemMkqlFreeList")) {
+                        clusterNode->MemMkqlFreeList.Load(times, *mkqlFree, 0, 0);
+                    }
+                    if (auto* outputBytes = globNode->GetValueByPath("OutputInflightBytes")) {
+                        clusterNode->OutputInflightBytes.Load(times, *outputBytes, 0, 0);
+                    }
+                    if (auto* localBytes = globNode->GetValueByPath("LocalInflightBytes")) {
+                        clusterNode->LocalInflightBytes.Load(times, *localBytes, 0, 0);
+                    }
+                    if (auto* inputBytes = globNode->GetValueByPath("InputInflightBytes")) {
+                        clusterNode->InputInflightBytes.Load(times, *inputBytes, 0, 0);
+                    }
+                    clusterNode->MemPhysicalUsage.DisplayMaxValue = clusterNode->MemPhysicalUsage.MaxValue;
+                    clusterNode->MemSysAllocated.DisplayMaxValue = clusterNode->MemSysAllocated.MaxValue;
+                    clusterNode->MemSysFragmented.DisplayMaxValue = clusterNode->MemSysFragmented.MaxValue;
+
+                    clusterNode->MemArrowDefault.DisplayMaxValue = clusterNode->MemArrowDefault.MaxValue;
+                    for (ui32 i = 0; i < std::min(clusterNode->MemArrowDefault.Values.size(), clusterNode->MemMkqlAllocated.Values.size()); i++) {
+                        clusterNode->MemArrowDefault.Values[i].second += clusterNode->MemMkqlAllocated.Values[i].second;
+                        clusterNode->MemArrowDefault.MaxValue = std::max(clusterNode->MemArrowDefault.MaxValue, clusterNode->MemArrowDefault.Values[i].second);
+                    }
+                    clusterNode->MemMkqlAllocated.DisplayMaxValue = clusterNode->MemMkqlAllocated.MaxValue;
+                    clusterNode->MemMkqlFreeList.DisplayMaxValue = clusterNode->MemMkqlFreeList.MaxValue;
+
+                    clusterNode->LocalInflightBytes.DisplayMaxValue = clusterNode->LocalInflightBytes.MaxValue;
+                    for (ui32 i = 0; i < std::min(clusterNode->LocalInflightBytes.Values.size(), clusterNode->InputInflightBytes.Values.size()); i++) {
+                        clusterNode->LocalInflightBytes.Values[i].second += clusterNode->InputInflightBytes.Values[i].second;
+                        clusterNode->LocalInflightBytes.MaxValue = std::max(clusterNode->LocalInflightBytes.MaxValue, clusterNode->LocalInflightBytes.Values[i].second);
+                    }
+                    clusterNode->OutputInflightBytes.DisplayMaxValue = clusterNode->OutputInflightBytes.MaxValue;
+                    for (ui32 i = 0; i < std::min(clusterNode->OutputInflightBytes.Values.size(), clusterNode->LocalInflightBytes.Values.size()); i++) {
+                        clusterNode->OutputInflightBytes.Values[i].second += clusterNode->LocalInflightBytes.Values[i].second;
+                        clusterNode->OutputInflightBytes.MaxValue = std::max(clusterNode->OutputInflightBytes.MaxValue, clusterNode->OutputInflightBytes.Values[i].second);
+                    }
+                    clusterNode->InputInflightBytes.DisplayMaxValue = clusterNode->InputInflightBytes.MaxValue;
+                }
+            }
+
+        }
+        /*
+        if (auto* inputBytesNode = node.GetValueByPath("InputBytes")) {
+            clusterNode->InputBytes = std::make_shared<TSingleMetric>(NodeInputBytes, *inputBytesNode);
+        }
+        if (auto* ingressBytesNode = node.GetValueByPath("IngressBytes")) {
+            clusterNode->IngressBytes = std::make_shared<TSingleMetric>(NodeIngressBytes, *ingressBytesNode);
+        }
+        */
+        Nodes.push_back(clusterNode);
+    }
+ }
 
 void TPlan::ResolveCteRefs() {
     if (CtePlanRef) {
@@ -870,7 +1018,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                     builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
 
-                    if (name == "TableRangeScan") {
+                    if (name == "TablePointLookup" || name == "TableRangeScan") {
                         builder << ": ";
                         auto* readRangesNode = subNode.GetValueByPath("ReadRanges");
                         if (!readRangesNode) {
@@ -1019,7 +1167,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
 
-                    if (name == "TableFullScan" || name == "TableRangeScan") {
+                    if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                         Y_ENSURE(externalOperator);
                         if (stage->IngressName) {
                             ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
@@ -1421,7 +1569,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     LoadSource(plan, stage->Operators, ingressRowsNode);
-                } else if (subNodeType == "TableFullScan" || subNodeType == "TableRangeScan") {
+                } else if (subNodeType == "TableFullScan" || subNodeType == "TablePointLookup" || subNodeType == "TableRangeScan") {
                     NodeToSource.insert(connectionPlanNodeId);
                     LoadStage(stage, plan, outputConnection);
                 } else {
@@ -1458,6 +1606,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         if (auto* cpuTimeNode = stage->StatsNode->GetValueByPath("CpuTimeUs")) {
             stage->CpuTime = std::make_shared<TSingleMetric>(CpuTime, *cpuTimeNode, stage->MinTime, stage->MaxTime);
             MergeTotalCpu(stage->CpuTime);
+        }
+
+        if (auto* mmuNode = stage->StatsNode->GetValueByPath("MemoryUsageMB")) {
+            stage->MemoryUsage = std::make_shared<TSingleMetric>(MemoryUsage, *mmuNode, stage->MinTime, stage->MaxTime);
         }
 
         if (auto* mmuNode = stage->StatsNode->GetValueByPath("MaxMemoryUsage")) {
@@ -1569,12 +1721,31 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
             stage->IndentY = std::max(stage->IndentY, c->FromStage->IndentY);
         }
     }
+
+    Height = std::max(Height, stage->IndentY);
 }
 
 void TPlan::MarkLayout() {
+    Height = 0;
     if (!Stages.empty()) {
         ui32 offsetY = 0;
         MarkStageIndent(0, offsetY, Stages.front());
+    }
+    if (!Nodes.empty()) {
+        NodeOffsetY = Height;
+        ui32 nodeOffsetY = GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
+        Height += nodeOffsetY; // only node header
+        for (auto& node : Nodes) {
+            node->OffsetY = nodeOffsetY;
+            node->Height =
+                (   // (node->OutputBytes != nullptr)
+                    + 4 /* 3xMEM, CPU */
+                    // + (node->InputBytes != nullptr)
+                    // + (node->IngressBytes != nullptr)
+                ) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
+            nodeOffsetY += (GAP_Y + node->Height);
+        }
+        NodeIndentY = nodeOffsetY;
     }
 }
 
@@ -1592,7 +1763,7 @@ void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, co
 
     background
         << "<rect x='" << x + firstMin << "' y='" << y
-        << "' width='" << lastMax - firstMin << "' height='" << h
+        << "' width='" << lastMax - firstMin + 1 << "' height='" << h
         << "' stroke-width='0' fill='" << color << "'/>" << Endl;
 
     if (firstMessage.Min < firstMessage.Max) {
@@ -1642,12 +1813,18 @@ void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMet
         << "' stroke='none' fill='" << fillColor << "' />" << Endl;
 }
 
-void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor) {
+void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor, bool closed) {
+    if (MaxTime == 0 || maxValue == 0 || series.empty()) {
+        return;
+    }
     if (title) {
         canvas << "<g><title>" << title << "</title>" << Endl;
     }
     i32 px0 = x + series.front().first * w / MaxTime;
     i32 py0 = y + (h - 1);
+    if (!closed) {
+        py0 = y + (h - std::max<ui32>(series.front().second * h / maxValue, 1));
+    }
     canvas << "<path d='M" << px0 << ',' << py0;
     for (auto& item : series) {
         i32 px = x + item.first * w / MaxTime;
@@ -1660,10 +1837,14 @@ void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64
             py0 = py;
         }
     }
-    i32 px = x + series.back().first * w / MaxTime;
-    i32 py = y + (h - 1);
+    if (closed) {
+        i32 px = x + series.back().first * w / MaxTime;
+        i32 py = y + (h - 1);
+        canvas
+        << "c" << (px0 * 2 + px) / 3 - px0 << ',' << py0 - py0 << ',' << (px0 + px * 2) / 3 - px0 << ',' << py - py0 << ',' << px - px0 << ',' << py - py0
+        << 'z';
+    }
     canvas
-        << "c" << (px0 * 2 + px) / 3 - px0 << ',' << py0 - py0 << ',' << (px0 + px * 2) / 3 - px0 << ',' << py - py0 << ',' << px - px0 << ',' << py - py0 << 'z'
         << "' stroke-width='1' stroke='" << lineColor << "' fill='" << (fillColor ? fillColor : "none") << "' />" << Endl;
 
     if (title) {
@@ -1715,7 +1896,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         background
         << SvgTextM(viewLeft + INTERNAL_WIDTH / 2, y0 + INTERNAL_HEIGHT / 2 + INTERNAL_TEXT_HEIGHT / 2, peerId);
     }
-    if (metric->Details.Max) {
+    if (metric->MinMaxDistribution && metric->Details.Max) {
         auto wavg = width / 2;
         if (metric->Details.Max > metric->Details.Min) {
             wavg = (metric->Details.Avg - metric->Details.Min) * width / (metric->Details.Max - metric->Details.Min);
@@ -1810,9 +1991,82 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
     }
 }
 
+void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMutableMetric*, TString>> history, ui64 scale, const TString& iconRef, const TString& iconColor, const TString& iconScale) {
+    ui32 x0 = viewLeft + INTERNAL_GAP_X;
+    ui32 width = viewWidth - INTERNAL_GAP_X * 2;
+
+    TStringBuilder titleBuilder;
+    TStringBuilder textBuilder;
+
+    ui64 lastScale = 0;
+    bool firstItem = true;
+    for (auto& item : history) {
+        auto itemScale = item.first->Average();
+        if (itemScale) {
+            if (!firstItem) {
+                textBuilder << " / ";
+                titleBuilder << "; ";
+            }
+            if (!item.first->IsLine) {
+                auto nextScale = itemScale;
+                itemScale -= lastScale;
+                lastScale = nextScale;
+            }
+            textBuilder << FormatBytes(itemScale * 1_MB);
+            titleBuilder << item.first->Title << ": Avg=" << FormatBytes(itemScale * 1_MB) << ", Max=" << FormatBytes(item.first->DisplayMaxValue * 1_MB);
+            firstItem = false;
+        }
+    }
+
+    background << "<g><title>" << titleBuilder << "</title>" << Endl;
+
+    if (iconRef) {
+        x0 += INTERNAL_WIDTH;
+        width -= INTERNAL_WIDTH;
+    }
+    if (iconRef) {
+        background
+        << "<use href='" << iconRef << "' transform='translate(" << viewLeft << ' ' << y0 << ") scale(" << iconScale << ")' fill='" << iconColor << "'/>" << Endl;
+    }
+
+    for (auto it = std::rbegin(history); it != std::rend(history); it++) {
+        auto itemScale = it->first->Average();
+        if (itemScale) {
+            if (scale == 0) {
+                scale = itemScale;
+            }
+
+            auto x = x0;
+            auto w = width * itemScale / scale;
+
+            if (it->first->IsLine) {
+                x = x + w - 2;
+                w = 2;
+            }
+
+            background
+            << "<rect x='" << x << "' y='" << y0 << "' width='" << w << "' height='" << h
+            << "' fill='" << it->second << "'/>" << Endl;
+        }
+    }
+
+    TString text = textBuilder;
+
+    if (text) {
+        background
+        << "<rect x='" << x0 << "' y='" << y0 + (h - INTERNAL_TEXT_HEIGHT) / 2
+        << "' width='" << (text.size() + 1) * INTERNAL_TEXT_HEIGHT * 6 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
+        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageMain << "'/>" << Endl
+        << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
+        << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (h - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << text << "</text>" << Endl;
+    }
+
+    background << "</g>" << Endl;
+}
+
+
 void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     OffsetY = offsetY;
-    Height = 0;
 
     auto* p = this;
     auto planName = NodeType;
@@ -1825,102 +2079,106 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     offsetY += GAP_Y;
 
     ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
+    auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
 
-    _Builder
+    SummaryBuilder
         << "<g data-group='g" << GroupId << "' class='selectable'><title> " << planName << "</title>" << Endl
-        << SvgRect(Config.HeaderLeft, GAP_Y, Config.HeaderWidth, TIME_HEIGHT + INTERNAL_HEIGHT, "background")
-        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, GAP_Y + INTERNAL_TEXT_HEIGHT, planName)
+        << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, TIME_HEIGHT + INTERNAL_HEIGHT, "background")
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, titleHeight, planName)
         << "</g>" << Endl;
 
-    _Builder
+    SummaryBuilder
         << "<g class='ardn button'>"
-        << SvgRect(INTERNAL_GAP_X, GAP_Y, CONN_SIZE, CONN_SIZE, "transparent")
-        << "<use href='#icon_arrowdn' transform='translate(" << INTERNAL_GAP_X << ' ' << GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
+        << SvgRect(INTERNAL_GAP_X, 0, CONN_SIZE, CONN_SIZE, "transparent")
+        << "<use href='#icon_arrowdn' transform='translate(" << INTERNAL_GAP_X << ' ' << 0 << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl
+        << "<g class='aruu button'>"
+        << SvgRect(INTERNAL_GAP_X, CONN_SIZE, CONN_SIZE, CONN_SIZE, "transparent")
+        << "<use href='#icon_arrowup' transform='translate(" << INTERNAL_GAP_X << ' ' << CONN_SIZE << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
 
-    _Builder
-        << SvgTextS(Config.OperatorLeft + 2, GAP_Y + INTERNAL_TEXT_HEIGHT, "Operators")
-        << SvgTextS(Config.SummaryLeft + 2, GAP_Y + INTERNAL_TEXT_HEIGHT, "Stages")
-        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, GAP_Y + INTERNAL_TEXT_HEIGHT, "Tasks")
-        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y, ToString(p->Tasks));
+    SummaryBuilder
+        << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Operators")
+        << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Stages")
+        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
+        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, ToString(p->Tasks));
 
-    _Builder
+    SummaryBuilder
         << "<g><title>Ingress "
         << FormatBytes(p->IngressBytes->Value) << ", Rows " << FormatIntegerValue(p->IngressRows->Value);
     if (p->IngressRows->Value) {
-    _Builder
+    SummaryBuilder
         << ", Width " << p->IngressBytes->Value / p->IngressRows->Value << "B";
     }
     if (p->MaxTime) {
-    _Builder
+    SummaryBuilder
         << ", Avg " << FormatBytes(p->IngressBytes->Value * 1000 / p->MaxTime) << "/s";
     }
-    _Builder
+    SummaryBuilder
         << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT + GAP_Y
+        << "  <rect x='" << Config.SummaryLeft << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.IngressMedium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatBytes(p->IngressBytes->Value) << "</text>" << Endl
+        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->IngressBytes->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
-    _Builder
+    SummaryBuilder
         << "<g><title>CPU Usage " << FormatUsage(p->CpuTime->Value);
     if (p->MaxTime) {
         auto usagePS = p->CpuTime->Value / p->MaxTime;
         usagePS /= 10;
-    _Builder
+    SummaryBuilder
         << ", Avg " << Sprintf("%lu.%.2lu", usagePS / 100, usagePS % 100) << " CPU/s";
     }
-    _Builder
+    SummaryBuilder
         << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT + GAP_Y
+        << "  <rect x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << Config.SummaryWidth - (summary3 + INTERNAL_GAP_X) * 2 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
+        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
-    _Builder
+    SummaryBuilder
         << "<g><title>Memory " << FormatBytes(p->MaxMemoryUsage->Value) << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT + GAP_Y
+        << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.MemMedium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 + 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y<< "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
+        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
-    auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->MaxTime + p->TimeOffset) / MaxTime;
-    _Builder
+    auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TimeOffset + p->MaxTime) / maxTime;
+    SummaryBuilder
         << "<g><title>" << "Duration: " << FormatTimeMs(p->MaxTime) << ", Total " << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</title>" << Endl
-        << "  <rect x='" << x - summary3 << "' y='" << GAP_Y
+        << "  <rect x='" << x - summary3 << "' y='" << INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
         << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</text>" << Endl
+        << "' y='" << titleHeight << "'>" << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</text>" << Endl
         << "</g>" << Endl;
 
-    offsetY += TIME_HEIGHT;
+    offsetY += titleHeight + INTERNAL_GAP_Y;
     if (!p->TotalCpuTime.Deriv.empty() && p->TotalCpuTime.MaxTime > p->TotalCpuTime.MinTime) {
 
         // auto tx0 = Config.TimelineLeft;
         // auto tw = Config.TimelineWidth;
 
-        auto xmin = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MinTime + p->TimeOffset) / MaxTime;
-        auto xmax = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MaxTime + p->TimeOffset) / MaxTime;
+        auto xmin = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MinTime + p->TimeOffset) / maxTime;
+        auto xmax = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MaxTime + p->TimeOffset) / maxTime;
 
         auto maxCpu = p->TotalCpuTime.MaxDeriv * TIME_SERIES_RANGES / (p->TotalCpuTime.MaxTime - p->TotalCpuTime.MinTime);
-        p->PrintDeriv(_Builder, p->TotalCpuTime, xmin, GAP_Y + TIME_HEIGHT, xmax - xmin, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+        p->PrintDeriv(SummaryBuilder, p->TotalCpuTime, xmin, titleHeight + INTERNAL_GAP_Y, xmax - xmin, TIME_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
     }
-    offsetY += INTERNAL_HEIGHT;
+    offsetY += TIME_HEIGHT;
 
     for (auto& s : Stages) {
         s->_Builder
             << "<g data-group='g" << s->GroupId << "' class='selectable'><title>Stage " << (s->External ? "E" : ToString(s->PhysicalStageId)) << "</title>" << Endl;
         auto stageClass = s->External ? "clone" : "stage";
-        Height = std::max(Height, s->IndentY);
+
         s->_Builder
             << SvgRect(Config.HeaderLeft + s->IndentX, 0, Config.HeaderWidth - s->IndentX, "100%", stageClass)
             << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", stageClass)
@@ -2127,14 +2385,16 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
                 << "</g>" << Endl;
             }
+        }
 
-            if (!s->MaxMemoryUsage->History.Values.empty()) {
-                PrintValues(s->_Builder, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
-            }
+        if (s->MemoryUsage && !s->MemoryUsage->History.Values.empty()) {
+            PrintValues(s->_Builder, s->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MemoryUsage->History.MaxValue * 1_MB), Config.Palette.MemMedium, Config.Palette.MemMedium);
+        } else if (s->MaxMemoryUsage && !s->MaxMemoryUsage->History.Values.empty()) {
+            PrintValues(s->_Builder, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
+        }
 
-            if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-                PrintDeriv(s->_Builder, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
-            }
+        if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
+            PrintDeriv(s->_Builder, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
         }
 
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -2534,10 +2794,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c) {
 
     if (stage->Connections.size() > 1) {
-        builder << SvgRect(Config.HeaderLeft + stage->IndentX, GAP_Y, INDENT_X, "100%", "stage");
+        builder
+            << "<g data-group='g" << stage->GroupId << "' class='selectable'><title>Stage " << (stage->External ? "E" : ToString(stage->PhysicalStageId)) << "</title>" << Endl
+            << SvgRect(Config.HeaderLeft + stage->IndentX, GAP_Y, INDENT_X, "100%", "stage")
+            << "</g>" << Endl;
     }
 
-    builder << "<svg data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
+    builder << "<svg class='slimable' data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
     builder << stage->_Builder;
     builder << "</svg>" << Endl;
 
@@ -2564,16 +2827,207 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
     }
 }
 
-void TPlan::PrintSvg(TStringBuilder& builder) {
+void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta) {
+    builder << SvgRect(0, GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, INDENT_X, "100%", "stage");
+    builder << "<svg data-stage='inner cluster' class='folded' data-height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << GAP_Y << "'>" << Endl;
+
+    builder
+        << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, "100%", "stage")
+        << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", "stage")
+        << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "stage")
+        << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "stage")
+        << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "stage")
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, TStringBuilder() << "Cluster of " << Nodes.size() << " node(s)")
+        << "<g><g class='plus button'>"
+        << SvgRect(INTERNAL_GAP_X, GAP_Y, CONN_SIZE, CONN_SIZE, "transparent")
+        << "<use href='#icon_minus' class='icon_minus' transform='translate(" << INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/>" << Endl
+        << "<use href='#icon_plus' class='icon_plus' transform='translate(" << INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g></g>" << Endl
+        ;
+
+    builder << "</svg>" << Endl;
+
+    ui64 physicalScale = 0;
+    ui64 memoryScale = 0;
+    ui64 dataScale = 0;
+
+    for (auto& node : Nodes) {
+        physicalScale = std::max(physicalScale, node->MemPhysicalUsage.Average());
+        physicalScale = std::max(physicalScale, node->MemSysAllocated.Average());
+        memoryScale = std::max(memoryScale, node->MemArrowDefault.Average());
+        memoryScale = std::max(memoryScale, node->MemMkqlAllocated.Average());
+        dataScale = std::max(dataScale, node->OutputInflightBytes.Average());
+    }
+
+    for (auto& node : Nodes) {
+        builder
+            << "<svg data-stage='outer node' data-height='" << GAP_Y + node->Height << "' width='" << Config.Width << "' height='" << GAP_Y + node->Height << "' x='0' y='" << node->OffsetY << "'>" << Endl
+            << "<svg data-stage='inner node' data-height='" << node->Height << "' width='" << Config.Width << "' height='" << node->Height << "' x='0' y='" << GAP_Y << "'>" << Endl
+            << SvgRect(Config.HeaderLeft + INDENT_X + GAP_X, 0, Config.HeaderWidth - (INDENT_X + GAP_X), "100%", "stage")
+            << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", "stage")
+            << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "stage")
+            << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "stage")
+            << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "stage")
+            << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
+
+        ui32 y0 = INTERNAL_GAP_Y;
+/*
+        if (node->OutputBytes) {
+            auto textSum = "";
+            auto tooltip = "";
+            auto px = Config.TimelineLeft;
+            auto pw = Config.TimelineWidth;
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325");
+            // PrintTimeline(builder, builder, "Output", node->OutputBytes->FirstMessage, node->OutputBytes->LastMessage, Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, Config.Palette.OutputMedium, true);
+            PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.OutputMedium, Config.Palette.OutputMedium);
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        }
+
+        if (node->MaxMemoryUsage) {
+            TString tooltip;
+            auto textSum = FormatTooltip(tooltip, "Memory", node->MaxMemoryUsage.get(), FormatBytes);
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, 0, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+        }
+*/
+        ui32 px = Config.TimelineLeft;
+        ui32 pw = Config.TimelineWidth - timelineDelta;
+
+        if (node->MemPhysicalUsage.Values.size()) {
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
+                { &node->MemSysFragmented, Config.Palette.MemMedium },
+                { &node->MemSysAllocated, Config.Palette.MemLight },
+                { &node->MemPhysicalUsage, "red" },
+            }, physicalScale, "#icon_memory", "red", "0.6 0.6");
+
+            px += (TimeOffset + node->MemPhysicalUsage.MinTime) * pw / maxTime;
+            pw = (node->MemPhysicalUsage.MaxTime - node->MemPhysicalUsage.MinTime) * pw / maxTime;
+
+            auto maxValue = std::max(node->MemPhysicalUsage.MaxValue, node->MemSysAllocated.MaxValue);
+            builder
+                << "<g><title>"
+                << "Max Fragmented " << FormatBytes(node->MemSysFragmented.DisplayMaxValue * 1_MB)
+                << ", Max Allocated " << FormatBytes(node->MemSysAllocated.DisplayMaxValue * 1_MB)
+                << ", Max RSS " + FormatBytes(node->MemPhysicalUsage.DisplayMaxValue * 1_MB)
+                << "</title>" << Endl;
+            PrintSeries(builder, node->MemSysAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
+            PrintSeries(builder, node->MemSysFragmented.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->MemPhysicalUsage.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", "red", "none", false);
+            builder << "</g>" << Endl;
+        }
+
+/*
+            if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
+                PrintDeriv(s->_Builder, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
+            }
+*/
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->MemArrowDefault.Values.size() || node->MemMkqlAllocated.Values.size() || node->MemMkqlFreeList.Values.size()) {
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
+                { &node->MemMkqlFreeList, Config.Palette.MemMedium },
+                { &node->MemMkqlAllocated, Config.Palette.MemLight },
+                { &node->MemArrowDefault, Config.Palette.BlockMedium },
+            }, memoryScale, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+
+            auto maxValue = std::max(node->MemArrowDefault.MaxValue, node->MemMkqlAllocated.MaxValue);
+            builder
+                << "<g><title>"
+                << "Max MKQL FreeList " <<  FormatBytes(node->MemMkqlFreeList.DisplayMaxValue * 1_MB)
+                << ", Max MKQL Allocated " <<  FormatBytes(node->MemMkqlAllocated.DisplayMaxValue * 1_MB)
+                << ", Max Arrow " << FormatBytes(node->MemArrowDefault.DisplayMaxValue * 1_MB)
+                << "</title>" << Endl;
+            PrintSeries(builder, node->MemArrowDefault.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.BlockMedium, Config.Palette.BlockMedium);
+            PrintSeries(builder, node->MemMkqlAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
+            PrintSeries(builder, node->MemMkqlFreeList.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            builder << "</g>" << Endl;
+        }
+
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->OutputInflightBytes.Values.size() || node->LocalInflightBytes.Values.size() || node->InputInflightBytes.Values.size()) {
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
+                { &node->InputInflightBytes, Config.Palette.InputMedium },
+                { &node->LocalInflightBytes, Config.Palette.MemLight },
+                { &node->OutputInflightBytes, Config.Palette.OutputMedium },
+            }, dataScale, "#icon_memory", Config.Palette.InputDark, "0.6 0.6");
+
+            auto maxValue = node->OutputInflightBytes.MaxValue;
+            builder
+                << "<g><title>"
+                << "Max Input " <<  FormatBytes(node->InputInflightBytes.DisplayMaxValue * 1_MB)
+                << ", Max Local " <<  FormatBytes(node->LocalInflightBytes.DisplayMaxValue * 1_MB)
+                << ", Max Output " << FormatBytes(node->OutputInflightBytes.DisplayMaxValue * 1_MB)
+                << "</title>" << Endl;
+            PrintSeries(builder, node->OutputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputMedium);
+            PrintSeries(builder, node->LocalInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
+            PrintSeries(builder, node->InputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputMedium);
+            builder << "</g>" << Endl;
+        }
+
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->CpuTime) {
+            TString tooltip;
+            auto textSum = FormatTooltip(tooltip, "CPU Usage", node->CpuTime.get(), FormatUsage);
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip, 0, "#icon_cpu", Config.Palette.CpuMedium, "0.6 0.6");
+
+            if (!node->CpuTime->History.Deriv.empty() && node->CpuTime->History.MaxTime > node->CpuTime->History.MinTime) {
+                auto px = Config.TimelineLeft + (TimeOffset + node->CpuTime->History.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
+                auto pw = (node->CpuTime->History.MaxTime - node->CpuTime->History.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
+                auto maxCpu = node->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (node->CpuTime->History.MaxTime - node->CpuTime->History.MinTime);
+                PrintDeriv(builder, node->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+            }
+        }
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+/*
+        if (node->InputBytes) {
+            auto textSum = "";
+            auto tooltip = "";
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, 0, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325");
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        }
+
+        if (node->IngressBytes) {
+            auto textSum = "";
+            auto tooltip = "";
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip, 0, "#icon_ingress", Config.Palette.IngressMedium, "0.9 0.9");
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        }
+*/
+        if (node->Tasks) {
+            if (node->FinishedTasks && node->FinishedTasks <= node->Tasks) {
+                auto unfinishedPercent = 100 * (node->Tasks - node->FinishedTasks) / node->Tasks;
+                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                builder
+                << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
+                << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+            }
+            builder
+            << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(node->Tasks));
+        }
+        builder
+            << "</svg>" << Endl
+            << "</svg>" << Endl;
+    }
+}
+
+void TPlan::PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta) {
     auto headerHeight = GAP_Y + TIME_HEIGHT + INTERNAL_HEIGHT;
-    builder << "<svg data-height='" << Height + headerHeight << "' width='" << Config.Width << "' height='" << Height + headerHeight << "' x='0' y='" << OffsetY << "'>" << Endl;
-    builder << _Builder;
+    auto clusterHeight = Nodes.empty() ? 0 : GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
+    builder << "<svg data-height='" << Height + clusterHeight + headerHeight << "' width='" << Config.Width << "' height='" << Height + clusterHeight + headerHeight << "' x='0' y='" << OffsetY << "'>" << Endl;
+    if (!Nodes.empty()) {
+        builder << "<svg data-stage='outer cluster' data-height='" << NodeIndentY << "' width='" << Config.Width << "' height='" << clusterHeight << "' x='0' y='" << 0 << "'>" << Endl;
+        PrintNodes(builder, maxTime, timelineDelta);
+        builder << "</svg>" << Endl;
+    }
+    builder << "<svg width='" << Config.Width << "' height='" << Height + headerHeight << "' x='0' y='" << clusterHeight << "'>" << Endl;
+    builder << SummaryBuilder;
     if (!Stages.empty()) {
         auto& stage = Stages.front();
         builder << "<svg data-stage='outer " << stage->PhysicalStageId << "' data-height='" << stage->IndentY - stage->OffsetY << "' width='" << Config.Width << "' height='" << stage->IndentY - stage->OffsetY << "' x='0' y='" << headerHeight << "'>" << Endl;
         PrintStage(builder, stage, nullptr);
         builder << "</svg>" << Endl;
     }
+    builder << "</svg>" << Endl;
     builder << "</svg>" << Endl;
 }
 
@@ -2618,7 +3072,8 @@ TColorPalette::TColorPalette() {
     SpillingTimeMedium  = "var(--spill-medium, #FFC522)";
     SpillingTimeLight   = "var(--spill-light, #FFD766)";
 
-    BlockMedium = "var(--block-medium, #EACB68)";
+    BlockLight = "var(--block-light, #EACB68)";
+    BlockMedium = "var(--block-medium, #D9AE61)";
 }
 
 TPlanViewConfig::TPlanViewConfig() {
@@ -2642,6 +3097,8 @@ void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
     NJson::TJsonValue jsonNode;
     if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
         if (auto* topNode = jsonNode.GetValueByPath(simplified ? "SimplifiedPlan" : "Plan")) {
+            LoadPlans(*topNode);
+        } else if (auto* topNode = jsonNode.GetValueByPath(simplified ? "queries.[0].SimplifiedPlan" : "queries.[0].Plan")) {
             LoadPlans(*topNode);
         }
     }
@@ -2734,16 +3191,16 @@ TString TPlanVisualizer::PrintSvg() {
     auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
 
     for (auto plan : Plans) {
-        plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
-        for (ui64 t = 0; t < maxSec; t += deltaSec) {
-            ui64 x1 = t * w / maxSec;
+        for (ui64 t = 0; t <= maxSec; t += deltaSec) {
+            ui64 x1 = t * w * 1000 / MaxTime;
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
-            plan->_Builder << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, timeLabel);
+            plan->SummaryBuilder << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, timeLabel);
         }
+        plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
 
     for (auto plan : Plans) {
-        plan->PrintSvg(background);
+        plan->PrintSvg(background, MaxTime, timelineDelta);
     }
 
     svg << "<svg width='" << Config.Width << "' height='" << offsetY << "' xmlns='http://www.w3.org/2000/svg'>" << Endl;
@@ -2895,7 +3352,7 @@ TString TPlanVisualizer::PrintSvg() {
     }
 
     function toggle_slim_on(node) {
-        if (node && !node.classList.contains("slim")) {
+        if (node && node.classList.contains("slimable") && !node.classList.contains("slim")) {
             node.classList.add("slim");
             var delta = 18 - Number(node.getAttribute("height"));
             if (delta) {
@@ -2924,6 +3381,21 @@ TString TPlanVisualizer::PrintSvg() {
                         toggle_fold(child);
                     }
                     expand_tree(child)
+                }
+            }
+        }
+    }
+
+    function tree_slim_on(node) {
+        if (node) {
+            for (var i = 0; i < node.children.length; i++) {
+                var child = node.children[i];
+                if (child.tagName == "svg") {
+                    toggle_slim_on(child);
+                    if (child.classList.contains("folded")) {
+                        break;
+                    }
+                    tree_slim_on(child);
                 }
             }
         }
@@ -2973,6 +3445,10 @@ TString TPlanVisualizer::PrintSvg() {
                 expand_tree(find_parent_svg(node));
                 return;
             }
+            if (node.classList.contains("button") && node.classList.contains("aruu")) {
+                tree_slim_on(find_parent_svg(node));
+                return;
+            }
             if (node.classList.contains("selectable")) {
                 toggle_slim_off(find_parent_svg(node));
                 toggle_selection(node);
@@ -2984,22 +3460,8 @@ TString TPlanVisualizer::PrintSvg() {
 ]]>
 </script>
 )";
-    svg << TString(background) << Endl;
-
-    for (ui64 t = 0; t < maxSec; t += deltaSec) {
-        ui64 x1 = t * w / maxSec;
-        svg
-            << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
-            << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
-    }
-
     if (timelineDelta) {
         ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
-        auto opacity = MaxTime ? std::min(0.5, static_cast<double>(UpdateTime - MaxTime) / (2 * MaxTime)) : 0.5;
-        svg
-        << "<rect x='" << Config.TimelineLeft + Config.TimelineWidth - timelineDelta << "' y='" << 0
-        << "' width='" << timelineDelta << "' height='" << offsetY
-        << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
         svg
         << "<g><title>" << "Last Update: " << FormatTimeMs(UpdateTime) << "</title>" << Endl
         << "  <rect x='" << Config.TimelineLeft + Config.TimelineWidth - summary3 << "' y='" << GAP_Y
@@ -3008,6 +3470,23 @@ TString TPlanVisualizer::PrintSvg() {
         << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << Config.TimelineLeft + Config.TimelineWidth - 2
         << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(UpdateTime) << "</text>" << Endl
         << "</g>" << Endl;
+    }
+
+    svg << TString(background) << Endl;
+
+    for (ui64 t = 0; t <= maxSec; t += deltaSec) {
+        ui64 x1 = t * w * 1000 / MaxTime;
+        svg
+            << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
+            << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
+    }
+
+    if (timelineDelta) {
+        auto opacity = MaxTime ? std::min(0.5, static_cast<double>(UpdateTime - MaxTime) / (2 * MaxTime)) : 0.5;
+        svg
+        << "<rect x='" << Config.TimelineLeft + Config.TimelineWidth - timelineDelta << "' y='" << 0
+        << "' width='" << timelineDelta << "' height='" << offsetY
+        << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
 
     svg << TString(canvas) << Endl;

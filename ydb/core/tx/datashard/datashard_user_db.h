@@ -43,37 +43,44 @@ public:
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const ui32 defaultFilledColumnCount) = 0;
+            const ui32 defaultFilledColumnCount,
+            NACLib::TUserContext::TPtr userCtx) = 0;
 
     virtual void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) = 0;
     
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) = 0;
     
     virtual void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) = 0;
 
     virtual void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) = 0;
 
     virtual void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            bool insertMissing) = 0;
-    
+            bool insertMissing,
+            NACLib::TUserContext::TPtr userCtx) = 0;
+
     virtual void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) = 0;
+            const TArrayRef<const TRawTypeValue> key,
+            NACLib::TUserContext::TPtr userCtx) = 0;
 
     virtual void CommitChanges(
             const TTableId& tableId,
@@ -88,7 +95,7 @@ public:
     virtual void CheckReadConflict(const TRowVersion& rowVersion) = 0;
     virtual void CheckReadDependency(ui64 txId) = 0;
 
-    virtual void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) = 0;
+    virtual void CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) = 0;
 
     /**
      * Called to handle new uncommitted writes potentially conflicting with
@@ -148,37 +155,44 @@ public:
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const ui32 defaultFilledColumnCount) override;
+            const ui32 defaultFilledColumnCount,
+            NACLib::TUserContext::TPtr userCtx) override;
 
     void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) override;
     
     void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) override;
             
     void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) override;
             
     void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            NACLib::TUserContext::TPtr userCtx) override;
         
     void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            bool insertMissing) override;
+            bool insertMissing,
+            NACLib::TUserContext::TPtr userCtx) override;
 
     void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) override;
+            const TArrayRef<const TRawTypeValue> key,
+            NACLib::TUserContext::TPtr userCtx) override;
 
     void CommitChanges(
             const TTableId& tableId, 
@@ -195,7 +209,7 @@ public:
     void CheckReadConflict(const TRowVersion& rowVersion) override;
     void CheckReadDependency(ui64 txId) override;
 
-    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) override;
+    void CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) override;
     void AddWriteConflict(ui64 txId) override;
     bool BreakWriteConflict(ui64 txId) override;
 
@@ -228,7 +242,8 @@ private:
 
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
-    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, 
+        const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx);
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 

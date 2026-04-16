@@ -5,8 +5,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 namespace {
 
 /**
@@ -82,5 +81,4 @@ IStatsRegistryPtr CreateDefaultStatsRegistry() {
     return new TDefaultStatsRegistry;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

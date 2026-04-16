@@ -266,12 +266,14 @@ namespace NMiniKQL {
         bool EvaluateResultType = true;
         bool EvaluateResultValue = true;
         bool LlvmRuntime = false;
+        NACLib::TUserContext::TPtr UserCtx;
 
         TEngineFlatSettings(
                 IEngineFlat::EProtocol protocol,
                 const IFunctionRegistry* functionRegistry,
                 IRandomProvider& randomProvider,
                 ITimeProvider& timeProvider,
+                NACLib::TUserContext::TPtr userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build(),
                 IEngineFlatHost* host = nullptr,
                 const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters()
                 )
@@ -282,6 +284,7 @@ namespace NMiniKQL {
             , Host(host)
             , AllocCounters(allocCounters)
             , ForceOnline(false)
+            , UserCtx(userCtx)
         {
             Y_ABORT_UNLESS(FunctionRegistry);
         }

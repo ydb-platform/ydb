@@ -61,6 +61,24 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
 
 } // namespace
 
+template <typename TRule>
+    requires std::same_as<TRule, TRule_union_op> ||
+             std::same_as<TRule, TRule_intersect_op>
+bool IsAllQualifiedOp(const TRule& node) {
+    if (!node.HasBlock2()) {
+        return false;
+    }
+
+    const TString token = ToLowerUTF8(node.GetBlock2().GetToken1().GetValue());
+    if (token == "all") {
+        return true;
+    } else if (token == "distinct") {
+        return false;
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
+    }
+}
+
 TSourcePtr TSqlSelect::CheckSubSelectOnDiscard(TSourcePtr source) {
     if (!source) {
         return nullptr;
@@ -141,7 +159,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                                 joinOp = Token(block.GetAlt4().GetToken1());
                                 break;
                             case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
-                                Y_UNREACHABLE();
+                                YQL_ENSURE(false, "Unreachable");
                         }
                     }
                     if (alt.GetBlock2().GetAlt1().HasBlock2()) {
@@ -163,14 +181,14 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                     joinOp = Token(alt.GetBlock2().GetAlt3().GetToken1());
                     break;
                 case TRule_join_op::TAlt2::TBlock2::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
             Ctx_.IncrementMonCounter("sql_features", "Join");
             Ctx_.IncrementMonCounter("sql_join_operations", joinOp);
             break;
         }
         case TRule_join_op::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     joinOp = NormalizeJoinOp(joinOp);
     if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
@@ -221,7 +239,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
             auto& alt = node.GetAlt_join_constraint1();
             Token(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             return Unwrap(expr.Build(alt.GetRule_expr2()));
         }
         case TRule_join_constraint::kAltJoinConstraint2: {
@@ -237,7 +255,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
             return join->GetJoin()->BuildJoinKeys(Ctx_, names);
         }
         case TRule_join_constraint::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return nullptr;
 }
@@ -318,7 +336,7 @@ bool TSqlSelect::FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& fla
             break;
         }
         case TRule_flatten_by_arg::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return true;
 }
@@ -363,7 +381,7 @@ TSourcePtr TSqlSelect::FlattenSource(const TRule_flatten_source& node) {
             }
 
             case TRule_flatten_source::TBlock2::TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
     return source;
@@ -438,7 +456,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
         case TRule_result_column::kAltResultColumn2: {
             auto alt = node.GetAlt_result_column2();
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             TNodePtr term(Unwrap(expr.Build(alt.GetRule_expr1())));
             if (!term) {
                 Ctx_.IncrementMonCounter("sql_errors", "NoTerm");
@@ -461,7 +479,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                         implicitLabel = true;
                         break;
                     case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                        Y_UNREACHABLE();
+                        YQL_ENSURE(false, "Unreachable");
                 }
                 term->SetLabel(label, Ctx_.Pos());
                 term->MarkImplicitLabel(implicitLabel);
@@ -470,7 +488,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
             break;
         }
         case TRule_result_column::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return true;
 }
@@ -545,7 +563,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
         case TRule_single_source::kAltSingleSource2: {
             const auto& alt = node.GetAlt_single_source2();
             Token(alt.GetToken1());
-            TSqlSelect innerSelect(Ctx_, Mode_);
+            TSqlSelect innerSelect(*this);
             TPosition pos;
             auto source = CheckSubSelectOnDiscard(innerSelect.Build(alt.GetRule_select_stmt2(), pos));
             if (!source) {
@@ -556,10 +574,10 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
         case TRule_single_source::kAltSingleSource3: {
             const auto& alt = node.GetAlt_single_source3();
             TPosition pos;
-            return TSqlValues(Ctx_, Mode_).Build(alt.GetRule_values_stmt2(), pos, derivedColumns, derivedColumnsPos);
+            return TSqlValues(*this).Build(alt.GetRule_values_stmt2(), pos, derivedColumns, derivedColumnsPos);
         }
         case TRule_single_source::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -591,7 +609,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
             Ctx_.Error() << "Source shall not simply contain both a sample clause and a row pattern recognition clause";
             return {};
         }
-        auto matchRecognizeClause = TSqlMatchRecognizeClause(Ctx_, Mode_);
+        auto matchRecognizeClause = TSqlMatchRecognizeClause(*this);
         auto matchRecognize = matchRecognizeClause.CreateBuilder(node.GetBlock2().GetRule_row_pattern_recognition_clause1());
         singleSource->SetMatchRecognize(matchRecognize);
     }
@@ -610,14 +628,14 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 }
                 break;
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
         singleSource->SetLabel(label);
     }
     if (node.HasBlock4()) {
         ESampleClause sampleClause;
         ESampleMode mode;
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         TNodePtr samplingRateNode;
         TNodePtr samplingSeedNode;
         const auto& sampleBlock = node.GetBlock4();
@@ -664,7 +682,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 Ctx_.IncrementMonCounter("sql_features", "SampleClause");
             } break;
             case TRule_named_single_source::TBlock4::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
         if (!singleSource->SetSamplingOptions(Ctx_, pos, sampleClause, mode, samplingRateNode, samplingSeedNode)) {
             Ctx_.IncrementMonCounter("sql_errors", "IncorrectSampleClause");
@@ -701,7 +719,7 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
             columnName = Id(node.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);
             break;
         case TRule_without_column_name::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     if (columnName.empty()) {
@@ -771,7 +789,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     if (!source) {
         return nullptr;
     }
-    if (node.GetBlock4().size()) {
+    if (!node.GetBlock4().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock4()) {
             sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), unorderedSubquery));
@@ -791,7 +809,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
 
     const auto& block5 = node.GetBlock5();
     if (block5.HasBlock5()) {
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         TNodePtr where = Unwrap(expr.Build(block5.GetBlock5().GetRule_expr2()));
         if (!where || !source->AddFilter(Ctx_, where)) {
@@ -808,7 +826,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     }
 
     bool listCall = false;
-    TSqlCallExpr call(Ctx_, Mode_);
+    TSqlCallExpr call(*this);
     bool initRet = call.Init(block5.GetRule_using_call_expr2());
     if (initRet) {
         call.IncCounters();
@@ -885,7 +903,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     if (!source) {
         return {};
     }
-    if (node.GetBlock3().size()) {
+    if (!node.GetBlock3().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock3()) {
             sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), true));
@@ -911,7 +929,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
 
     if (node.HasBlock11()) {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         TNodePtr where = Unwrap(expr.Build(node.GetBlock11().GetRule_expr2()));
         if (!where || !source->AddFilter(Ctx_, where)) {
             return nullptr;
@@ -924,7 +942,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     TNodePtr having;
     if (node.HasBlock12()) {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         having = Unwrap(expr.Build(node.GetBlock12().GetRule_expr2()));
         if (!having) {
             return nullptr;
@@ -932,7 +950,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     }
 
     bool listCall = false;
-    TSqlCallExpr call(Ctx_, Mode_);
+    TSqlCallExpr call(*this);
     bool initRet = call.Init(node.GetRule_using_call_expr9());
     if (initRet) {
         call.IncCounters();
@@ -997,7 +1015,8 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     const auto hints = Ctx_.PullHintForToken(selectPos);
-    TColumnsSets uniqueSets, distinctSets;
+    TColumnsSets uniqueSets;
+    TColumnsSets distinctSets;
     for (const auto& hint : hints) {
         if (const auto& name = to_lower(hint.Name); name == "unique") {
             uniqueSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
@@ -1051,7 +1070,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         TNodePtr where;
         {
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            TSqlExpression expr(Ctx_, Mode_);
+            TSqlExpression expr(*this);
             where = Unwrap(expr.Build(block.GetRule_expr2()));
         }
         if (!where) {
@@ -1066,12 +1085,13 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     /// \todo merge gtoupByExpr and groupBy in one
-    TVector<TNodePtr> groupByExpr, groupBy;
+    TVector<TNodePtr> groupByExpr;
+    TVector<TNodePtr> groupBy;
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec;
     bool compactGroupBy = false;
     TString groupBySuffix;
     if (node.HasBlock11()) {
-        TGroupByClause clause(Ctx_, Mode_);
+        TGroupByClause clause(*this);
         if (!clause.Build(node.GetBlock11().GetRule_group_by_clause1())) {
             return nullptr;
         }
@@ -1095,7 +1115,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
 
     TNodePtr having;
     if (node.HasBlock12()) {
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         having = Unwrap(expr.Build(node.GetBlock12().GetRule_expr2()));
         if (!having) {
@@ -1248,7 +1268,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
             return {};
         }
 
-        TSqlExpression takeExpr(Ctx_, Mode_);
+        TSqlExpression takeExpr(*this);
         auto take = Unwrap(takeExpr.Build(block.GetRule_expr2()));
         if (!take) {
             return {};
@@ -1256,7 +1276,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
 
         TNodePtr skip;
         if (block.HasBlock3()) {
-            TSqlExpression skipExpr(Ctx_, Mode_);
+            TSqlExpression skipExpr(*this);
             skip = Unwrap(skipExpr.Build(block.GetBlock3().GetRule_expr2()));
             if (!skip) {
                 return {};
@@ -1347,7 +1367,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             break;
         }
         case TRule_select_kind_TBlock2::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     return res;
@@ -1371,24 +1391,6 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
             }
         }
         return SelectKind(partial, selectPos, {});
-    }
-}
-
-template <typename TRule>
-    requires std::same_as<TRule, TRule_union_op> ||
-             std::same_as<TRule, TRule_intersect_op>
-bool TSqlSelect::IsAllQualifiedOp(const TRule& node) {
-    if (!node.HasBlock2()) {
-        return false;
-    }
-
-    const TString token = ToLowerUTF8(Token(node.GetBlock2().GetToken1()));
-    if (token == "all") {
-        return true;
-    } else if (token == "distinct") {
-        return false;
-    } else {
-        Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
     }
 }
 
@@ -1514,10 +1516,12 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetToken1();
         TString nextOp = ToLowerUTF8(Token(token));
         if (nextOp != "union" &&
-            !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
-            !Ctx_.ExceptIntersectBefore202503) {
-            Ctx_.Error(Ctx_.TokenPosition(token))
-                << "EXCEPT/INTERSECT is not available before version 2025.03";
+            !Ctx_.ExceptIntersectBefore202503 &&
+            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                Ctx_.TokenPosition(token),
+                "EXCEPT/INTERSECT",
+                MakeLangVersion(2025, 3)))
+        {
             return nullptr;
         }
 
@@ -1525,10 +1529,12 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
             const NSQLv1Generated::TToken& token = nextBlock.GetRule_union_op1().GetBlock2().GetToken1();
             const TString qualifier = ToLowerUTF8(Token(token));
             if (qualifier == "distinct" &&
-                !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
-                !Ctx_.ExceptIntersectBefore202503) {
-                Ctx_.Error(Ctx_.TokenPosition(token))
-                    << "UNION DISTINCT is not available before version 2025.03";
+                !Ctx_.ExceptIntersectBefore202503 &&
+                !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                    Ctx_.TokenPosition(token),
+                    "UNION DISTINCT",
+                    MakeLangVersion(2025, 3)))
+            {
                 return nullptr;
             }
         }
@@ -1620,10 +1626,12 @@ TSourcePtr TSqlSelect::BuildIntersection(
         const auto& nextBlock = tail[i];
 
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_intersect_op1().GetToken1();
-        if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 3)) &&
-            !Ctx_.ExceptIntersectBefore202503) {
-            Ctx_.Error(Ctx_.TokenPosition(token))
-                << "EXCEPT/INTERSECT is not available before version 2025.03";
+        if (!Ctx_.ExceptIntersectBefore202503 &&
+            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                Ctx_.TokenPosition(token),
+                "EXCEPT/INTERSECT",
+                MakeLangVersion(2025, 3)))
+        {
             return nullptr;
         }
 
@@ -1672,11 +1680,11 @@ TSqlSelect::TSelectKindResult TSqlSelect::BuildAtom(
                 break;
             }
             case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2: {
-                result.Source = TSqlExpression(Ctx_, Mode_).BuildSource(node);
+                result.Source = TSqlExpression(*this).BuildSource(node);
                 break;
             }
             case NSQLv1Generated::TRule_select_or_expr::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     } else if (placement.IsFirstInSelectOp && placement.IsLastInSelectOp) {
         result = SelectKind(node, pos, /* placement = */ Nothing());

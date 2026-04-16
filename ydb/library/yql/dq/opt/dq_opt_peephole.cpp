@@ -35,6 +35,33 @@ inline TString GetColumnName(std::string_view label, const TItemExprType *key) {
     return ToString(key->GetName());
 }
 
+std::optional<ui32> FindJoinKeyIndex(const TStructExprType* itemType, TStringBuf keyName,
+    std::string_view tableLabel, bool leftSide, std::optional<ui32> keyPosition = std::nullopt) {
+    if (auto idx = itemType->FindItem(keyName)) {
+        return *idx;
+    }
+    if (!tableLabel.empty()) {
+        if (keyName.StartsWith(tableLabel) && keyName.size() > tableLabel.size() && keyName[tableLabel.size()] == '.') {
+            auto shortName = keyName.substr(tableLabel.size() + 1);
+            if (auto idx = itemType->FindItem(shortName)) {
+                return *idx;
+            }
+        }
+        TString prefixed = TString(tableLabel) + "." + TString(keyName);
+        if (auto idx = itemType->FindItem(prefixed)) {
+            return *idx;
+        }
+    }
+    if (keyPosition) {
+        const char* prefix = leftSide ? "_yql_dq_key_left_" : "_yql_dq_key_right_";
+        TString remappedName = TString(prefix) + ToString(*keyPosition);
+        if (auto idx = itemType->FindItem(remappedName)) {
+            return *idx;
+        }
+    }
+    return std::nullopt;
+}
+
 std::pair<TExprNode::TListType, TExprNode::TListType> JoinKeysToAtoms(TExprContext& ctx, const TDqJoinBase& join,
     std::string_view leftTableLabel, std::string_view rightTableLabel)
 {
@@ -917,13 +944,13 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
 
         auto leftName = leftKeyColumnNodes[i]->Content();
-        auto leftIndex = itemTypeLeft->FindItem(leftName);
-        YQL_ENSURE(leftIndex);
+        auto leftIndex = FindJoinKeyIndex(itemTypeLeft, leftName, leftTableLabel, true, i);
+        YQL_ENSURE(leftIndex, "Left join key column '" << leftName << "' not found in left input type (left label: '" << leftTableLabel << "')");
         const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
 
         auto rightName = rightKeyColumnNodes[i]->Content();
-        auto rightIndex = itemTypeRight->FindItem(rightName);
-        YQL_ENSURE(rightIndex);
+        auto rightIndex = FindJoinKeyIndex(itemTypeRight, rightName, rightTableLabel, false, i);
+        YQL_ENSURE(rightIndex, "Right join key column '" << rightName << "' not found in right input type (right label: '" << rightTableLabel << "')");
         const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
 
         bool hasOptional = false;
@@ -986,7 +1013,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    // Build block hash join - now inputs are guaranteed to be blocks
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftInput))
@@ -994,6 +1020,9 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
+            .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
+            .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
+            .Add(7, blockHashJoin.Settings().Ptr())
         .Seal()
         .Build();
 
@@ -1007,6 +1036,21 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
+    // Wide row layout: [L base][L converted][R base][R converted]
+    const ui32 leftBase = itemTypeLeft->GetSize();
+    const ui32 leftConv = leftConvertedItems.size();
+    const ui32 rightBase = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
+        ? itemTypeRight->GetSize() : 0;
+    const ui32 rightConv = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
+        ? rightConvertedItems.size() : 0;
+    const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
+
+    TVector<ui32> keep;
+    keep.reserve(fullColNames.size());
+    for (ui32 i = 0; i < leftBase; ++i) keep.push_back(i);
+    const ui32 rightStart = leftBase + leftConv;
+    for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
+
     // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
@@ -1014,14 +1058,14 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
                 .Add(0, std::move(wideResult))
             .Seal()
             .Lambda(1)
-                .Params("output", fullColNames.size())
+                .Params("output", totalColumns)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 i = 0U;
                         for (const auto& colName : fullColNames) {
                             parent.List(i)
                                 .Atom(0, colName)
-                                .Arg(1, "output", i)
+                                .Arg(1, "output", keep[i])
                             .Seal();
                             i++;
                         }
@@ -1035,8 +1079,13 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     return TExprBase(result);
 }
 
-NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool rewritingFinalAggregator, const bool useBlocks)
-{
+NNodes::TExprBase DqPeepholeRewriteWideCombiner(
+    const NNodes::TExprBase& node,
+    TExprContext& ctx,
+    const bool rewritingFinalAggregator,
+    const bool useBlocks,
+    const bool exportTypeInfo
+) {
     if (!node.Maybe<TCoWideCombiner>()) {
         return node;
     }
@@ -1078,10 +1127,33 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         outputIsFlow = *outputKind;
     }
 
+    auto expandTypeAnnFromNode = [&](const NNodes::TExprBase& src) -> TExprNode::TPtr {
+        if (const TTypeAnnotationNode* typeAnn; src.Ptr() && (typeAnn = src.Ptr()->GetTypeAnn())) {
+            return ExpandType(node.Pos(), *typeAnn, ctx);
+        } else {
+            return ctx.NewList(node.Pos(), {});
+        }
+    };
+
+    auto exportTypeAnnotations = [&](TDqPhyHashCombine& dest, const NNodes::TExprBase& input) -> void {
+        if (!exportTypeInfo) {
+            return;
+        }
+
+        auto children = dest.Ptr()->ChildrenList();
+        TExprNode::TListType typeInfos;
+        typeInfos.push_back(expandTypeAnnFromNode(input));
+        typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.KeyExtractor()));
+        typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.InitHandler()));
+        typeInfos.push_back(expandTypeAnnFromNode(dest));
+        children.push_back(ctx.NewList(node.Pos(), std::move(typeInfos)));
+        dest.Ptr()->ChangeChildrenInplace(std::move(children));
+    };
+
     bool inputIsBlocks = false;
 
     if (simpleReplace) {
-        return Build<TDqPhyHashCombine>(ctx, node.Pos())
+        auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
             .Input(wideCombiner.Input())
             .MemLimit(wideCombiner.MemLimit())
             .KeyExtractor(copyLambda(wideCombiner.KeyExtractor()))
@@ -1089,6 +1161,8 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
             .UpdateHandler(copyLambda(wideCombiner.UpdateHandler()))
             .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
         .Done();
+        exportTypeAnnotations(dqPhyCombine, wideCombiner.Input());
+        return dqPhyCombine;
     }
 
     while (input->IsCallable()) {
@@ -1122,6 +1196,8 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         .UpdateHandler(copyLambda(wideCombiner.UpdateHandler()))
         .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
     .Done();
+
+    exportTypeAnnotations(dqPhyCombine, wrappedInput);
 
     auto dqPhyCombinePtr = dqPhyCombine.Ptr();
 
@@ -1161,18 +1237,18 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
     return NNodes::TExprBase(dqPhyCombinePtr);
 }
 
-NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks) {
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks, const bool exportTypeInfo) {
     if (!node.Maybe<TCoWideCombiner>()) {
         return node;
     }
-    return DqPeepholeRewriteWideCombiner(node, ctx, true, useBlocks);
+    return DqPeepholeRewriteWideCombiner(node, ctx, true, useBlocks, exportTypeInfo);
 }
 
-NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks) {
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks, const bool exportTypeInfo) {
     if (!node.Maybe<TCoWideCombiner>()) {
         return node;
     }
-    return DqPeepholeRewriteWideCombiner(node, ctx, false, useBlocks);
+    return DqPeepholeRewriteWideCombiner(node, ctx, false, useBlocks, exportTypeInfo);
 } // namespace NYql::NDq
 
 }

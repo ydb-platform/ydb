@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from ..._grpc.grpcwrapper.ydb_coordination import (
     CreateNodeRequest,
@@ -10,8 +10,11 @@ from ..._grpc.grpcwrapper.ydb_coordination_public_types import NodeConfig
 from ...coordination.base import BaseCoordinationClient
 from .session import CoordinationSession
 
+if TYPE_CHECKING:
+    from ..driver import Driver as AsyncDriver  # noqa: F401
 
-class CoordinationClient(BaseCoordinationClient):
+
+class CoordinationClient(BaseCoordinationClient["AsyncDriver"]):
     async def create_node(self, path: str, config: Optional[NodeConfig] = None, settings=None):
         self._log_experimental_api()
 

@@ -1,0 +1,38 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "hd_demo_sk";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "hd_income_band_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "hd_buy_potential";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "hd_dep_count";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "hd_vehicle_count";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+    ];
+}

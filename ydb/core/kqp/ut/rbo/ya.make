@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_rbo_pg_ut.cpp
@@ -17,6 +18,10 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     ydb/library/benchmarks/queries/tpch
     ydb/public/lib/ut_helpers
+    ydb/library/yql/udfs/statistics_internal
+    ydb/core/statistics/ut_common
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/hyperloglog
 )
 
 ADDINCL(

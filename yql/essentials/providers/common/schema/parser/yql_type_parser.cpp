@@ -3,8 +3,7 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 void TYqlTypeYsonSaverBase::SaveTypeHeader(TStringBuf name) {
     Writer_.OnBeginList();
@@ -83,5 +82,4 @@ bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err) {
     return true;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

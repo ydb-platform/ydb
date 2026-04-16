@@ -38,6 +38,7 @@
 #include <util/string/split.h>
 #include <util/system/hp_timer.h>
 #include <util/system/info.h>
+#include <util/thread/pool.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -134,76 +135,6 @@ Ydb::Table::DescribeSystemViewResult ReadSystemViewDescription(const TFsPath& fs
 
 TTableDescription TableDescriptionFromProto(const Ydb::Table::CreateTableRequest& proto) {
     return TProtoAccessor::FromProto(proto);
-}
-
-TRestoreResult CheckSysViewCompatibility(
-    const Ydb::Table::DescribeSystemViewResult& dumpedProto,
-    const Ydb::Table::DescribeSystemViewResult& actualProto)
-{
-    if (dumpedProto.sys_view_id() != actualProto.sys_view_id()) {
-        return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder()
-            << "System view ID mismatch: dumped=" << dumpedProto.sys_view_id()
-            << ", actual=" << actualProto.sys_view_id());
-    }
-
-    const auto& dumpedColumns = dumpedProto.columns();
-    const auto& actualColumns = actualProto.columns();
-
-    THashMap<TString, const Ydb::Table::ColumnMeta*> actualColumnsMap;
-    for (const auto& col : actualColumns) {
-        actualColumnsMap.emplace(col.name(), &col);
-    }
-
-    for (const auto& dumpedCol : dumpedColumns) {
-        auto it = actualColumnsMap.find(dumpedCol.name());
-        if (it == actualColumnsMap.end()) {
-            return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder()
-                << "Column " << TString(dumpedCol.name()).Quote() << " from dump is missing in actual system view");
-        }
-
-        const auto& actualCol = *it->second;
-
-        TType dumpedType(dumpedCol.type());
-        TType actualType(actualCol.type());
-        if (!TypesEqual(dumpedType, actualType)) {
-            // Add detailed logging for type comparison failures
-            TString dumpedTypeStr = dumpedCol.type().ShortUtf8DebugString();
-            TString actualTypeStr = actualCol.type().ShortUtf8DebugString();
-
-            return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder()
-                << "Column type mismatch for " << TString(dumpedCol.name()).Quote()
-                << ": dumped type: " << dumpedTypeStr
-                << ", actual type: " << actualTypeStr);
-        }
-
-        bool dumpedNotNull = dumpedCol.has_not_null() ? dumpedCol.not_null() : false;
-        bool actualNotNull = actualCol.has_not_null() ? actualCol.not_null() : false;
-        if (dumpedNotNull != actualNotNull) {
-            return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder()
-                << "Column not_null property mismatch for " << TString(dumpedCol.name()).Quote()
-                << ": dumped not_null=" << (dumpedNotNull ? "true" : "false")
-                << ", actual not_null=" << (actualNotNull ? "true" : "false"));
-        }
-    }
-
-    const auto& dumpedPrimaryKeys = dumpedProto.primary_key();
-    const auto& actualPrimaryKeys = actualProto.primary_key();
-    if (dumpedPrimaryKeys.size() > actualPrimaryKeys.size()) {
-        return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder()
-            << "Primary key count mismatch: dumped has more keys (" << dumpedPrimaryKeys.size()
-            << ") than actual (" << actualPrimaryKeys.size() << ")");
-    }
-
-    for (int i = 0; i < dumpedPrimaryKeys.size(); ++i) {
-        if (dumpedPrimaryKeys[i] != actualPrimaryKeys[i]) {
-            return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder()
-                << "Primary key order mismatch at position " << i
-                << ": dumped=" << TString(dumpedPrimaryKeys[i]).Quote()
-                << ", actual=" << TString(actualPrimaryKeys[i]).Quote());
-        }
-    }
-
-    return Result<TRestoreResult>();
 }
 
 TChangefeedDescription ChangefeedDescriptionFromProto(const Ydb::Table::ChangefeedDescription& proto) {
@@ -878,7 +809,9 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, {});
+        TRestoreSettings restoreSettings;
+        restoreSettings.ReplaceSysACL(true);
+        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }
@@ -1441,7 +1374,7 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
     if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, dbRestoreRoot, settings); !result.IsSuccess()) {
         return result;
     }
-    
+
     if (auto result = DropAndRestoreTablesAndDependents(backupEntries, tables, views, replications, transfers, dbRestoreRoot, settings); !result.IsSuccess()) {
         return result;
     }
@@ -1822,37 +1755,38 @@ TRestoreResult TRestoreClient::RestoreSysView(
 
     auto existenceResult = CheckExistenceAndType(dbPath, ESchemeEntryType::SysView);
 
-    if (settings.DryRun_) {
-        if (!existenceResult.IsSuccess()) {
-            return existenceResult;
-        }
-
-        auto dumpedProto = ReadSystemViewDescription(fsPath, Log.get());
-
-        Ydb::Table::DescribeSystemViewResult actualProto;
-        auto describeStatus = DescribeSystemView(TableClient, dbPath, actualProto);
-        if (!describeStatus.IsSuccess()) {
-            LOG_E("Failed to describe system view " << dbPath.Quote());
-            return Result<TRestoreResult>(dbPath, std::move(describeStatus));
-        }
-
-        auto compatibilityStatus = CheckSysViewCompatibility(dumpedProto, actualProto);
-        if (!compatibilityStatus.IsSuccess()) {
-            LOG_E("System view compatibility check failed for " << dbPath.Quote()
-                  << ": " << compatibilityStatus.GetIssues().ToOneLineString());
-            return Result<TRestoreResult>(dbPath, std::move(compatibilityStatus));
-        }
-
-        LOG_D("System view " << dbPath.Quote() << " is compatible");
-        return Result<TRestoreResult>();
-    }
-
     if (!existenceResult.IsSuccess()) {
-        LOG_D("System view " << dbPath.Quote() << " does not exist, skipping");
-        return Result<TRestoreResult>();
+        if (settings.DryRun_) {
+            return existenceResult;
+        } else {
+            LOG_D("System view " << dbPath.Quote() << " does not exist, skipping");
+            return Result<TRestoreResult>();
+        }
     }
 
-    return RestorePermissions(fsPath, dbPath, settings, true, true);
+    auto dumpedProto = ReadSystemViewDescription(fsPath, Log.get());
+
+    Ydb::Table::DescribeSystemViewResult actualProto;
+    auto describeStatus = DescribeSystemView(TableClient, dbPath, actualProto);
+    if (!describeStatus.IsSuccess()) {
+        LOG_E("Failed to describe system view " << dbPath.Quote());
+        return Result<TRestoreResult>(dbPath, std::move(describeStatus));
+    }
+
+    TRestoreResult compatibilityStatus = CheckSysViewCompatibility(dumpedProto, actualProto);
+    if (!compatibilityStatus.IsSuccess()) {
+        LOG_E("System view compatibility check failed for " << dbPath.Quote()
+                << ": " << compatibilityStatus.GetIssues().ToOneLineString());
+        return Result<TRestoreResult>(dbPath, std::move(compatibilityStatus));
+    } else {
+        LOG_D("System view " << dbPath.Quote() << " is compatible");
+    }
+
+    if (settings.DryRun_) {
+        return Result<TRestoreResult>();
+    } else {
+        return RestorePermissions(fsPath, dbPath, settings, true, true);
+    }
 }
 
 TRestoreResult TRestoreClient::RestoreTable(
@@ -2249,20 +2183,71 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
         return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
     }
 
-    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
+    const auto topicPath = Join("/", dbPath, fsPath.GetName());
+    return RestoreConsumers(topicPath, topicDesc.GetConsumers());
 }
 
 TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<TConsumer>& consumers) {
     for (const auto& consumer : consumers) {
-        auto result = TopicClient.AlterTopic(topicPath,
-            TAlterTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(consumer.GetConsumerName())
-                    .Important(consumer.GetImportant())
-                    .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
-                    .Attributes(consumer.GetAttributes())
-                .EndAddConsumer()
-        ).GetValueSync();
+        const auto& dlp = consumer.GetDeadLetterPolicy();
+        TAlterTopicSettings settings;
+        auto& addConsumer = settings.BeginAddConsumer(consumer.GetConsumerType());
+        addConsumer.ConsumerName(consumer.GetConsumerName())
+            .Important(consumer.GetImportant())
+            .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
+            .Attributes(consumer.GetAttributes())
+            .KeepMessagesOrder(consumer.GetKeepMessagesOrder())
+            .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
+            .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
+            .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime())
+            .ReadFrom(consumer.GetReadFrom());
+
+        for (const auto& codec : consumer.GetSupportedCodecs()) {
+            addConsumer.AppendSupportedCodecs(codec);
+        }
+
+        auto result = [&]() {
+            if (!dlp.GetEnabled()) {
+                return TopicClient.AlterTopic(
+                    topicPath,
+                    addConsumer.EndAddConsumer()
+                ).ExtractValueSync();
+            }
+
+            auto deadLetterPolicy = addConsumer
+                .BeginDeadLetterPolicy()
+                    .Enabled(dlp.GetEnabled());
+
+            switch (dlp.GetAction()) {
+                case EDeadLetterAction::Move:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .MoveAction(dlp.GetDeadLetterQueue());
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Delete:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .DeleteAction();
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Unspecified:
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        addConsumer.EndAddConsumer()
+                    ).ExtractValueSync();
+            }
+        }();
         if (result.IsSuccess()) {
             LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
         } else {

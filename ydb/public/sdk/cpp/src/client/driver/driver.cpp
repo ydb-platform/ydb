@@ -45,6 +45,7 @@ public:
     TBalancingPolicy::TImpl GetBalancingSettings() const override { return BalancingSettings; }
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
+    std::string GetGRpcLoadBalancingPolicy() const override { return GRpcLoadBalancingPolicy; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     uint64_t GetMemoryQuota() const override { return MemoryQuota; }
     uint64_t GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
@@ -52,6 +53,8 @@ public:
     uint64_t GetMaxMessageSize() const override { return MaxMessageSize; }
     const TLog& GetLog() const override { return Log; }
     std::shared_ptr<IExecutor> GetExecutor() const override { return Executor; }
+    std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const override { return MetricRegistry; }
+    std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const override { return TraceProvider; }
 
     std::string Endpoint;
     size_t NetworkThreadsNum = 2;
@@ -75,6 +78,7 @@ public:
     TBalancingPolicy::TImpl BalancingSettings = TBalancingPolicy::TImpl::UsePreferableLocation(std::nullopt);
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
+    std::string GRpcLoadBalancingPolicy = "round_robin";
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
     uint64_t MaxInboundMessageSize = 0;
@@ -82,6 +86,8 @@ public:
     uint64_t MaxMessageSize = 0;
     TLog Log; // Null by default.
     std::shared_ptr<IExecutor> Executor;
+    std::shared_ptr<NMetrics::IMetricRegistry> MetricRegistry;
+    std::shared_ptr<NTrace::ITraceProvider> TraceProvider;
 };
 
 TDriverConfig::TDriverConfig(const std::string& connectionString)
@@ -206,6 +212,11 @@ TDriverConfig& TDriverConfig::SetGRpcKeepAlivePermitWithoutCalls(bool permitWith
     return *this;
 }
 
+TDriverConfig& TDriverConfig::SetGRpcLoadBalancingPolicy(const std::string& policy) {
+    Impl_->GRpcLoadBalancingPolicy = policy;
+    return *this;
+}
+
 TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     Impl_->SocketIdleTimeout = timeout;
     return *this;
@@ -233,6 +244,16 @@ TDriverConfig& TDriverConfig::SetLog(std::unique_ptr<TLogBackend>&& log) {
 
 TDriverConfig& TDriverConfig::SetExecutor(std::shared_ptr<IExecutor> executor) {
     Impl_->Executor = executor;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetMetricRegistry(std::shared_ptr<NMetrics::IMetricRegistry> registry) {
+    Impl_->MetricRegistry = std::move(registry);
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetTraceProvider(std::shared_ptr<NTrace::ITraceProvider> provider) {
+    Impl_->TraceProvider = std::move(provider);
     return *this;
 }
 
@@ -283,11 +304,14 @@ TDriverConfig TDriver::GetConfig() const {
     config.SetBalancingPolicy(std::make_unique<TBalancingPolicy::TImpl>(Impl_->BalancingSettings_));
     config.SetGRpcKeepAliveTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->GRpcKeepAliveTimeout_));
     config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
+    config.SetGRpcLoadBalancingPolicy(Impl_->GRpcLoadBalancingPolicy_);
     config.SetSocketIdleTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->SocketIdleTimeout_));
     config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
     config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);
     config.SetMaxMessageSize(Impl_->MaxMessageSize_);
     config.Impl_->Log = Impl_->Log;
+    config.SetMetricRegistry(Impl_->GetExternalMetricRegistry());
+    config.SetTraceProvider(Impl_->GetTraceProvider());
 
     return config;
 }

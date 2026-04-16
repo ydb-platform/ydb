@@ -141,14 +141,14 @@ class ArrowFormatSettings(IToProto):
         return settings
 
 
-class ArrowFormatMeta(IFromProto):
+class ArrowFormatMeta(IFromProto["ydb_formats_pb2.ArrowFormatMeta", "ArrowFormatMeta"]):
     """Metadata for Arrow format result sets containing the schema."""
 
     def __init__(self, schema: bytes):
         self.schema = schema
 
     @classmethod
-    def from_proto(cls, proto_message):
+    def from_proto(cls, proto_message: "ydb_formats_pb2.ArrowFormatMeta") -> "ArrowFormatMeta":
         return cls(schema=proto_message.schema)
 
     def __repr__(self):

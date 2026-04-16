@@ -1201,7 +1201,7 @@ Y_UNIT_TEST(TestBlockedEvGetRequest) {
     tc.Runtime->Send(new IEventHandle(*dsProxyActor, *tabletActor, ev.release()));
 
     // read with the blocked generation should fail and lead to a restart of the key value tablet
-    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_ERROR>(tc, "key", "", 0, 0, 0);
+    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_BLOCKED>(tc, "key", "", 0, 0, 0);
     // read data through the newly created key value tablet
     ExecuteRead(tc, "key", "value", 0, 0, 0);
     // check that the key value tablet has indeed restarted

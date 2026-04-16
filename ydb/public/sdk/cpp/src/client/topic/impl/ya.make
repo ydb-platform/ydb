@@ -16,6 +16,8 @@ SRCS(
     read_session.cpp
     topic_impl.h
     topic_impl.cpp
+    producer.h
+    producer.cpp
     topic.cpp
     transaction.cpp
     write_session_impl.h
@@ -30,6 +32,7 @@ PEERDIR(
     library/cpp/threading/future/subscription
     library/cpp/monlib/metrics
     library/cpp/string_utils/url
+    ydb/library/persqueue
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/public/api/grpc/draft
     ydb/public/api/grpc

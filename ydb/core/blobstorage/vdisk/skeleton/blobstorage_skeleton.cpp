@@ -29,6 +29,8 @@
 #include <ydb/core/blobstorage/vdisk/query/query_public.h>
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
 #include <ydb/core/blobstorage/vdisk/query/assimilation.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_actor.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_ctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
@@ -116,7 +118,7 @@ namespace NKikimr {
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->IsThrottling() : false) : std::nullopt,
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0) : std::nullopt));
             // repeat later
-            ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
+            ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats());
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -604,11 +606,6 @@ namespace NKikimr {
                     VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk),
                     firstBlobId.TabletID(), ev->Get()->GetSumBlobSize());
 
-            if (!OutOfSpaceLogic->Allow(ctx, ev)) {
-                ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
-                return;
-            }
-
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVMultiPut: race;"
                         << " Marker# BSVS06");
@@ -629,6 +626,12 @@ namespace NKikimr {
                     item.GetIgnoreBlock());
                 TVPutInfo &info = putsInfo.back();
                 const bool ignoreBlock = record.GetIgnoreBlock() || info.IgnoreBlock;
+                const bool isZeroEntry = item.GetIsZeroEntry();
+
+                if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size())) {
+                    info.HullStatus = {NKikimrProto::OUT_OF_SPACE, "out of space", false};
+                    continue;
+                }
 
                 try {
                     info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID(), MinHugeBlobInBytes);
@@ -1568,6 +1571,7 @@ namespace NKikimr {
                         << " Self# " << SelfVDiskId << " Source# " << protoVDisk
                         << " Marker# BSVS24");
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
+                return;
             }
             if (!SelfVDiskId.SameDisk(record.GetTargetVDiskID())) {
                 auto protoVDisk = VDiskIDFromVDiskID(record.GetTargetVDiskID());
@@ -1576,6 +1580,7 @@ namespace NKikimr {
                         << " Self# " << SelfVDiskId << " Source# " << protoVDisk
                         << " Marker# BSVS25");
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
+                return;
             }
 
             ctx.Send(ev->Forward(Db->SyncerID));
@@ -1965,6 +1970,8 @@ namespace NKikimr {
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON LOCAL RECOVERY SUCCEEDED"
                     << " Marker# BSVS29");
 
+            bool writeMetadata = (ev->Get()->HasMetadata || AppData(ctx)->FeatureFlags.GetEnableTinyDisks());
+
             // run logger forwarder
             auto logWriter = CreateRecoveryLogWriter(PDiskCtx->PDiskId, Db->SkeletonID,
                     PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, Db->LsnMngr->GetStartLsn(),
@@ -1979,16 +1986,22 @@ namespace NKikimr {
 
             // run LogCutter in the same mailbox
             TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
-                    (TActorId)(Db->LoggerID)};
+                    (TActorId)(Db->LoggerID), writeMetadata};
             Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
             ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run metadata actor
-            auto metadataCtx = MakeIntrusive<TMetadataContext>(VCtx, Db->LsnMngr, PDiskCtx,
-                    (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID));
-            auto metadataActor = CreateMetadataActor(metadataCtx, std::move(ev->Get()->MetadataEntryPoint));
+            auto logCtx = MakeIntrusive<TVDiskLogContext>(VCtx, Db->LsnMngr, PDiskCtx,
+                    (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID), writeMetadata);
+            auto metadataActor = CreateMetadataActor(logCtx, std::move(ev->Get()->MetadataEntryPoint));
             MetadataActorId = ctx.Register(metadataActor);
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
+
+            // run chunk keeper actor
+            IActor* chunkKeeperActor = CreateChunkKeeperActor(TChunkKeeperCtx{logCtx, Db->SkeletonID},
+                    std::move(ev->Get()->ChunkKeeperData), Config->EnableChunkKeeper, Config->BaseInfo.ReadOnly);
+            Db->ChunkKeeperActorID.Set(ctx.Register(chunkKeeperActor));
+            ActiveActors.Insert(Db->ChunkKeeperActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             LocalRecoveryDoneEvent = std::move(ev);
 
@@ -2433,6 +2446,10 @@ namespace NKikimr {
                 ctx.Send(MetadataActorId, msg->Clone());
                 ++counter;
             }
+            if (Db->ChunkKeeperActorID) {
+                ctx.Send(Db->ChunkKeeperActorID, msg->Clone());
+                ++counter;
+            }
 
             LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
                     << "SpreadCutLog: Handle " << msg->ToString()
@@ -2675,7 +2692,8 @@ namespace NKikimr {
 
             const TMonotonic now = ctx.Monotonic();
             TSnapshotExpirationMap::iterator it;
-            for (it = SnapshotExpirationMap.begin(); it != SnapshotExpirationMap.end() && now <= it->first; ++it) {
+            // Erase snapshots that have expired (expiration time <= now)
+            for (it = SnapshotExpirationMap.begin(); it != SnapshotExpirationMap.end() && it->first <= now; ++it) {
                 Snapshots.erase(TString(it->second->SnapshotId));
             }
             SnapshotExpirationMap.erase(SnapshotExpirationMap.begin(), it);
@@ -2798,6 +2816,7 @@ namespace NKikimr {
                 .HugeKeeperId = Db->HugeKeeperID,
                 .DefragId = DefragId,
                 .SyncLogId = Db->SyncLogID,
+                .ChunkKeeperId = Db->ChunkKeeperActorID,
             });
 
             const TActorContext& ctx = TActivationContext::AsActorContext();
@@ -2824,6 +2843,10 @@ namespace NKikimr {
 
         void Handle(TEvNotifyChunksDeleted::TPtr ev) {
             TActivationContext::Send(IEventHandle::Forward(ev, ShredActorId));
+        }
+
+        void Handle(const TEvGetSkeletonState::TPtr& ev) {
+            Send(ev->Sender, new TEvGetSkeletonStateResult(Db->ChunkKeeperActorID));
         }
 
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
@@ -2872,7 +2895,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvLocalRecoveryDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
@@ -2890,6 +2913,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
             HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         COUNTED_STRICT_STFUNC(StateSyncGuidRecovery,
@@ -2924,7 +2948,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -2947,6 +2971,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredEnqueue)
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         COUNTED_STRICT_STFUNC(StateNormal,
@@ -2996,7 +3021,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -3021,6 +3046,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShred)
             hFunc(NPDisk::TEvShredVDisk, HandleShred)
             hFunc(TEvNotifyChunksDeleted, Handle)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         COUNTED_STRICT_STFUNC(StateDatabaseError,
@@ -3029,7 +3055,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
@@ -3052,6 +3078,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredError)
             hFunc(NPDisk::TEvShredVDisk, HandleShredError)
             hFunc(TEvNotifyChunksDeleted, Handle)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
@@ -3088,7 +3115,7 @@ namespace NKikimr {
         {
             auto cpuGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu");
             SkeletonBusyTimeUs = cpuGroup->GetCounter("skeletonBusyTimeUs");
-            ActorQueueLight.Initialize(cpuGroup, "Queue");
+            ActorQueueLight.Initialize(cpuGroup, TLightCounterConfig::WithDefaultLightSet("Queue"));
         }
 
         virtual ~TSkeleton() {

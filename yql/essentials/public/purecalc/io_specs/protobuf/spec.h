@@ -4,8 +4,7 @@
 
 #include <yql/essentials/public/purecalc/io_specs/protobuf_raw/spec.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * Processing mode for working with non-raw protobuf messages.
  *
@@ -143,5 +142,4 @@ struct TOutputSpecTraits<TProtobufMultiOutputSpec<T...>> {
         TOutputSpecTraits<TProtobufRawMultiOutputSpec>::SetConsumerToWorker(outputSpec, worker, std::move(wrapper));
     }
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

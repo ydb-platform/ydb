@@ -7,6 +7,17 @@
         "client": "total",
         "important": "0",
         "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/InFlightLimitReachedDurationMs"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "total",
+        "important": "0",
+        "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/MessageLagByCommitted"
       },
       "value": 0
@@ -293,6 +304,17 @@
         "client": "total",
         "important": "total",
         "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/InFlightLimitReachedDurationMs"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "total",
+        "important": "total",
+        "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/MessageLagByCommitted"
       },
       "value": 0
@@ -579,6 +601,17 @@
         "client": "total",
         "important": "total",
         "topic": "total",
+        "sensor": "PQ/InFlightLimitReachedDurationMs"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "total",
+        "important": "total",
+        "topic": "total",
         "sensor": "PQ/MessageLagByCommitted"
       },
       "value": 0
@@ -865,6 +898,17 @@
         "client": "user",
         "important": "0",
         "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/InFlightLimitReachedDurationMs"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "user",
+        "important": "0",
+        "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/MessageLagByCommitted"
       },
       "value": 0
@@ -1151,6 +1195,17 @@
         "client": "user",
         "important": "0",
         "topic": "total",
+        "sensor": "PQ/InFlightLimitReachedDurationMs"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "user",
+        "important": "0",
+        "topic": "total",
         "sensor": "PQ/MessageLagByCommitted"
       },
       "value": 0
@@ -1429,6 +1484,17 @@
         "sensor": "PQ/WriteTimeLagMsByLastReadOld"
       },
       "value": 5009
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "user",
+        "important": "total",
+        "topic": "total",
+        "sensor": "PQ/InFlightLimitReachedDurationMs"
+      },
+      "value": 0
     },
     {
       "kind": "GAUGE",

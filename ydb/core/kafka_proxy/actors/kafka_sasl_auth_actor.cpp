@@ -44,25 +44,30 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     AuthRequest = TString(requestRowBytes.data(), requestRowBytes.size());
 
     if (Context->AuthenticationStep != EAuthSteps::WAIT_AUTH) {
-        SendResponseAndDie(EKafkaErrors::ILLEGAL_SASL_STATE,
-                             "Request is not valid given the current SASL state.",
-                             TStringBuilder() << "Current step: " << static_cast<int>(Context->AuthenticationStep),
-                             ctx);
+        SendResponseAndDie(EKafkaErrors::ILLEGAL_SASL_STATE, Ydb::StatusIds::BAD_REQUEST,
+                            "Request is not valid given the current SASL state.",
+                            TStringBuilder() << "Current step: " << static_cast<int>(Context->AuthenticationStep),
+                            ctx);
         return;
     }
 
     if (CurrentStateFunc() == &TThis::StateWork) {
         if (Context->SaslMechanism == "PLAIN") {
-            StartPlainAuth(ctx);
+            if (!StartPlainAuth(ctx)) {
+                return;
+            }
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             StartScramAuth();
         } else {
-            SendResponseAndDie(EKafkaErrors::UNSUPPORTED_SASL_MECHANISM,
+            SendResponseAndDie(EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, Ydb::StatusIds::UNSUPPORTED,
                                 "Does not support the requested SASL mechanism.",
                                 TStringBuilder() << "Requested mechanism '" << Context->SaslMechanism << "'",
                                 ctx);
             return;
         }
+
+        TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
+        AuthDatabasePath = IsDomainLoginOnlyEnabled(AppData()->AuthConfig) ? domainName : DatabasePath;
 
         SendDescribeRequest();
         Become(&TKafkaSaslAuthActor::StateResolveDatabase);
@@ -72,13 +77,25 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     }
 }
 
-void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
-    if (!TryParseAuthDataTo(ClientAuthData, ctx)) {
-        return;
+ void TKafkaSaslAuthActor::HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext&) {
+    auto& mtlsRequest = *ev->Get();
+    ClientCert = mtlsRequest.ClientCertificate;
+    if (CurrentStateFunc() == &TThis::StateWork) {
+        StartMtlsAuth();
+        SendDescribeRequest();
+        Become(&TKafkaSaslAuthActor::StateResolveDatabase);
     }
+ }
+
+bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
+    return TryParseAuthDataTo(ClientAuthData, ctx);
 }
 
 void TKafkaSaslAuthActor::StartScramAuth() {
+    DatabasePath = AppData()->TenantName;
+}
+
+void TKafkaSaslAuthActor::StartMtlsAuth() {
     DatabasePath = AppData()->TenantName;
 }
 
@@ -98,7 +115,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
     case NKikimrIssues::TIssuesIds::SUCCESS: {
         Ticket = "Login " + token;
 
-        AuditLogLogin(Address, DatabasePath, ClientAuthData.UserName, Ydb::StatusIds::SUCCESS, /* reason */ "",
+        AuditLogLogin(Address, AuthDatabasePath, ClientAuthData.UserName, Ydb::StatusIds::SUCCESS, /* reason */ "",
             /* errorDetails */ "", TString(sanitizedToken), isAdmin);
         SendTicketParserRequest();
         return;
@@ -149,7 +166,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
     }
 
     if (ClientAuthData.UserName) {
-        AuditLogLogin(Address, DatabasePath, ClientAuthData.UserName, status, errorMessage, errorDetails,
+        AuditLogLogin(Address, AuthDatabasePath, ClientAuthData.UserName, status, errorMessage, errorDetails,
             /* sanitizedToken */ "");
     }
 
@@ -157,7 +174,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
         errorMessage = Ydb::StatusIds_StatusCode_Name(status);
     }
 
-    SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", errorMessage, ctx);
+    SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, status, "", errorMessage, ctx);
 }
 
 void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -180,28 +197,29 @@ void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslScramFinalServerResp
 }
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
-    if (ev->Get()->Error) {
+    if (ev->Get()->HasError()) {
         if (Context->SaslMechanism == "SCRAM-SHA-256") {
             AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
         }
 
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TString{ev->Get()->Error.Message}, ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED,
+                            "", TString{ev->Get()->Error.Message}, ctx);
         return;
     }
 
     UserToken = ev->Get()->Token;
-    SendResponseAndDie(EKafkaErrors::NONE_ERROR, "", "", ctx);
+    SendResponseAndDie(EKafkaErrors::NONE_ERROR, Ydb::StatusIds::SUCCESS, "", "", ctx);
 }
 
 void TKafkaSaslAuthActor::HandleTimeout(const NActors::TActorContext& ctx) {
     const TString reason = "Login timeout";
-    SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", reason, ctx);
+    SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::TIMEOUT, "", reason, ctx);
 }
 
 void TKafkaSaslAuthActor::SendTicketParserRequest() {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = Ticket,
-        .Database = DatabasePath,
+        .Database = AuthDatabasePath,
         .PeerName = TStringBuilder() << Address,
         .Entries = TicketParserEntries,
     }));
@@ -231,7 +249,9 @@ void TKafkaSaslAuthActor::SendResponse() {
     Send(Context->ConnectionId, evResponse.release());
 }
 
-void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx) {
+void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::StatusIds::StatusCode status,
+    const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx)
+{
     auto isFailed = errorCode != EKafkaErrors::NONE_ERROR;
 
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
@@ -240,9 +260,18 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
     responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
 
     if (isFailed) {
-        KAFKA_LOG_ERROR("Authentication failure. " << errorMessage << " " << details);
-        responseToClient->ErrorMessage = TStringBuilder() << "Authentication failure. " << errorMessage;
+        TStringBuilder authenticationFailureReason;
+        authenticationFailureReason << (errorMessage ? " " + errorMessage : "")
+            << (details ? " " + details : "");
+        KAFKA_LOG_ERROR("Authentication failure." << authenticationFailureReason);
+        const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
+        TStringBuilder responseErrorMessage;
+        responseErrorMessage << "Authentication failure.";
+        if (status != Ydb::StatusIds::UNAUTHORIZED || !securityConfig.GetHideAuthenticationFailureReasons()) {
+            responseErrorMessage << authenticationFailureReason;
+        }
 
+        responseToClient->ErrorMessage = responseErrorMessage;
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, errorMessage);
         Send(Context->ConnectionId, authResult);
@@ -256,8 +285,9 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
         responseToClient->ErrorMessage = "";
 
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
-        auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath, DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
-                                                                ResourcePath, IsServerless, errorMessage, ResourseDatabasePath);
+        auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath,
+                                                        DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
+                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath);
         Send(Context->ConnectionId, authResult);
     }
 
@@ -266,13 +296,16 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
 
 bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx) {
     if (AuthRequest.empty()) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", "AuthBytes is empty.",  ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::BAD_REQUEST,
+                            "", "AuthBytes is empty.",  ctx);
         return false;
     }
 
     TVector<TString> tokens = StringSplitter(AuthRequest).Split('\0');
     if (tokens.size() != 3) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN response: expected 3 tokens, got " << tokens.size(), "", ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::BAD_REQUEST,
+                            TStringBuilder() << "Invalid SASL/PLAIN request: expected 3 tokens, got " << tokens.size(),
+                            "", ctx);
         return false;
     }
 
@@ -297,10 +330,10 @@ void TKafkaSaslAuthActor::SendPlainLoginRequest(const NActors::TActorContext& ct
     if (IsUsernameFromLdapAuthDomain(ClientAuthData.UserName, AppData()->AuthConfig)) {
         const TString ldapUsername = PrepareLdapUsername(ClientAuthData.UserName, AppData()->AuthConfig);
         const TString authMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ldapUsername, ClientAuthData.Password);
-        authActor = CreatePlainLdapAuthProxyActor(ctx.SelfID, DatabasePath, authMsg, Address->ToString());
+        authActor = CreatePlainLdapAuthProxyActor(ctx.SelfID, AuthDatabasePath, authMsg, Address->ToString());
     } else {
         const TString authMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ClientAuthData.UserName, ClientAuthData.Password);
-        authActor = CreatePlainAuthActor(ctx.SelfID, DatabasePath, authMsg, Address->ToString());
+        authActor = CreatePlainAuthActor(ctx.SelfID, AuthDatabasePath, authMsg, Address->ToString());
     }
 
     Register(authActor.release());
@@ -310,7 +343,7 @@ void TKafkaSaslAuthActor::SendPlainLoginRequest(const NActors::TActorContext& ct
 void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ctx) {
     std::string authMsg = AuthRequest;
     if (!ScramAuthActor) {
-        auto authActor = CreateScramAuthActor(ctx.SelfID, DatabasePath, NLoginProto::EHashType::ScramSha256, authMsg, Address->ToString());
+        auto authActor = CreateScramAuthActor(ctx.SelfID, AuthDatabasePath, NLoginProto::EHashType::ScramSha256, authMsg, Address->ToString());
         ScramAuthActor = Register(authActor.release());
         Become(&TKafkaSaslAuthActor::StateSaslScramLogin, Timeout, new TEvents::TEvWakeup());
     } else {
@@ -318,6 +351,13 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
         event->Msg = std::move(authMsg);
         Send(ScramAuthActor, event.release());
     }
+}
+
+void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
+                                                                                                     .Database = DatabasePath,
+                                                                                                     .PeerName = TStringBuilder() << Address}));
+    Become(&TKafkaSaslAuthActor::StateTicketResolve);
 }
 
 void TKafkaSaslAuthActor::SendDescribeRequest() {
@@ -353,11 +393,14 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-                return SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists", ctx);
+                return SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::SCHEME_ERROR, "",
+                                            TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-                return SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "Database with path '" << DatabasePath << "' access denied", ctx);
+                return SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::SCHEME_ERROR, "",
+                                            TStringBuilder() << "Database with path '" << DatabasePath << "' access denied", ctx);
             default:
-                return SendResponseAndDie(EKafkaErrors::BROKER_NOT_AVAILABLE, "", TStringBuilder() << "Internal error with navigate status " << navigate->ResultSet.front().Status, ctx);
+                return SendResponseAndDie(EKafkaErrors::BROKER_NOT_AVAILABLE, Ydb::StatusIds::UNAVAILABLE, "",
+                                            TStringBuilder() << "Internal error with navigate status " << navigate->ResultSet.front().Status, ctx);
         }
         return;
     }
@@ -413,6 +456,9 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             // Scram Login/Password authentication
             SendScramLoginRequest(ctx);
+        } else if (Context->SaslMechanism == "MTLS") {
+            // Mtls authentication
+            SendMtlsAuthRequest(ctx);
         }
     }
 }

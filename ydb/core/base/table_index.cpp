@@ -89,6 +89,7 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
             return false;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
@@ -106,7 +107,8 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson);
         takeKeyColumns--;
     }
 
@@ -155,6 +157,8 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalJson;
         default:
             return std::nullopt;
     }
@@ -241,7 +245,8 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
         // Vector and fulltext indexes allow to add all columns both to index & data
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson);
     }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
@@ -260,6 +265,7 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
             return false;
         default:
             Y_DEBUG_ABORT_S(InvalidIndexType(indexType));
@@ -283,19 +289,14 @@ std::span<const std::string_view> GetImplTables(
                 return PrefixedGlobalKMeansTreeImplTables;
             }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT);
+            return GlobalFulltextPlainImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+            return GlobalFulltextWithRelevanceImplTables;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            return GlobalFulltextPlainImplTables;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
     }
-}
-
-std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout) {
-    if (layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-        return GlobalFulltextWithRelevanceImplTables;
-    }
-    return GlobalFulltextPlainImplTables;
 }
 
 bool IsImplTable(std::string_view tableName) {
@@ -330,30 +331,30 @@ ui32 NormalizeMinimumShouldMatch(i32 wordsCount, i32 minimumShouldMatch) {
 
 }
 
-EQueryMode QueryModeFromString(const TString& mode, TString& explain) {
+EDefaultOperator DefaultOperatorFromString(const TString& mode, TString& explain) {
     if (mode.empty()) {
-        return EQueryMode::And;
+        return EDefaultOperator::And;
     } else if (to_lower(mode) == "and") {
-        return EQueryMode::And;
+        return EDefaultOperator::And;
     } else if (to_lower(mode) == "or") {
-        return EQueryMode::Or;
+        return EDefaultOperator::Or;
     } else {
-        explain = TStringBuilder() << "Unsupported query mode: `" << EscapeC(mode) << "`. Should be `and` or `or`";
-        return EQueryMode::Invalid;
+        explain = TStringBuilder() << "Unsupported default operator: `" << EscapeC(mode) << "`. Should be `and` or `or`";
+        return EDefaultOperator::Invalid;
     }
 }
 
-ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch, TString& explain) {
+ui32 MinimumShouldMatchFromString(i32 wordsCount, EDefaultOperator defaultOperator, const TString& minimumShouldMatch, TString& explain) {
     if (minimumShouldMatch.empty()) {
-        if (queryMode == EQueryMode::And) {
+        if (defaultOperator == EDefaultOperator::And) {
             return wordsCount;
         } else {
             // at least one word should be matched
             return 1;
         }
     } else {
-        if (queryMode != EQueryMode::Or) {
-            explain = TStringBuilder() << "MinimumShouldMatch is not supported for AND query mode";
+        if (defaultOperator != EDefaultOperator::Or) {
+            explain = TStringBuilder() << "MinimumShouldMatch is not supported for AND default operator";
             return 0;
         }
 

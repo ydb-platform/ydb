@@ -63,6 +63,7 @@ enum MimeTypes {
     MIME_VIDEO_MP4 = 49,
     MIME_VIDEO_AVI = 50,
     MIME_IMAGE_AVIF = 51,
+    MIME_IMAGE_HEIC = 52,
     MIME_MAX
 };
 

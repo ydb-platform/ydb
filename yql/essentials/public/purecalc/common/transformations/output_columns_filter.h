@@ -5,8 +5,7 @@
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * A transformer which removes unwanted columns from output.
  *
@@ -14,5 +13,4 @@ namespace NPureCalc {
  * @return a graph transformer for filtering output.
  */
 TAutoPtr<IGraphTransformer> MakeOutputColumnsFilter(const TMaybe<THashSet<TString>>& columns);
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

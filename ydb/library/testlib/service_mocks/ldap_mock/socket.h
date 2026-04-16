@@ -1,5 +1,6 @@
 #pragma once
 #include <util/generic/ptr.h>
+#include <util/generic/string.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
 
@@ -26,6 +27,7 @@ public:
     bool Receive(void* buf, size_t len);
     bool Send(const void* msg, size_t len);
     bool UpgradeToTls(SSL_CTX* ctx);
+    TString GetClientCertSubjectName() const;
 
 private:
     bool ReceivePlain(void* buf, size_t len);
@@ -37,6 +39,7 @@ private:
     int Fd{0};
     bool UseTls = false;
     TSslHolder<SSL> Ssl = nullptr;
+    TString ClientSubjectName;
 };
 
 } // LdapMock

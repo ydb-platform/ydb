@@ -1,8 +1,7 @@
 #include "check_runner.h"
 #include <yql/essentials/core/langver/yql_core_langver.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request, TCheckState& state) {
     TMaybe<TIssue> verIssue;
@@ -27,5 +26,4 @@ TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request, TCheckState&
     return response;
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

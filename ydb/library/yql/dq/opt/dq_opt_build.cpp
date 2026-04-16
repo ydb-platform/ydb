@@ -370,13 +370,21 @@ public:
         for (const auto& root : queryRoots) {
             TNodeMap<ui32> stageUsages;
 
-            VisitExpr(root.Ptr(), filter, [addStageConsumer, &stageUsages](const TExprNode::TPtr& node) {
+            VisitExpr(root.Ptr(), filter, [addStageConsumer, &stageUsages, &consumersMap](const TExprNode::TPtr& node) {
                 if (auto maybeOutput = TMaybeNode<TDqOutput>(node)) {
                     auto output = maybeOutput.Cast();
 
                     if (output.Stage().Maybe<TDqStage>()) {
                         addStageConsumer(output.Stage(), FromString<ui32>(output.Index().Value()), output);
                         stageUsages[output.Stage().Raw()]++;
+
+                        if (output.Stage().Outputs()
+                                && output.Stage().Outputs().Cast().Size() == 1
+                                && TDqTransform::Match(output.Stage().Outputs().Cast().Item(0).Raw())) {
+                            YQL_ENSURE(stageUsages[output.Stage().Raw()] == 1);
+                            YQL_ENSURE(consumersMap[output.Stage().Raw()].Consumers.size() == 1);
+                            YQL_ENSURE(consumersMap[output.Stage().Raw()].ConsumersCount == 1);
+                        }
                     }
                 }
 
@@ -384,11 +392,17 @@ public:
                     if (const auto stage = maybeStage.Cast(); const auto maybeOutputs = stage.Outputs()) {
                         const auto outputs = maybeOutputs.Cast();
                         for (size_t i = 0; i < outputs.Size(); ++i) {
-                            const auto output = outputs.Item(i);
-                            addStageConsumer(stage, FromString<ui32>(output.Index().Value()), TStageConsumersInfo::TAsyncOutput{
-                                .Output = output,
-                                .OutputIndex = i,
-                            });
+                            auto output = outputs.Item(i);
+                            if (TDqTransform::Match(output.Raw())) {
+                                // Don't count output transform as consumer
+                                YQL_ENSURE(outputs.Size() == 1);
+                                YQL_ENSURE(stageUsages[stage.Raw()] <= 1);
+                            } else {
+                                addStageConsumer(stage, FromString<ui32>(output.Index().Value()), TStageConsumersInfo::TAsyncOutput{
+                                    .Output = output,
+                                    .OutputIndex = i,
+                                });
+                            }
                         }
                     }
                 }

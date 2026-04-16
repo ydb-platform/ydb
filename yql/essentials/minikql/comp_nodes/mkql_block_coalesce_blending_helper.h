@@ -19,7 +19,7 @@ namespace NKikimr::NMiniKQL {
 template <bool isScalar, bool isOptional>
 Y_FORCE_INLINE bool GetBit(const ui8* bitMask, size_t offset) {
     if constexpr (isScalar || !isOptional) {
-        return 1;
+        return true;
     } else {
         return arrow::BitUtil::GetBit(bitMask, offset);
     }

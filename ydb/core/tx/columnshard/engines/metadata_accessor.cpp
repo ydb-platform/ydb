@@ -44,7 +44,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
         context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
-            readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions);
+            readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions, context.GetOrbit(), readDescription.TxId, readDescription.ScanId);
     if (!isPlain) {
         std::deque<NReader::NSimple::TSourceConstructor> sources;
         for (auto&& i : portions) {

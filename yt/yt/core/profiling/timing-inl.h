@@ -36,15 +36,17 @@ inline TCpuDurationIncrementingGuard::~TCpuDurationIncrementingGuard()
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TTimer>
-TTimerGuard<TTimer>::TTimerGuard(TTimer* timer)
+TTimerGuard<TTimer>::TTimerGuard(TTimer* timer, NThreading::TSpinLock* lock)
     : Timer_(timer)
+    , TimerLock_(lock)
 {
+    auto guard = TimerLock_ ? std::optional(Guard(*TimerLock_)) : std::nullopt;
     Timer_->Start();
 }
 
 template <class TTimer>
 TTimerGuard<TTimer>::TTimerGuard(TTimerGuard&& other) noexcept
-    : Timer_(std::exchange(other.Timer_, nullptr))
+    : Timer_(std::exchange(other.Timer_, nullptr), std::exchange(other.TimerLock_, nullptr))
 { }
 
 template <class TTimer>
@@ -66,6 +68,7 @@ template <class TTimer>
 void TTimerGuard<TTimer>::TryStopTimer() noexcept
 {
     if (Timer_) {
+        auto guard = TimerLock_ ? std::optional(Guard(*TimerLock_)) : std::nullopt;
         Timer_->Stop();
     }
 }

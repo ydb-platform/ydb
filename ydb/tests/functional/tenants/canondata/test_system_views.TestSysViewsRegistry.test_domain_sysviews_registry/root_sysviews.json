@@ -153,7 +153,7 @@
         "type": "Timestamp?"
       },
       {
-        "name": "CompilationDuration",
+        "name": "CompilationDurationMs",
         "type": "Uint64?"
       },
       {
@@ -162,6 +162,18 @@
       },
       {
         "name": "Metadata",
+        "type": "Utf8?"
+      },
+      {
+        "name": "IsTruncated",
+        "type": "Bool?"
+      },
+      {
+        "name": "QueryType",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Syntax",
         "type": "Utf8?"
       }
     ],
@@ -358,6 +370,10 @@
       {
         "name": "SlotSizeInUnits",
         "type": "Uint32?"
+      },
+      {
+        "name": "MaintenanceStatus",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [
@@ -940,6 +956,22 @@
       {
         "name": "UserSID",
         "type": "Utf8?"
+      },
+      {
+        "name": "WmPoolId",
+        "type": "Utf8?"
+      },
+      {
+        "name": "WmState",
+        "type": "Utf8?"
+      },
+      {
+        "name": "WmEnterTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "WmExitTime",
+        "type": "Timestamp?"
       }
     ],
     "primary_key": [

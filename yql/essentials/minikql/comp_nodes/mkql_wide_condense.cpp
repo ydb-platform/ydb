@@ -142,10 +142,7 @@ public:
         block = init;
 
         if constexpr (UseCtx) {
-            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&CleanupCurrentContext>());
-            const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
-            const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
-            CallInst::Create(cleanupType, cleanupPtr, {}, "", block);
+            EmitFunctionCall<&CleanupCurrentContext>(Type::getVoidTy(context), {}, ctx, block);
         }
 
         new StoreInst(GetFalse(context), statePtr, block);

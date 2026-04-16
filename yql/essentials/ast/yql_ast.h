@@ -12,6 +12,8 @@
 #include <util/memory/pool.h>
 #include <util/generic/array_ref.h>
 
+#include <utility>
+
 namespace NYql {
 
 struct TNodeFlags {
@@ -132,7 +134,7 @@ struct TAstNode {
 
     inline TArrayRef<TAstNode* const> GetChildren() const {
         Y_ABORT_UNLESS(IsList());
-        return {ListCount_ <= SmallListCount ? Data_.S.Children : Data_.L.Children, ListCount_};
+        return {ListCount_ <= SmallListCount ? Data_.S.Children.data() : Data_.L.Children, ListCount_};
     }
 
     static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
@@ -171,8 +173,8 @@ struct TAstNode {
 
     template <typename... TNodes>
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool, TNodes... nodes) {
-        TAstNode* children[] = {nodes...};
-        return NewList(position, children, sizeof...(nodes), pool);
+        std::array<TAstNode*, sizeof...(TNodes)> children = {nodes...};
+        return NewList(position, children.data(), sizeof...(nodes), pool);
     }
 
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool) {
@@ -194,7 +196,7 @@ struct TAstNode {
 
 private:
     inline TAstNode(TPosition position, TStringBuf content, ui32 flags)
-        : Position_(position)
+        : Position_(std::move(position))
         , Type_(Atom)
         , ListCount_(0)
     {
@@ -204,7 +206,7 @@ private:
     }
 
     inline TAstNode(TPosition position, TAstNode** children, ui32 childrenCount)
-        : Position_(position)
+        : Position_(std::move(position))
         , Type_(List)
         , ListCount_(childrenCount)
     {
@@ -232,7 +234,7 @@ private:
     };
 
     struct TSmallList {
-        TAstNode* Children[SmallListCount];
+        std::array<TAstNode*, SmallListCount> Children;
     };
 
     union {

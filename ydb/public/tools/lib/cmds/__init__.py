@@ -329,6 +329,8 @@ def deploy(arguments):
     if getattr(arguments, 'use_packages', None) is not None:
         arguments.ydb_binary_path = driver_path_packages(arguments.use_packages)
         arguments.ydb_udfs_dir = None
+    elif arguments.ydb_udfs_dir is None:
+        arguments.ydb_udfs_dir = _get_build_path("yql/udfs")
 
     additional_log_configs = {}
     if getattr(arguments, 'debug_logging', []):
@@ -380,7 +382,7 @@ def deploy(arguments):
         pq_client_service_types=pq_client_service_types(arguments),
         enable_pqcd=enable_pqcd(arguments),
         suppress_version_check=arguments.suppress_version_check,
-        udfs_path=arguments.ydb_udfs_dir or _get_build_path("yql/udfs"),
+        udfs_path=arguments.ydb_udfs_dir,
         additional_log_configs=additional_log_configs,
         port_allocator=port_allocator,
         use_in_memory_pdisks=use_in_memory_pdisks_flag(arguments.ydb_working_dir),

@@ -72,8 +72,9 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> CreateSearchEntryResponses(c
 
 } // namespace
 
-TLdapRequestProcessor::TLdapRequestProcessor(std::shared_ptr<TSocket> socket)
+TLdapRequestProcessor::TLdapRequestProcessor(std::shared_ptr<TSocket> socket, const THashMap<TString, TString>& externalAuthMap)
     : Socket(socket)
+    , ExternalAuthMap(externalAuthMap)
 {}
 
 unsigned char TLdapRequestProcessor::GetByte() {
@@ -210,10 +211,49 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     requestInfo.Login = GetString();
 
-    unsigned char authType = GetByte();
-    Y_UNUSED(authType);
-
-    requestInfo.Password = GetString();
+    unsigned char authMethod = GetByte();
+    switch (authMethod) {
+    case EAuthMethod::LDAP_AUTH_NONE:
+        break;
+    case EAuthMethod::LDAP_AUTH_SIMPLE:
+        requestInfo.Mechanism = "simple";
+        requestInfo.Password = GetString();
+        break;
+    case EAuthMethod::LDAP_AUTH_SASL:
+        size_t authMessageLength = GetLength();
+        if (authMessageLength == 0) {
+            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+            Cerr << "LDAP_MOCK: BindRequest, protocol error, auth message length is zero" << Endl;
+            return {responseOpData};
+        }
+        elementType = GetByte();
+        if (elementType != EElementType::STRING) {
+            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+            Cerr << "LDAP_MOCK: BindRequest, protocol error, sasl mechanism is not a string" << Endl;
+            return {responseOpData};
+        }
+        TString saslMechanism = GetString();
+        elementType = GetByte();
+        if (elementType != EElementType::STRING) {
+            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+            Cerr << "LDAP_MOCK: BindRequest, protocol error, credentials is not a string" << Endl;
+            return {responseOpData};
+        }
+        TString credentials = GetString();
+        Y_UNUSED(credentials);
+        if (saslMechanism == "EXTERNAL") {
+            requestInfo.Mechanism = "external";
+            TString bindDn = GetBindDnFromClientCert();
+            if (bindDn.empty()) {
+                responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+                Cerr << "LDAP_MOCK: BindRequest, protocol error, can not find login for client subject name" << Endl;
+                return {responseOpData};
+            }
+            requestInfo.Login = bindDn;
+            requestInfo.Password = "";
+        }
+        break;
+    }
 
     const auto it = std::find_if(responses.begin(), responses.end(), [&requestInfo] (const std::pair<TBindRequestInfo, TBindResponseInfo>& el) {
         const auto& expectedRequestInfo = el.first;
@@ -459,6 +499,11 @@ void TLdapRequestProcessor::ProcessFilterOr(TSearchRequestInfo::TSearchFilter* f
     while (ReadBytes < limit) {
         filter->NestedFilters.push_back(std::make_shared<TSearchRequestInfo::TSearchFilter>(ProcessFilter()));
     }
+}
+
+TString TLdapRequestProcessor::GetBindDnFromClientCert() {
+    auto it = ExternalAuthMap.find(Socket->GetClientCertSubjectName());
+    return (it != ExternalAuthMap.end() ? it->second : Socket->GetClientCertSubjectName());
 }
 
 }

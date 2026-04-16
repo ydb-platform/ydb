@@ -128,13 +128,6 @@ void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
 }
 
-void TNodeWarden::StartStaticProxies() {
-    Y_ABORT_UNLESS(Cfg->BlobStorageConfig.HasServiceSet());
-    for (const auto& group : Cfg->BlobStorageConfig.GetServiceSet().GetGroups()) {
-        StartLocalProxy(group.GetGroupID());
-    }
-}
-
 void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const TGroupID groupId(GroupIDFromBlobStorageProxyID(ev->GetForwardOnNondeliveryRecipient()));
     const ui32 id = groupId.GetRaw();
@@ -228,6 +221,59 @@ void TNodeWarden::Handle(TEvNodeWardenQueryCacheResult::TPtr ev) {
             Y_DEBUG_ABORT("failed to parse group configuration");
         }
     }
+}
+
+void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
+    auto common = std::make_shared<TInterpileRequest::TCommonPart>(*ev);
+    auto& msg = *ev->Get();
+    const auto groupId = TGroupId::FromProto(&msg.Record, &NKikimrBlobStorage::TEvInterpilePut::GetGroupId);
+    const ui32 groupGeneration = msg.Record.GetGroupGeneration();
+    for (size_t index = 0; index < msg.Record.ItemsSize(); ++index) {
+        const ui64 cookie = NextInterpileRequestCookie++;
+        InterpileRequests.try_emplace(cookie, common, index);
+
+        auto& item = msg.Record.GetItems(index);
+        auto traceId = item.HasTraceId()
+            ? NWilson::TTraceId(item.GetTraceId())
+            : NWilson::TTraceId();
+        auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+            .BlobId = LogoBlobIDFromLogoBlobID(item.GetBlobId()),
+            .Buffer = TRope(msg.GetPayload(index)),
+            .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
+            .HandleClass = msg.Record.GetHandleClass(),
+            .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .IssueKeepFlag = item.GetIssueKeepFlag(),
+            .IgnoreBlock = item.GetIgnoreBlock(),
+            .AlreadyEncrypted = item.GetAlreadyEncrypted(),
+            .ReduceInterpileTraffic = false,
+            .IsZeroEntry = item.GetIsZeroEntry(),
+        });
+        ev->ForceGroupGeneration = groupGeneration;
+        SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
+        ++common->RepliesRemaining;
+    }
+}
+
+void TNodeWarden::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
+    auto it = InterpileRequests.find(ev->Cookie);
+    Y_ABORT_UNLESS(it != InterpileRequests.end());
+    auto& common = *it->second.CommonPart;
+    auto *item = common.Result.MutableItems(it->second.Index);
+    auto& msg = *ev->Get();
+    item->SetStatus(msg.Status);
+    if (msg.ErrorReason) {
+        item->SetErrorReason(msg.ErrorReason);
+    }
+    if (!--common.RepliesRemaining) {
+        auto ev = std::make_unique<TEvInterpilePutResult>();
+        common.Result.Swap(&ev->Record);
+        auto h = std::make_unique<IEventHandle>(common.Sender, SelfId(), ev.release(), 0, common.Cookie);
+        if (common.InterconnectSessionId) {
+            h->Rewrite(TEvInterconnect::EvForward, common.InterconnectSessionId);
+        }
+        TActivationContext::Send(h.release());
+    }
+    InterpileRequests.erase(it);
 }
 
 #undef ADD_CONTROLS_FOR_DEVICE_TYPES

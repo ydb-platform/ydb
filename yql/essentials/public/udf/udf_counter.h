@@ -3,8 +3,7 @@
 #include "udf_type_size_check.h"
 #include <library/cpp/deprecated/atomic/atomic.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TCounter {
 public:
@@ -116,5 +115,4 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(ICountersProvider, 8);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

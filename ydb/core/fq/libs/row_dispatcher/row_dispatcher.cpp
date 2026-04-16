@@ -3,6 +3,7 @@
 #include "actors_factory.h"
 #include "coordinator.h"
 #include "leader_election.h"
+#include "local_leader_election.h"
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -363,7 +364,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
-    NYql::IPqGateway::TPtr PqGateway;
+    NYql::IPqStaticGateway::TPtr PqGateway;
     NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
@@ -371,6 +372,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TAggregatedStats AggrStats; 
     ui64 LastCpuTime = 0;
     NActors::TActorId NodesManagerId;
+    TInstant LastUpdateMetricsTime = TInstant::Now();
 
     struct TConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -449,7 +451,7 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
         NActors::TActorId nodesManagerId = {},
@@ -534,7 +536,7 @@ TRowDispatcher::TRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,
@@ -566,7 +568,10 @@ void TRowDispatcher::Bootstrap() {
 
     const auto& config = Config.GetCoordinator();
     auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
-    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters).release());
+    auto leaderElection = !config.GetCoordinationNodePath().empty()
+        ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
+        : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
+    Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -679,7 +684,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 }
 
 void TRowDispatcher::UpdateMetrics() {
-    static TInstant LastUpdateMetricsTime = TInstant::Now();
     auto now = TInstant::Now();
     AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
     LastUpdateMetricsTime = now;
@@ -989,7 +993,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
+        LOG_ROW_DISPATCHER_WARN("Consumer not found, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", sending TEvNoSession");
+        Send(ev->Sender, new NFq::TEvRowDispatcher::TEvNoSession(), 0, ev->Cookie);
         return;
     }
     LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
@@ -1331,6 +1336,7 @@ void TRowDispatcher::UpdateCpuTime() {
     for (auto& [actorId, consumer] : Consumers) {
         consumer->CpuMicrosec += diff;
     }
+    LOG_ROW_DISPATCHER_TRACE("UpdateCpuTime, currentCpuTime " << currentCpuTime << ", diff " << diff);
     LastCpuTime = currentCpuTime;
 }
 
@@ -1347,7 +1353,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,

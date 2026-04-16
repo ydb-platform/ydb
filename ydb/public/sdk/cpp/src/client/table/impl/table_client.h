@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/table_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/observation.h>
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_client.h>
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -27,6 +28,9 @@ namespace NTable {
 //How ofter run host scan to perform session balancing
 constexpr TDeadline::Duration HOSTSCAN_PERIODIC_ACTION_INTERVAL = std::chrono::seconds(2);
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
+// Max wait time for Drain() to complete. Sessions are being closed with 2 seconds
+// timeout each (in parallel), plus up to 10 seconds for discovery if needed.
+constexpr TDuration DRAIN_TIMEOUT = TDuration::Seconds(30);
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
@@ -237,6 +241,8 @@ private:
         auto promise = NewPromise<TDataQueryResult>();
         bool keepInCache = settings.KeepInQueryCache_ && settings.KeepInQueryCache_.value();
 
+        auto obs = MakeObservation("ExecuteDataQuery");
+
         // We don't want to delay call of TSession dtor, so we can't capture it by copy
         // otherwise we break session pool and other clients logic.
         // Same problem with TDataQuery and TTransaction
@@ -246,7 +252,7 @@ private:
         // - capture pointer
         // - call free just before SetValue call
         auto sessionPtr = new TSession(session);
-        auto extractor = [promise, sessionPtr, query, fromCache, keepInCache]
+        auto extractor = [promise, sessionPtr, query, fromCache, keepInCache, obs]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TResultSet> res;
                 std::optional<TTransaction> tx;
@@ -284,6 +290,8 @@ private:
 
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
                     std::move(res), tx, dataQuery, fromCache, queryStats);
+
+                obs->End(dataQueryResult.GetStatus());
 
                 delete sessionPtr;
                 tx.reset();
@@ -327,9 +335,23 @@ public:
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing;
 
 private:
+    std::shared_ptr<NTrace::ITracer> Tracer_;
+    NSdkStats::TStatCollector::TClientOperationStatCollector OperationStatCollector_;
     NSessionPool::TSessionPool SessionPool_;
     TRequestMigrator RequestMigrator_;
     static const TKeepAliveSettings KeepAliveSettings;
+
+    std::shared_ptr<NObservability::TRequestObservation> MakeObservation(const std::string& operationName) {
+        return std::make_shared<NObservability::TRequestObservation>(
+            "Table",
+            &OperationStatCollector_,
+            Tracer_,
+            operationName,
+            DbDriverState_->DiscoveryEndpoint,
+            DbDriverState_->Database,
+            DbDriverState_->Log
+        );
+    }
 };
 
 }

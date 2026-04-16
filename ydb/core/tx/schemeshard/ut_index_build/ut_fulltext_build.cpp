@@ -33,7 +33,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         index.set_name("fulltext_idx");
         index.add_index_columns("text");
         auto& fulltext = *index.mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
-        fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);  // Layout is required for internal processing
         auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
         fulltext.mutable_columns()->at(0).set_column("text");
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
@@ -75,7 +74,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         index.add_index_columns("text");
         index.add_data_columns("data");
         auto& fulltext = *index.mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
-        fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
         auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
         fulltext.mutable_columns()->at(0).set_column("text");
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
@@ -225,27 +223,26 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
 
         auto describe = DescribePath(runtime, "/MyRoot/texts");
         UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, "Unexpected status: " << describe.GetStatus());
-        auto curPaths = describe.GetPathDescription().GetDomainDescription().GetPathsInside();
         auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
 
         Ydb::Table::TableIndex index = FulltextIndexConfig();
 
         TSchemeLimits lowLimits;
 
-        lowLimits.MaxPaths = curPaths+5;
-        lowLimits.MaxShards = curShards+3;
+        lowLimits.MaxPaths = 6;
+        lowLimits.MaxShards = curShards + 3;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
-        lowLimits.MaxPaths = curPaths+4;
-        lowLimits.MaxShards = curShards+4;
+        lowLimits.MaxPaths = 5;
+        lowLimits.MaxShards = curShards + 4;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
-        lowLimits.MaxPaths = curPaths+5;
-        lowLimits.MaxShards = curShards+4;
+        lowLimits.MaxPaths = 6;
+        lowLimits.MaxShards = curShards + 4;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index, Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, txId);

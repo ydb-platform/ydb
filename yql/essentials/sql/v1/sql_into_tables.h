@@ -8,8 +8,8 @@ using namespace NSQLv1Generated;
 
 class TSqlIntoTable: public TSqlTranslation {
 public:
-    TSqlIntoTable(TContext& ctx, NSQLTranslation::ESqlMode mode)
-        : TSqlTranslation(ctx, mode)
+    explicit TSqlIntoTable(const TSqlTranslation& that)
+        : TSqlTranslation(that)
     {
     }
 

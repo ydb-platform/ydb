@@ -212,7 +212,7 @@ public:
     }
 
     void WriteSerializedRowset(
-        size_t rowCount,
+        int rowCount,
         const std::vector<TSharedRef>& serializedRowset) override
     {
         WriteRowCount(rowCount);
@@ -270,7 +270,7 @@ private:
 
     void EnsureCapacity(size_t more)
     {
-        if (Y_LIKELY(Current_ + more < EndPreallocated_)) {
+        if (Current_ + more < EndPreallocated_) [[likely]] {
             return;
         }
 

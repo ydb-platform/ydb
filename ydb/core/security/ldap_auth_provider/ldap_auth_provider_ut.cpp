@@ -8,7 +8,7 @@
 
 #include <ydb/core/security/ldap_auth_provider/test_utils/test_settings.h>
 
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
 namespace {
 
@@ -595,10 +595,8 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
-
-    ldapServer.Stop();
 }
 
 void LdapFetchGroupsWithDefaultGroupAttributeGood(const ESecurityConnectionType& secureType) {
@@ -619,7 +617,7 @@ void LdapFetchGroupsWithDefaultGroupAttributeGood(const ESecurityConnectionType&
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -633,7 +631,6 @@ void LdapFetchGroupsWithDefaultGroupAttributeGood(const ESecurityConnectionType&
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 } // namespace
@@ -662,7 +659,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeDisableNestedGroups) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -676,7 +673,6 @@ Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeDisableNestedGroups) {
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanFetchGroupsFromAdServer) {
@@ -689,7 +685,7 @@ Y_UNIT_TEST(CanFetchGroupsFromAdServer) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -703,7 +699,6 @@ Y_UNIT_TEST(CanFetchGroupsFromAdServer) {
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanFetchGroupsWithDisabledRequestToAD) {
@@ -716,7 +711,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDisabledRequestToAD) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -730,7 +725,6 @@ Y_UNIT_TEST(CanFetchGroupsWithDisabledRequestToAD) {
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeUseListOfHosts) {
@@ -743,7 +737,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeUseListOfHosts) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -757,7 +751,6 @@ Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeUseListOfHosts) {
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanFetchGroupsWithCustomGroupAttribute) {
@@ -770,7 +763,7 @@ Y_UNIT_TEST(CanFetchGroupsWithCustomGroupAttribute) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -784,7 +777,6 @@ Y_UNIT_TEST(CanFetchGroupsWithCustomGroupAttribute) {
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanFetchGroupsWithDontExistGroupAttribute) {
@@ -824,14 +816,13 @@ Y_UNIT_TEST(CanFetchGroupsWithDontExistGroupAttribute) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
     const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
     UNIT_ASSERT_EQUAL(fetchedGroups.size(), 1);
     UNIT_ASSERT_STRINGS_EQUAL(fetchedGroups.front(), "all-users@well-known");
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanNotFetchGroupsWithInvalidRobotUserLogin) {
@@ -847,10 +838,9 @@ Y_UNIT_TEST(CanNotFetchGroupsWithInvalidRobotUserLogin) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
     UNIT_ASSERT(ticketParserResult->Token == nullptr);
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanNotFetchGroupsWithInvalidRobotUserPassword) {
@@ -866,10 +856,9 @@ Y_UNIT_TEST(CanNotFetchGroupsWithInvalidRobotUserPassword) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
     UNIT_ASSERT(ticketParserResult->Token == nullptr);
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanNotFetchGroupsWithRemovedUserCredentials) {
@@ -901,9 +890,8 @@ Y_UNIT_TEST(CanNotFetchGroupsWithRemovedUserCredentials) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, removedUserLogin, removedUserPassword);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanNotFetchGroupsUseInvalidSearchFilter) {
@@ -919,9 +907,8 @@ Y_UNIT_TEST(CanNotFetchGroupsUseInvalidSearchFilter) {
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanRefreshGroupsInfo) {
@@ -943,7 +930,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
     const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -963,7 +950,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
     const auto& newFetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -976,7 +963,6 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     for (const auto& expectedGroup : newExpectedGroups) {
         UNIT_ASSERT_C(newGroups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
@@ -998,7 +984,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
     const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -1018,7 +1004,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
     const auto& newFetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -1031,7 +1017,6 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     for (const auto& expectedGroup : newExpectedGroups) {
         UNIT_ASSERT_C(newGroups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanNotRefreshRemovedUser) {
@@ -1058,7 +1043,7 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -1079,11 +1064,10 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT(ticketParserResult->Token == nullptr);
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
     UNIT_ASSERT_EQUAL(ticketParserResult->Error.Retryable, false);
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
@@ -1111,7 +1095,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
     // Server is busy, return retryable error
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT(ticketParserResult->Token == nullptr);
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
     UNIT_ASSERT_EQUAL(ticketParserResult->Error.Retryable, true);
@@ -1124,7 +1108,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
     // After refresh ticket, server return success
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -1138,7 +1122,6 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 
@@ -1185,7 +1168,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDelayUpdateSecurityState) {
     TAutoPtr<IEventHandle> handle;
     runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
     UNIT_ASSERT(ticketParserResult->Token != nullptr);
     const TString ldapDomain = "@ldap";
     UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -1199,7 +1182,6 @@ Y_UNIT_TEST(CanFetchGroupsWithDelayUpdateSecurityState) {
     for (const auto& expectedGroup : expectedGroups) {
         UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
     }
-    ldapServer.Stop();
 }
 
 Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
@@ -1225,11 +1207,85 @@ Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
     TAutoPtr<IEventHandle> handle;
     runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT(!ticketParserResult->Error.empty());
+    UNIT_ASSERT(ticketParserResult->HasError());
     UNIT_ASSERT(ticketParserResult->Token == nullptr);
     UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Message, "Login state is not available", ticketParserResult->Error);
     UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Retryable, false, ticketParserResult->Error.Retryable);
-    ldapServer.Stop();
+}
+
+Y_UNIT_TEST(CanFetchGroupsWithValidCredentialsUseExternalSaslAuth) {
+    TString login = "ldapuser";
+    TString password = "ldapUserPassword";
+
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithSaslExternalBind, {
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .CertFile = CertStorage.GetClientCertFileName(),
+        .KeyFile = CertStorage.GetClientKeyFileName(),
+        .Type = ESecurityConnectionType::LDAPS_SCHEME
+    });
+
+    LdapMock::TLdapMockResponses responses = TCorrectLdapResponse::GetResponses(login);
+    responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = "external"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+    LdapMock::TSimpleServer ldapServer({
+        .Port = ydbServer.GetLdapPort(),
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .CertFile = CertStorage.GetServerCertFileName(),
+        .KeyFile = CertStorage.GetServerKeyFileName(),
+        .UseTls = true,
+        .RequireClientCert = true,
+        .ExternalAuthMap = {
+            {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=robouser,dc=search,dc=yandex,dc=net"}
+        }
+    }, responses);
+    ldapServer.Start();
+    TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
+    TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+    UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
+    UNIT_ASSERT(ticketParserResult->Token != nullptr);
+    const TString ldapDomain = "@ldap";
+    UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+    const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+    THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+    THashSet<TString> expectedGroups = TCorrectLdapResponse::GetAllGroups(ldapDomain);
+    expectedGroups.insert("all-users@well-known");
+
+    UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+    for (const auto& expectedGroup : expectedGroups) {
+        UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+    }
+}
+
+Y_UNIT_TEST(CanNotFetchGroupsOverSaslExternalWithoutClientCert) {
+    TString login = "ldapuser";
+    TString password = "ldapUserPassword";
+
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithSaslExternalBind, {
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .Type = ESecurityConnectionType::LDAPS_SCHEME
+    });
+
+    LdapMock::TLdapMockResponses responses = TCorrectLdapResponse::GetResponses(login);
+    responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = "external"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+    LdapMock::TSimpleServer ldapServer({
+        .Port = ydbServer.GetLdapPort(),
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .CertFile = CertStorage.GetServerCertFileName(),
+        .KeyFile = CertStorage.GetServerKeyFileName(),
+        .UseTls = true,
+        .RequireClientCert = true,
+        .ExternalAuthMap = {
+            {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=robouser,dc=search,dc=yandex,dc=net"}
+        }
+    }, responses);
+    ldapServer.Start();
+    TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
+    TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Should be error");
+    UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Message, "Could not login via LDAP", ticketParserResult->Error);
+    UNIT_ASSERT(ticketParserResult->Token == nullptr);
 }
 
 } // LdapAuthProviderTests

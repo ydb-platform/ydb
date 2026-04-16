@@ -1,4 +1,6 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
+#include "datashard_tli.h"
 #include "datashard_locks_db.h"
 #include "setup_sys_locks.h"
 
@@ -24,8 +26,6 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
-
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(*Self, &locksDb);
 
@@ -98,7 +98,12 @@ public:
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
         }
 
-        Self->SysLocksTable().ApplyLocks();
+        auto [_, locksBrokenByReplication] = Self->SysLocksTable().ApplyLocks();
+        if (!locksBrokenByReplication.empty()) {
+            auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenByReplication);
+            NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Replication apply broke locks on replicated rows", locksBrokenByReplication,
+                                           Nothing(), victimQuerySpanIds);
+        }
         return true;
     }
 

@@ -112,6 +112,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
         if (index.KeyColumns && addIndex) {
             TIntrusivePtr<TKikimrTableMetadata> implTable = table.Metadata->ImplTables[i];
             switch (index.Type) {
+                case TIndexDescription::EType::GlobalJson:
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique: {
@@ -122,9 +123,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                 }
                 case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalFulltextRelevance: {
-                    const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index.SpecializedIndexDescription);
-                    YQL_ENSURE(fulltextDesc);
-                    const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                    const bool withRelevance = index.Type == TIndexDescription::EType::GlobalFulltextRelevance;
                     if (withRelevance) {
                         while (implTable && !implTable->Name.EndsWith(NKikimr::NTableIndex::ImplTable)) {
                             implTable = implTable->Next;
@@ -149,6 +148,9 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                     result.emplace_back(indexTable, &index);
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    break;
             }
         }
     }

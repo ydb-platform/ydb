@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetClient().FlatQuery(&env.GetRuntime(), query, res);
     }
 
-    Y_UNIT_TEST_FLAG(Boot, EnableRealSystemViewPaths) {
-        TTestEnv env(EnableRealSystemViewPaths);
+    Y_UNIT_TEST(Boot) {
+        TTestEnv env;
         auto lsroot = env.GetClient().Ls("/");
         Print(lsroot);
 
@@ -54,14 +54,16 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             NTestLs::Finished(ls);
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, EnableRealSystemViewPaths ? 6 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
     }
 
     Y_UNIT_TEST(LsLs) {
         TTestEnv env;
 
+        TLocalPathId subdomainPathId;
         {
+            subdomainPathId = GetNextLocalPathId(env, env.GetRoot());
             auto subdomain = GetSubDomainDeclareSetting("USER_0", env.GetPools());
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", subdomain));
         }
@@ -71,7 +73,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             NTestLs::Finished(ls, NKikimrSchemeOp::EPathTypeSubDomain);
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeSubDomain);
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
 
@@ -79,7 +81,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls(env.GetRoot());
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 12);
         }
     }
 
@@ -107,7 +109,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls(env.GetRoot());
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 8);
         }
     }
 
@@ -209,6 +211,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
     Y_UNIT_TEST(CreateTableInsideAndForceDeleteSubDomain) {
         TTestEnv env(1, 1);
 
+        TLocalPathId subdomainPathId = GetNextLocalPathId(env, env.GetRoot());
         auto subdomain_0 = GetSubDomainDeclareSetting("USER_0", env.GetPools());
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", subdomain_0));
 
@@ -219,7 +222,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             {
                 auto ls = env.GetClient().Ls("/dc-1/USER_0");
                 auto ver = NTestLs::ExtractPathVersion(ls);
-                UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+                UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
                 UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
             }
         }
@@ -234,30 +237,31 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 3);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId + 1);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
     }
 
-    Y_UNIT_TEST(CreateTableInsidetThenStopTenantAndForceDeleteSubDomain) {
+    Y_UNIT_TEST(CreateTableInsideThenStopTenantAndForceDeleteSubDomain) {
         TTestEnv env(1, 1);
 
+        TLocalPathId subdomainPathId = GetNextLocalPathId(env, env.GetRoot());
         auto subdomain_0 = GetSubDomainDeclareSetting("USER_0", env.GetPools());
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", subdomain_0));
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
 
@@ -271,7 +275,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
         }
 
@@ -283,14 +287,14 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 3);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId + 1);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
 
@@ -340,13 +344,14 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
+        TLocalPathId subdomainPathId = GetNextLocalPathId(env, env.GetRoot());
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                  env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
 
@@ -358,7 +363,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
         }
 
@@ -368,7 +373,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
 
@@ -630,10 +635,12 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1");
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
 
+        TLocalPathId subdomainPathId;
         {
+            subdomainPathId = GetNextLocalPathId(env, env.GetRoot());
             auto subdomain = GetSubDomainDeclareSetting("USER_0", env.GetPools());
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", subdomain));
         }
@@ -642,13 +649,13 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1");
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 12);
         }
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
 
@@ -662,7 +669,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
         }
 
@@ -703,10 +710,12 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1");
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
 
+        TLocalPathId subdomainPathId;
         {
+            subdomainPathId = GetNextLocalPathId(env, env.GetRoot());
             auto subdomain = GetSubDomainDeclareSetting("USER_0", env.GetPools());
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", subdomain));
         }
@@ -715,7 +724,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1");
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 12);
         }
 
         {
@@ -736,13 +745,13 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1");
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 12);
         }
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
 
@@ -778,6 +787,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
+        TLocalPathId subdomainPathId = GetNextLocalPathId(env, env.GetRoot());
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                  env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
 
@@ -793,7 +803,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
 
         auto pathVer = env.GetClient().ExtractPathVersion(env.GetClient().Ls("/dc-1/USER_0"));
-        UNIT_ASSERT_VALUES_EQUAL(pathVer.PathId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(pathVer.PathId, subdomainPathId);
         UNIT_ASSERT_VALUES_EQUAL(pathVer.Version, 4);
 
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -803,7 +813,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             NTestLs::HasUserAttributes(ls, {{"AttrA2", "ValA2"}});
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
         }
 
@@ -814,12 +824,12 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             NTestLs::HasUserAttributes(ls, {{"AttrA2", "ValA2"}});
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
         }
 
         pathVer = env.GetClient().ExtractPathVersion(env.GetClient().Ls("/dc-1/USER_0"));
-        UNIT_ASSERT_VALUES_EQUAL(pathVer.PathId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(pathVer.PathId, subdomainPathId);
         UNIT_ASSERT_VALUES_EQUAL(pathVer.Version, 5);
 
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -829,7 +839,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             NTestLs::HasUserAttributes(ls, {{"AttrA3", "ValA3"}});
             auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, subdomainPathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
         }
     }

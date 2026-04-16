@@ -10,8 +10,9 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-
 #include <ydb/services/lib/actors/pq_schema_actor.h>
+
+#include <google/protobuf/util/time_util.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -95,7 +96,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table, status, error)) {
             return nullptr;
         }
-        
+
         if (!FillDefaultValues(item, indexedTable, error)) {
             return nullptr;
         }
@@ -137,7 +138,7 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
     Y_ABORT_UNLESS(record.HasPathDescription());
     const auto& pathDesc = record.GetPathDescription();
     Y_ABORT_UNLESS(pathDesc.HasTable() || pathDesc.HasColumnTableDescription());
-    
+
     if (pathDesc.HasColumnTableDescription()) {
         NKikimrSchemeOp::TTableDescription result;
         const auto& columnTable = pathDesc.GetColumnTableDescription();
@@ -189,6 +190,21 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
     return tableDesc;
 }
 
+template <typename TSettings>
+void FillRestoreEncryptionSettings(
+    NKikimrSchemeOp::TRestoreTask& task,
+    const TSettings& settings,
+    const TImportInfo::TItem& item)
+{
+    if (settings.has_encryption_settings()) {
+        auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
+        *taskEncryptionSettings.MutableSymmetricKey() = settings.encryption_settings().symmetric_key();
+        if (item.ExportItemIV) {
+            taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
+        }
+    }
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -219,15 +235,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     case TImportInfo::EKind::S3:
         {
             auto settings = importInfo.GetS3Settings();
-            
-            if (settings.has_encryption_settings()) {
-                auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
-                *taskEncryptionSettings.MutableSymmetricKey() = settings.encryption_settings().symmetric_key();
-                if (item.ExportItemIV) {
-                    taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
-                }
-            }
-
+            FillRestoreEncryptionSettings(task, settings, item);
             task.SetNumberOfRetries(settings.number_of_retries());
             auto& restoreSettings = *task.MutableS3Settings();
             restoreSettings.SetEndpoint(settings.endpoint());
@@ -257,6 +265,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     case TImportInfo::EKind::FS:
         {
             auto settings = importInfo.GetFsSettings();
+            FillRestoreEncryptionSettings(task, settings, item);
             task.SetNumberOfRetries(settings.number_of_retries());
             auto& restoreSettings = *task.MutableFSSettings();
             restoreSettings.SetBasePath(settings.base_path());
@@ -373,9 +382,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
     const auto& keyId = tableDesc.GetKeyColumnIds()[0];
     bool isPartitioningAvailable = false;
-    
+
     // Explicit specification of the number of partitions when creating CDC
-    // is possible only if the first component of the primary key 
+    // is possible only if the first component of the primary key
     // of the source table is Uint32 or Uint64
     for (const auto& column : tableDesc.GetColumns()) {
         if (column.GetId() == keyId) {
@@ -421,6 +430,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     const TImportInfo& importInfo,
     TImportInfo::TItem& item
 ) {
+    using google::protobuf::util::TimeUtil;
+
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
 
     const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
@@ -458,6 +469,38 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
         addedConsumer.SetName(consumerName);
         if (consumer.important()) {
             addedConsumer.SetImportant(true);
+        }
+
+        addedConsumer.SetAvailabilityPeriodMs(TimeUtil::DurationToMilliseconds(consumer.availability_period()));
+        if (consumer.has_shared_consumer_type()) {
+            const auto& sharedConsumerType = consumer.shared_consumer_type();
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP);
+            addedConsumer.SetKeepMessageOrder(sharedConsumerType.keep_messages_order());
+            addedConsumer.SetDefaultProcessingTimeoutSeconds(TimeUtil::DurationToSeconds(sharedConsumerType.default_processing_timeout()));
+            addedConsumer.SetDefaultDelayMessageTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_delay()));
+            addedConsumer.SetDefaultReceiveMessageWaitTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_wait_time()));
+            const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+
+            if (sharedConsumerType.has_dead_letter_policy() && deadLetterPolicy.enabled()) {
+                const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+                addedConsumer.SetDeadLetterPolicyEnabled(true);
+                if (deadLetterPolicy.has_condition()) {
+                    addedConsumer.SetMaxProcessingAttempts(deadLetterPolicy.condition().max_processing_attempts());
+                }
+
+                if (deadLetterPolicy.has_move_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_MOVE);
+                    addedConsumer.SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
+                } else if (deadLetterPolicy.has_delete_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_DELETE);
+                } else {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_UNSPECIFIED);
+                }
+            } else {
+                addedConsumer.SetDeadLetterPolicyEnabled(false);
+            }
+        } else {
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_STREAMING);
         }
     }
 

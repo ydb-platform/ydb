@@ -869,13 +869,13 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
                 .Build());
         } else {
             const auto& multiFields = column->Child(0)->Children();
-            for (ui32 field = 0; field < multiFields.size(); ++field) {
+            for (const auto& multiField : multiFields) {
                 finalRowNodes.push_back(ctx.Builder(pos)
                     .List()
-                        .Atom(0, multiFields[field]->Content())
+                        .Atom(0, multiField->Content())
                         .Callable(1, "Member")
                             .Add(0, opt)
-                            .Atom(1, multiFields[field]->Content())
+                            .Atom(1, multiField->Content())
                         .Seal()
                     .Seal()
                     .Build());
@@ -1602,7 +1602,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
     }
 
     TExprNode::TPtr tuple;
-    if (tupleItems.size() == 0) {
+    if (tupleItems.empty()) {
         tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, 0U).Seal().Build();
     } else if (tupleItems.size() == 1) {
         tuple = tupleItems[0];
@@ -1848,9 +1848,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
             if (node->Head().IsList()) {
                 auto dependsOnArgs = node->Head().ChildrenList();
                 bool changed = false;
-                for (size_t i = 0; i < dependsOnArgs.size(); i++) {
-                    if (dependsOnArgs[i].Get() == arg) {
-                        dependsOnArgs[i] = placeHolder;
+                for (auto& dependsOnArg : dependsOnArgs) {
+                    if (dependsOnArg.Get() == arg) {
+                        dependsOnArg = placeHolder;
                         changed = true;
                     }
                 }
@@ -2486,7 +2486,8 @@ template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& 
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
     if (!prefix.StartsWith("_yql")) {
         YQL_ENSURE(prefix.Contains('.'));
-        TStringBuf table, column;
+        TStringBuf table;
+        TStringBuf column;
         SplitTableName(prefix, table, column);
         YQL_ENSURE(column.StartsWith("_yql"));
     }
@@ -2544,7 +2545,7 @@ bool CheckSupportedTypes(
             return false;
         }
     }
-    if (supportedDataTypes.size()) {
+    if (!supportedDataTypes.empty()) {
         supported.emplace(ETypeAnnotationKind::Data);
     }
     auto checkType = [&] (const TTypeAnnotationNode* type) {

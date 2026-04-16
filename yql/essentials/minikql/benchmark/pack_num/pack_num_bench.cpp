@@ -20,7 +20,7 @@ struct TSamples32 {
         }
     }
 
-    ui32 Data[COUNT];
+    ui32 Data[COUNT]; // NOLINT(modernize-avoid-c-arrays)
 };
 
 template <ui64 UPPER, size_t MAX_BYTE_SIZE = (1 << 15) - (1 << 10)>
@@ -32,7 +32,7 @@ struct TSamples64 {
         }
     }
 
-    ui64 Data[COUNT];
+    ui64 Data[COUNT]; // NOLINT(modernize-avoid-c-arrays)
 };
 
 template <ui32 UPPER, typename TCoder, size_t MAX_BYTE_SIZE = (1 << 15) - (1 << 10)>
@@ -45,8 +45,8 @@ struct TCodedData32 {
         }
     }
 
-    char Data[MAX_BYTE_SIZE + BYTES_PER_NUM];
-    size_t Length[COUNT];
+    char Data[MAX_BYTE_SIZE + BYTES_PER_NUM]; // NOLINT(modernize-avoid-c-arrays)
+    size_t Length[COUNT];                     // NOLINT(modernize-avoid-c-arrays)
 };
 
 template <ui64 UPPER, typename TCoder, size_t MAX_BYTE_SIZE = (1 << 15) - (1 << 10)>
@@ -59,8 +59,8 @@ struct TCodedData64 {
         }
     }
 
-    char Data[MAX_BYTE_SIZE + BYTES_PER_NUM];
-    size_t Length[COUNT];
+    char Data[MAX_BYTE_SIZE + BYTES_PER_NUM]; // NOLINT(modernize-avoid-c-arrays)
+    size_t Length[COUNT];                     // NOLINT(modernize-avoid-c-arrays)
 };
 
 struct TKikimrCoder32 {
@@ -101,34 +101,34 @@ struct TDictUtilsCoder64 {
 
 } // namespace
 
-#define DEF_WRITE_BENCH(base, limit)                                                        \
-    Y_CPU_BENCHMARK(Write##base##_Kikimr_##limit, iface) {                                  \
-        char buffer[sizeof(ui##base) + 1];                                                  \
-        auto& data = Default<TSamples##base<limit>>();                                      \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                   \
-            Y_DO_NOT_OPTIMIZE_AWAY(NKikimr::Pack##base(data.Data[i % data.COUNT], buffer)); \
-            NBench::Clobber();                                                              \
-        }                                                                                   \
-    }                                                                                       \
-    Y_CPU_BENCHMARK(Write##base##_PackedTypes_##limit, iface) {                             \
-        char buffer[sizeof(ui##base) + 1];                                                  \
-        auto& data = Default<TSamples##base<limit>>();                                      \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                   \
-            Y_DO_NOT_OPTIMIZE_AWAY(Pack##base(data.Data[i % data.COUNT], buffer));          \
-            NBench::Clobber();                                                              \
-        }                                                                                   \
-    }                                                                                       \
-    Y_CPU_BENCHMARK(Write##base##_DictUtils_##limit, iface) {                               \
-        char buffer[sizeof(ui##base) + 1];                                                  \
-        auto& data = Default<TSamples##base<limit>>();                                      \
-        for (size_t i = 0; i < iface.Iterations(); ++i) {                                   \
-            Y_DO_NOT_OPTIMIZE_AWAY(PackU##base(data.Data[i % data.COUNT], buffer));         \
-            NBench::Clobber();                                                              \
-        }                                                                                   \
+#define DEF_WRITE_BENCH(base, limit)                                                                       \
+    Y_CPU_BENCHMARK(Write##base##_Kikimr_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */      \
+        char buffer[sizeof(ui##base) + 1];                 /* NOLINT(modernize-avoid-c-arrays) */          \
+        auto& data = Default<TSamples##base<limit>>();                                                     \
+        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                  \
+            Y_DO_NOT_OPTIMIZE_AWAY(NKikimr::Pack##base(data.Data[i % data.COUNT], buffer));                \
+            NBench::Clobber();                                                                             \
+        }                                                                                                  \
+    }                                                                                                      \
+    Y_CPU_BENCHMARK(Write##base##_PackedTypes_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */ \
+        char buffer[sizeof(ui##base) + 1];                      /* NOLINT(modernize-avoid-c-arrays) */     \
+        auto& data = Default<TSamples##base<limit>>();                                                     \
+        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                  \
+            Y_DO_NOT_OPTIMIZE_AWAY(Pack##base(data.Data[i % data.COUNT], buffer));                         \
+            NBench::Clobber();                                                                             \
+        }                                                                                                  \
+    }                                                                                                      \
+    Y_CPU_BENCHMARK(Write##base##_DictUtils_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */   \
+        char buffer[sizeof(ui##base) + 1];                    /* NOLINT(modernize-avoid-c-arrays) */       \
+        auto& data = Default<TSamples##base<limit>>();                                                     \
+        for (size_t i = 0; i < iface.Iterations(); ++i) {                                                  \
+            Y_DO_NOT_OPTIMIZE_AWAY(PackU##base(data.Data[i % data.COUNT], buffer));                        \
+            NBench::Clobber();                                                                             \
+        }                                                                                                  \
     }
 
 #define DEF_READ_BENCH(base, limit)                                                                                       \
-    Y_CPU_BENCHMARK(Read##base##_KikimrLong_##limit, iface) {                                                             \
+    Y_CPU_BENCHMARK(Read##base##_KikimrLong_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                  \
         ui##base num = 0;                                                                                                 \
         NBench::Escape(&num);                                                                                             \
         const auto& data = *HugeSingleton<TCodedData##base<limit, TKikimrCoder##base>>();                                 \
@@ -138,7 +138,7 @@ struct TDictUtilsCoder64 {
             NBench::Clobber();                                                                                            \
         }                                                                                                                 \
     }                                                                                                                     \
-    Y_CPU_BENCHMARK(Read##base##_KikimrShort_##limit, iface) {                                                            \
+    Y_CPU_BENCHMARK(Read##base##_KikimrShort_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                 \
         ui##base num = 0;                                                                                                 \
         NBench::Escape(&num);                                                                                             \
         const auto& data = *HugeSingleton<TCodedData##base<limit, TKikimrCoder##base>>();                                 \
@@ -148,7 +148,7 @@ struct TDictUtilsCoder64 {
             NBench::Clobber();                                                                                            \
         }                                                                                                                 \
     }                                                                                                                     \
-    Y_CPU_BENCHMARK(Read##base##_PackedTypes_##limit, iface) {                                                            \
+    Y_CPU_BENCHMARK(Read##base##_PackedTypes_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                 \
         ui##base num = 0;                                                                                                 \
         NBench::Escape(&num);                                                                                             \
         const auto& data = *HugeSingleton<TCodedData##base<limit, TPackedTypesCoder##base>>();                            \
@@ -158,7 +158,7 @@ struct TDictUtilsCoder64 {
             NBench::Clobber();                                                                                            \
         }                                                                                                                 \
     }                                                                                                                     \
-    Y_CPU_BENCHMARK(Read##base##_DictUtils_##limit, iface) {                                                              \
+    Y_CPU_BENCHMARK(Read##base##_DictUtils_##limit, iface) { /* NOLINT(misc-use-anonymous-namespace) */                   \
         ui##base num = 0;                                                                                                 \
         NBench::Escape(&num);                                                                                             \
         const auto& data = *HugeSingleton<TCodedData##base<limit, TDictUtilsCoder##base>>();                              \

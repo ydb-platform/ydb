@@ -36,22 +36,6 @@ bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
     return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
-bool AllowPayloadRenameOverWindow(const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char OptName[] = "PayloadRenameOverWindow";
-    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-}
-
-bool CheckWindowFramesFieldSubsetEnabled(const TOptimizeContext& optCtx) {
-    if (AllowPayloadRenameOverWindow(optCtx)) {
-        // payload renaming requires checking window frame subset before fusing
-        return true;
-    }
-    YQL_ENSURE(optCtx.Types);
-    static const char OptName[] = "CheckWindowFramesFieldSubset";
-    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-}
-
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(node.Settings().Ref(), "session");
@@ -879,8 +863,8 @@ bool IsFlatmapSuitableForPullUpOverEquiJoin(const TCoFlatMapBase& flatMap, TVect
             continue;
         }
         const auto& renames = renamesByLabel[label];
-        for (auto it = renames.begin(); it != renames.end(); ++it) {
-            if (it->first != it->second) {
+        for (const auto & rename : renames) {
+            if (rename.first != rename.second) {
                 renamesAreIdentical = false;
                 break;
             }
@@ -909,7 +893,7 @@ TExprNode::TPtr ApplyRenames(const TExprNode::TPtr& input, const TMap<TStringBuf
         TStringBuf columnName;
         SplitTableName(memberName, tableName, columnName);
 
-        if (columnName.find(canaryBaseName, 0) == 0) {
+        if (columnName.starts_with(canaryBaseName)) {
             continue;
         }
 
@@ -1036,8 +1020,8 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
             .Build();
 
         TVector<TExprNode::TPtr> args;
-        for (ui32 i = 0; i < labels.size(); ++i) {
-            TString prefix = TString::Join(labels[i], ".");
+        for (const auto& label : labels) {
+            TString prefix = TString::Join(label, ".");
             auto arg = ctx.Builder(input.Pos())
                 .List()
                    .Atom(0, prefix)
@@ -1357,7 +1341,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
             }
 
             auto flattenMembersArgsByInput = BuildOutputFlattenMembersArg(input, afterJoinArg, canaryName, *canaryResultType, ctx);
-            if (flattenMembersArgsByInput.size()) {
+            if (!flattenMembersArgsByInput.empty()) {
                 flattenMembersArgs.insert(flattenMembersArgs.end(), flattenMembersArgsByInput.begin(), flattenMembersArgsByInput.end());
             }
         } else {
@@ -2403,12 +2387,10 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
             }
 
-            if (AllowPayloadRenameOverWindow(optCtx)) {
-                if (self.Input().Maybe<TCoCalcOverWindowBase>() || self.Input().Maybe<TCoCalcOverWindowGroup>()) {
-                    auto ret = PayloadRenameOverWindow(self, ctx);
-                    if (ret != self.Ptr()) {
-                        return ret;
-                    }
+            if (self.Input().Maybe<TCoCalcOverWindowBase>() || self.Input().Maybe<TCoCalcOverWindowGroup>()) {
+                auto ret = PayloadRenameOverWindow(self, ctx);
+                if (ret != self.Ptr()) {
+                    return ret;
                 }
             }
         }
@@ -3088,10 +3070,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         const TStructExprType& inputItemType = *input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
         TExprNodeList parentCalcs = ExtractCalcsOverWindow(node, ctx);
-        if (CheckWindowFramesFieldSubsetEnabled(optCtx)) {
-            if (!CheckWindowFramesFieldSubset(parentCalcs, inputItemType)) {
-                return node;
-            }
+        if (!CheckWindowFramesFieldSubset(parentCalcs, inputItemType)) {
+            return node;
         }
 
         TExprNodeList calcs = ExtractCalcsOverWindow(node->HeadPtr(), ctx);

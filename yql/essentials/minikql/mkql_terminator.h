@@ -5,9 +5,7 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TTerminateException: public NYql::TErrorException {
 public:
@@ -45,6 +43,4 @@ struct TOnlyThrowingBindTerminator: public TBindTerminator, public ITerminator {
 
 [[noreturn]] void MKQLTerminate(const char* message);
 
-} // namespace NMiniKQL
-
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -377,22 +377,6 @@ namespace NKikimr {
             }
         }
 
-        EDispatchStatus HandleLogoBlob(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            bool success = PutMsg.ParseFromArray(record.Data.GetData(), record.Data.GetSize());
-            if (!success)
-                return EDispatchStatus::Error;
-
-            const bool fromVPutCommand = true;
-            const TLogoBlobID id = LogoBlobIDFromLogoBlobID(PutMsg.GetBlobID());
-            const TString &buf = PutMsg.GetBuffer();
-            TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, id,
-                PutMsg.GetIssueKeepFlag());
-            Y_VERIFY_S(ingress, "Failed to create ingress, VDiskId# " << LocRecCtx->VCtx->ShortSelfVDisk << ", BlobId# " << id);
-
-            PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, id, *ingress, buf, fromVPutCommand);
-            return EDispatchStatus::Success;
-        }
-
         EDispatchStatus HandleOptLogoBlob(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
             bool success = PutMsgOpt.ParseFromArray(LocRecCtx->VCtx->Top->GType, record.Data.GetData(), record.Data.GetSize());
             if (!success)
@@ -795,6 +779,10 @@ namespace NKikimr {
             return EDispatchStatus::Success;
         }
 
+        EDispatchStatus HandleChunkKeeper(const TActorContext& /*ctx*/, const NPDisk::TLogRecord& /*record*/) {
+            return EDispatchStatus::Success;
+        }
+
         void Handle(TEvBulkSstEssenceLoaded::TPtr &ev, const TActorContext &ctx) {
             // BulkSstEssence is loaded into memory, apply it
             TEvBulkSstEssenceLoaded *msg = ev->Get();
@@ -820,8 +808,7 @@ namespace NKikimr {
 
             switch (record.Signature) {
                 case TLogSignature::SignatureLogoBlob:
-                    LocRecCtx->RecovInfo->DispatchSignatureLogoBlob(record);
-                    return HandleLogoBlob(ctx, record);
+                    Y_ABORT("obsolete recovery log format");
                 case TLogSignature::SignatureBlock:
                     LocRecCtx->RecovInfo->DispatchSignatureBlock(record);
                     return HandleBlock(ctx, record);
@@ -884,6 +871,9 @@ namespace NKikimr {
                 case TLogSignature::SignatureMetadata:
                     LocRecCtx->RecovInfo->DispatchSignatureMetadata(record);
                     return HandleMetadata(ctx, record);
+                case TLogSignature::SignatureChunkKeeper:
+                    LocRecCtx->RecovInfo->DispatchSignatureChunkKeeper(record);
+                    return HandleChunkKeeper(ctx, record);
                 case TLogSignature::Max:
                     break;
             }
@@ -897,6 +887,7 @@ namespace NKikimr {
             LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks);
             LocRecCtx->RepairedHuge->GetOwnedChunks(chunks);
             LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks);
+            LocRecCtx->ChunkKeeperData->GetOwnedChunks(chunks, LocRecCtx->VCtx->VDiskLogPrefix);
 
             // calculate leaked and unowned chunks
             TVector<TChunkIdx> leaks, misowned;

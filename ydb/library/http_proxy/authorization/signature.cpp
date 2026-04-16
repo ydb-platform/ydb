@@ -133,6 +133,10 @@ TString TAwsRequestSignV4::CalcSignature(const TString& secretKey) const {
     return to_lower(HexEncode(signatureHmac.data(), signatureHmac.size()));
 }
 
+bool TAwsRequestSignV4::Empty() const {
+    return Empty_;
+}
+
 void TAwsRequestSignV4::ParseAuthorization(const THttpInput& input) {
     for (const auto& header : input.Headers()) {
         if (AsciiEqualsIgnoreCase(header.Name(), AUTHORIZATION_HEADER)) {
@@ -146,6 +150,8 @@ void TAwsRequestSignV4::ParseAuthorization(const THttpInput& input) {
             AwsDate_ = TString(credential.NextTok(pathDelim));
             AwsRegion_ = TString(credential.NextTok(pathDelim));
             AwsService_ = TString(credential.NextTok(pathDelim));
+
+            Empty_ = false;
             break;
         }
     }

@@ -2,7 +2,9 @@
 
 #include "yql_setting.h"
 
+#include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -21,6 +23,10 @@
 #include <util/generic/guid.h>
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
+
+#include <concepts>
+#include <ranges>
+#include <utility>
 
 namespace NYql {
 
@@ -75,6 +81,36 @@ YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 
 template <typename TType>
+using TSerializer = std::function<TString(const TType&)>;
+
+template <typename TType>
+TSerializer<TType> GetDefaultSerializer() {
+    return [](const TType&) -> TString { throw yexception() << "Unsupported serializer"; };
+}
+
+template <>
+TSerializer<TString> GetDefaultSerializer<TString>();
+
+template <>
+TSerializer<bool> GetDefaultSerializer<bool>();
+
+template <>
+TSerializer<TGUID> GetDefaultSerializer<TGUID>();
+
+template <>
+TSerializer<NSize::TSize> GetDefaultSerializer<NSize::TSize>();
+
+template <>
+TSerializer<TInstant> GetDefaultSerializer<TInstant>();
+
+#define YQL_DECLARE_SETTING_SERIALIZER(type) \
+    template <>                              \
+    TSerializer<type> GetDefaultSerializer<type>();
+
+YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_SERIALIZER)
+YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_SERIALIZER)
+
+template <typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::StaticPerCluster>& setting, const TString& cluster) {
     return setting.Get(cluster);
 }
@@ -89,6 +125,26 @@ TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingT
     Y_UNUSED(cluster);
     return setting.Get();
 }
+
+template <typename T, typename TType>
+concept EnumContainer = std::ranges::input_range<T> &&
+                        std::convertible_to<std::ranges::range_value_t<T>, TType>;
+
+template <typename T>
+concept StringContainer = std::ranges::input_range<T> &&
+                          std::convertible_to<std::ranges::range_value_t<T>, TString>;
+
+template <typename T>
+concept ConfigFeature = requires(const T& elem) {
+    { elem.GetName() } -> std::convertible_to<TString>;
+    { elem.GetValue() } -> std::convertible_to<TMaybe<TString>>;
+};
+
+template <typename T>
+concept ConfigFeatureList = std::ranges::input_range<T> && ConfigFeature<std::ranges::range_value_t<T>>;
+
+template <typename TFilter, typename TContainer>
+concept AttributeFilter = std::predicate<TFilter, std::ranges::range_value_t<TContainer>>;
 
 } // namespace NPrivate
 
@@ -110,8 +166,8 @@ public:
     public:
         using TPtr = TIntrusivePtr<TSettingHandler>;
 
-        explicit TSettingHandler(const TString& name)
-            : Name_(name)
+        explicit TSettingHandler(TString name)
+            : Name_(std::move(name))
         {
         }
 
@@ -126,6 +182,7 @@ public:
         virtual bool IsPerCluster() const = 0;
         virtual bool IsDeprecated() const = 0;
         virtual bool IgnoreInFullReplay() const = 0;
+        virtual void Serialize(const std::function<void(const TString&, const TString&)>& callback) const = 0;
 
     protected:
         TString Name_;
@@ -143,6 +200,7 @@ public:
             : TSettingHandler(name)
             , Setting_(setting)
             , Parser_(::NYql::NPrivate::GetDefaultParser<TType>())
+            , Serializer_(::NYql::NPrivate::GetDefaultSerializer<TType>())
             , ValueSetter_([this](const TString& cluster, TType value) {
                 Setting_[cluster] = value;
             })
@@ -230,11 +288,11 @@ public:
             return *this;
         }
 
-        template <class TContainer>
+        template <NPrivate::EnumContainer<TType> TContainer>
         TSettingHandlerImpl& Enum(const TContainer& container) {
             THashSet<TType> allowed(container.cbegin(), container.cend());
             Validators_.push_back([allowed = std::move(allowed)](const TString&, TType value) {
-                if (!allowed.has(value)) {
+                if (!allowed.contains(value)) {
                     throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed);
                 }
             });
@@ -289,6 +347,25 @@ public:
             return *this;
         }
 
+        TSettingHandlerImpl& Serializer(::NYql::NPrivate::TSerializer<TType>&& serializer) {
+            Serializer_ = std::move(serializer);
+            return *this;
+        }
+
+        TSettingHandlerImpl& Serializer(const ::NYql::NPrivate::TSerializer<TType>& serializer) {
+            Serializer_ = serializer;
+            return *this;
+        }
+
+        void Serialize(const std::function<void(const TString&, const TString&)>& callback) const override {
+            YQL_ENSURE(SettingType == EConfSettingType::Static, "Only serialization for static settings is supported now");
+            if constexpr (SettingType == EConfSettingType::Static) {
+                if (auto value = Setting_.Get()) {
+                    callback(Name_, Serializer_(*value));
+                }
+            }
+        }
+
         TSettingHandlerImpl& ValueSetter(TValueCallback&& hook) {
             ValueSetter_ = std::move(hook);
             return *this;
@@ -339,6 +416,7 @@ public:
         TConfSetting<TType, SettingType>& Setting_;
         TMaybe<TConfSetting<TType, SettingType>> Default_;
         ::NYql::NPrivate::TParser<TType> Parser_;
+        ::NYql::NPrivate::TSerializer<TType> Serializer_;
         TValueCallback ValueSetter_;
         TVector<TValueCallback> Validators_;
         TString Warning_;
@@ -346,20 +424,21 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    explicit TSettingDispatcher(const TQContext& qContext = {})
-        : QContext_(qContext)
+    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {})
+        : ProviderName_(providerName)
+        , QContext_(qContext)
     {
     }
 
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
-    template <class TContainer>
+    template <NPrivate::StringContainer TContainer>
     explicit TSettingDispatcher(const TContainer& validClusters)
         : ValidClusters(validClusters.begin(), validClusters.end())
     {
     }
 
-    template <class TContainer>
+    template <NPrivate::StringContainer TContainer>
     void SetValidClusters(const TContainer& validClusters) {
         ValidClusters.clear();
         ValidClusters.insert(validClusters.begin(), validClusters.end());
@@ -393,17 +472,30 @@ public:
 
     bool Dispatch(const TString& cluster, const TString& name, const TMaybe<TString>& value, EStage stage, const TErrorCallback& errorCallback);
 
-    template <class TContainer, typename TFilter>
+    template <NPrivate::ConfigFeatureList TContainer, NPrivate::AttributeFilter<TContainer> TFilter>
     void Dispatch(const TString& cluster, const TContainer& clusterValues, const TFilter& filter) {
+        using TAttribute = typename TContainer::value_type;
+
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v : clusterValues) {
-            if (filter(v)) {
-                Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
-            }
+        TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
+
+        TVector<TAttribute> flags;
+        if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TAttribute>(activationLabel, QContext_)) {
+            flags = std::move(*loadedFlags);
+        } else {
+            CopyIf(clusterValues.begin(), clusterValues.end(), std::back_inserter(flags), filter);
+        }
+
+        for (const auto& flag : flags) {
+            Dispatch(cluster, flag.GetName(), flag.GetValue(), EStage::CONFIG, errorCallback);
+        }
+
+        if (ProviderName_) {
+            NCommon::SaveActivatedFlagsToQContext<TAttribute>(flags, activationLabel, QContext_);
         }
     }
 
-    template <class TContainer>
+    template <NPrivate::ConfigFeatureList TContainer>
     void Dispatch(const TString& cluster, const TContainer& clusterValues) {
         auto errorCallback = GetDefaultErrorCallback();
         for (auto& v : clusterValues) {
@@ -411,12 +503,12 @@ public:
         }
     }
 
-    template <class TContainer, typename TFilter>
+    template <NPrivate::ConfigFeatureList TContainer, NPrivate::AttributeFilter<TContainer> TFilter>
     void Dispatch(const TContainer& globalValues, const TFilter& filter) {
         Dispatch(ALL_CLUSTERS, globalValues, filter);
     }
 
-    template <class TContainer>
+    template <NPrivate::ConfigFeatureList TContainer>
     void Dispatch(const TContainer& globalValues) {
         Dispatch(ALL_CLUSTERS, globalValues);
     }
@@ -426,12 +518,14 @@ public:
     static TErrorCallback GetDefaultErrorCallback();
     static TErrorCallback GetErrorCallback(TPositionHandle pos, TExprContext& ctx);
     void Enumerate(std::function<void(std::string_view)> callback);
+    void SerializeStaticSettings(const std::function<void(const TString&, const TString&)>& callback) const;
 
 protected:
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
     THashMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;
 
+    const TString ProviderName_;
     const TQContext QContext_;
 };
 

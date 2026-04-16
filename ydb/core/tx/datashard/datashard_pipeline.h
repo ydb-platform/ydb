@@ -12,6 +12,9 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_exec_seat.h>
 
+#include <ydb/core/util/intrusive_heap.h>
+#include <ydb/library/actors/async/async.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -115,7 +118,7 @@ public:
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
-    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx);
+    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, NACLib::TUserContext::TPtr userCtx);
     bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
@@ -165,6 +168,7 @@ public:
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }
     bool HasDropPersistentSnapshot() const { return SchemaTx && SchemaTx->IsDropPersistentSnapshot(); }
     bool HasInitiateBuilIndex() const { return SchemaTx && SchemaTx->IsInitiateBuildIndex(); }
+    bool HasPrepareIndexValidation() const { return SchemaTx && SchemaTx->IsPrepareIndexValidation(); }
     bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); }
     bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); }
     bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); }
@@ -267,20 +271,23 @@ public:
     TOperation::TPtr BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan);
+                                    const TActorContext &ctx, NWilson::TSpan &&operationSpan,
+                                    NACLib::TUserContext::TPtr userCtx);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     NWilson::TSpan &&operationSpan);
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
-                     const TActorContext &ctx);
+                     const TActorContext &ctx,
+                     NACLib::TUserContext::TPtr userCtx);
     ERestoreDataStatus RestoreDataTx(
             TActiveTransaction *tx,
             TTransactionContext &txc,
-            const TActorContext &ctx)
+            const TActorContext &ctx,
+            NACLib::TUserContext::TPtr userCtx)
     {
-        return tx->RestoreTxData(Self, txc, ctx);
+        return tx->RestoreTxData(Self, txc, ctx, userCtx);
     }
 
     ERestoreDataStatus RestoreWriteTx(
@@ -373,6 +380,18 @@ public:
     bool CancelWaitingReadIterator(const TReadIteratorId& readId);
     void RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
     bool HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
+
+    /**
+     * Returns the number of coroutines currently waiting for snapshots
+     */
+    size_t WaitingCoroutinesCount() const { return WaitingCoroutines.Size(); }
+
+    /**
+     * Waits until the specified snapshot is potentially readable
+     *
+     * Returns true on success and false when there are too many waiting requests already.
+     */
+    async<bool> WaitForSnapshot(const TRowVersion& snapshot);
 
     TRowVersion GetReadEdge() const;
     TRowVersion GetUnreadableEdge() const;
@@ -565,6 +584,42 @@ private:
 
     TMultiMap<TRowVersion, TWaitingReadIterator> WaitingDataReadIterators;
     THashMap<TReadIteratorId, TEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
+
+    class TWaitingCoroutine {
+    public:
+        struct THeapIndex {
+            size_t& operator()(TWaitingCoroutine& c) const {
+                return c.HeapIndex;
+            }
+        };
+
+        struct TCompare {
+            bool operator()(const TWaitingCoroutine& a, const TWaitingCoroutine& b) const {
+                return a.Snapshot < b.Snapshot;
+            }
+        };
+
+    public:
+        virtual void Resume() = 0;
+
+    protected:
+        TWaitingCoroutine(const TRowVersion& snapshot)
+            : Snapshot(snapshot)
+        {}
+
+        ~TWaitingCoroutine() = default;
+
+    public:
+        const TRowVersion Snapshot;
+
+    protected:
+        size_t HeapIndex = -1;
+    };
+
+    class TWaitForSnapshotAwaiter;
+
+    using TWaitingCoroutines = TIntrusiveHeap<TWaitingCoroutine, TWaitingCoroutine::THeapIndex, TWaitingCoroutine::TCompare>;
+    TWaitingCoroutines WaitingCoroutines;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);
     void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId);

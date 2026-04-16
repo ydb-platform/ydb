@@ -3,7 +3,6 @@
 LIBRARY()
 
 LICENSE(
-    BSD-3-Clause AND
     BSLA AND
     MIT AND
     libtiff
@@ -11,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(4.7.0)
+VERSION(4.7.1)
 
-ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.7.0)
+ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.7.1)
 
 PEERDIR(
     contrib/libs/libjpeg-turbo
@@ -36,7 +35,6 @@ NO_UTIL()
 
 CFLAGS(
     -DALLOW_TIFF_NON_EXT_ALLOC_FUNCTIONS
-    -DHAVE_JPEGTURBO_DUAL_MODE_8_12
     -DTIFF_DO_NOT_USE_NON_EXT_ALLOC_FUNCTIONS
 )
 

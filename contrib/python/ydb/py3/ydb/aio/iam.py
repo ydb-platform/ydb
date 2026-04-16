@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 try:
     import jwt
 except ImportError:
-    jwt = None
+    jwt = None  # type: ignore[assignment]
 
 try:
     from yandex.cloud.iam.v1 import iam_token_service_pb2_grpc
@@ -23,7 +23,7 @@ except ImportError:
 try:
     import aiohttp
 except ImportError:
-    aiohttp = None
+    aiohttp = None  # type: ignore
 
 
 class TokenServiceCredentials(AbstractExpiringTokenCredentials):

@@ -83,7 +83,7 @@ bool TSqlValues::BuildRows(const TRule_values_source_row_list& node, TVector<TVe
 }
 
 bool TSqlValues::BuildRow(const TRule_values_source_row& inRow, TVector<TNodePtr>& outRow) {
-    TSqlExpression sqlExpr(Ctx_, Mode_);
+    TSqlExpression sqlExpr(*this);
     return Unwrap(ExprList(sqlExpr, outRow, inRow.GetRule_expr_list2()));
 }
 
@@ -102,7 +102,7 @@ TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVect
             return BuildWriteValues(pos, operationName, columnsHint, rows);
         }
         case TRule_values_source::kAltValuesSource2: {
-            TSqlSelect select(Ctx_, Mode_);
+            TSqlSelect select(*this);
             TPosition selectPos;
             auto source = select.Build(node.GetAlt_values_source2().GetRule_select_stmt1(), selectPos);
             if (!source) {
@@ -111,7 +111,7 @@ TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVect
             return BuildWriteValues(pos, "UPDATE", columnsHint, std::move(source));
         }
         case NSQLv1Generated::TRule_values_source::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -130,7 +130,7 @@ TSourcePtr TSqlIntoValues::Build(const TRule_into_values_source& node, const TSt
             AltNotImplemented("into_values_source", node);
             return nullptr;
         case NSQLv1Generated::TRule_into_values_source::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -145,7 +145,7 @@ TSourcePtr TSqlAsValues::Build(const TRule_values_source& node, const TString& o
             return ValuesSource(node, {}, operationName);
         }
         case NSQLv1Generated::TRule_values_source::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 

@@ -1,6 +1,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/backup/common/encryption.h>
 
 #include <google/protobuf/text_format.h>
 #include <util/folder/path.h>
@@ -61,7 +62,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         // Check that export was created
         auto response = TestGetExport(runtime, txId, "/MyRoot");
         UNIT_ASSERT(response.GetResponse().GetEntry().HasExportToFsSettings());
-        
+
         const auto& settings = response.GetResponse().GetEntry().GetExportToFsSettings();
         UNIT_ASSERT_VALUES_EQUAL(settings.base_path(), "/mnt/exports");
         UNIT_ASSERT_VALUES_EQUAL(settings.items_size(), 1);
@@ -96,7 +97,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
         auto response = TestGetExport(runtime, txId, "/MyRoot");
         UNIT_ASSERT(response.GetResponse().GetEntry().HasExportToFsSettings());
-        
+
         const auto& settings = response.GetResponse().GetEntry().GetExportToFsSettings();
         UNIT_ASSERT_VALUES_EQUAL(settings.compression(), "zstd-3");
     }
@@ -192,7 +193,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
         auto response = TestGetExport(runtime, txId, "/MyRoot");
         UNIT_ASSERT(response.GetResponse().GetEntry().HasExportToFsSettings());
-        
+
         const auto& settings = response.GetResponse().GetEntry().GetExportToFsSettings();
         UNIT_ASSERT_VALUES_EQUAL(settings.items_size(), 2);
     }
@@ -253,7 +254,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_C(!schemeContent.empty(), "Scheme file is empty");
 
         Ydb::Table::CreateTableRequest schemeProto;
-        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto), 
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto),
                      "Failed to parse scheme.pb");
         UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(0).name(), "key");
@@ -265,7 +266,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
         TString dataContent = ReadFileContent(dataPath);
         UNIT_ASSERT_C(!dataContent.empty(), "Data file is empty");
-        UNIT_ASSERT_C(dataContent.Contains("row1") || dataContent.Contains("row2") || dataContent.Contains("row3"), 
+        UNIT_ASSERT_C(dataContent.Contains("row1") || dataContent.Contains("row2") || dataContent.Contains("row3"),
                      "Data file doesn't contain expected rows");
     }
 
@@ -331,14 +332,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
         TString scheme1Content = ReadFileContent(MakeExportPath(basePath, "backup/Table1", "scheme.pb"));
         Ydb::Table::CreateTableRequest schemeProto1;
-        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(scheme1Content, &schemeProto1), 
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(scheme1Content, &schemeProto1),
                      "Failed to parse scheme.pb");
         UNIT_ASSERT_VALUES_EQUAL(schemeProto1.columns_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(schemeProto1.columns(0).name(), "key");
 
         TString scheme2Content = ReadFileContent(MakeExportPath(basePath, "backup/Table2", "scheme.pb"));
         Ydb::Table::CreateTableRequest schemeProto2;
-        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(scheme2Content, &schemeProto2), 
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(scheme2Content, &schemeProto2),
                      "Failed to parse scheme.pb");
         UNIT_ASSERT_VALUES_EQUAL(schemeProto2.columns_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(schemeProto2.columns(0).name(), "id");
@@ -391,5 +392,327 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
                      "Scheme file not found");
         UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table", "metadata.json")),
                      "Metadata file not found");
+    }
+
+    Y_UNIT_TEST(SchemaMapping) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              source_path: "/MyRoot"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_path: "table2_prefix"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+
+        TFsPath baseDir(basePath);
+        UNIT_ASSERT(FileExists((baseDir / "metadata.json").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "SchemaMapping" / "metadata.json").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "SchemaMapping" / "mapping.json").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "Table1" / "scheme.pb").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "table2_prefix" / "scheme.pb").GetPath()));
+
+        TString metadataContent = ReadFileContent((baseDir / "metadata.json").GetPath());
+        UNIT_ASSERT_STRINGS_EQUAL(metadataContent, "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
+    }
+
+    Y_UNIT_TEST(SchemaMappingEncryption) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_path: "table2_prefix"
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                  key: "0123456789012345"
+                }
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+
+        TFsPath baseDir(basePath);
+        UNIT_ASSERT(FileExists((baseDir / "metadata.json").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "SchemaMapping" / "metadata.json.enc").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "SchemaMapping" / "mapping.json.enc").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "001" / "scheme.pb.enc").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "table2_prefix" / "scheme.pb.enc").GetPath()));
+    }
+
+    Y_UNIT_TEST(SchemaMappingEncryptionIncorrectKey) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              source_path: "/MyRoot"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "123"
+                }
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr, "", "", Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+    }
+
+    Y_UNIT_TEST(EncryptedExport) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (ui32 i = 1; i <= 10; ++i) {
+            WriteRow(runtime, ++txId, "/MyRoot/Table1", 0, i, Sprintf("value1_%u", i));
+            WriteRow(runtime, ++txId, "/MyRoot/Table1", 1, i + 100, Sprintf("value1_%u", i + 100));
+        }
+        for (ui32 i = 1; i <= 10; ++i) {
+            WriteRow(runtime, ++txId, "/MyRoot/Table2", 0, i, Sprintf("value2_%u", i));
+            WriteRow(runtime, ++txId, "/MyRoot/Table2", 1, i + 100, Sprintf("value2_%u", i + 100));
+        }
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                  key: "0123456789012345"
+                }
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+
+        TFsPath baseDir(basePath);
+        TVector<TFsPath> expectedFiles = {
+            baseDir / "metadata.json",
+            baseDir / "SchemaMapping" / "metadata.json.enc",
+            baseDir / "SchemaMapping" / "mapping.json.enc",
+            baseDir / "001" / "scheme.pb.enc",
+            baseDir / "001" / "data_00.csv.enc",
+            baseDir / "001" / "data_01.csv.enc",
+            baseDir / "002" / "scheme.pb.enc",
+            baseDir / "002" / "data_00.csv.enc",
+            baseDir / "002" / "data_01.csv.enc",
+        };
+
+        for (const auto& file : expectedFiles) {
+            UNIT_ASSERT_C(FileExists(file.GetPath()), "File not found: " << file.GetPath());
+        }
+
+        TVector<TFsPath> allFiles;
+        std::function<void(const TFsPath&)> collectFiles = [&](const TFsPath& dir) {
+            TVector<TString> children;
+            dir.ListNames(children);
+            for (const auto& child : children) {
+                TFsPath childPath = dir / child;
+                if (childPath.IsDirectory()) {
+                    collectFiles(childPath);
+                } else if (childPath.IsFile()) {
+                    allFiles.push_back(childPath);
+                }
+            }
+        };
+        collectFiles(baseDir);
+
+        THashSet<TString> ivs;
+        for (const auto& file : allFiles) {
+            TString filePath = file.GetPath();
+            if (filePath.EndsWith("metadata.json") || filePath.EndsWith(".sha256")) {
+                continue;
+            }
+
+            UNIT_ASSERT_C(filePath.EndsWith(".enc"), filePath);
+
+            TString content = ReadFileContent(filePath);
+            UNIT_ASSERT_C(!content.empty(), "File is empty: " << filePath);
+
+            TBuffer decryptedData;
+            NBackup::TEncryptionIV iv;
+            UNIT_ASSERT_NO_EXCEPTION_C(
+                std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                    NBackup::TEncryptionKey("0123456789012345"),
+                    TBuffer(content.data(), content.size())
+                ), filePath);
+
+            UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, "Duplicate IV for: " << filePath);
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationForFs) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "backup/Table"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+
+        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table", "scheme.pb")));
+        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table/index/indexImplTable", "scheme.pb")));
     }
 }

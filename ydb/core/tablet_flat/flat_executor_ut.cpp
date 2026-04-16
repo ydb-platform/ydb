@@ -8882,6 +8882,79 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
         }
     }
 
+    Y_UNIT_TEST(TruncateGarbageCollection) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the first tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Init schema
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        Cerr << "...inserting initial rows" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+            OpWrite(1, "value1"),
+            OpWrite(2, "value2"))
+        });
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Sleep a little, tablet may collect some older compacted garbage
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        size_t doNotKeep = 0;
+        auto garbageCollectObserver = env->AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](auto& ev) {
+            auto* msg = ev->Get();
+            Cerr << "gc " << msg->ToString() << Endl;
+            if (msg->DoNotKeep) {
+                doNotKeep += msg->DoNotKeep->size();
+            }
+        });
+        auto putObserver = env->AddObserver<TEvBlobStorage::TEvPut>([&](auto& ev) {
+            auto* msg = ev->Get();
+            Cerr << "put " << msg->Id << Endl;
+        });
+
+        Cerr << "!!! truncate begin !!!" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+            OpTruncate())
+        });
+        Cerr << "!!! truncate end !!!" << Endl;
+
+        // Sleep a little, tablet is expected to collect truncated garbage
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(doNotKeep > 0, "Tablet did not collect any blobs");
+
+        // Verify tablet doesn't collect any important data and successfully restarts
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_SensitiveColumns) {

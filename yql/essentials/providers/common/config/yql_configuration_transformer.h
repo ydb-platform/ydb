@@ -9,13 +9,12 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/strbuf.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TProviderConfigurationTransformer: public TSyncTransformerBase {
 public:
     TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher, const TTypeAnnotationContext& types,
-                                      const TString& provider, const THashSet<TStringBuf>& configureCallables = {});
+                                      TString provider, const THashSet<TStringBuf>& configureCallables = {});
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     void Rewind() final {
@@ -41,5 +40,4 @@ THolder<IGraphTransformer> CreateProviderConfigurationTransformer(
     const TTypeAnnotationContext& types,
     const TString& provider);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

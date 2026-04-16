@@ -73,7 +73,8 @@ public:
                               TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                               TInstant receivedAt, ui64 tieBreakerIndex,
                               bool delayed,
-                              NWilson::TSpan &&datashardTransactionSpan);
+                              NWilson::TSpan &&datashardTransactionSpan,
+                              NACLib::TUserContext::TPtr userCtx);
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;
@@ -98,6 +99,7 @@ protected:
     bool Rescheduled = false;
     bool WaitComplete = false;
     NWilson::TSpan DatashardTransactionSpan;
+    NACLib::TUserContext::TPtr UserCtx;
 };
 
 class TDataShard::TTxWrite: public NTabletFlatExecutor::TTransactionBase<TDataShard> {

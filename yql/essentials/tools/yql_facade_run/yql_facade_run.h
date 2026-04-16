@@ -132,7 +132,7 @@ public:
     THolder<TGatewaysConfig> GatewaysConfig;
     THolder<TFileStorageConfig> FsConfig;
     THolder<NProto::TPgExtensions> PgExtConfig;
-    TMaybe<TString> GatewaysPatch;
+    THolder<TGatewaysConfig> GatewaysPatch;
 
     // No command line options for these settings. Should be configured in the inherited class
     bool NoDebug = false;
@@ -146,8 +146,10 @@ public:
     bool OptimizeLibs = true;
     bool CustomTests = false;
     bool EnableLineage = false;
+    bool FuzzUntypedLambda = false;
+    bool FuzzUniversal = false;
 
-    void Parse(int argc, const char* argv[]);
+    void Parse(int argc, const char** argv);
 
     void AddOptExtension(std::function<void(NLastGetopt::TOpts& opts)> optExtender) {
         OptExtenders_.push_back(std::move(optExtender));
@@ -189,7 +191,7 @@ public:
     explicit TFacadeRunner(TString name);
     ~TFacadeRunner();
 
-    int Main(int argc, const char* argv[]);
+    int Main(int argc, const char** argv);
 
     void AddFsDownloadFactory(std::function<NFS::IDownloaderPtr()> factory) {
         FsDownloadFactories_.push_back(std::move(factory));
@@ -232,7 +234,7 @@ public:
     }
 
 protected:
-    virtual int DoMain(int argc, const char* argv[]);
+    virtual int DoMain(int argc, const char** argv);
     virtual int DoRun(TProgramFactory& factory);
     virtual TProgram::TStatus DoRunProgram(TProgramPtr program);
 

@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 
 namespace NKikimr {
 namespace NDriverClient {
@@ -53,7 +54,7 @@ int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv) {
     actorSys.Start();
     actorSys.Register(CreateGopherMother(lineProfile, 1000, 2));
     Sleep(TDuration::Seconds(config.Duration));
-    actorSys.GetPoolStats(0, poolStats, stats, sharedStats);
+    GetActorSystemStats(actorSys).GetPoolStats(0, poolStats, stats, sharedStats);
     actorSys.Stop();
 
     ui64 sentEvents = 0;

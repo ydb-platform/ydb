@@ -1157,6 +1157,11 @@ protected:
             return node;
         }
 
+        auto outerLambdaArg = outerFlatmap.Lambda().Args().Arg(0).Raw();
+        if (outerLambdaArg->IsUsedInDependsOn()) {
+            return node;
+        }
+
         auto innerFlatmap = outerFlatmap.Input().Cast<TCoFlatMapBase>();
         if (!IsYtProviderInput(innerFlatmap.Input())) {
             return node;
@@ -1431,6 +1436,15 @@ protected:
         }
 
         input = input.Cast<TYtTableContent>().Input();
+        if (const auto& maybeRead = input.Maybe<TYtReadTable>()) {
+            for (const auto& section: maybeRead.Cast().Input()) {
+                for (const auto& path: section.Paths()) {
+                    if (TYtTableBaseInfo::GetMeta(path.Table())->HasRLS) {
+                        return node;
+                    }
+                }
+            }
+        }
 
         TYtDSource dataSource = GetDataSource(input, ctx);
         TString cluster = TString{dataSource.Cluster().Value()};

@@ -118,7 +118,7 @@ class TTimerGuard
     : public TNonCopyable
 {
 public:
-    explicit TTimerGuard(TTimer* timer);
+    explicit TTimerGuard(TTimer* timer, NThreading::TSpinLock* lock = nullptr);
 
     TTimerGuard(TTimerGuard&& other) noexcept;
     TTimerGuard& operator=(TTimerGuard&& other) noexcept;
@@ -127,6 +127,7 @@ public:
 
 private:
     TTimer* Timer_;
+    NThreading::TSpinLock* TimerLock_;
 
     void TryStopTimer() noexcept;
 };

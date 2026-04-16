@@ -1,59 +1,21 @@
 #pragma once
 
-#include <yt/cpp/mapreduce/interface/io.h>
-#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
-#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/interface/yql_yt_yson_block_iterator.h>
-
-#include <functional>
+#include "yql_yt_fmr_indexed_block_reader.h"
 
 namespace NYql::NFmr {
 
-
-class TSortedMergeReader final: public NYT::TRawTableReader {
+class TSortedMergeReader final: public TFmrIndexedBlockReader {
 public:
-    TSortedMergeReader(
-        TVector<IBlockIterator::TPtr> inputs,
-        TVector<ESortOrder> sortOrders
-    );
-
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override;
-    void ResetRetries() override;
-    bool HasRangeIndices() const override;
+    TSortedMergeReader(const std::vector<IBlockIterator::TPtr>& inputs);
 
 private:
-    size_t DoRead(void* buf, size_t len) override;
+    size_t DoRead(void* buf, size_t len) final;
 
 private:
-    struct TSourceState {
-        ui32 SourceId = 0;
-        std::reference_wrapper<const TVector<ESortOrder>> SortOrders;
-        IBlockIterator::TPtr It;
-        TIndexedBlock Block;
-        ui32 RowIndex = 0;
-        bool Eof = false;
-
-        void EnsureRow();
-        bool Valid() const;
-        const TRowIndexMarkup& Markup() const;
-        TStringBuf RowBytes() const;
-        void Next();
-
-        int CompareTo(const TSourceState& rhs) const;
-        bool operator<(const TSourceState& rhs) const;
-    };
-
-    int CompareSources(ui32 lhsSourceId, ui32 rhsSourceId) const;
-
-private:
-    const TVector<ESortOrder> SortOrders_;
-
-    TVector<TSourceState> Sources_;
-    TVector<ui32> Heap_;
-
+    std::vector<ui32> Heap_;
+    std::function<bool(ui32, ui32)> HeapComparator_;
     bool HasActive_ = false;
-    ui32 ActiveSource_ = 0;
-    size_t ActiveOffset_ = 0;
+    ui64 ActiveSource_ = 0;
 };
 
 } // namespace NYql::NFmr
-

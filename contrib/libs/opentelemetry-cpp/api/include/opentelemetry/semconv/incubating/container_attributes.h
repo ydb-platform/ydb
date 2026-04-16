@@ -73,7 +73,7 @@ static constexpr const char *kContainerId = "container.id";
   <p>
   Docker defines a sha256 of the image id; @code container.image.id @endcode corresponds to the
   @code Image @endcode field from the Docker container inspect <a
-  href="https://docs.docker.com/reference/api/engine/version/v1.43/#tag/Container/operation/ContainerInspect">API</a>
+  href="https://docs.docker.com/reference/api/engine/version/v1.52/#tag/Container/operation/ContainerInspect">API</a>
   endpoint. K8s defines a link to the container registry repository with digest @code "imageID":
   "registry.azurecr.io
   /namespace/service/dockerfile@sha256:bdeabd40c3a8a492eaf9e8e44d0ebbb84bac7ee25ac0cf8a7159d25f62555625"
@@ -92,7 +92,7 @@ static constexpr const char *kContainerImageName = "container.image.name";
   Repo digests of the container image as provided by the container runtime.
   <p>
   <a
-  href="https://docs.docker.com/reference/api/engine/version/v1.43/#tag/Image/operation/ImageInspect">Docker</a>
+  href="https://docs.docker.com/reference/api/engine/version/v1.52/#tag/Image/operation/ImageInspect">Docker</a>
   and <a
   href="https://github.com/kubernetes/cri-api/blob/c75ef5b473bbe2d0a4fc92f82235efd665ea8e9f/pkg/apis/runtime/v1/api.proto#L1237-L1238">CRI</a>
   report those under the @code RepoDigests @endcode field.
@@ -101,7 +101,7 @@ static constexpr const char *kContainerImageRepoDigests = "container.image.repo_
 
 /**
   Container image tags. An example can be found in <a
-  href="https://docs.docker.com/reference/api/engine/version/v1.43/#tag/Image/operation/ImageInspect">Docker
+  href="https://docs.docker.com/reference/api/engine/version/v1.52/#tag/Image/operation/ImageInspect">Docker
   Image Inspect</a>. Should be only the @code <tag> @endcode section of the full name for example
   from @code registry.example.com/my-org/my-image:<tag> @endcode.
  */

@@ -50,9 +50,9 @@ private:
 
     TMutex Mutex;
     THashMap<TString, NPq::NConfigurationManager::IClient::TPtr> ClusterCmClients; // Cluster -> CM Client.
-    THashMap<TString, NYdb::NDataStreams::V1::TDataStreamsClient> ClusterDsClients; // Cluster -> DS Client
-    THashMap<TString, NYdb::NTopic::TTopicClient> ClusterYdbPqClients; // Cluster -> Topic Client.
-    THashMap<TString, NYdb::NFederatedTopic::TFederatedTopicClient> ClusterYdbFederatedPqClients; // Cluster -> Topic Client.
+    THashMap<std::pair<TString, TString>, NYdb::NDataStreams::V1::TDataStreamsClient> ClusterDbDsClients; // Cluster, Database -> DS Client
+    THashMap<std::pair<TString, TString>, NYdb::NTopic::TTopicClient> ClusterDbYdbPqClients; // Cluster, Database -> Topic Client.
+    THashMap<std::pair<TString, TString>, NYdb::NFederatedTopic::TFederatedTopicClient> ClusterDbYdbFederatedPqClients; // Cluster, Database -> Topic Client.
 };
 
 } // namespace NYql

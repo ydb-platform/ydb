@@ -15,6 +15,12 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
 
+#include <memory>
+
+namespace NKikimr::NKqp {
+    struct IWmSessionUpdater;
+}
+
 namespace NKikimr::NKqp::NPrivateEvents {
 
 struct TEvQueryRequestRemote: public TEventPB<TEvQueryRequestRemote, NKikimrKqp::TEvQueryRequest,
@@ -89,6 +95,8 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
+    TEvQueryRequest(NACLib::TUserContext::TPtr userCtx);
+
     bool IsSerializable() const override {
         return true;
     }
@@ -98,6 +106,8 @@ public:
     const TString& GetDatabase() const {
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
+
+    NACLib::TUserContext::TPtr GetUserCtx();
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
         return RequestCtx;
@@ -291,6 +301,11 @@ public:
         return RequestCtx ? RequestCtx->IsInternalCall() : Record.GetRequest().GetIsInternalCall();
     }
 
+    bool GetIsWarmupCompilation() const {
+        // RequestCtx is set only if request came from grpc, warmup is internal operation
+        return RequestCtx ? false : Record.GetRequest().GetIsWarmupCompilation();
+    }
+
     ui64 GetParametersSize() const {
         if (ParametersSize > 0) {
             return ParametersSize;
@@ -333,6 +348,14 @@ public:
 
     TIntrusivePtr<TUserRequestContext> GetUserRequestContext() const {
         return UserRequestContext;
+    }
+
+    void SetWmSessionUpdater(const std::shared_ptr<IWmSessionUpdater>& wmSessionUpdater) {
+        WmSessionUpdater = wmSessionUpdater;
+    }
+
+    std::shared_ptr<IWmSessionUpdater> GetWmSessionUpdater() const {
+        return WmSessionUpdater;
     }
 
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
@@ -450,6 +473,7 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
+    NACLib::TUserContext::TPtr UserCtx;
     TString YqlText;
     TString QueryId;
     TString PoolId;
@@ -471,6 +495,7 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;
     bool DisableDefaultTimeout = false;
+    std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

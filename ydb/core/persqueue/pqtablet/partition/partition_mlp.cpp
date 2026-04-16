@@ -24,8 +24,18 @@ void TPartition::HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& e
     MLPPendingEvents.emplace_back(ev);
 }
 
+void TPartition::HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
+    LOG_D("HandleOnInit TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
+    MLPPendingEvents.emplace_back(ev);
+}
+
 void TPartition::HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     LOG_D("HandleOnInit TEvPQ::TEvGetMLPConsumerStateRequest " << ev->Get()->Consumer << ":" << ev->Get()->PartitionId);
+    MLPPendingEvents.emplace_back(ev);
+}
+
+void TPartition::HandleOnInit(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
+    LOG_D("HandleOnInit TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId " << ev->Get()->Record.GetConsumer() << ":" << ev->Get()->GetPartitionId());
     MLPPendingEvents.emplace_back(ev);
 }
 
@@ -33,7 +43,8 @@ template<typename TEventHandle>
 void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev) {
     auto it = MLPConsumers.find(consumer);
     if (it == MLPConsumers.end()) {
-        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Consumer not found"), 0, ev->Cookie);
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Partition.OriginalPartitionId, Ydb::StatusIds::SCHEME_ERROR,
+            TStringBuilder() << "Consumer '" << consumer << "' does not exist"), 0, ev->Cookie);
         return;
     }
 
@@ -61,9 +72,19 @@ void TPartition::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
+void TPartition::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
+}
+
 void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvGetMLPConsumerStateRequest " << ev->Get()->Consumer << ":" << ev->Get()->PartitionId);
     ForwardToMLPConsumer(ev->Get()->Consumer, ev);
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
+    LOG_D("Handle TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId " << ev->Get()->Record.GetConsumer() << ":" << ev->Get()->GetPartitionId());
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
@@ -79,6 +100,27 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
 
     auto& consumerInfo = it->second;
     consumerInfo.Metrics = std::move(metrics);
+    consumerInfo.UseForReading = ev->Get()->UseForReading;
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
+
+    auto it = MLPConsumers.find(record.GetConsumer());
+    if (it == MLPConsumers.end()) {
+        return;
+    }
+
+    auto& consumerInfo = it->second;
+    consumerInfo.UseForReading = record.GetUseForReading();
+    consumerInfo.LockedMessageCount = record.GetLockedMessageCount();
+    consumerInfo.DelayedMessageCount = record.GetDelayedMessageCount();
+    consumerInfo.MessageCount = record.GetMessageCount();
+
+    record.SetGeneration(TabletGeneration);
+    record.SetCookie(++PQRBCookie);
+    Forward(ev, TabletActorId);
 }
 
 void TPartition::ProcessMLPPendingEvents() {
@@ -151,6 +193,7 @@ void TPartition::InitializeMLPConsumers() {
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
+            TabletGeneration,
             Config,
             consumer,
             retentionPeriod(consumer),

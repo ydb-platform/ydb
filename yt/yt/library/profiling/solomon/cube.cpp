@@ -255,7 +255,7 @@ int TCube<T>::ReadSensors(
     auto writeLabelsInternal = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
         consumer->OnLabel(nameLabel.first, nameLabel.second);
 
-        if (options.Global) {
+        if (options.Global && !options.ExportGlobalsAsMemOnly) {
             consumer->OnLabel(globalHostLabel.first, globalHostLabel.second);
         } else if (options.Host) {
             consumer->OnLabel(hostLabel.first, hostLabel.second);
@@ -263,12 +263,12 @@ int TCube<T>::ReadSensors(
 
         TCompactVector<bool, 8> replacedInstanceTags(options.InstanceTags.size());
 
-        if (options.MarkAggregates && !options.Global) {
+        if (options.MarkAggregates) {
             if (options.EnableSolomonAggregates) {
                 auto ytAggrLabel = GetOrCrash(ytAggrLabelBySummaryPolicy, summaryPolicy);
                 consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
-            } else if (summaryPolicy == ESummaryPolicy::Sum) {
-                // By default support only sum aggregate.
+            } else if (summaryPolicy == ESummaryPolicy::Sum && !options.Global) {
+                // By default support only sum aggregate except global sensors.
                 consumer->OnLabel(ytAggrLegacyLabel.first, ytAggrLegacyLabel.second);
             }
         }
@@ -374,7 +374,7 @@ int TCube<T>::ReadSensors(
         };
 
         auto writeFlags = [&] {
-            consumer->OnMemOnly(options.MemOnly);
+            consumer->OnMemOnly(options.MemOnly || (options.Global && options.ExportGlobalsAsMemOnly));
         };
 
         auto writeSummary = [&, tagIds = tagIds] (auto makeSummary) {
@@ -701,13 +701,35 @@ int TCube<T>::ReadSensorValues(
     TFluentAny fluent) const
 {
     int valuesRead = 0;
+
+    auto readHistogramValue = [&valuesRead] (TFluentAny fluent, const auto& value) {
+        std::vector<std::pair<double, i64>> hist;
+        size_t n = value.Bounds.size();
+        hist.reserve(n + 1);
+        for (size_t i = 0; i != n; ++i) {
+            auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
+            hist.emplace_back(value.Bounds[i], bucketValue);
+        }
+        hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);
+
+        fluent.DoListFor(hist, [] (TFluentList fluent, const auto& bar) {
+            fluent
+                .Item().BeginMap()
+                    .Item("bound").Value(bar.first)
+                    .Item("count").Value(bar.second)
+                .EndMap();
+        });
+        ++valuesRead;
+    };
+
     auto doReadValueForProjection = [&] (TFluentAny fluent, const TProjection& projection, const T& value) {
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
             // NB(eshcherbin): Not much sense in returning rate here.
+            auto rollup = Rollup(projection, index);
             if constexpr (std::is_same_v<T, i64>) {
-                fluent.Value(Rollup(projection, index));
+                fluent.Value(rollup);
             } else {
-                fluent.Value(Rollup(projection, index).SecondsFloat());
+                fluent.Value(rollup.SecondsFloat());
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, double>) {
@@ -761,24 +783,11 @@ int TCube<T>::ReadSensorValues(
                     .EndMap();
             }
             ++valuesRead;
-        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TGaugeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
-            std::vector<std::pair<double, i64>> hist;
-            size_t n = value.Bounds.size();
-            hist.reserve(n + 1);
-            for (size_t i = 0; i != n; ++i) {
-                auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
-                hist.emplace_back(value.Bounds[i], bucketValue);
-            }
-            hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);
-
-            fluent.DoListFor(hist, [] (TFluentList fluent, const auto& bar) {
-                fluent
-                    .Item().BeginMap()
-                        .Item("bound").Value(bar.first)
-                        .Item("count").Value(bar.second)
-                    .EndMap();
-            });
-            ++valuesRead;
+        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
+            // NB(eshcherbin): Not much sense in returning rate here.
+            readHistogramValue(fluent, Rollup(projection, index));
+        } else if (std::is_same_v<T, TGaugeHistogramSnapshot>) {
+            readHistogramValue(fluent, value);
         } else {
             THROW_ERROR_EXCEPTION("Unexpected cube type");
         }

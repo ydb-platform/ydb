@@ -1470,9 +1470,13 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     NACLib::TDiffACL diffACL;
+    diffACL.ClearAccess();
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;
+        }
+        if (action.has_change_owner()) {
+            out.MutableModifyACL()->SetNewOwner(action.change_owner());
         }
     }
     out.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());

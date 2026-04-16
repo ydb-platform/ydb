@@ -2,9 +2,10 @@ UNITTEST_FOR(ydb/core/sys_view)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -30,6 +31,7 @@ SRCS(
     ut_counters.cpp
     ut_labeled.cpp
     ut_registry.cpp
+    ut_show_create.cpp
 )
 
 END()

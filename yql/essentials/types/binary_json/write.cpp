@@ -1,11 +1,6 @@
 #include "write.h"
 
-#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
+#include <contrib/libs/simdjson/include/simdjson.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/generic/algorithm.h>
@@ -654,77 +649,6 @@ template <typename TOnDemandValue>
 
     return simdjson::SUCCESS;
 
-#undef RETURN_IF_NOT_SUCCESS
-}
-
-// unused, left for performance comparison
-[[nodiscard]] [[maybe_unused]] simdjson::error_code SimdJsonToJsonIndexImpl(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
-#define RETURN_IF_NOT_SUCCESS(status)              \
-    if (Y_UNLIKELY(status != simdjson::SUCCESS)) { \
-        return status;                             \
-    }
-
-    switch (value.type()) {
-        case simdjson::dom::element_type::STRING: {
-            std::string_view v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnString(v);
-            break;
-        }
-        case simdjson::dom::element_type::BOOL: {
-            bool v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnBoolean(v);
-            break;
-        }
-        case simdjson::dom::element_type::INT64: {
-            int64_t v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnInteger(v);
-            break;
-        }
-        case simdjson::dom::element_type::UINT64: {
-            uint64_t v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnUInteger(v);
-            break;
-        }
-        case simdjson::dom::element_type::DOUBLE: {
-            double v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnDouble(v);
-            break;
-        }
-        case simdjson::dom::element_type::NULL_VALUE:
-            callbacks.OnNull();
-            break;
-        case simdjson::dom::element_type::ARRAY: {
-            callbacks.OnOpenArray();
-
-            simdjson::dom::array v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (const auto& item : v) {
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item, callbacks));
-            }
-
-            callbacks.OnCloseArray();
-            break;
-        }
-        case simdjson::dom::element_type::OBJECT: {
-            callbacks.OnOpenMap();
-
-            simdjson::dom::object v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (const auto& item : v) {
-                callbacks.OnMapKey(item.key);
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item.value, callbacks));
-            }
-
-            callbacks.OnCloseMap();
-            break;
-        }
-    }
-    return simdjson::SUCCESS;
 #undef RETURN_IF_NOT_SUCCESS
 }
 

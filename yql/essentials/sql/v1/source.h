@@ -7,7 +7,7 @@ namespace NSQLTranslationV1 {
 using TColumnsSets = NSorted::TSimpleSet<NSorted::TSimpleSet<TString>>;
 
 class ISource;
-typedef TIntrusivePtr<ISource> TSourcePtr;
+using TSourcePtr = TIntrusivePtr<ISource>;
 
 struct TTableRef {
     TString RefName;
@@ -18,14 +18,14 @@ struct TTableRef {
     TSourcePtr Source;
 
     TTableRef() = default;
-    TTableRef(const TString& refName, const TString& service, const TDeferredAtom& cluster, TNodePtr keys);
+    TTableRef(TString refName, const TString& service, TDeferredAtom cluster, TNodePtr keys);
     TTableRef(const TTableRef&) = default;
     TTableRef& operator=(const TTableRef&) = default;
 
     TString ShortName() const;
 };
 
-typedef TVector<TTableRef> TTableList;
+using TTableList = TVector<TTableRef>;
 
 class IJoin;
 class ISource: public INode {
@@ -255,7 +255,12 @@ TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref);
 bool IsYqlSubqueryRef(const TNodePtr& source);
 
 TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
+TNodePtr BuildSourceNode(
+    TPosition pos,
+    TSourcePtr source,
+    bool checkExist = false,
+    bool isInlineScalar = false,
+    bool isPure = false);
 TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
 TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false, bool inSubquery = false);
 TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false, bool wrapByTableSource = false);

@@ -57,12 +57,14 @@ public:
     TKqpBuildTxTransformer()
         : QueryType(EKikimrQueryType::Unspecified)
         , IsPrecompute(false)
+        , MergeOutputAndEffect(false)
     {
     }
 
-    void Init(EKikimrQueryType queryType, bool isPrecompute) {
+    void Init(EKikimrQueryType queryType, bool isPrecompute, bool mergeOutputAndEffect) {
         QueryType = queryType;
         IsPrecompute = isPrecompute;
+        MergeOutputAndEffect = mergeOutputAndEffect;
     }
 
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
@@ -72,6 +74,10 @@ public:
         }
 
         YQL_ENSURE(inputExpr->IsList() && inputExpr->ChildrenSize() > 0);
+
+        if (MergeOutputAndEffect) {
+            return DoBuildTxImpl(inputExpr, outputExpr, ctx);
+        }
 
         if (TKqlQueryResult::Match(inputExpr->Child(0))) {
             YQL_CLOG(DEBUG, ProviderKqp) << ">>> TKqpBuildTxTransformer[" << QueryType << "/"
@@ -112,6 +118,44 @@ private:
         }
 
         return EPhysicalTxType::Data;
+    }
+
+    TStatus DoBuildTxImpl(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) {
+        auto stages = CollectStages(inputExpr, ctx);
+        Y_DEBUG_ABORT_UNLESS(!stages.empty());
+
+        TKqlQuery query(inputExpr);
+        TMaybeNode<TExprList> txResults;
+        if (!query.Results().Empty()) {
+            txResults = BuildTxResults(query.Results().Ptr(), stages, ctx);
+            if (!txResults) {
+                return TStatus::Error;
+            }
+        } else {
+            txResults = Build<TExprList>(ctx, inputExpr->Pos()).Done();
+        }
+
+        TKqpPhyTxSettings txSettings;
+        txSettings.Type = GetPhyTxType(query.Effects().Empty() && AreAllStagesKqpPure(stages));
+        txSettings.WithEffects = !query.Effects().Empty();
+
+        auto tx = Build<TKqpPhysicalTx>(ctx, inputExpr->Pos())
+            .Stages()
+                .Add(stages)
+                .Build()
+            .Results(txResults.Cast())
+            .ParamBindings()
+                .Build()
+            .Settings(txSettings.BuildNode(ctx, inputExpr->Pos()))
+            .Done();
+
+        auto newTx = ExtractParamsFromTx(tx, ctx);
+        if (!newTx) {
+            return TStatus::Error;
+        }
+
+        outputExpr = newTx.Cast().Ptr();
+        return TStatus(TStatus::Repeat, true);
     }
 
     TStatus DoBuildTxResults(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) {
@@ -468,6 +512,7 @@ private:
 private:
     EKikimrQueryType QueryType;
     bool IsPrecompute;
+    bool MergeOutputAndEffect;
 };
 
 TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
@@ -587,14 +632,7 @@ public:
             return *status;
         }
 
-        if (!query.Results().Empty()) {
-            auto tx = BuildTx(query.Results().Ptr(), ctx, false);
-            if (!tx) {
-                return TStatus::Error;
-            }
-
-            BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
-
+        auto updateResultBinding = [this, &ctx](const TKqlQuery& query) {
             for (ui32 i = 0; i < query.Results().Size(); ++i) {
                 const auto& result = query.Results().Item(i);
                 auto binding = Build<TKqpTxResultBinding>(ctx, query.Pos())
@@ -607,6 +645,57 @@ public:
 
                 BuildCtx->QueryResults.emplace_back(std::move(binding));
             }
+        };
+
+        if (KqpCtx->Config->GetEnableIndexStreamWrite()) {
+            auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
+
+            if (!query.Results().Empty()) {
+                auto resultsQuery = Build<TKqlQuery>(ctx, query.Pos())
+                    .Results(query.Results())
+                    .Effects()
+                        .Build()
+                    .Done();
+
+                auto tx = BuildTx(resultsQuery.Ptr(), ctx, false);
+                if (!tx) {
+                    return TStatus::Error;
+                }
+
+                BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+
+                updateResultBinding(resultsQuery);
+            }
+
+            for (auto& effects : *collectedEffects) {
+                auto effectsQuery = Build<TKqlQuery>(ctx, query.Pos())
+                    .Results()
+                        .Build()
+                    .Effects(effects)
+                    .Done();
+
+                auto tx = BuildTx(effectsQuery.Ptr(), ctx, /* isPrecompute */ false);
+                if (!tx) {
+                    return TStatus::Error;
+                }
+
+                BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+
+                updateResultBinding(effectsQuery);
+            }
+            
+            return TStatus::Ok;
+        }
+
+        if (!query.Results().Empty()) {
+            auto tx = BuildTx(query.Results().Ptr(), ctx, false);
+            if (!tx) {
+                return TStatus::Error;
+            }
+
+            BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+
+            updateResultBinding(query);
         }
 
         if (!query.Effects().Empty()) {
@@ -637,7 +726,7 @@ public:
     }
 
 private:
-    static TDqSink GetStageSink(const TKqpSinkEffect& effect) {
+    static TMaybeNode<TDqSink> GetStageSink(const TKqpSinkEffect& effect) {
         // (KqpSinkEffect (DqStage (... ((DqSink '0 (DataSink '"kikimr") ...)))) '0)
         const auto maybeStage = effect.Stage().Maybe<TDqStageBase>();
         YQL_ENSURE(maybeStage);
@@ -647,8 +736,7 @@ private:
         const size_t sinkIndex = FromString(effect.SinkIndex().Value());
         YQL_ENSURE(sinkIndex < outputs.Size());
         const auto maybeSink = outputs.Item(sinkIndex).Maybe<TDqSink>();
-        YQL_ENSURE(maybeSink);
-        return maybeSink.Cast();
+        return maybeSink;
     }
 
     std::optional<TVector<TExprList>> CollectEffects(const TExprList& list, TExprContext& ctx, TKqpOptimizeContext& kqpCtx) {
@@ -657,8 +745,15 @@ private:
 
         for (const auto& expr : list) {
             if (auto sinkEffect = expr.Maybe<TKqpSinkEffect>()) {
-                const auto sinkSettings = GetStageSink(sinkEffect.Cast()).Settings().Maybe<TKqpTableSinkSettings>();
+                const auto dqSink = GetStageSink(sinkEffect.Cast());
+                if (!dqSink) {
+                    // TODO: process output transfroms
+                    continue;
+                }
+                
+                const auto sinkSettings = dqSink.Cast().Settings().Maybe<TKqpTableSinkSettings>();
                 if (!sinkSettings) {
+                    /// ???
                     externalEffects.emplace_back(sinkEffect.Cast());
                 } else {
                     // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
@@ -807,7 +902,12 @@ private:
     bool HasTableEffects(const TExprList& effectsList) const {
         for (const TExprBase& effect : effectsList) {
             if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
-                auto dataSink = TCoDataSink(GetStageSink(maybeSinkEffect.Cast()).DataSink().Ptr());
+                const auto dqSink = GetStageSink(maybeSinkEffect.Cast());
+                if (!dqSink) {
+                    // TODO: process output transforms
+                    continue;
+                }
+                auto dataSink = TCoDataSink(dqSink.Cast().DataSink().Ptr());
                 if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
                     return true;
                 }
@@ -958,11 +1058,19 @@ private:
         }
         Y_DEBUG_ABORT_UNLESS(phaseResults.size() == computedInputs.size());
 
-        auto phaseResultsNode = Build<TKqlQueryResultList>(ctx, query.Pos())
-            .Add(phaseResults)
-            .Done();
+        auto phaseQueryNode = KqpCtx->Config->GetEnableIndexStreamWrite()
+            ? Build<TKqlQuery>(ctx, query.Pos())
+                .Results()
+                    .Add(phaseResults)
+                    .Build()
+                .Effects()
+                    .Build()
+                .Done().Ptr()
+            : Build<TKqlQueryResultList>(ctx, query.Pos())
+                .Add(phaseResults)
+                .Done().Ptr();
 
-        auto tx = BuildTx(phaseResultsNode.Ptr(), ctx, /* isPrecompute */ true);
+        auto tx = BuildTx(phaseQueryNode, ctx, /* isPrecompute */ true);
 
         if (!tx.IsValid()) {
             return TStatus::Error;
@@ -995,7 +1103,10 @@ private:
         auto& transformer = *DataTxTransformer;
 
         transformer.Rewind();
-        BuildTxTransformer->Init(KqpCtx->QueryCtx->Type, isPrecompute);
+        BuildTxTransformer->Init(
+            KqpCtx->QueryCtx->Type,
+            isPrecompute,
+            KqpCtx->Config->GetEnableIndexStreamWrite());
         auto expr = result;
 
         while (true) {

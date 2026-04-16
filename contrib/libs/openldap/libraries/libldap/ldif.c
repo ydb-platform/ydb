@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -134,7 +134,15 @@ ldif_parse_line2(
 		*p = '\0';
 	}
 	*s++ = '\0';
-	type->bv_len = s - type->bv_val - 1;
+	type->bv_len = p - type->bv_val + 1;
+
+	if ( BER_BVISEMPTY( type ) ) {
+		/* no type is present, error out */
+		ber_pvt_log_printf( LDAP_DEBUG_PARSE, ldif_debug,
+			_("ldif_parse_line: empty type is invalid\n") );
+		if ( !freeval ) ber_memfree( line );
+		return( -1 );
+	}
 
 	url = 0;
 	b64 = 0;
@@ -149,9 +157,17 @@ ldif_parse_line2(
 		b64 = 1;
 	}
 
-	/* skip space between : and value */
-	while ( isspace( (unsigned char) *s ) ) {
-		s++;
+	/* if value is b64, skip any white-space characters between : and value,
+	   they are obviously not part of the value.
+	   Otherwise skip any spaces (0x20) */
+	if ( b64 || url ) {
+		while ( isspace( (unsigned char) *s ) ) {
+			s++;
+		}
+	} else {
+		while ( *s == ' ' ) {
+			s++;
+		}
 	}
 
 	/* check for continued line markers that should be deleted */
@@ -814,10 +830,12 @@ pop:
 					/* ITS#9811 Reached the end looking for an entry, try again */
 					goto pop;
 				}
-				stop = 1;
 				len = 0;
 			} else {
 				len = strlen( line );
+			}
+			if ( !len ) {
+				stop = 1;
 			}
 		}
 

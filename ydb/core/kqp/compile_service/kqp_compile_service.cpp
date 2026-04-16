@@ -12,7 +12,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/aclib/aclib.h>
-
+#include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -31,12 +31,14 @@ using namespace NYql;
 
 struct TKqpCompileSettings {
     TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, bool perStatementResult,
-        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE)
+        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE,
+        bool isWarmupCompilation = false)
         : KeepInCache(keepInCache)
         , IsQueryActionPrepare(isQueryActionPrepare)
         , PerStatementResult(perStatementResult)
         , Deadline(deadline)
         , Action(action)
+        , IsWarmupCompilation(isWarmupCompilation)
     {}
 
     bool KeepInCache;
@@ -44,6 +46,7 @@ struct TKqpCompileSettings {
     bool PerStatementResult;
     TInstant Deadline;
     ECompileActorAction Action;
+    bool IsWarmupCompilation = false;
 };
 
 struct TKqpCompileRequest {
@@ -145,7 +148,12 @@ public:
                 auto result = std::move(request);
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                     "Drop compilation request because session is not longer wait for response");
-                QueryIndex[result.Query].erase(curIt);
+                if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
+                    qIt->second.erase(curIt);
+                    if (qIt->second.empty()) {
+                        QueryIndex.erase(qIt);
+                    }
+                }
                 Queue.erase(curIt);
                 continue;
             }
@@ -154,7 +162,12 @@ public:
                 auto result = std::move(request);
 
                 Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
-                QueryIndex[result.Query].erase(curIt);
+                if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
+                    qIt->second.erase(curIt);
+                    if (qIt->second.empty()) {
+                        QueryIndex.erase(qIt);
+                    }
+                }
                 Queue.erase(curIt);
 
                 return result;
@@ -290,8 +303,23 @@ private:
             "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-        if (AppData()->TenantName != tenant or snapshot.empty()) {
+
+        // Check for tenant mismatch (serverless scenario)
+        if (AppData()->TenantName != tenant) {
+            response->Record.SetNodeId(SelfId().NodeId());
+            response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue("Compile cache is not available for this database"));
+            NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+
+            Send(ev->Sender, response.release());
+            return;
+        }
+
+        if (snapshot.empty()) {
             response->Record.SetFinished(true);
+            response->Record.SetNodeId(SelfId().NodeId());
             Send(ev->Sender, response.release());
             return;
         }
@@ -345,6 +373,7 @@ private:
         if (!finished) {
             record.SetContinuationToken(currentIt->CompileResult->Uid);
         }
+        record.SetNodeId(SelfId().NodeId());
         Send(ev->Sender, response.release());
     }
 
@@ -483,14 +512,15 @@ private:
                 ? ECompileActorAction::SPLIT
                 : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                     ? ECompileActorAction::PARSE
-                    : ECompileActorAction::COMPILE);
+                    : ECompileActorAction::COMPILE,
+            request.IsWarmupCompilation);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
             std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-            return CompileByAst(*request.QueryAst, compileRequest, ctx);
+            return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -573,7 +603,7 @@ private:
                 compileRequest.FindInCache = false;
 
             if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-                return CompileByAst(*request.QueryAst, compileRequest, ctx);
+                return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
             }
 
             auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -642,7 +672,7 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
+                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
@@ -711,7 +741,7 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
-    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution) {
+    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution, bool isWarmupCompilation) {
         if (QueryCache->FindByUid(compileResult->Uid, false)) {
             QueryCache->Replace(compileResult);
         } else if (keepInCache) {
@@ -724,7 +754,7 @@ private:
             if (QueryCache->Insert(compileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution)) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
-            if (compileResult->Query && isQueryActionPrepare) {
+            if (compileResult->Query && isQueryActionPrepare && !isWarmupCompilation) {
                 if (InsertPreparingQuery(ctx, compileResult, true, isPerStatementExecution)) {
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
@@ -732,7 +762,7 @@ private:
         }
     }
 
-    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest& compileRequest, const TActorContext& ctx) {
+    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
         YQL_ENSURE(queryAst.Ast->Root);
@@ -798,7 +828,7 @@ private:
         }
 
         compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
-        CompileByAst(astStatements.front(), compileRequest, ctx);
+        CompileByAst(astStatements.front(), std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1341,7 +1371,7 @@ TKqpQueryId TKqpQueryCache::GetQueryIdWithAst(const TKqpQueryId& query, const NY
             }
         }
     }
-    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
+    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
 }
 
 //

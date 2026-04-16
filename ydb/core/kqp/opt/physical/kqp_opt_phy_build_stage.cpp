@@ -88,7 +88,7 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
 
 bool IsLiteralNothing(TExprBase node) {
     if (node.Maybe<TCoNothing>()) {
-        auto* type = node.Raw()->GetTypeAnn();
+        auto type = node.Raw()->GetTypeAnn();
         switch (type->GetKind()) {
             case ETypeAnnotationKind::Optional: {
                 type = type->Cast<TOptionalExprType>()->GetItemType();
@@ -636,7 +636,7 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
 }
 
 NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx) {
-    auto* type = param.Raw()->GetTypeAnn();
+    auto type = param.Raw()->GetTypeAnn();
     YQL_ENSURE(type);
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
         param = Build<TCoUnwrap>(ctx, param.Pos())
@@ -757,7 +757,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    TTypeAnnotationContext& typeCtx, bool ruleEnabled)
+    TTypeAnnotationContext& /*typeCtx*/, bool ruleEnabled, const NKikimr::NKqp::TKqpStatsStore* kqpStats)
 {
     if (!ruleEnabled) {
         return node;
@@ -774,7 +774,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
     }
 
     auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
-    auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
+    auto inputStats = kqpStats ? kqpStats->GetStats(unionAll.Output().Raw()) : nullptr;
     if (!inputStats || !inputStats->SortColumns) {
         return node;
     }
@@ -902,9 +902,12 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     NYql::NNodes::TExprBase node,
     NYql::TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
-    bool ruleEnabled
+    bool ruleEnabled,
+    const NKikimr::NKqp::TKqpStatsStore* kqpStats
 )
 {
+    Y_UNUSED(typeCtx);
+
     if (!ruleEnabled) {
         return node;
     }
@@ -920,10 +923,10 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     }
 
     auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
-    auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
-    auto sortedByOrderingIdx = inputStats->SortingOrderings.GetInitOrderingIdx();
+    auto inputStats = kqpStats ? kqpStats->GetStats(unionAll.Output().Raw()) : nullptr;
+    auto sortedByOrderingIdx = inputStats ? inputStats->SortingOrderings.GetInitOrderingIdx() : -1;
 
-    if (!inputStats || !typeCtx.SortingsFSM || sortedByOrderingIdx == -1) {
+    if (!inputStats || !kqpStats->SortingsFSM || sortedByOrderingIdx == -1) {
         return node;
     }
 
@@ -988,7 +991,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
 
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
 
-    auto& fdStorage = typeCtx.SortingsFSM->FDStorage;
+    auto& fdStorage = kqpStats->SortingsFSM->FDStorage;
     Y_ENSURE(sortedByOrderingIdx >= 0);
     auto sortedBy = fdStorage.GetInterestingSortingByOrderingIdx(sortedByOrderingIdx);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1012,7 +1015,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
 
         TString columnDir;
         switch (dir) {
-            using enum TOrdering::TItem::EDirection;
+            using enum NKikimr::NKqp::TOrdering::TItem::EDirection;
             case EAscending: { columnDir = TTopSortSettings::AscendingSort; break; }
             case EDescending: { columnDir = TTopSortSettings::DescendingSort; break; }
             case ENone: { return node; }

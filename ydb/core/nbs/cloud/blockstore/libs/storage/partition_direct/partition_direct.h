@@ -2,19 +2,18 @@
 
 #include <ydb/library/actors/core/actor.h>
 
-#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
+namespace NKikimr {
+class TTabletStorageInfo;
+}   // namespace NKikimr
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-using namespace NYdb::NBS::NProto;
-
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::TActorId CreatePartitionTablet(
-    const NActors::TActorId& owner,
-    TStorageConfig storageConfig,
-    NKikimrBlockStore::TVolumeConfig volumeConfig
-);
+NActors::IActor* CreatePartitionTablet(
+    const NActors::TActorId& tablet,
+    NKikimr::TTabletStorageInfo* info);
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

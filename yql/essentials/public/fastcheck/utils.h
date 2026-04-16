@@ -4,14 +4,9 @@
 
 #include <yql/essentials/sql/settings/translation_settings.h>
 
-#include <library/cpp/json/json_reader.h>
+namespace NYql::NFastCheck {
 
-namespace NYql {
-namespace NFastCheck {
-
-TUdfFilter ParseUdfFilter(const NJson::TJsonValue& json);
-
+std::unique_ptr<IUdfMeta> LoadUdfMeta(TStringBuf json);
 void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings);
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

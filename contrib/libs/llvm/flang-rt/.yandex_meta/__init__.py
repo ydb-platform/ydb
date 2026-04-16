@@ -27,6 +27,10 @@ llvm_flang_rt = CMakeNinjaNixProject(
     copy_sources=[
         "flang/include/flang/Common/windows-include.h",
     ],
+    use_full_libnames=True,
+    install_targets=[
+        "libflang_rt.runtime",
+    ],
     disable_includes=[
         "stdfloat",
         "cuda/",

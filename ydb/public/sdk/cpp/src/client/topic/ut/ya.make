@@ -2,9 +2,9 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 REQUIREMENTS(ram:32 cpu:4)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -12,6 +12,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    ydb/library/persqueue
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 )
 
@@ -22,6 +23,7 @@ SRCS(
     describe_topic_ut.cpp
     local_partition_ut.cpp
     topic_to_table_ut.cpp
+    topic_tx_skip_conflict_ut.cpp
 )
 
 RESOURCE(

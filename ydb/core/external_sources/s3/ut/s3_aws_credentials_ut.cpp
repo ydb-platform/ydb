@@ -1,6 +1,6 @@
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -10,9 +10,11 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/hook/hook.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
+#include <util/string/escape.h>
 #include <util/system/env.h>
 
 #include <fmt/format.h>
@@ -66,6 +68,14 @@ void WaitBucket(std::shared_ptr<TKikimrRunner> kikimr, const TString& externalDa
         Sleep(TDuration::Seconds(1));
     }
     UNIT_FAIL("Bucket isn't ready");
+}
+
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    NKikimr::InitAwsAPI();
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    NKikimr::ShutdownAwsAPI();
 }
 
 Y_UNIT_TEST_SUITE(S3AwsCredentials) {

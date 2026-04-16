@@ -30,6 +30,7 @@ class StressFixture:
         self.database = "/Root"
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
         self.mon_endpoint = f"http://localhost:{self.cluster.nodes[1].mon_port}"
+        self.http_proxy_endpoint = f"http://localhost:{self.cluster.nodes[1].http_proxy_port}"
 
         self.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -39,4 +40,5 @@ class StressFixture:
         )
         self.driver.wait(timeout=60)
         yield
+        self.driver.stop()
         self.cluster.stop()

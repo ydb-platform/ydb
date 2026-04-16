@@ -79,6 +79,9 @@ void FillRateLimiterDescription(
                 if (metricFields.contains("source_id") && metricFields.at("source_id").has_string_value()) {
                     metric.SetSourceId(metricFields.at("source_id").string_value());
                 }
+                if (metricFields.contains("database") && metricFields.at("database").has_string_value()) {
+                    metric.SetDatabase(metricFields.at("database").string_value());
+                }
             }
         };
         if (inDescAcc.has_provisioned()) {
@@ -137,6 +140,7 @@ void FillRateLimiterDescription(
             metricFields["folder_id"].set_string_value(inDescMetric.GetFolderId());
             metricFields["resource_id"].set_string_value(inDescMetric.GetResourceId());
             metricFields["source_id"].set_string_value(inDescMetric.GetSourceId());
+            metricFields["database"].set_string_value(inDescMetric.GetDatabase());
         };
         if (inDescAcc.HasProvisioned()) {
             copyMetric(inDescAcc.GetProvisioned(), *acc.mutable_provisioned());

@@ -1,6 +1,7 @@
 #include "actor.h"
 #include "debug.h"
 #include "actorsystem.h"
+#include "cpu_manager.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
 
@@ -63,6 +64,10 @@ namespace NActors {
         TActorRunnableQueue* queue = TlsActorRunnableQueue;
         Y_ABORT_UNLESS(queue, "Trying to schedule actor runnable outside an event handler");
         queue->Queue_.PushBack(item);
+    }
+
+    void TActorRunnableQueue::Cancel(TActorRunnableItem* item) noexcept {
+        item->Unlink();
     }
 
     void TActorRunnableQueue::Execute() noexcept {

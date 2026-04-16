@@ -134,7 +134,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsSysViewDirectory();
+                .IsSystemDirectory();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -161,7 +161,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
-                    .PathsLimit()
                     .DirChildrenLimit()
                     .IsValidACL(acl);
             }
@@ -202,7 +201,7 @@ public:
         context.DbChanges.PersistTxState(OperationId);
 
         dstPath.MaterializeLeaf(owner, sysViewPathId);
-        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, EPathCategory::System);
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         result->SetPathId(sysViewPathId.LocalPathId);

@@ -1,25 +1,55 @@
 #include "load_actor_impl.h"
 
 #include <ydb/library/actors/interconnect/interconnect_stream.h>
+#include <util/network/address.h>
 
 namespace NKikimr::NTestShard {
 
     class TStateServerInterfaceActor : public TActor<TStateServerInterfaceActor> {
         struct TServerContext : TThrRefBase {
-            const TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+            TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             const TString Host;
             i32 Port;
             std::unordered_set<TActorId, THash<TActorId>> Subscribers;
 
             TServerContext(const TString& host, i32 port, const TActorIdentity& self)
-                : Socket(NInterconnect::TStreamSocket::Make(AF_INET6))
-                , Host(host)
+                : Host(host)
                 , Port(port)
             {
+                NInterconnect::TAddress addr;
+                try {
+                    TNetworkAddress netAddr(host, port);
+                    bool found = false;
+                    for (auto it = netAddr.Begin(); it != netAddr.End(); ++it) {
+                        if (it->ai_family == AF_INET6) {
+                            auto* sin6 = reinterpret_cast<sockaddr_in6*>(it->ai_addr);
+                            addr = NInterconnect::TAddress(sin6->sin6_addr, port);
+                            found = true;
+                            break;
+                        } else if (it->ai_family == AF_INET) {
+                            if (!found) {
+                                auto* sin = reinterpret_cast<sockaddr_in*>(it->ai_addr);
+                                addr = NInterconnect::TAddress(sin->sin_addr, port);
+                                found = true;
+                            }
+                        }
+                    }
+                } catch (const yexception& e) {
+                    STLOG(PRI_WARN, TEST_SHARD, TS36, "Hostname resolution failed for " << host << ": " << e.what() << ", falling back to raw address");
+                    addr = NInterconnect::TAddress(host, port);
+                }
+
+                int family = addr.GetFamily();
+                if (family == 0) {
+                    family = AF_INET6;
+                }
+
+                Socket = NInterconnect::TStreamSocket::Make(family);
+
                 Y_ABORT_UNLESS(*Socket != INVALID_SOCKET);
                 SetNonBlock(*Socket);
                 SetNoDelay(*Socket, true);
-                Socket->Connect(NInterconnect::TAddress(host, port));
+                Socket->Connect(addr);
                 self.Send(MakePollerActorId(), new TEvPollerRegister(Socket, self, self));
             }
 

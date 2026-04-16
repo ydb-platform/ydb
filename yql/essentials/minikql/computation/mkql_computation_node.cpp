@@ -23,8 +23,7 @@
 #include <util/stream/output.h>
 #include <util/memory/pool.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TComputationUpvalues::TComputationUpvalues(TComputationContext& ctx, IComputationNode* lambdaNode,
                                            const TComputationExternalNodePtrVector& argNodes) {
@@ -59,6 +58,8 @@ std::unique_ptr<IArrowKernelComputationNode> IComputationNode::PrepareArrowKerne
 }
 
 TDatumProvider MakeDatumProvider(const arrow::Datum& datum) {
+    // TODO(YQL-20095): Explore real problem to fix this.
+    // NOLINTNEXTLINE(bugprone-exception-escape)
     return [datum]() {
         return datum;
     };
@@ -88,7 +89,8 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
                                          const TComputationMutables& mutables,
                                          arrow::MemoryPool& arrowMemoryPool,
                                          TMaybe<NUdf::TSourcePosition>& notConsumedLinear)
-    : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+    : TComputationContextLLVM{.HolderFactory = holderFactory, .Stats = opts.Stats, .MutableValues = std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), .Builder = builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
     , ArrowMemoryPool(arrowMemoryPool)
@@ -191,5 +193,4 @@ std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(cons
     return std::make_unique<TSimpleSecureParamsProvider>(secureParams);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

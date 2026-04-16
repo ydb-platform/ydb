@@ -1,3 +1,18 @@
+* Added the `--no-producer-id-track` option to `ydb workload topic run write|full` to disable ProducerId tracking in transactions when using `--use-tx`.
+* Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
+
+## 2.30.0 ##
+
+* Added the `direct-read` option to the `ydb workload topic` command
+* Added the `ydb config completion` command to generate shell completion scripts for bash and zsh.
+* Added the `ydb export nfs` and `ydb import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
+* Added `--compact` option to `ydb workload tpcc import` command.
+* When a profile is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
+* Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Added support for the new compaction operation in the `ydb operation` subcommands.
+
+## 2.29.0 ##
+
 * Fixed Out Of Memory issue in the `ydb workload query run` command for queries with large result sets.
 * Improved the `ydb init` and `ydb config profile` commands with interactive menus.
 * Added download progress bar to the `ydb update` command.

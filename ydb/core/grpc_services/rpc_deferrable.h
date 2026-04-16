@@ -189,7 +189,7 @@ protected:
                 NYql::TIssues issues;
                 issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unexpected event received in TRpcOperationRequestActor::StateWork: "
-                        << ev->GetTypeRewrite()));
+                        << ev->GetTypeRewrite() << " event=" << ev->GetTypeName()));
                 return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, TActivationContext::AsActorContext());
             }
         }

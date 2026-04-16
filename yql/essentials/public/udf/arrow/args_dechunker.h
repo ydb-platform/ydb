@@ -6,8 +6,7 @@
 
 #include "util.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TArgsDechunker {
 public:
@@ -22,5 +21,4 @@ private:
     bool Finish_ = false;
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

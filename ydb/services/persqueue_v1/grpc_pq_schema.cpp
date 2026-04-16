@@ -1,8 +1,10 @@
 #include "grpc_pq_schema.h"
 
 #include "actors/schema_actors.h"
-#include "actors/commit_offset_actor.h"
-#include "actors/events.h"
+#include "actors/read_session_actor.h"
+
+#include <ydb/services/persqueue_v1/actors/schema/pqv1/actors.h>
+#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
@@ -120,7 +122,7 @@ void DoDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpc
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TDropTopicActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDropTopicActor(p));
 }
 
 void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f,
@@ -139,7 +141,7 @@ void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProv
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::AlterTopicRequest*>(p->GetRequest()));
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new alter topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TAlterTopicActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateAlterTopicActor(p));
 }
 
 void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -168,13 +170,14 @@ void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikim
     f.RegisterActor(new NGRpcProxy::V1::TDescribePartitionActor(p));
 }
 
-void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
-     auto p = dynamic_cast<TEvCommitOffsetRequest*>(ctx.release());
+void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider&) {
+    std::unique_ptr<TEvCommitOffsetRequest> p;
+    p.reset(dynamic_cast<TEvCommitOffsetRequest*>(ctx.release()));
 
-    EnsureReq(p);
+    EnsureReq(p.get());
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Commit Offset request");
-    f.RegisterActor(new NKikimr::NGRpcProxy::V1::TCommitOffsetActor(p));
+    TActivationContext::Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), std::move(p));
 }
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -183,7 +186,7 @@ void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQDropTopicActor(p));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateDropTopicActor(p));
 }
 
 void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,

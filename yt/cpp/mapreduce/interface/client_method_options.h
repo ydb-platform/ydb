@@ -87,6 +87,12 @@ struct TCreateOptions
     FLUENT_FIELD_DEFAULT(bool, IgnoreExisting, false);
 
     ///
+    /// @brief Ignore type mismatch with existing node.
+    ///
+    /// Only valid when IgnoreExisting=true.
+    FLUENT_FIELD_DEFAULT(bool, IgnoreTypeMismatch, false);
+
+    ///
     /// @brief Recreate node if it exists.
     ///
     /// Force and IgnoreExisting MUST NOT be used simultaneously.

@@ -327,6 +327,16 @@ protected:
             SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
         }
 
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty() ) {
+                json["user"] = userCtx->GetUserSID();
+            }
+            if (Opts.TraceIds && userCtx->GetUserTraceId()) {
+                json["traceId"] = userCtx->GetUserTraceId().GetHexTraceId();
+            }
+        }
+
         const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
         switch (body.GetRowOperationCase()) {
         case NKikimrChangeExchange::TDataChange::kUpsert:
@@ -529,6 +539,20 @@ protected:
         default:
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
+
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
+                auto& userIdentityJson = json["userIdentity"];
+                if (userCtx->GetUserSID() == BUILTIN_ACL_CDC_TTL) {
+                    userIdentityJson["type"] = "Service";
+                    userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
+                } else {
+                    userIdentityJson["type"] = "User";
+                    userIdentityJson["principalId"] = userCtx->GetUserSID();
+                }
+            }
+        }
     }
 
 public:
@@ -581,7 +605,8 @@ protected:
             }
         }
 
-        valueJson["payload"]["source"] = NJson::TJsonMap({
+        auto& sourceJson = valueJson["payload"]["source"];
+        sourceJson = NJson::TJsonMap({
             {"version", "1.0.0"},
             {"connector", "ydb"},
             {"ts_ms", record.GetApproximateCreationDateTime().MilliSeconds()},
@@ -590,6 +615,16 @@ protected:
             {"txId", record.GetTxId()},
             // TODO: db & table
         });
+
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
+                sourceJson["user"] = userCtx->GetUserSID();
+            }
+            if (Opts.TraceIds && userCtx->GetUserTraceId()) {
+                sourceJson["traceId"] = userCtx->GetUserTraceId().GetHexTraceId();
+            }
+        }
     }
 
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {

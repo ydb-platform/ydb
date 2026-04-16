@@ -7,6 +7,7 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TEvLocalMKQL {
     optional NKikimrTxUserProxy.TMiniKQLTransaction Program = 1;
+    optional string UserSID = 2;
 }
 
 message TEvLocalMKQLResponse {

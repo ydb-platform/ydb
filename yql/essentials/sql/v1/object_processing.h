@@ -56,7 +56,7 @@ protected:
     virtual INode::TPtr FillFeatures(INode::TPtr options) const = 0;
 
 public:
-    TObjectProcessorImpl(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context);
+    TObjectProcessorImpl(TPosition pos, TString objectId, TString typeId, const TObjectOperatorContext& context);
 
     bool DoInit(TContext& ctx, ISource* src) override;
 };

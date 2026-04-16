@@ -295,7 +295,8 @@ void WriteValue(TWriter& writer, const TUnboxedValue& x) {
         case ENodeType::Dict:
             writer.BeginMap();
             if (x.IsBoxed()) {
-                TUnboxedValue key, payload;
+                TUnboxedValue key;
+                TUnboxedValue payload;
                 for (const auto it = x.GetDictIterator(); it.NextPair(key, payload);) {
                     writer.Key(key.AsStringRef());
                     WriteValue(writer, payload);
@@ -305,7 +306,8 @@ void WriteValue(TWriter& writer, const TUnboxedValue& x) {
             break;
         case ENodeType::Attr: {
             writer.BeginAttributes();
-            TUnboxedValue key, payload;
+            TUnboxedValue key;
+            TUnboxedValue payload;
             for (const auto it = x.GetDictIterator(); it.NextPair(key, payload);) {
                 writer.Key(key.AsStringRef());
                 WriteValue(writer, payload);

@@ -4,7 +4,6 @@ import os
 
 from .utils import build_pj_path
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -106,6 +105,9 @@ class PackageJson(object):
     def has_dependencies(self):
         first_dep = next(self.dependencies_iter(), None)
         return first_dep is not None
+
+    def get_files(self) -> list[str]:
+        return self.data.get("files", [])
 
     def bins_iter(self):
         bins = self.data.get("bin")
@@ -211,7 +213,7 @@ class PackageJson(object):
         pj_queue = [(self, 0)]
 
         while len(pj_queue):
-            (pj, depth) = pj_queue.pop()
+            pj, depth = pj_queue.pop()
             pj_dir = os.path.dirname(pj.path)
             if pj_dir in ws_deps:
                 continue

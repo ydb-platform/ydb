@@ -51,6 +51,7 @@
                                                         "Columns": "Key, Text, __ydb_full_text_relevance",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
+                                                        "ItemsLimit": "\"1001\"",
                                                         "K1Factor": "\"1.5\"",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",

@@ -89,9 +89,8 @@ Y_UNIT_TEST(StoreStrings) {
 
 Y_UNIT_TEST(StoreTuples) {
     TSetup setup;
-    TType* elems[] = {
-        setup.TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32),
-        setup.TypeBuilder.NewDataType(NUdf::EDataSlot::String)};
+    auto elems = std::to_array<TType*>({setup.TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32),
+                                        setup.TypeBuilder.NewDataType(NUdf::EDataSlot::String)});
     TTestedSets sets{setup.TypeBuilder.NewTupleType(elems)};
     const size_t N = 100; // be aware of O(n^2) complexity in data generation
     for (size_t i = 0; i != N; ++i) {
@@ -113,9 +112,8 @@ Y_UNIT_TEST(StoreTuples) {
 
 Y_UNIT_TEST(StoreStructs) {
     TSetup setup;
-    std::pair<std::string_view, TType*> elems[] = {
-        std::pair<std::string_view, TType*>{"i", setup.TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32)},
-        std::pair<std::string_view, TType*>{"s", setup.TypeBuilder.NewDataType(NUdf::EDataSlot::String)}};
+    auto elems = std::to_array({std::pair<std::string_view, TType*>{"i", setup.TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32)},
+                                std::pair<std::string_view, TType*>{"s", setup.TypeBuilder.NewDataType(NUdf::EDataSlot::String)}});
     TTestedSets sets{setup.TypeBuilder.NewStructType(elems)};
     const size_t N = 100; // be aware of O(n^2) complexity in data generation
     for (size_t i = 0; i != N; ++i) {
@@ -143,14 +141,12 @@ Y_UNIT_TEST(ReleaseAllResources) {
 
     TTestedSets stringSets{setup->TypeBuilder.NewDataType(NUdf::EDataSlot::String)};
 
-    TType* tupleElems[] = {
-        setup->TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32),
-        setup->TypeBuilder.NewDataType(NUdf::EDataSlot::String)};
+    auto tupleElems = std::to_array<TType*>({setup->TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32),
+                                             setup->TypeBuilder.NewDataType(NUdf::EDataSlot::String)});
     TTestedSets tupleSets{setup->TypeBuilder.NewTupleType(tupleElems)};
 
-    std::pair<std::string_view, TType*> structElems[] = {
-        std::pair<std::string_view, TType*>{"i", setup->TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32)},
-        std::pair<std::string_view, TType*>{"s", setup->TypeBuilder.NewDataType(NUdf::EDataSlot::String)}};
+    auto structElems = std::to_array({std::pair<std::string_view, TType*>{"i", setup->TypeBuilder.NewDataType(NUdf::EDataSlot::Uint32)},
+                                      std::pair<std::string_view, TType*>{"s", setup->TypeBuilder.NewDataType(NUdf::EDataSlot::String)}});
     TTestedSets structSets{setup->TypeBuilder.NewStructType(structElems)};
 
     intSets.Reset();

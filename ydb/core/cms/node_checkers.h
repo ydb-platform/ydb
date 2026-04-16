@@ -12,6 +12,14 @@
 
 namespace NKikimr::NCms {
 
+struct TNodeLockContext {
+    i32 Priority = 0;
+    TString RequestId;
+    NKikimrCms::EAvailabilityMode Mode = NKikimrCms::MODE_MAX_AVAILABILITY;
+
+    TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode = NKikimrCms::MODE_MAX_AVAILABILITY);
+};
+
 /**
  * A base class for storing the state of some group of nodes. For example, tenant nodes, state storage nodes, etc.
  *
@@ -48,10 +56,10 @@ public:
     virtual void UpdateNode(ui32 nodeId, NKikimrCms::EState) = 0;
 
     virtual bool IsNodeLocked(ui32 nodeId, i32 priority) const = 0;
-    virtual void LockNode(ui32 nodeId, i32 priority) = 0;
-    virtual void UnlockNode(ui32 nodeId, i32 priority) = 0;
+    virtual void LockNode(ui32 nodeId, const TNodeLockContext& ctx) = 0;
+    virtual void UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) = 0;
 
-    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const = 0;
+    virtual bool TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const = 0;
 };
 
 /**
@@ -74,8 +82,8 @@ public:
     void UpdateNode(ui32 nodeId, NKikimrCms::EState) override;
 
     bool IsNodeLocked(ui32 nodeId, i32 priority) const override;
-    void LockNode(ui32 nodeId, i32 priority) override;
-    void UnlockNode(ui32 nodeId, i32 priority) override;
+    void LockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
+    void UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
 
     const THashMap<ui32, TNodeInfo>& GetNodes() const;
 };
@@ -112,7 +120,7 @@ public:
         DisabledNodesRatioLimit = ratioLimit;
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const override final;
+    bool TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const override final;
 };
 
 class TTenantLimitsCounter : public TNodesLimitsCounterBase {
@@ -153,6 +161,7 @@ public:
 class TSysTabletsNodesCounter : public TNodesCounterBase {
 private:
     const NKikimrConfig::TBootstrap::ETabletType TabletType;
+    THashMap<TString, size_t> LockedByRequests;
 
 public:
     explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType)
@@ -160,7 +169,9 @@ public:
     {
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const override final;
+    void LockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
+    void UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
+    bool TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const override final;
 };
 
 } // namespace NKikimr::NCms

@@ -99,7 +99,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             return TStatus::Error;
         }
 
-        auto* argType = input->GetTypeAnn();
+        auto argType = input->GetTypeAnn();
         if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
             if (TDqConnection::Match(input.Get()) && argType->GetKind() == ETypeAnnotationKind::List) {
                 auto* itemType = argType->Cast<TListExprType>()->GetItemType();
@@ -147,7 +147,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    auto* resultType = programLambda->GetTypeAnn();
+    auto resultType = programLambda->GetTypeAnn();
     if (!resultType) {
         return TStatus::Repeat;
     }
@@ -249,7 +249,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {
-                auto* type = transform->GetTypeAnn();
+                auto type = transform->GetTypeAnn();
                 if (!EnsureListType(transform->Pos(), *type, ctx)) {
                     return TStatus::Error;
                 }
@@ -484,6 +484,10 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
     auto leftInputType = join.LeftInput().Ref().GetTypeAnn();
     auto rightInputType = join.RightInput().Ref().GetTypeAnn();
+    if (!leftInputType || !rightInputType) {
+        ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Lambda is not allowed as join input"));
+        return nullptr;
+    }
 
     if (stream) {
         if (!EnsureNewSeqType<false, false, true>(join.Pos(), *leftInputType, ctx)) {
@@ -817,8 +821,8 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     auto cnMerge = TDqCnMerge(node);
-
-    if (!EnsureTupleMinSize(*cnMerge.SortColumns().Ptr(), 1, ctx)) {
+    auto sortColumns = node->Child(TDqCnMerge::idx_SortColumns);
+    if (!EnsureTupleMinSize(*sortColumns, 1, ctx)) {
         return TStatus::Error;
     }
 
@@ -1196,8 +1200,8 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
-    if (!EnsureArgsCount(*node, 5, ctx)) {
+    // BlockHashJoin expects 8 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
+    if (!EnsureArgsCount(*node, 8, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -1270,7 +1274,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
 }
 
 TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 6, ctx)) {
+    if (!EnsureMinArgsCount(*input, 6, ctx)) {
         return TStatus::Error;
     }
 

@@ -1,8 +1,8 @@
 #pragma once
-#include "cracked_page.h"
 #include "extension.h"
 #include "context.h"
 #include "oidc_settings.h"
+#include <ydb/mvp/core/cracked_page.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
@@ -70,6 +70,7 @@ TCheckStateResult CheckState(const TString& state, const TString& key);
 TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 TString GetAddressWithoutPort(const TString& address);
+TString GenerateRandomBase64(size_t byteNumber = 32);
 
 
 struct TProxiedRequestParams {
@@ -86,13 +87,10 @@ NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtecte
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {
-    TStringBuf scheme = "grpc";
-    TStringBuf host;
-    TStringBuf uri;
-    NHttp::CrackURL(endpoint, scheme, host, uri);
+    TCrackedPage cracked(endpoint);
     NYdbGrpc::TGRpcClientConfig config;
-    config.Locator = host;
-    config.EnableSsl = (scheme == "grpcs");
+    config.Locator = cracked.Host;
+    config.EnableSsl = cracked.IsSecureScheme();
     SetGrpcKeepAlive(config);
     return MVPAppData()->GRpcClientLow->CreateGRpcServiceConnection<TSessionService>(config);
 }

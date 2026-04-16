@@ -521,6 +521,135 @@ static void test_basic(struct buf_desc *bd)
 	}
 }
 
+static int test_readv_fixed(struct buf_desc *bd, struct iovec *vecs, int nr_vec)
+{
+	unsigned buf_idx = bd->buf_idx;
+	struct io_uring *ring = &bd->ring;
+	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	size_t total_len, i, offset;
+	int ret, fd;
+	char *expected;
+	char filename[] = ".readv_fixed.XXXXXX";
+
+	total_len = t_iovec_data_length(vecs, nr_vec);
+
+	expected = malloc(total_len);
+	if (!expected) {
+		fprintf(stderr, "malloc failed\n");
+		return 1;
+	}
+
+	/* Fill expected buffer with pattern */
+	for (i = 0; i < total_len; i++)
+		expected[i] = i & 0xff;
+
+	fd = mkstemp(filename);
+	if (fd < 0) {
+		perror("mkstemp");
+		free(expected);
+		return 1;
+	}
+	unlink(filename);
+
+	/* Write expected data to file */
+	ret = write(fd, expected, total_len);
+	if (ret != total_len) {
+		fprintf(stderr, "file write failed: %d\n", ret);
+		close(fd);
+		free(expected);
+		return 1;
+	}
+
+	/* Clear registered buffer before reading into it */
+	memset(bd->buf_wr, 0, bd->size);
+
+	/* Read using READV_FIXED - vecs already point to bd->buf_wr (registered) */
+	sqe = io_uring_get_sqe(ring);
+	io_uring_prep_readv_fixed(sqe, fd, vecs, nr_vec, 0, 0, buf_idx);
+
+	ret = io_uring_submit(ring);
+	if (ret != 1) {
+		fprintf(stderr, "submit failed %i\n", ret);
+		close(fd);
+		free(expected);
+		return 1;
+	}
+
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret) {
+		fprintf(stderr, "wait_cqe=%d\n", ret);
+		close(fd);
+		free(expected);
+		return 1;
+	}
+
+	ret = cqe->res;
+	io_uring_cqe_seen(ring, cqe);
+
+	close(fd);
+
+	if (ret != total_len) {
+		fprintf(stderr, "readv_fixed: got %d, expected %zu\n", ret, total_len);
+		free(expected);
+		return 1;
+	}
+
+	/* Verify data across all iovec segments */
+	offset = 0;
+	for (i = 0; i < nr_vec; i++) {
+		if (memcmp(vecs[i].iov_base, expected + offset, vecs[i].iov_len) != 0) {
+			fprintf(stderr, "readv_fixed: data mismatch at segment %zu\n", i);
+			free(expected);
+			return 1;
+		}
+		offset += vecs[i].iov_len;
+	}
+
+	free(expected);
+	return 0;
+}
+
+static int test_readv(struct buf_desc *bd)
+{
+	void *p = bd->buf_wr;
+	int ret;
+	struct iovec iov_page = { .iov_base = p, .iov_len = page_sz };
+	struct iovec iov_multi[] = {
+		{ .iov_base = p, .iov_len = page_sz },
+		{ .iov_base = p + page_sz, .iov_len = page_sz },
+		{ .iov_base = p + page_sz * 2, .iov_len = page_sz },
+	};
+	struct iovec iov_unalign = { .iov_base = p + 1, .iov_len = page_sz - 1 };
+
+	reinit_ring(bd);
+
+	/* Single page read */
+	ret = test_readv_fixed(bd, &iov_page, 1);
+	if (ret) {
+		fprintf(stderr, "readv_fixed: single page failed\n");
+		return ret;
+	}
+
+	/* Multi-segment read */
+	reinit_ring(bd);
+	ret = test_readv_fixed(bd, iov_multi, 3);
+	if (ret) {
+		fprintf(stderr, "readv_fixed: multi-segment failed\n");
+		return ret;
+	}
+
+	/* Unaligned read */
+	reinit_ring(bd);
+	ret = test_readv_fixed(bd, &iov_unalign, 1);
+	if (ret) {
+		fprintf(stderr, "readv_fixed: unaligned failed\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static void test_fail(struct buf_desc *bd)
 {
 	int ret, cqe_ret;
@@ -577,7 +706,7 @@ static void test_fail(struct buf_desc *bd)
 int main(int argc, char *argv[])
 {
 	struct buf_desc bd = {};
-	int i = 0;
+	int ret, i;
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
@@ -600,6 +729,12 @@ int main(int argc, char *argv[])
 
 		test_basic(&bd);
 		test_fail(&bd);
+	}
+
+	ret = test_readv(&bd);
+	if (ret) {
+		fprintf(stderr, "test_readv failed\n");
+		return T_EXIT_FAIL;
 	}
 
 	free(bd.buf_rd);

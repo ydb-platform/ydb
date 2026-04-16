@@ -1,6 +1,9 @@
+import logging
+from typing import Generic
+
 from .. import _apis, issues
 from .._grpc.grpcwrapper.ydb_coordination_public_types import NodeConfig, DescribeResult
-import logging
+from .._typing import DriverT
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +25,10 @@ def wrapper_alter_node(rpc_state, response_pb):
     issues._process_response(response_pb.operation)
 
 
-class BaseCoordinationClient:
-    def __init__(self, driver):
+class BaseCoordinationClient(Generic[DriverT]):
+    _driver: DriverT
+
+    def __init__(self, driver: DriverT) -> None:
         self._driver = driver
         self._user_warned = False
 

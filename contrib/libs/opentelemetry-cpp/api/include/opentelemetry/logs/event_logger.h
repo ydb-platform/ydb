@@ -17,8 +17,9 @@ namespace logs
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
 /**
  * Handles event log record creation.
+ * @deprecated
  **/
-class OPENTELEMETRY_DEPRECATED EventLogger
+class EventLogger
 {
 public:
   virtual ~EventLogger() = default;

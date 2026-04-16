@@ -91,6 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((TotalMemoryLimitExceeded)              (761))
     ((ForbiddenErasureCodec)                 (762))
     ((ReadMetaTimeout)                       (763))
+    ((ReaderRetryCountLimitExceeded)         (764))
 );
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,
@@ -219,9 +220,11 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
 
     // Journal chunks.
     ((JournalDefault)                       (0))
+    ((JournalDistributed)                  (11))
 
     // Hunk chunks.
     ((HunkDefault)                          (7))
+    ((HunkJournal)                         (10))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

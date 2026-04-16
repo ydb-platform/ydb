@@ -97,6 +97,7 @@ struct TTestEnvOpts {
     bool IsBridgeMode;
     bool EnableSimpleStateStorageConfig;
     bool EnableCmsLocksPriority;
+    bool EnableCmsSmartAvailabilityMode;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
@@ -124,6 +125,7 @@ struct TTestEnvOpts {
         , IsBridgeMode(false)
         , EnableSimpleStateStorageConfig(false)
         , EnableCmsLocksPriority(false)
+        , EnableCmsSmartAvailabilityMode(false)
     {
     }
 
@@ -144,6 +146,11 @@ struct TTestEnvOpts {
 
     TTestEnvOpts& WithEnableCmsLocksPriority() {
         EnableCmsLocksPriority = true;
+        return *this;
+    }
+
+    TTestEnvOpts& WithEnableCmsSmartAvailabilityMode() {
+        EnableCmsSmartAvailabilityMode = true;
         return *this;
     }
 

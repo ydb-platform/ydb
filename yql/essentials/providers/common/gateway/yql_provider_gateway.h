@@ -5,8 +5,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TOperationResult {
 public:
@@ -116,5 +115,4 @@ inline void SetPromiseValue(NThreading::TPromise<T>& promise, const NThreading::
     });
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

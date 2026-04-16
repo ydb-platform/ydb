@@ -106,13 +106,13 @@ public:
     TControlWrapper ForsetiMinLogCostNsControl;
     TControlWrapper ForsetiMilliBatchSize;
     TControlWrapper ForsetiMaxLogBatchNs;
-    TControlWrapper ForsetiOpPieceSizeSsd;
-    TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper ForsetiOpPieceSize;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
     TControlWrapper ChunkBaseLimitPerMille;
     TControlWrapper SemiStrictSpaceIsolation;
     i64 SemiStrictSpaceIsolationCached = 0;
+    TControlWrapper ForcedPDiskSpaceColor;
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         switch (SemiStrictSpaceIsolation) {
@@ -145,7 +145,7 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    alignas(16) TDiskFormat Format;
+    alignas(16) TDiskFormat Format = {};
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;
     TNonceJumpLogPageHeader2 LastNonceJumpLogPageHeader2;
@@ -386,7 +386,7 @@ public:
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
-    void SchedulerConfigure(const TConfigureScheduler &conf);
+    void SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId);
     void SendCutLog(TAskForCutLog &reqest);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Free space check
@@ -443,7 +443,7 @@ public:
 
     void DropAllMetadataRequests();
 
-    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
+    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,
         const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic);
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 

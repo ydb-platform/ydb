@@ -237,10 +237,6 @@ bool TPDiskStatusComputer::IsInitialDeploymentGracePeriod() const {
 /// TPDiskStatus
 
 
-TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits, TInstant::Zero(), TDuration::Zero())
-{}
-
 TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
                            const ui32& goodStateLimit, const TLimitsMap& stateLimits,
                            TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod)
@@ -1121,7 +1117,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
         // we ignore all previous unhandled requests
         // usually it will never happen with correct config
-        SentinelState->ChangeRequests.clear();
+        if (SentinelState->StatusChangeAttempt == 0) {
+            SentinelState->ChangeRequests.clear();
+        }
 
         for (const auto& id : allowed) {
             Y_ABORT_UNLESS(SentinelState->PDisks.contains(id));
@@ -1148,8 +1146,10 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             LogStatusChange(id, status, requiredStatus, reason);
 
             if (!Config.DryRun) {
-                SentinelState->ChangeRequests.emplace(id, info);
-                (*Counters->PDisksPendingChange)++;
+                auto [_, inserted] = SentinelState->ChangeRequests.insert_or_assign(id, info);
+                if (inserted) {
+                    (*Counters->PDisksPendingChange)++;
+                }
             }
         }
 

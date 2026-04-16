@@ -6,11 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
-    ydb/core/security/certificate_check
+    ydb/core/security/certificate_check/test_utils
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

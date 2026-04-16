@@ -46,7 +46,13 @@ struct TTMStorage {
     }
 
     inline void FromDate(const NUdf::IDateBuilder& builder, ui16 value, ui16 timezoneId = 0) {
-        ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 year;
+        ui32 month;
+        ui32 day;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
 
         if (!builder.FullSplitDate2(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
             ythrow yexception() << "Error in FullSplitDate";
@@ -81,7 +87,16 @@ struct TTMStorage {
     }
 
     inline void FromDatetime(const NUdf::IDateBuilder& builder, ui32 value, ui16 timezoneId = 0) {
-        ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 year;
+        ui32 month;
+        ui32 day;
+        ui32 hour;
+        ui32 minute;
+        ui32 second;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
 
         if (!builder.FullSplitDatetime2(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
             ythrow yexception() << "Error in FullSplitDatetime";
@@ -139,7 +154,16 @@ struct TTMStorage {
             }
         }
 
-        ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+        ui32 year;
+        ui32 month;
+        ui32 day;
+        ui32 hour;
+        ui32 minute;
+        ui32 second;
+        ui32 dayOfYear;
+        ui32 weekOfYear;
+        ui32 weekOfYearIso8601;
+        ui32 dayOfWeek;
         if (!builder.FullSplitDatetime2(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) {
             ythrow yexception() << "Error in FullSplitDatetime.";
         }
@@ -171,7 +195,7 @@ struct TTMStorage {
         return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
     }
 
-    const TString ToString() const {
+    TString ToString() const {
         const auto& tzName = NTi::GetTimezones()[TimezoneId];
         return Sprintf("%4d-%02d-%02dT%02d:%02d:%02d.%06d,%.*s",
                        Year, Month, Day, Hour, Minute, Second, Microsecond,

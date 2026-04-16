@@ -49,9 +49,9 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestWorkerPool) {
-static TString sql = "SELECT 'abc'u || X AS X FROM Input";
 
-static TVector<TString> expected{"abc0", "abc1", "abc2"};
+TString sql = "SELECT 'abc'u || X AS X FROM Input";
+TVector<TString> expected{"abc0", "abc1", "abc2"};
 
 void TestPullStreamImpl(bool useWorkerPool) {
     auto factory = MakeProgramFactory(TProgramFactoryOptions().SetUseWorkerPool(useWorkerPool));

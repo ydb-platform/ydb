@@ -31,10 +31,11 @@ void TNbsGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_NBS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, nbs, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, nbs, auditMode, EEmptyDatabaseMode::EmptyDatabaseAllowed)
 
     SETUP_NBS_METHOD(CreatePartition, DoCreatePartition, RLMODE(Rps), NBS_CREATEPARTITION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Default));
     SETUP_NBS_METHOD(DeletePartition, DoDeletePartition, RLMODE(Rps), NBS_DELETEPARTITION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Default));
+    SETUP_NBS_METHOD(GetLoadActorAdapterActorId, DoGetLoadActorAdapterActorId, RLMODE(Rps), NBS_GETLOADACTORADAPTERACTORID, TAuditMode::NonModifying());
     SETUP_NBS_METHOD(ListPartitions, DoListPartitions, RLMODE(Rps), NBS_LISTPARTITIONS, TAuditMode::NonModifying());
 
     SETUP_NBS_METHOD(WriteBlocks, DoWriteBlocks, RLMODE(Rps), NBS_WRITEBLOCKS, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Default));

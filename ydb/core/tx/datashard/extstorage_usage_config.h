@@ -114,7 +114,12 @@ public:
 
     template <>
     static TStorageSettings FromRestoreTask<NKikimrSchemeOp::TFSSettings>(const NKikimrSchemeOp::TRestoreTask& task) {
-        return TStorageSettings(CanonizePath(TStringBuilder() << task.GetFSSettings().GetBasePath() << "/" << task.GetFSSettings().GetPath()), task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
+        TString path = task.GetFSSettings().GetPath();
+        // Absolute path in the prefix is possible if the backup with SchemaMapping
+        if (!path.empty() && path[0] != '/') {
+            path = CanonizePath(TStringBuilder() << task.GetFSSettings().GetBasePath() << "/" << path);
+        }
+        return TStorageSettings(path, task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
     }
 
     explicit TStorageSettings(const TString& objectKeyPattern, ui32 shard, const TEncryptionSettings& encryptionSettings)

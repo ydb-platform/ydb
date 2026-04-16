@@ -112,6 +112,7 @@ SELECT
     CASE
         WHEN s.Db LIKE '%sas%' THEN 'sas'
         WHEN s.Db LIKE '%vla%' THEN 'vla'
+        WHEN s.Db LIKE '%klg%' THEN 'klg'
         WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%' THEN 'cloud'
         ELSE 'other'
     END AS DbDc,
@@ -126,15 +127,25 @@ SELECT
     CASE
         WHEN s.Db LIKE '%sas-daily%' THEN 'sas_small_'
         WHEN s.Db LIKE '%sas-perf%' THEN 'sas_big_'
-        WHEN s.Db LIKE '%sas%' THEN 'sas_'
         WHEN s.Db LIKE '%vla-acceptance%' THEN 'vla_small_'
         WHEN s.Db LIKE '%vla-perf%' THEN 'vla_big_'
-        WHEN s.Db LIKE '%vla4-8154%' THEN 'vla_2_node_'
+        WHEN s.Db LIKE '%vla4-8154%' OR s.Db LIKE '%vla4-8158%' THEN 'vla_2_node_'
         WHEN s.Db LIKE '%vla4-8157%' THEN 'vla_1_node_'
-        WHEN s.Db LIKE '%vla4-8163%' THEN 'vla_3_node_'
-        WHEN s.Db LIKE '%vla%' THEN 'vla_'
+        WHEN s.Db LIKE '%vla4-8163%' OR s.Db LIKE '%vla4-8171%' OR s.Db LIKE '%vla4-8174%' THEN 'vla_3_node_'
         WHEN s.Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_128_'
         WHEN s.Db LIKE '%etntj9d0t8v7ud2hrqho%b1ggceeul2pkher8vhb6/etntj9d0t8v7ud2hrqho%' THEN 'cloud_slonnn_64_'
+        WHEN s.Db LIKE '%static-node-1.ydb-cluster.com/Root/db%' THEN 'ansible_'
+        WHEN s.Db LIKE '%ydb-vla-dev04-002%' THEN 'oltp-vla-perf1_'
+        WHEN s.Db LIKE '%ydb-vla-dev04-005%' THEN 'oltp-vla-perf2_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-010%' THEN 'oltp-klg-perf3_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-014%' THEN 'oltp-klg-perf4_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-018%' THEN 'oltp-klg-perf5_'
+        WHEN s.Db LIKE '%ydb-qa-01-sas-000%' THEN 'oltp-3dc-perf6_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-021%' THEN 'oltp-klg-perf7_'
+        WHEN s.Db LIKE '%ydb-qa-01-klg-030%' THEN 'oltp-klg-perf9_'
+        WHEN s.Db LIKE '%sas%' THEN 'sas_'
+        WHEN s.Db LIKE '%vla%' THEN 'vla_'
+        WHEN s.Db LIKE '%klg%' THEN 'klg_'
         ELSE 'new_db_'
     END || CASE
         WHEN s.Db LIKE '%load%' THEN 'column'
@@ -142,9 +153,9 @@ SELECT
         WHEN s.Db LIKE '%/row%' THEN 'row'
         ELSE 'other'
     END AS DbAlias,
-    COALESCE(SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')), 'unknown') As Branch,
-    COALESCE(SubString(CAST(s.CiVersion AS String), 0U, FIND(CAST(s.CiVersion AS String), '.')), 'unknown') As CiBranch,
-    COALESCE(SubString(CAST(s.TestToolsVersion AS String), 0U, FIND(CAST(s.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch
+    COALESCE(SubString(CAST(s.Version AS String), 0U, RFIND(CAST(s.Version AS String), '.')), 'unknown') As Branch,
+    COALESCE(SubString(CAST(s.CiVersion AS String), 0U, RFIND(CAST(s.CiVersion AS String), '.')), 'unknown') As CiBranch,
+    COALESCE(SubString(CAST(s.TestToolsVersion AS String), 0U, RFIND(CAST(s.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch
 FROM $suites AS s
 LEFT JOIN $diff_tests AS d ON s.RunId = d.RunId AND s.Db = d.Db AND s.Suite = d.Suite
 LEFT JOIN $fail_tests AS f ON s.RunId = f.RunId AND s.Db = f.Db AND s.Suite = f.Suite

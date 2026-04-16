@@ -68,9 +68,11 @@ bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
 }
 
 bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates,
+        NACLib::TUserContext::TPtr userCtx)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
+    Y_UNUSED(userCtx);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
     Y_ENSURE(key.size() == userTable->KeyColumnIds.size(), "Count doesn't match"
@@ -267,7 +269,8 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body,
+        NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build());
 }
 
 void TAsyncIndexChangeCollector::Clear() {

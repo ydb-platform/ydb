@@ -7,6 +7,8 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
+#include <ydb/library/aclib/aclib.h>
+
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
@@ -331,6 +333,7 @@ public:
                 .WithSchemaVersion(table->GetTableSchemaVersion())
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
+                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_INITIAL_SCAN).Build())
                 .Build();
 
             const auto& record = *recordPtr;

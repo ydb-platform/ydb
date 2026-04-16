@@ -7,10 +7,11 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:2)
 ENDIF()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 DEPENDS(
     ydb/tests/stress/viewer

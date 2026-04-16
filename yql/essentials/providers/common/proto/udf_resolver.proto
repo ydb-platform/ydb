@@ -33,6 +33,8 @@ message TFunctionResult {
     repeated string Messages = 16;
     optional uint32 MinLangVer = 17;
     optional uint32 MaxLangVer = 18;
+    optional string PolyArgs = 19;
+    optional string ResolvedCallableTypes = 20;
 };
 
 message TImport {

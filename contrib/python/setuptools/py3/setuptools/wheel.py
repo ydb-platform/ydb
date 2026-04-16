@@ -8,6 +8,7 @@ import os
 import posixpath
 import re
 import zipfile
+from collections.abc import Iterator
 
 from packaging.requirements import Requirement
 from packaging.tags import sys_tags
@@ -65,7 +66,7 @@ def unpack(src_dir, dst_dir) -> None:
 
 
 @contextlib.contextmanager
-def disable_info_traces():
+def disable_info_traces() -> Iterator[None]:
     """
     Temporarily disable info traces.
     """

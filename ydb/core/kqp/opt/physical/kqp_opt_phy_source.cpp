@@ -29,6 +29,114 @@ bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescri
     return useSource;
 }
 
+TExprBase KqpRewriteReadTableSysView(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!kqpCtx.Config->GetEnableKqpSysViewSourceRead()) {
+        return node;
+    }
+
+    auto stage = node.Cast<TDqStage>();
+
+    struct TMatchedRead {
+        TExprBase Expr;
+        TKqpTable Table;
+        TCoAtomList Columns;
+        TCoNameValueTupleList Settings;
+        TExprBase RangeExpr;
+    };
+    TMaybe<TMatchedRead> matched;
+
+    VisitExpr(stage.Program().Body().Ptr(), [&](const TExprNode::TPtr& node) {
+        TExprBase expr(node);
+        if (auto cast = expr.Maybe<TKqpReadTable>()) {
+            Y_ENSURE(!matched || matched->Expr.Raw() == node.Get());
+            auto read = cast.Cast();
+            matched = TMatchedRead {
+                .Expr = read,
+                .Table = read.Table(),
+                .Columns = read.Columns(),
+                .Settings = read.Settings(),
+                .RangeExpr = read.Range()
+            };
+        }
+        if (auto cast = expr.Maybe<TKqpReadTableRanges>()) {
+            Y_ENSURE(!matched || matched->Expr.Raw() == node.Get());
+            auto read = cast.Cast();
+            matched = TMatchedRead {
+                .Expr = read,
+                .Table = read.Table(),
+                .Columns = read.Columns(),
+                .Settings = read.Settings(),
+                .RangeExpr = read.Ranges()
+            };
+        }
+        return true;
+    });
+
+    if (!matched) {
+        return node;
+    }
+
+    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, matched->Table.Path());
+    if (tableDesc.Metadata->Kind != EKikimrTableKind::SysView) {
+        return node;
+    }
+
+    TVector<TExprBase> inputs;
+    TVector<TCoArgument> args;
+    TNodeOnNodeOwnedMap argReplaces;
+    TNodeOnNodeOwnedMap sourceReplaces;
+
+    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+        inputs.push_back(stage.Inputs().Item(i));
+
+        TCoArgument newArg{ctx.NewArgument(stage.Pos(), TStringBuilder() << "_kqp_pc_arg_" << i)};
+        args.push_back(newArg);
+
+        TCoArgument arg = stage.Program().Args().Arg(i);
+
+        argReplaces[arg.Raw()] = newArg.Ptr();
+        sourceReplaces[arg.Raw()] = stage.Inputs().Item(i).Ptr();
+    }
+
+    TCoArgument arg{ctx.NewArgument(stage.Pos(), TStringBuilder() << "_kqp_source_arg")};
+    args.insert(args.begin(), arg);
+
+    auto source =
+        Build<TDqSource>(ctx, matched->Expr.Pos())
+            .Settings<TKqpReadSysViewSourceSettings>()
+                .Table(matched->Table)
+                .Columns(matched->Columns)
+                .Settings(matched->Settings)
+                .RangesExpr(matched->RangeExpr)
+            .Build()
+            .DataSource<TCoDataSource>()
+                .Category<TCoAtom>().Value(KqpSysViewSourceName).Build()
+            .Build()
+        .Done();
+    inputs.insert(inputs.begin(), TExprBase(ctx.ReplaceNodes(source.Ptr(), sourceReplaces)));
+
+    TExprNode::TPtr replaceExpr =
+        Build<TCoToFlow>(ctx, matched->Expr.Pos())
+            .Input(arg)
+        .Done()
+            .Ptr();
+
+    argReplaces[matched->Expr.Raw()] = replaceExpr;
+
+    TDqStageSettings newSettings = TDqStageSettings::Parse(stage);
+    newSettings.SetPartitionMode(TDqStageSettings::EPartitionMode::Single);
+
+    return Build<TDqStage>(ctx, stage.Pos())
+        .Inputs().Add(inputs).Build()
+        .Outputs(stage.Outputs())
+        .Settings(newSettings.BuildNode(ctx, stage.Pos()))
+        .Program()
+            .Args(args)
+            .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argReplaces))
+            .Build()
+    .Done();
+}
+
 TExprBase KqpRewriteReadTableFullText(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     Y_UNUSED(kqpCtx);
 

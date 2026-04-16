@@ -1,7 +1,7 @@
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -115,6 +115,26 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
 
             indexInfo.AddNotifySubscriber(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
+        } else if (auto* compactionInfoPtr = Self->ForcedCompactions.FindPtr(rawTxId)) {
+            auto& compactionInfo = *compactionInfoPtr->Get();
+            auto txId = rawTxId;
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "NotifyTxCompletion"
+                            << " forced compaction in-flight"
+                            << ", txId: " << txId
+                            << ", at schemeshard: " << Self->TabletID());
+            if (compactionInfo.IsFinished()) {
+                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "NotifyTxCompletion"
+                               << ", forced compaction is ready to notify"
+                               << ", txId: " << txId
+                               << ", at schemeshard: " << Self->TabletID());
+                Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
+                return;
+            }
+
+            compactionInfo.AddNotifySubscriber(Ev->Sender);
+            Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(txId);
         } else {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "NotifyTxCompletion"

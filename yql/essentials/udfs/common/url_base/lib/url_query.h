@@ -114,7 +114,7 @@ class TBuildQueryString: public TQueryStringConv {
     } FirstArgTypeId_;
 
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     explicit TBuildQueryString(TSourcePosition&& pos, EFirstArgTypeId firstArgTypeId)
         : Pos_(std::move(pos))

@@ -17,12 +17,18 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
-        config.Opts->AddLongOption("queue-url", "AWS queue URL.")
+        config.Opts->AddLongOption("sqs-endpoint", "SQS HTTP endpoint of the queue.")
             .Required()
-            .StoreResult(&Scenario.QueueUrl);
-        config.Opts->AddLongOption("queue-endpoint", "Queue endpoint.")
-            .Optional()
-            .StoreResult(&Scenario.QueueEndpoint);
+            .StoreResult(&Scenario.Endpoint);
+        config.Opts->AddLongOption("topic", "YDB topic name.")
+            .DefaultValue("sqs-workload-topic")
+            .StoreResult(&Scenario.Topic);
+        config.Opts->AddLongOption("consumer", "YDB consumer name.")
+            .DefaultValue("sqs-workload-consumer")
+            .StoreResult(&Scenario.Consumer);
+        config.Opts->AddLongOption("queue-name", "AWS queue name.")
+            .Hidden()
+            .StoreResult(&Scenario.QueueName);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);
@@ -46,11 +52,11 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1)
             .StoreResult(&Scenario.WorkersCount);
         config.Opts->AddLongOption("aws-access-key-id", "AWS access key id.")
-            .StoreResult(&Scenario.Account);
+            .StoreResult(&Scenario.AwsAccessKeyId);
         config.Opts->AddLongOption("aws-session-token", "AWS session token.")
-            .StoreResult(&Scenario.Token);
+            .StoreResult(&Scenario.AwsSessionToken);
         config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
-            .StoreResult(&Scenario.SecretKey);
+            .StoreResult(&Scenario.AwsSecretKey);
         config.Opts->AddLongOption('b', "batch-size", "AWS batch size.")
             .DefaultValue(1)
             .StoreResult(&Scenario.BatchSize);
@@ -71,16 +77,12 @@ namespace NYdb::NConsoleClient {
             ->AddLongOption("request-timeout", "Request timeout in milliseconds.")
             .DefaultValue(2000)
             .StoreResult(&Scenario.RequestTimeoutMs);
-        config.Opts->AddLongOption("region", "AWS region.")
+        config.Opts->AddLongOption("aws-region", "AWS region.")
             .Optional()
-            .StoreResult(&Scenario.Region);
-        config.Opts->AddLongOption("set-subject-token", "Set subject token.")
+            .StoreResult(&Scenario.AwsRegion);
+        config.Opts->AddLongOption("with-messages-order", "Write messages with order (validation can be enabled in run read command).")
             .DefaultValue(false)
-            .Hidden()
-            .StoreTrue(&Scenario.SetSubjectToken);
-        config.Opts->AddLongOption("validate-fifo", "Validate FIFO.")
-            .DefaultValue(false)
-            .StoreTrue(&Scenario.ValidateFifo);
+            .StoreTrue(&Scenario.ValidateMessagesOrder);
         config.Opts->AddLongOption("max-unique-messages", "Max unique messages. If set to 0, content based deduplication is used.")
             .DefaultValue(0)
             .StoreResult(&Scenario.MaxUniqueMessages);

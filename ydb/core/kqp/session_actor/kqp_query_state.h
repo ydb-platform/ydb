@@ -20,6 +20,7 @@
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
+#include <util/random/random.h>
 
 #include <map>
 #include <memory>
@@ -65,13 +66,16 @@ public:
         , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
+        , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
+        , RuntimeParameterSizeLimitSatisfied(runtimeParameterSizeLimit > 0)
     {
         RequestEv.reset(ev->Release().Release());
 
@@ -100,6 +104,15 @@ public:
         if (KqpSessionSpan && AppData()) {
             KqpSessionSpan.Attribute("database", AppData()->TenantName);
         }
+        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            if (KqpSessionSpan) {
+                QuerySpanId = *reinterpret_cast<const ui64*>(KqpSessionSpan.GetTraceId().GetSpanIdPtr());
+            } else {
+                while (QuerySpanId == 0) { // avoid 0 as query span id
+                    QuerySpanId = RandomNumber<ui64>();
+                }
+            }
+        }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
         } else {
@@ -122,6 +135,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
+    ui64 QuerySpanId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;
     TString Cluster;
@@ -147,6 +161,7 @@ public:
     ui64 CurrentTx = 0;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
+    bool IsWarmupCompilation_ = false;
 
     TInstant StartTime;
     TInstant ContinueTime;
@@ -155,6 +170,7 @@ public:
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    NWilson::TTraceId UserTraceId;
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
     bool CompilationRunning = false;
@@ -199,7 +215,7 @@ public:
     NFormats::TFormatsSettings FormatsSettings;
 
     i32 RuntimeParameterSizeLimit = 0;
-    bool RuntimeParameterSizeLimitSatisfied = true;
+    bool RuntimeParameterSizeLimitSatisfied = false;
 
 
     bool IsLocalExecution(ui32 nodeId) const {
@@ -304,6 +320,10 @@ public:
         return FormatsSettings;
     }
 
+    ui64 GetQuerySpanId() const {
+        return QuerySpanId;
+    }
+
     // todo: gvit
     // fill this hash set only once on query compilation.
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
@@ -334,6 +354,10 @@ public:
             for (const auto& source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     addTable(source.GetReadRangesSource().GetTable());
+                }
+
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    addTable(source.GetFullTextSource().GetTable());
                 }
             }
 
@@ -393,6 +417,17 @@ public:
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
+    TVector<NKikimr::TTableId> GetTableIdsForSnapshot() const {
+        if (!Commit) {
+            return {};
+        }
+        TVector<NKikimr::TTableId> tableIds;
+        for (const auto& [tableId, _] : TableVersions) {
+            tableIds.push_back(tableId);
+        }
+        return tableIds;
+    }
+
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         if (!Commit) {
@@ -440,11 +475,12 @@ public:
             return false;
         }
 
-        if (TxCtx->Locks.GetLockTxId() && !TxCtx->Locks.Broken()) {
+        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }
 
-        if (TxCtx->Locks.Broken()) {
+        if (TxCtx->TxManager->GetLockIssue()) {
             YQL_ENSURE(TxCtx->GetSnapshot().IsValid() && !TxCtx->TxHasEffects());
             return false;  // Do not acquire locks after first lock issue
         }
@@ -477,9 +513,9 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
+            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable && tx->ResultsSize() == 0) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
-                bool success = TxCtx->AddDeferredEffect(tx, QueryData);
+                bool success = TxCtx->AddDeferredEffect(tx, QueryData, GetQuerySpanId());
                 YQL_ENSURE(success);
                 if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
                     ++CurrentTx;

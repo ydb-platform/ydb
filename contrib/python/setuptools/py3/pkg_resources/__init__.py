@@ -131,7 +131,9 @@ class _ZipLoaderModule(Protocol):
     __loader__: zipimport.zipimporter
 
 
-_PEP440_FALLBACK = re.compile(r"^v?(?P<safe>(?:[0-9]+!)?[0-9]+(?:\.[0-9]+)*)", re.I)
+_PEP440_FALLBACK = re.compile(
+    r"^v?(?P<safe>(?:[0-9]+!)?[0-9]+(?:\.[0-9]+)*)", re.IGNORECASE
+)
 
 
 class PEP440Warning(RuntimeWarning):

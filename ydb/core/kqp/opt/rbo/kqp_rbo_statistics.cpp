@@ -6,7 +6,7 @@ namespace NKqp {
 
 
 void TColumnLineage::AddMapping(const TInfoUnit& unit, const TColumnLineageEntry& entry) {
-    auto rawAlias = entry.GetRawAlias();
+    const auto rawAlias = entry.GetRawAlias();
 
     if (entry.DuplicateNo != 0) {
         int duplicateId = entry.DuplicateNo;
@@ -25,8 +25,8 @@ void TColumnLineage::AddMapping(const TInfoUnit& unit, const TColumnLineageEntry
     ReverseMapping.insert({TInfoUnit(entry.GetCannonicalAlias(), entry.ColumnName), unit});
 }
 
-int TColumnLineage::AddAlias(TString alias, TString tableName) {
-    auto rawAlias = alias != "" ? alias : tableName;
+int TColumnLineage::AddAlias(const TString& alias, const TString& tableName) {
+    const auto rawAlias = alias != "" ? alias : tableName;
     int duplicateId = 0;
     if (MaxDuplicateId.contains(rawAlias)) {
         duplicateId = MaxDuplicateId.at(rawAlias) + 1;
@@ -50,29 +50,31 @@ void TColumnLineage::Merge(const TColumnLineage& other) {
     }
 }
 
-TInfoUnit TRBOMetadata::MapColumn(TInfoUnit key) {
+TInfoUnit TRBOMetadata::MapColumn(const TInfoUnit& key) {
     if (ColumnLineage.Mapping.contains(key)) {
         return ColumnLineage.Mapping.at(key).GetInfoUnit();
     } else {
         return key;
     }
 }
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts ){
-    return BuildOptimizerStatistics(props, withStatsAndCosts, {});
+
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts) {
+    TVector<TInfoUnit> keyColumns;
+    return BuildOptimizerStatistics(props, withStatsAndCosts, keyColumns);
 }
 
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, TVector<TInfoUnit> keyColumns) {
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts, const TVector<TInfoUnit>& keyColumns) {
     TVector<TString> keyColumnNames;
-    for (auto iu: (keyColumns.empty() ? props.Metadata->KeyColumns : keyColumns)) {
+    for (const auto& iu: (keyColumns.empty() ? props.Metadata->KeyColumns : keyColumns)) {
         keyColumnNames.push_back(iu.GetColumnName());
     }
 
-    double cost = props.Cost.has_value() ? *props.Cost : 0.0;
+    const double cost = props.Cost.has_value() ? *props.Cost : 0.0;
 
     return TOptimizerStatistics(props.Metadata->Type, 
-        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
+        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         props.Metadata->ColumnsCount,
-        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
+        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         withStatsAndCosts ? cost : 0.0,
         TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
             new TOptimizerStatistics::TKeyColumns(keyColumnNames)));
@@ -128,7 +130,7 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
 
     if (printOptions & EPrintPlanOptions::PrintFullMetadata) {
         builder << ", Lineage: {";
-        for (auto &[k, v] : ColumnLineage.Mapping) {
+        for (const auto &[k, v] : ColumnLineage.Mapping) {
             builder << k.GetFullName() << ": <ColName: " << v.ColumnName 
                 << ", Alias: " << v.SourceAlias 
                 << ", Table: " << v.TableName
@@ -143,7 +145,7 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
 
 TString TRBOStatistics::ToString(ui32 printOptions) {
     Y_UNUSED(printOptions);
-    return TStringBuilder() << "N records: " << RecordsCount << ", Size: " << DataSize << ", Selectivity: " << Selectivity; 
+    return TStringBuilder() << "N records: " << ERows << ", Size: " << EBytes << ", Selectivity: " << Selectivity;
 }
 
 }

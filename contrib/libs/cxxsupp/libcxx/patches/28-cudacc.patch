@@ -1,18 +1,18 @@
 diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
-index 4e3e4f2..a89d65f 100644
+index 47942a0..066d572 100644
 --- a/include/__algorithm/simd_utils.h
 +++ b/include/__algorithm/simd_utils.h
 @@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS
- #include <__undef_macros>
- 
  // TODO: Find out how altivec changes things and allow vectorizations there too.
--#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__)
-+#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__) && !defined(__CUDACC__)
+ // TODO: Simplify this condition once we stop building with AppleClang 15 in the CI.
+ #if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_COMPILER_CLANG_BASED) && !defined(__ALTIVEC__) &&                         \
+-    !(defined(_LIBCPP_APPLE_CLANG_VER) && _LIBCPP_APPLE_CLANG_VER < 1600)
++    !(defined(_LIBCPP_APPLE_CLANG_VER) && _LIBCPP_APPLE_CLANG_VER < 1600) && !defined(__CUDACC__)
  #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 1
  #else
  #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 0
 diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
-index 5e88d86..c1b92b5 100644
+index 8935e5a..70cf1e9 100644
 --- a/include/__iterator/reverse_iterator.h
 +++ b/include/__iterator/reverse_iterator.h
 @@ -132,7 +132,7 @@ public:
@@ -25,10 +25,10 @@ index 5e88d86..c1b92b5 100644
      requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
    {
 diff --git a/include/__iterator/segmented_iterator.h b/include/__iterator/segmented_iterator.h
-index 8cb54a3..ca72ecc 100644
+index af27a7b..03d6b9a 100644
 --- a/include/__iterator/segmented_iterator.h
 +++ b/include/__iterator/segmented_iterator.h
-@@ -68,8 +68,10 @@ struct __segmented_iterator_traits;
+@@ -69,8 +69,10 @@ struct __segmented_iterator_traits;
  template <class _Tp, size_t = 0>
  struct __has_specialization : false_type {};
  
@@ -38,12 +38,12 @@ index 8cb54a3..ca72ecc 100644
 +#endif
  
  template <class _Iterator>
- using __is_segmented_iterator = __has_specialization<__segmented_iterator_traits<_Iterator> >;
+ using __is_segmented_iterator _LIBCPP_NODEBUG = __has_specialization<__segmented_iterator_traits<_Iterator> >;
 diff --git a/include/__math/traits.h b/include/__math/traits.h
-index 0c96f76..dcc54f2 100644
+index 4a6e58c..21d8772 100644
 --- a/include/__math/traits.h
 +++ b/include/__math/traits.h
-@@ -92,7 +92,7 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
+@@ -86,7 +86,7 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
  }
  
  [[__nodiscard__]] inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI
@@ -52,7 +52,7 @@ index 0c96f76..dcc54f2 100644
  _LIBCPP_PREFERRED_OVERLOAD
  #endif
      bool
-@@ -111,12 +111,14 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
+@@ -105,12 +105,14 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
    return false;
  }
  
@@ -68,7 +68,7 @@ index 0c96f76..dcc54f2 100644
  _LIBCPP_PREFERRED_OVERLOAD
  #endif
      bool
-@@ -124,9 +126,11 @@ _LIBCPP_PREFERRED_OVERLOAD
+@@ -118,9 +120,11 @@ _LIBCPP_PREFERRED_OVERLOAD
    return __builtin_isnan(__x);
  }
  
@@ -81,10 +81,10 @@ index 0c96f76..dcc54f2 100644
  // isnormal
  
 diff --git a/include/complex b/include/complex
-index 2dc6d29..a3922bc 100644
+index e9baec0..4825fba 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1454,6 +1454,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
+@@ -1456,6 +1456,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
    return {0.0, static_cast<double>(__im)};
  }
  
@@ -92,28 +92,36 @@ index 2dc6d29..a3922bc 100644
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im) {
    return {0.0f, static_cast<float>(__im)};
  }
-@@ -1461,6 +1462,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
+@@ -1463,6 +1464,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(unsigned long long __im) {
    return {0.0f, static_cast<float>(__im)};
  }
 +#  endif
  } // namespace complex_literals
  } // namespace literals
- #endif
+ #  endif
+diff --git a/include/stdlib.h b/include/stdlib.h
+index 8dfdfa4..2b9a877 100644
+--- a/include/stdlib.h
++++ b/include/stdlib.h
+@@ -106,8 +106,12 @@ extern "C++" {
+ #        undef llabs
+ #      endif
+ 
++#ifndef __CUDACC__
+ #      include <__math/abs.h>
+ using std::__math::abs;
++#else
++#      include <__math/abs_cuda.h>
++#endif
+ 
+ // div
+ 
 diff --git a/include/tuple b/include/tuple
-index c3f7b80..550380b 100644
+index 6e7a430..9f8e5de 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -305,7 +305,7 @@ class __tuple_leaf {
- 
-   template <class _Tp>
-   static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
--#  if __has_keyword(__reference_binds_to_temporary)
-+#  if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
-     return !__reference_binds_to_temporary(_Hp, _Tp);
- #  else
-     return true;
-@@ -612,8 +612,16 @@ public:
+@@ -611,8 +611,16 @@ public:
                is_constructible<_Tp, _Up>... > {};
  
    template <class... _Up,

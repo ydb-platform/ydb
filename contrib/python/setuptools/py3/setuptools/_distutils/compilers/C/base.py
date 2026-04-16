@@ -130,10 +130,7 @@ class Compiler:
     library dirs specific to this compiler class
     """
 
-    def __init__(
-        self, verbose: bool = False, dry_run: bool = False, force: bool = False
-    ) -> None:
-        self.dry_run = dry_run
+    def __init__(self, verbose: bool = False, force: bool = False) -> None:
         self.force = force
         self.verbose = verbose
 
@@ -531,12 +528,8 @@ class Compiler:
         """
         if self.force:
             return True
-        else:
-            if self.dry_run:
-                newer = newer_group(objects, output_file, missing='newer')
-            else:
-                newer = newer_group(objects, output_file)
-            return newer
+        newer = newer_group(objects, output_file)
+        return newer
 
     def detect_language(self, sources: str | list[str]) -> str | None:
         """Detect the language of a given file, or list of files. Uses
@@ -1150,12 +1143,12 @@ int main (int argc, char **argv) {{
         msg: object = None,
         level: int = 1,
     ) -> None:
-        execute(func, args, msg, self.dry_run)
+        execute(func, args, msg)
 
     def spawn(
         self, cmd: MutableSequence[bytes | str | os.PathLike[str]], **kwargs
     ) -> None:
-        spawn(cmd, dry_run=self.dry_run, **kwargs)
+        spawn(cmd, **kwargs)
 
     @overload
     def move_file(
@@ -1170,10 +1163,10 @@ int main (int argc, char **argv) {{
         src: str | os.PathLike[str] | bytes | os.PathLike[bytes],
         dst: str | os.PathLike[str] | bytes | os.PathLike[bytes],
     ) -> str | os.PathLike[str] | bytes | os.PathLike[bytes]:
-        return move_file(src, dst, dry_run=self.dry_run)
+        return move_file(src, dst)
 
     def mkpath(self, name, mode=0o777):
-        mkpath(name, mode, dry_run=self.dry_run)
+        mkpath(name, mode)
 
 
 # Map a sys.platform/os.name ('posix', 'nt') to the default compiler
@@ -1262,7 +1255,6 @@ def new_compiler(
     plat: str | None = None,
     compiler: str | None = None,
     verbose: bool = False,
-    dry_run: bool = False,
     force: bool = False,
 ) -> Compiler:
     """Generate an instance of some CCompiler subclass for the supplied
@@ -1307,7 +1299,7 @@ def new_compiler(
     # XXX The None is necessary to preserve backwards compatibility
     # with classes that expect verbose to be the first positional
     # argument.
-    return klass(None, dry_run, force)
+    return klass(None, force=force)
 
 
 def gen_preprocess_options(

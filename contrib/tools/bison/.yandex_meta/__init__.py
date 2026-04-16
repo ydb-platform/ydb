@@ -5,7 +5,6 @@ from devtools.yamaker.modules import GLOBAL, Linkable, Switch
 from devtools.yamaker import pathutil
 from devtools.yamaker.project import NixProject
 
-
 WINDOWS_SRCS = [
     "alloca.h",
     "close.c",
@@ -106,6 +105,16 @@ EXCESSIVE_SRCS = [
 
 
 def post_install(self):
+    with self.yamakes["."] as yamake:
+        yamake.after(
+            "CFLAGS",
+            """
+IF (OPENSOURCE)
+    LDFLAGS(-Wl,--allow-multiple-definition)
+ENDIF()
+            """,
+        )
+
     with self.yamakes["lib"] as gnulib:
         # musl-libc has fseterr
         gnulib.SRCS.remove("fseterr.c")

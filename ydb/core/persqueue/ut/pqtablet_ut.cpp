@@ -2183,12 +2183,21 @@ Y_UNIT_TEST_F(One_New_Partition_In_Another_Tablet, TPQTabletFixture)
     // Tablet PQ has not confirmed that she received TEvPlanStep. Therefore, the coordinator will send it again
     SendPlanStep({.Step=100, .TxIds={txId}});
 
+    // TEvReadSet от владельца партиции 2
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+
+    // PQ отправит запрос в KV, а потом пришлёт ответ на TEvReadSet
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 

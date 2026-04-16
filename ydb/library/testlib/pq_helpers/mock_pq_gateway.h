@@ -3,6 +3,8 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
+#include <optional>
+
 namespace NTestUtils {
 
 struct TEvMockPqEvents {
@@ -25,6 +27,7 @@ public:
     struct TMessage {
         ui64 Offset;
         TString Data;
+        std::optional<TInstant> MessageTime;  // CreateTime/WriteTime in event; if unset, TInstant::Now() is used
     };
 
     virtual ~IMockPqReadSession() = default;
@@ -38,6 +41,8 @@ public:
     virtual void AddStartSessionEvent() = 0;
 
     virtual void AddDataReceivedEvent(ui64 offset, const TString& data) = 0;
+
+    virtual void AddDataReceivedEvent(ui64 offset, const TString& data, TInstant messageTime) = 0;
 
     virtual void AddDataReceivedEvent(const std::vector<TMessage>& messages) = 0;
 
@@ -62,14 +67,16 @@ public:
 };
 
 // Limitations:
-// - There is should be at most one query in flight for each topic
-// - Supported only single partition topics
+// - There should be at most one query in flight for each topic
 class IMockPqGateway : public NYql::IPqGateway {
 public:
     using TPtr = TIntrusivePtr<IMockPqGateway>;
 
-    // Extract last created partition read session, returns nullptr if there is no existing session
+    // Extract last created partition read session for the topic, returns nullptr if none
     virtual IMockPqReadSession::TPtr ExtractReadSession(const TString& topic) = 0;
+
+    // Get read session for a specific partition (multi-partition topics). Returns nullptr if not created.
+    virtual IMockPqReadSession::TPtr GetReadSession(const TString& topic, ui64 partitionId) = 0;
 
     // Wait for read session creation
     virtual IMockPqReadSession::TPtr WaitReadSession(const TString& topic) = 0;

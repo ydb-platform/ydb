@@ -15,7 +15,6 @@ namespace {
 
 TKikimrSettings GetTestSettings() {
     auto appConfig = NKikimrConfig::TAppConfig();
-    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
     appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
 
     auto logConfig = TTestLogSettings()
@@ -118,7 +117,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
                 case 3: {
                     // TEvResolveKeySetResult has empty partitioning (why not? o_O)
-                    const_cast<TVector<TKeyDesc::TPartitionInfo>&>(*request->ResultSet[0].KeyDescription->Partitioning).clear();
+                    request->ResultSet[0].KeyDescription->Partitioning = std::make_shared<TPartitioning>();
                     break;
                 }
 

@@ -4,25 +4,31 @@
 
 namespace NYdb::NConsoleClient {
 
-    int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
+    int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig& config) {
         InitAwsSdk();
-        auto result = RunScenario();
+        auto result = RunScenario(config);
         DestroyAwsSdk();
         return result;
     }
 
-    int TSqsWorkloadWriteScenario::RunScenario() {
+    int TSqsWorkloadWriteScenario::RunScenario(const TClientCommand::TConfig& config) {
         InitStatsCollector(WorkersCount, 0);
         InitMeasuringHttpClient(StatsCollector);
-        InitSqsClient();
+        InitSqsClient(config);
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
+        auto queueUrl = GetQueueUrl(Topic, Consumer, QueueName);
+        if (queueUrl.empty()) {
+            DestroySqsClient();
+            return EXIT_FAILURE;
+        }
 
         TSqsWorkloadWriterParams params{
             .TotalSec = TotalSec,
-            .QueueUrl = QueueUrl,
-            .Account = Account,
-            .Token = Token,
+            .QueueUrl = queueUrl,
+            .AwsAccessKeyId = AwsAccessKeyId,
+            .AwsSessionToken = AwsSessionToken,
+            .AwsSecretKey = AwsSecretKey,
             .Log = Log,
             .Mutex = Mutex,
             .FinishedCond = FinishedCond,
@@ -35,7 +41,6 @@ namespace NYdb::NConsoleClient {
             .WorkersCount = WorkersCount,
             .GroupsAmount = GroupsAmount,
             .MessageSize = MessageSize,
-            .SetSubjectToken = SetSubjectToken,
         };
 
         auto f = std::async([&params, finishedFlag]() {
@@ -55,7 +60,7 @@ namespace NYdb::NConsoleClient {
 
         DestroySqsClient();
 
-        if (AnyErrors()) {
+        if (AnyErrors() || params.StatsCollector->GetTotalWriteMessages() == 0) {
             return EXIT_FAILURE;
         }
 

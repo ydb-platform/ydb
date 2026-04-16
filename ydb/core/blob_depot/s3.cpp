@@ -18,7 +18,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS05, "Init", (Settings, settings));
         if (settings) {
             auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings->GetSettings());
-            WrapperId = Self->Register(NWrappers::CreateS3Wrapper(externalStorageConfig->ConstructStorageOperator()));
+            WrapperId = Self->Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));
             BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
             Bucket = settings->GetSettings().GetBucket();
             SyncMode = settings->HasSyncMode();

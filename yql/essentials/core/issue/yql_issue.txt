@@ -693,6 +693,10 @@ ids {
   severity: S_WARNING
 }
 ids {
+  code: YQL_NO_STATEMENTS
+  severity: S_ERROR
+}
+ids {
   code: CORE_LINEAGE_INTERNAL_ERROR
   severity: S_WARNING
 }
@@ -735,4 +739,16 @@ ids {
 ids {
   code: CBO_MISSING_TABLE_STATS
   severity: S_WARNING
+}
+ids {
+  code: FMR_UNKNOWN_ERROR
+  severity: S_ERROR
+}
+ids {
+  code: FMR_NEED_FALLBACK
+  severity: S_ERROR
+}
+ids {
+  code: FMR_UDF_TERMINATE
+  severity: S_ERROR
 }

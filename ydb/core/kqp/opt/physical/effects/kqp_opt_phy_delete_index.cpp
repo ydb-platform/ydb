@@ -51,7 +51,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         .Table(del.Table())
         .Input(lookupKeys)
         .ReturningColumns(del.ReturningColumns())
-        .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+        .IsBatch(del.IsBatch())
         .Done();
 
     TVector<TExprBase> effects;
@@ -101,14 +101,13 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 break;
             }
             case TIndexDescription::EType::GlobalFulltextPlain:
-            case TIndexDescription::EType::GlobalFulltextRelevance: {
-                // For fulltext indexes, we need to tokenize the text and create deleted rows
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson: {
+                // For fulltext and JSON indexes, we need to tokenize the text and create deleted rows
                 const auto deletePrecompute = ReadInputToPrecompute(deleteIndexKeys, del.Pos(), ctx);
                 deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deletePrecompute, indexTableColumnsSet, indexTableColumns,
                     true /*forDelete*/, del.Pos(), ctx);
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc);
-                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
                 if (withRelevance) {
                     // Update dictionary rows
                     const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
@@ -137,6 +136,9 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 }
                 break;
             }
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+                break;
         }
 
         auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())

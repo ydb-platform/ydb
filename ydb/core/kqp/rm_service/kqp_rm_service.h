@@ -25,33 +25,18 @@ namespace NKqp {
 
 namespace NRm {
 
-/// memory pools
-enum EKqpMemoryPool : ui32 {
-    Unspecified = 0,
-    ScanQuery   = 1, // slow allocations via ResourceBroker
-    DataQuery   = 2, // fast allocations via memory-arena
-
-    Count = 3
-};
-
 using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>;
 
 /// resources request
 struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
-    EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
     ui64 ExternalMemory = 0;
     bool ReleaseAllResources = false;
 
-    void MoveToFreeTier() {
-        ExternalMemory += Memory;
-        Memory = 0;
-    }
-
     TString ToString() const {
-        return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
-            << "ExternalMemory: " << ExternalMemory << " }";
+        return TStringBuilder() << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory
+            << ", ExternalMemory: " << ExternalMemory << " }";
     }
 };
 
@@ -97,7 +82,6 @@ public:
     TKqpResourcesRequest FreeResourcesRequest() const {
         return TKqpResourcesRequest{
             .ExecutionUnits=ExecutionUnits,
-            .MemoryPool=EKqpMemoryPool::Unspecified,
             .Memory=ScanQueryMemory,
             .ExternalMemory=ExternalDataQueryMemory};
     }
@@ -308,7 +292,8 @@ struct TKqpRMAllocateResult {
 /// local resources snapshot
 struct TKqpLocalNodeResources {
     ui32 ExecutionUnits = 0;
-    std::array<ui64, EKqpMemoryPool::Count> Memory;
+    ui64 Memory = 0;
+    ui64 ExternalMemory = 0;
 };
 
 struct TPlannerPlacingOptions {
@@ -378,7 +363,7 @@ struct TKqpProxySharedResources {
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
-    ui32 nodeId = 0);
+    ui32 nodeId = 0, TDuration warmupDeadline = TDuration::Zero());
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());

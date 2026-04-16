@@ -3,8 +3,7 @@
 #include <util/system/types.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TWatermarkTrackerTest) {
 Y_UNIT_TEST(WhenNotGranularShouldNotMoveWatermark) {
@@ -22,5 +21,4 @@ Y_UNIT_TEST(WhenGranularShouldMoveWatermark) {
 }
 } // Y_UNIT_TEST_SUITE(TWatermarkTrackerTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

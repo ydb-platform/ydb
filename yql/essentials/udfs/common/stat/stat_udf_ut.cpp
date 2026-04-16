@@ -202,10 +202,10 @@ Y_UNIT_TEST(SerializedMergedPercentile) {
     }
 
     TRuntimeNode pgmDigest;
-    for (size_t i = 0; i < pgmSerializedDataVector.size(); ++i) {
+    for (const auto& it : pgmSerializedDataVector) {
         TRuntimeNode pgmDigest2;
         {
-            TVector<TRuntimeNode> params = {pgmSerializedDataVector[i]};
+            TVector<TRuntimeNode> params = {it};
             pgmDigest2 = pgmBuilder.Apply(udfTDigest_Deserialize, params);
         }
         if (!pgmDigest) {
@@ -233,9 +233,13 @@ Y_UNIT_TEST(SerializedMergedPercentile) {
     UNIT_ASSERT_DOUBLES_EQUAL(value.Get<double>(), 8.95, 0.001);
 }
 
-static double GetParetoRandomNumber(double a) {
+namespace {
+
+double GetParetoRandomNumber(double a) {
     return 1 / pow(RandomNumber<double>(), double(1) / a);
 }
+
+} // namespace
 
 Y_UNIT_TEST(BigPercentile) {
     auto mutableFunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();

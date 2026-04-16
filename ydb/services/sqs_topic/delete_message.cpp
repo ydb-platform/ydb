@@ -122,13 +122,12 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
-            TString serializedToken = this->Request_->GetSerializedToken();
             NPQ::NMLP::TCommitterSettings committerSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Consumer = this->QueueUrl_->Consumer,
                 .Messages = std::move(requestList),
-                .UserToken = MakeIntrusive<NACLib::TUserToken>(serializedToken),
+                .UserToken = this->Request_->GetInternalToken(),
             };
 
             std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateCommitter(this->SelfId(), std::move(committerSettings))};

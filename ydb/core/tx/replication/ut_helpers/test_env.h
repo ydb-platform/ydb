@@ -34,6 +34,11 @@ class TEnv {
         Endpoint = "localhost:" + ToString(grpcPort);
         Database = "/" + ToString(DomainName);
 
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(Endpoint)
+            .SetDatabase(Database);
+        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
             Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));
         Sender = Server.GetRuntime()->AllocateEdgeActor();
@@ -220,7 +225,7 @@ public:
     }
 
     const NYdb::TDriver& GetDriver() const {
-        return Server.GetDriver();
+        return *Driver;
     }
 
     const TString& GetEndpoint() const {
@@ -244,6 +249,7 @@ private:
     Tests::TServerSettings Settings;
     Tests::TServer Server;
     Tests::TClient Client;
+    THolder<NYdb::TDriver> Driver;
     TString Endpoint;
     TString Database;
     TActorId YdbProxy;

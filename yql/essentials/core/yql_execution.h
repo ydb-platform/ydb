@@ -5,6 +5,8 @@
 #include <yql/essentials/ast/yql_gc_nodes.h>
 #include <util/system/mutex.h>
 
+#include <utility>
+
 #ifndef YQL_OPERATION_STATISTICS_CUSTOM_FIELDS
 #define YQL_OPERATION_STATISTICS_CUSTOM_FIELDS
 #endif
@@ -85,9 +87,9 @@ namespace NYql {
 
         TVector<TAlert> Alerts;
 
-        TOperationProgress(const TString& category, ui32 id,
+        TOperationProgress(TString  category, ui32 id,
             EState state, const TString& stage = "", const TVector<TAlert>& alerts = {})
-            : Category(category)
+            : Category(std::move(category))
             , Id(id)
             , State(state)
             , Stage(stage, TInstant::Now())

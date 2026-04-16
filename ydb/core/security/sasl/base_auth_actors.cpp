@@ -10,8 +10,7 @@ using namespace NLogin;
 using namespace NLogin::NSasl;
 using namespace NSchemeShard;
 
-TAuthActorBase::TAuthActorBase(TActorId sender, const std::string& database, const std::string& peerName
-)
+TAuthActorBase::TAuthActorBase(TActorId sender, const std::string& database, const std::string& peerName)
     : Sender(sender)
     , Database(database)
     , PeerName(peerName)
@@ -31,18 +30,14 @@ void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             IActor* pipe = NTabletPipe::CreateClient(SelfId(), domainInfo->ExtractSchemeShard(), GetPipeClientConfig());
             PipeClient = RegisterWithSameMailbox(pipe);
 
-            auto request = std::make_unique<TEvSchemeShard::TEvLogin>();
-            request.get()->Record = CreateLoginRequest();
-            NTabletPipe::SendData(SelfId(), PipeClient, request.release());
-            Become(&TThis::StateLogin, Timeout, new TEvents::TEvWakeup());
-            return;
+            return ProceedWithAuthentication(ctx, domainInfo);
         }
     }
 
     std::string error = "Unknown database";
     LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
         DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        ", " << error
+        ", " << "Authentication failed: " << error
     );
     SendError(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, error);
     return CleanupAndDie(ctx);
@@ -131,11 +126,19 @@ void TAuthActorBase::ResolveSchemeShard(const TActorContext &ctx) {
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = SplitPath(TString(Database));
     entry.RedirectRequired = false;
+    entry.SyncVersion = true;
 
     request->ResultSet.emplace_back(std::move(entry));
 
     ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
     Become(&TThis::StateNavigate);
+}
+
+void TAuthActorBase::SendLoginRequest() {
+    auto request = std::make_unique<TEvSchemeShard::TEvLogin>();
+    request.get()->Record = CreateLoginRequest();
+    NTabletPipe::SendData(SelfId(), PipeClient, request.release());
+    Become(&TThis::StateLogin, Timeout, new TEvents::TEvWakeup());
 }
 
 NTabletPipe::TClientConfig TAuthActorBase::GetPipeClientConfig() const {
@@ -161,7 +164,7 @@ TPlainAuthActorBase::TPlainAuthActorBase(TActorId sender, const std::string& dat
 {
 }
 
-void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
+bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
     std::vector<std::string> authMsgParts = StringSplitter(AuthMsg).Split('\0');
     if (authMsgParts.size() != 3) {
         std::string error = "Wrong SASL PLAIN auth message format";
@@ -170,7 +173,8 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
             ", " << error
         );
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-        return CleanupAndDie(ctx);
+        CleanupAndDie(ctx);
+        return false;
     }
 
     AuthzId = authMsgParts[0];
@@ -179,15 +183,16 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
 
     if (!AuthzId.empty()) {
         std::string prepAuthzId;
-        auto saslPrepRC = NLogin::NSasl::SaslPrep(AuthzId, prepAuthzId);
-        if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
+        auto saslPrepRC = SaslPrep(AuthzId, prepAuthzId);
+        if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authorization identity";
             LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
                 DerivedActorName << "# " << ctx.SelfID.ToString() <<
                 ", " << error
             );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-            return CleanupAndDie(ctx);
+            CleanupAndDie(ctx);
+            return false;
         }
 
         AuthzId = std::move(prepAuthzId);
@@ -200,22 +205,26 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
             ", " << error
         );
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-        return CleanupAndDie(ctx);
+        CleanupAndDie(ctx);
+        return false;
     } else {
         std::string prepAuthcId;
-        auto saslPrepRC = NLogin::NSasl::SaslPrep(AuthcId, prepAuthcId);
-        if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
+        auto saslPrepRC = SaslPrep(AuthcId, prepAuthcId);
+        if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authentication identity";
             LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
                 DerivedActorName << "# " << ctx.SelfID.ToString() <<
                 ", " << error
             );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-            return CleanupAndDie(ctx);
+            CleanupAndDie(ctx);
+            return false;
         }
 
         AuthcId = std::move(prepAuthcId);
     }
+
+    return true;
 }
 
 }

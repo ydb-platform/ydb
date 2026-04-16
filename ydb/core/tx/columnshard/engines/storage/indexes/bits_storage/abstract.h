@@ -11,15 +11,13 @@ class TSkipIndexBitSetStorage;
 }
 
 namespace NKikimr::NOlap::NIndexes {
-class IBitsStorage {
+class IBitsStorageViewer {
 private:
     virtual bool DoGet(const ui32 index) const = 0;
     virtual ui32 DoGetBitsCount() const = 0;
-    virtual TConclusionStatus DoDeserializeFromString(const TString& data) = 0;
-    virtual TString DoSerializeToString() const = 0;
 
 public:
-    virtual ~IBitsStorage() = default;
+    virtual ~IBitsStorageViewer() = default;
 
     TString DebugString() const;
 
@@ -30,24 +28,12 @@ public:
     [[nodiscard]] bool Get(const ui32 index) const {
         return DoGet(index);
     }
-
-    [[nodiscard]] TString SerializeToString() const {
-        return DoSerializeToString();
-    }
-
-    [[nodiscard]] TConclusionStatus DeserializeFromString(const TString& data) noexcept {
-        try {
-            return DoDeserializeFromString(data);
-        } catch (...) {
-            return TConclusionStatus::Fail("cannot read index: " + CurrentExceptionMessage());
-        }
-    }
 };
 
 class IBitsStorageConstructor {
 private:
-    virtual std::shared_ptr<IBitsStorage> DoBuild(TDynBitMap&& bm) const = 0;
-    virtual TConclusion<std::shared_ptr<IBitsStorage>> DoBuild(const TString& data) const = 0;
+    virtual TString DoSerializeToString(TDynBitMap&& bm) const = 0;
+    virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const = 0;
 
 public:
     static std::shared_ptr<IBitsStorageConstructor> GetDefault();
@@ -55,12 +41,12 @@ public:
     virtual ~IBitsStorageConstructor() = default;
 
     using TFactory = NObjectFactory::TObjectFactory<IBitsStorageConstructor, TString>;
-    [[nodiscard]] std::shared_ptr<IBitsStorage> Build(TDynBitMap&& bm) const {
-        return DoBuild(std::move(bm));
+    [[nodiscard]] TString SerializeToString(TDynBitMap&& bm) const {
+        return DoSerializeToString(std::move(bm));
     }
 
-    [[nodiscard]] TConclusion<std::shared_ptr<IBitsStorage>> Build(const TString& data) const {
-        return DoBuild(data);
+    [[nodiscard]] TConclusion<std::shared_ptr<IBitsStorageViewer>> Restore(const TString& data) const {
+        return DoRestore(data);
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TSkipIndexBitSetStorage& proto);

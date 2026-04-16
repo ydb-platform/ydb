@@ -202,14 +202,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TString types = rowset.GetValue<Schema::ForceTraversalOperations::Types>();
                 ui64 createdAt = rowset.GetValue<Schema::ForceTraversalOperations::CreatedAt>();
                 TString databaseName = rowset.GetValue<Schema::ForceTraversalOperations::DatabaseName>();
+                TActorId replyToActorId = rowset.GetValue<Schema::ForceTraversalOperations::ReplyToActorId>();
 
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
                     .DatabaseName = databaseName,
                     .Tables = {},
                     .Types = types,
-                    .ReplyToActorId = {},
-                    .CreatedAt = TInstant::FromValue(createdAt)
+                    .ReplyToActorId = replyToActorId,
+                    .RequestingActorReattached = false,
+                    .CreatedAt = TInstant::FromValue(createdAt),
                 };
                 Self->ForceTraversals.emplace_back(operation);
 
@@ -240,14 +242,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
                 TString columnTagsStr = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
                 TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
-
-                if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
-                    // Resent TEvAnalyzeShard to shards
-                    status = TForceTraversalTable::EStatus::None;
-                } else if (status == TForceTraversalTable::EStatus::TraversalStarted) {
-                    // Reset traversal
-                    status = TForceTraversalTable::EStatus::AnalyzeFinished;
-                }
 
                 auto pathId = TPathId(ownerId, localPathId);
                 auto columnTags = Scan<ui32>(SplitString(columnTagsStr, ","));
@@ -283,11 +277,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
         Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
-        Self->EnableBackgroundColumnStatsCollection = AppData(ctx)
-            ->StatisticsConfig.GetEnableBackgroundColumnStatsCollection();
         Self->SubscribeForConfigChanges(ctx);
 
-        Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
+        Self->Schedule(Self->GetPropagateInterval(), new TEvPrivate::TEvPropagate());
 
         if (Self->EnableColumnStatistics) {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());

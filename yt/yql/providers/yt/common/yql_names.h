@@ -30,6 +30,7 @@ const TStringBuf YqlReadUdfRunConfigAttribute = "_yql_read_udf_run_config";
 const TStringBuf YqlViewPrefixAttribute = "_yql_view_";
 const TStringBuf YqlProtoFieldPrefixAttribute = "_yql_proto_field_";
 const TStringBuf YqlDynamicAttribute = "_yql_dynamic";
+const TStringBuf YqlRLSAttribute = "_yql_rls";
 
 const TStringBuf YqlSysColumnPrefix = "_yql_sys_table";
 const TStringBuf YqlSysColumnPath = "_yql_sys_tablepath";

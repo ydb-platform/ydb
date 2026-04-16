@@ -1,6 +1,7 @@
 #include "kqp_buffer_lookup_actor.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
@@ -84,6 +85,7 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
+
         AFL_ENSURE(Settings.Alloc);
         {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
@@ -96,8 +98,9 @@ public:
             cancel->Record.SetReadId(readId);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
         }
+        ReadIdToState.clear();
 
-        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        Unlink();
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
 
@@ -108,16 +111,26 @@ public:
         PassAway();
     }
 
+    void Unlink() override {
+        AFL_ENSURE(ReadIdToState.empty());
+
+        for (auto& [_, state] : ShardToState) {
+            state.HasPipe = false;
+        }
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+    }
+
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDataShard::TEvReadResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                default:
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                        TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
+                hFunc(TEvPrivate::TEvRetryRead, Handle);
+            default:
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                    NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                    TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite());
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             RuntimeError(
@@ -249,12 +262,14 @@ public:
 
     void StartLookupTask(ui64 cookie, TLookupState& state, bool isUnique, bool uniqueFailOnRead) {
         auto& worker = state.Worker;
-        auto reads = worker->BuildRequests(Partitioning, ReadId);
+        worker->BuildRequests(Partitioning, ReadId);
 
-        // lookup can't be overloaded
-        AFL_ENSURE(!worker->IsOverloaded(std::numeric_limits<size_t>::max()));
+        while(true) {
+            auto [shardId, read] = worker->PopNextRequest();
+            if (!read) {
+                break;
+            }
 
-        for (auto& [shardId, read] : reads) {
             ++state.ReadsInflight;
             StartTableRead(cookie, shardId, isUnique, uniqueFailOnRead, std::move(read));
         }
@@ -318,6 +333,9 @@ public:
         record.SetLockMode(!isUniqueCheck
             ? Settings.LockMode
             : NKikimrDataEvents::OPTIMISTIC);
+        if (Settings.QuerySpanId) {
+            record.SetQuerySpanId(Settings.QuerySpanId);
+        }
 
         AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 
@@ -415,25 +433,22 @@ public:
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
+            if (record.HasDeferredVictimQuerySpanId()) {
+                Settings.TxManager->SetVictimQuerySpanId(record.GetDeferredVictimQuerySpanId());
+            } else {
+                SetVictimQuerySpanIdFromBrokenLocks(shardId, record.GetBrokenTxLocks(), Settings.TxManager);
+            }
+            RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << lookupState.Worker->GetTablePath() << "`.");
+                MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));
             return;
         }
 
         for (const auto& lock : record.GetTxLocks()) {
-            if (!Settings.TxManager->AddLock(shardId, lock)) {
-                YQL_ENSURE(Settings.TxManager->BrokenLocks());
-                NYql::TIssues issues;
-                issues.AddIssue(*Settings.TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
+            if (!Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId)) {
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    TStringBuilder() << "Transaction locks invalidated. Table: `"
-                        << lookupState.Worker->GetTablePath() << "`.",
-                    std::move(issues));
+                    MakeLockInvalidatedMessage(Settings.TxManager, lookupState.Worker->GetTablePath()));
                 return;
             }
         }
@@ -546,9 +561,9 @@ public:
 
         {
             const auto guard = Settings.TypeEnv.BindAllocator();
-            lookupState.Worker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
-            });
+            lookupState.Worker->AddResult(TStreamLookupShardReadResult(
+                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), &guard.GetMutex()->Ref()
+            ));
         }
 
         Settings.Callbacks->OnLookupTaskFinished();
@@ -607,6 +622,7 @@ public:
             return false;
         }
 
+        ++failedRead.RetryAttempts;
         auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);
@@ -623,12 +639,17 @@ public:
         AFL_ENSURE(failedRead.Blocked);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
-        auto requests = lookupState.Worker->RebuildRequest(failedReadId, ReadId);
-        for (auto& request : requests) {
+        lookupState.Worker->RebuildRequest(failedRead.ShardId, failedReadId, ReadId);
+        while(true) {
+            auto [shardId, request] = lookupState.Worker->PopNextRequest();
+            if (!request)  {
+                break;
+            }
+
             const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
             StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.IsUniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
-            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts + 1;
+            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts;
         }
         ReadIdToState.erase(failedReadId);
     }
@@ -678,7 +699,7 @@ public:
 
 private:
     TKqpBufferTableLookupSettings Settings;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    std::shared_ptr<const TPartitioning> Partitioning;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

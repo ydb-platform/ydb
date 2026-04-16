@@ -13,12 +13,14 @@ TRangeMap::TRangeMap(const TBlockRange64& range)
 
 TRangeMap::TRangeMap(const TVector<TBlockRange64>& ranges)
 {
-    for (const auto& r : ranges) {
+    for (const auto& r: ranges) {
         Blocks.insert(r);
     }
 }
 
-TMaybe<TBlockRange64> TRangeMap::GetBlock(const TBlockRange64& range, bool exact)
+TMaybe<TBlockRange64> TRangeMap::GetBlock(
+    const TBlockRange64& range,
+    bool exact)
 {
     if (Blocks.empty()) {
         return Nothing();
@@ -115,7 +117,7 @@ bool TRangeMap::Empty() const
 TString TRangeMap::DumpRanges() const
 {
     TStringStream ss;
-    for (const auto& r : Blocks) {
+    for (const auto& r: Blocks) {
         ss << DescribeRange(r) << " ";
     }
     return ss.Str();

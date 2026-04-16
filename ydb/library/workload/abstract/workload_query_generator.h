@@ -125,6 +125,9 @@ public:
 
     virtual void ConfigureOpts(NLastGetopt::TOpts& opts) = 0;
     virtual TBulkDataGeneratorList GetBulkInitialData() = 0;
+    virtual int PostImport() {
+        return EXIT_SUCCESS;
+    };
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(TString, Description);
 };

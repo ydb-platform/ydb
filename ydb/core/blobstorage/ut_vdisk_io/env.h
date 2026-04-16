@@ -142,7 +142,7 @@ namespace NKikimr {
             pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
             pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
             pDiskConfig->SectorMap = SectorMapByPath[filePath];
-            pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+            pDiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pDiskConfig->SectorMap);
 
             NPDisk::TMainKey mainKeys = NPDisk::TMainKey{ .Keys = { mainKey }, .IsInitialized = true };
 

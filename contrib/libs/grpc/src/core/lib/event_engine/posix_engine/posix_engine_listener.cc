@@ -15,6 +15,7 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/event_engine/posix.h"
+#include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/port.h"
 
 #ifdef GRPC_POSIX_SOCKET_TCP
@@ -27,6 +28,7 @@
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include "y_absl/functional/any_invocable.h"
@@ -68,7 +70,7 @@ PosixEngineListenerImpl::PosixEngineListenerImpl(
 y_absl::StatusOr<int> PosixEngineListenerImpl::Bind(
     const EventEngine::ResolvedAddress& addr,
     PosixListenerWithFdSupport::OnPosixBindNewFdCallback on_bind_new_fd) {
-  y_absl::MutexLock lock(&this->mu_);
+  grpc_core::MutexLock lock(&this->mu_);
   if (this->started_) {
     return y_absl::FailedPreconditionError(
         "Listener is already started, ports can no longer be bound");
@@ -181,11 +183,11 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     }
 
     // For UNIX sockets, the accept call might not fill up the member
-    // sun_path of sockaddr_un, so explicitly call getsockname to get it.
+    // sun_path of sockaddr_un, so explicitly call getpeername to get it.
     if (addr.address()->sa_family == AF_UNIX) {
       socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
-      if (getsockname(fd, const_cast<sockaddr*>(addr.address()), &len) < 0) {
-        gpr_log(GPR_ERROR, "Closing acceptor. Failed getsockname: %s",
+      if (getpeername(fd, const_cast<sockaddr*>(addr.address()), &len) < 0) {
+        gpr_log(GPR_ERROR, "Closing acceptor. Failed getpeername: %s",
                 strerror(errno));
         close(fd);
         // Shutting down the acceptor. Unref the ref grabbed in
@@ -227,15 +229,20 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
         listener_->memory_allocator_factory_->CreateMemoryAllocator(
             y_absl::StrCat("endpoint-tcp-server-connection: ", *peer_name)),
         /*options=*/listener_->options_);
-    // Call on_accept_ and then resume accepting new connections by continuing
-    // the parent for-loop.
-    listener_->on_accept_(
-        /*listener_fd=*/handle_->WrappedFd(), /*endpoint=*/std::move(endpoint),
-        /*is_external=*/false,
-        /*memory_allocator=*/
-        listener_->memory_allocator_factory_->CreateMemoryAllocator(
-            y_absl::StrCat("on-accept-tcp-server-connection: ", *peer_name)),
-        /*pending_data=*/nullptr);
+
+    grpc_core::EnsureRunInExecCtx([this, peer_name = std::move(*peer_name),
+                                   endpoint = std::move(endpoint)]() mutable {
+      // Call on_accept_ and then resume accepting new connections
+      // by continuing the parent for-loop.
+      listener_->on_accept_(
+          /*listener_fd=*/handle_->WrappedFd(),
+          /*endpoint=*/std::move(endpoint),
+          /*is_external=*/false,
+          /*memory_allocator=*/
+          listener_->memory_allocator_factory_->CreateMemoryAllocator(
+              y_absl::StrCat("on-accept-tcp-server-connection: ", peer_name)),
+          /*pending_data=*/nullptr);
+    });
   }
   GPR_UNREACHABLE_CODE(return);
 }
@@ -258,21 +265,24 @@ y_absl::Status PosixEngineListenerImpl::HandleExternalConnection(
         y_absl::StrCat("HandleExternalConnection: peer not connected: ",
                      peer_name.status().ToString()));
   }
-  auto endpoint = CreatePosixEndpoint(
-      /*handle=*/poller_->CreateHandle(fd, *peer_name,
-                                       poller_->CanTrackErrors()),
-      /*on_shutdown=*/nullptr, /*engine=*/engine_,
-      /*allocator=*/
-      memory_allocator_factory_->CreateMemoryAllocator(y_absl::StrCat(
-          "external:endpoint-tcp-server-connection: ", *peer_name)),
-      /*options=*/options_);
-  on_accept_(
-      /*listener_fd=*/listener_fd, /*endpoint=*/std::move(endpoint),
-      /*is_external=*/true,
-      /*memory_allocator=*/
-      memory_allocator_factory_->CreateMemoryAllocator(y_absl::StrCat(
-          "external:on-accept-tcp-server-connection: ", *peer_name)),
-      /*pending_data=*/pending_data);
+  grpc_core::EnsureRunInExecCtx([this, peer_name = std::move(*peer_name),
+                                 pending_data, listener_fd, fd]() mutable {
+    auto endpoint = CreatePosixEndpoint(
+        /*handle=*/poller_->CreateHandle(fd, peer_name,
+                                         poller_->CanTrackErrors()),
+        /*on_shutdown=*/nullptr, /*engine=*/engine_,
+        /*allocator=*/
+        memory_allocator_factory_->CreateMemoryAllocator(y_absl::StrCat(
+            "external:endpoint-tcp-server-connection: ", peer_name)),
+        /*options=*/options_);
+    on_accept_(
+        /*listener_fd=*/listener_fd, /*endpoint=*/std::move(endpoint),
+        /*is_external=*/true,
+        /*memory_allocator=*/
+        memory_allocator_factory_->CreateMemoryAllocator(y_absl::StrCat(
+            "external:on-accept-tcp-server-connection: ", peer_name)),
+        /*pending_data=*/pending_data);
+  });
   return y_absl::OkStatus();
 }
 
@@ -284,7 +294,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::Shutdown() {
 }
 
 y_absl::Status PosixEngineListenerImpl::Start() {
-  y_absl::MutexLock lock(&this->mu_);
+  grpc_core::MutexLock lock(&this->mu_);
   // Start each asynchronous acceptor.
   GPR_ASSERT(!this->started_);
   this->started_ = true;
@@ -297,7 +307,7 @@ y_absl::Status PosixEngineListenerImpl::Start() {
 void PosixEngineListenerImpl::TriggerShutdown() {
   // This would get invoked from the destructor of the parent
   // PosixEngineListener object.
-  y_absl::MutexLock lock(&this->mu_);
+  grpc_core::MutexLock lock(&this->mu_);
   for (auto it = acceptors_.begin(); it != acceptors_.end(); it++) {
     // Trigger shutdown of each asynchronous acceptor. This in-turn calls
     // ShutdownHandle on the associated poller event handle. It may also
@@ -308,7 +318,7 @@ void PosixEngineListenerImpl::TriggerShutdown() {
 }
 
 PosixEngineListenerImpl::~PosixEngineListenerImpl() {
-  // This should get invoked only after all the AsyncConnectionAcceptor's have
+  // This should get invoked only after all the AsyncConnectionAcceptors have
   // been destroyed. This is because each AsyncConnectionAcceptor has a
   // shared_ptr ref to the parent PosixEngineListenerImpl.
   if (on_shutdown_ != nullptr) {

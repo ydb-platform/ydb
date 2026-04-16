@@ -3,6 +3,7 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    expected_error_guard.cpp
     debug_metrics.cpp
     helpers.cpp
     retry_lib.cpp

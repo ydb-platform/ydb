@@ -121,8 +121,6 @@ void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestA
 
 TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName);
 
-void SetupSignalActions();
-
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet);
 
 template <typename TValue>

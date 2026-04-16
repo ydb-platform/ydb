@@ -155,9 +155,9 @@ public:
         }
     }
 private:
-    size_t AcquireManager(ui64 externalProcessId, int delta = 1);
+    size_t AcquireManager(ui64 externalProcessId);
     size_t ReleaseManager(ui64 externalProcessId);
-    size_t GetManager(ui64 externalProcessId);
+    std::optional<size_t> GetManager(ui64 externalProcessId);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

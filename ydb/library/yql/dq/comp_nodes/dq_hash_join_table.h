@@ -1,6 +1,5 @@
 #pragma once
 #include "type_utils.h"
-#include <util/string/printf.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/block_layout_converter.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
@@ -31,7 +30,7 @@ class TStdJoinTable {
     void Add(TSizedTuple tuple) {
         MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         MKQL_ENSURE(std::ssize(tuple) == TupleSize,
-                    Sprintf("tuple size promise(%i) vs actual(%i) mismatch", TupleSize, std::ssize(tuple)));
+                    TStringBuilder() << "tuple size promise(" << TupleSize << ") vs actual(" << std::ssize(tuple) << ") mismatch");
         for (int idx = 0; idx < TupleSize; ++idx) {
             Tuples.push_back(tuple[idx]);
         }
@@ -87,15 +86,27 @@ class TStdJoinTable {
 class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   public:
 
-    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout)
+    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false)
         : Table_(layout)
+        , RowWidth_(layout->TotalRowSize)
+        , TrackUsed_(trackUsed)
     {
         MKQL_ENSURE(Empty(), "table should be empty by default");
     }
 
     void BuildWith(IBlockLayoutConverter::TPackResult data) {
         BuildData_ = std::move(data);
-        Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(), BuildData_.NTuples);
+        MKQL_ENSURE(BuildData_.NTuples >= 0 && BuildData_.NTuples <= std::numeric_limits<int>::max(),
+                    TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds int range");
+        MKQL_ENSURE(
+            BuildData_.PackedTuples.size() >= static_cast<size_t>(BuildData_.NTuples) * RowWidth_,
+            TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds PackedTuples capacity ("
+                             << BuildData_.PackedTuples.size() << " bytes, row width " << RowWidth_ << ")");
+        Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(),
+                     BuildData_.NTuples);
+        if (TrackUsed_ && BuildData_.NTuples > 0) {
+            Used_.resize(BuildData_.NTuples, 0);
+        }
     }
 
 
@@ -103,22 +114,42 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.Empty();
     }
 
-    i64 RequiredMemoryForBuild(i64 nTuples) const {
+    ui64 RequiredMemoryForBuild(int nTuples) const {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
-    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) const {
+    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
         if (Empty()){
             return;
         }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
+            if (TrackUsed_) {
+                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
+                MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+                Used_[index] = 1;
+            }
             consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
         });
+    }
+
+    void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
+        MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
+        for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
+            if (!Used_[i]) {
+                consume(TSingleTuple{
+                    BuildData_.PackedTuples.data() + i * RowWidth_,
+                    BuildData_.Overflow.data()
+                });
+            }
+        }
     }
 
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
+    size_t RowWidth_ = 0;
+    bool TrackUsed_ = false;
+    TMKQLVector<ui8> Used_;
 };
 
 } // namespace NKikimr::NMiniKQL::NJoinTable

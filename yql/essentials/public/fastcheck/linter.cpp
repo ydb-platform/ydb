@@ -9,8 +9,7 @@
 
 #include <functional>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -126,5 +125,4 @@ TChecksResponse RunChecks(const TChecksRequest& request) {
     return res;
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

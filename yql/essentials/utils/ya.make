@@ -7,8 +7,8 @@ SRCS(
     chunked_buffer.h
     debug_info.cpp
     debug_info.h
-    exceptions.cpp
-    exceptions.h
+    exception_utils.cpp
+    exception_utils.h
     future_action.cpp
     future_action.h
     hash.cpp
@@ -30,6 +30,7 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
+    checked_deref_ptr.h
     runnable.h
     sort.cpp
     sort.h

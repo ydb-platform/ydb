@@ -1,8 +1,7 @@
 #pragma once
 #include "linter.h"
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 class TCheckState;
 
@@ -35,5 +34,4 @@ std::unique_ptr<ICheckRunner> MakeTranslatorRunner();
 std::unique_ptr<ICheckRunner> MakeFormatRunner();
 std::unique_ptr<ICheckRunner> MakeTypecheckRunner();
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

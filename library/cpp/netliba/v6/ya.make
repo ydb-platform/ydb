@@ -33,7 +33,7 @@ PEERDIR(
     library/cpp/binsaver
     library/cpp/netliba/socket
     library/cpp/string_utils/url
-    library/cpp/deprecated/atomic_bool
+    library/cpp/deprecated/atomic
     library/cpp/threading/mux_event
 )
 

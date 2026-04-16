@@ -1,14 +1,20 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
+
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/duration.h>
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
+
 #include <library/cpp/json/json_writer.h>
+
+#include <util/folder/path.h>
+#include <util/generic/serialized_enum.h>
+#include <util/random/shuffle.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
-#include <util/folder/path.h>
-#include <util/random/shuffle.h>
+#include <util/thread/pool.h>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
@@ -99,6 +105,21 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload")
         .StoreResult(&Threads).DefaultValue(Threads).RequiredArgument("COUNT");
+
+    config.Opts->AddLongOption("tx-mode", TStringBuilder() << "Transaction mode (" << GetEnumAllNames<BenchmarkUtils::ETxMode>() << ")")
+        .RequiredArgument("VAL").StoreResult(&TxMode).DefaultValue(TxMode);
+
+    config.Opts->AddLongOption("stats", TStringBuilder() << "Collect statistics mode")
+        .RequiredArgument("VAL").Handler([&](const TStringBuf option) {
+            StatsMode = ParseQueryStatsModeOrThrow(TString(option), StatsMode);
+            if (StatsMode < NQuery::EStatsMode::Full) {
+                throw TMisuseException() << "Stats collection mode can't be less than [full] in benchmark mode";
+            }
+        })
+        .ChoicesWithCompletion({
+            {"full", "Full"},
+            {"profile", "Profile"},
+        });
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -640,6 +661,8 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
 BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkSettings(bool withProgress) const {
     BenchmarkUtils::TQueryBenchmarkSettings result;
     result.WithProgress = withProgress;
+    result.TxMode = TxMode;
+    result.StatsMode = StatsMode;
     result.RetrySettings = RetrySettings;
     if (GlobalDeadline != TInstant::Max()) {
         result.Deadline.Deadline = GlobalDeadline;

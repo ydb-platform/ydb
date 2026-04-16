@@ -2,9 +2,7 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
-namespace NSQLTranslation {
-
-namespace NDetail {
+namespace NSQLTranslation::NDetail {
 
 enum EParseState {
     INITIAL,
@@ -100,6 +98,4 @@ TVector<TSQLHint> ParseSqlHints(NYql::TPosition commentPos, const TStringBuf& co
     return result;
 }
 
-} // namespace NDetail
-
-} // namespace NSQLTranslation
+} // namespace NSQLTranslation::NDetail

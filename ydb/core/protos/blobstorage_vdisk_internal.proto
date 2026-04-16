@@ -279,8 +279,25 @@ message THugeKeeperEntryPoint {
 }
 
 message TMetadataEntryPoint {
-    optional bool IsTinyDisk = 1;
+    reserved 1;
     optional uint32 HullCompLevel0MaxSstsAtOnce = 2;
     optional uint32 HullCompSortedPartsNum = 3;
-    optional uint32 HugeBlobOverhead = 4;
+    reserved 4;
+}
+
+message TChunkKeeperEntryPoint {
+    enum ESubsystem {
+        // reserved for test purposes
+        Test1 = 1;
+        Test2 = 2;
+
+        PhantomFlagStorage = 10;
+    };
+
+    message TChunk {
+        optional uint32 ChunkIdx = 1;
+        optional uint32 Subsystem = 2;
+    }
+
+    repeated TChunk Chunks = 1;
 }

@@ -10,8 +10,7 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TProtobufBase: public IUdfModule {
 public:
@@ -108,5 +107,4 @@ private:
     }
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

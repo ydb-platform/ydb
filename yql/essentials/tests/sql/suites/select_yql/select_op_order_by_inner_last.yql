@@ -1,0 +1,8 @@
+/* custom error: YqlSelect unsupported: ORDER BY within UNION/EXCEPT/INTERSECT component */
+PRAGMA YqlSelect = 'force';
+
+    SELECT * FROM (VALUES (1), (3)) AS t (x)
+UNION
+    SELECT * FROM (VALUES (2)) AS t (x)
+EXCEPT
+    (SELECT * FROM (VALUES (3)) AS t (x) ORDER BY x LIMIT 3);

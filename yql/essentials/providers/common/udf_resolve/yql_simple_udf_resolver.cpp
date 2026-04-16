@@ -20,17 +20,18 @@
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 class TSimpleUdfResolver: public IUdfResolver {
 public:
-    TSimpleUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TFileStoragePtr& fileStorage, bool useFakeMD5)
+    TSimpleUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, TFileStoragePtr fileStorage, bool useFakeMD5)
         : FunctionRegistry_(functionRegistry)
-        , FileStorage_(fileStorage)
+        , FileStorage_(std::move(fileStorage))
         , TypeInfoHelper_(new TTypeInfoHelper)
         , UseFakeMD5_(useFakeMD5)
     {
@@ -58,7 +59,8 @@ public:
             THashSet<TString> requiredModules;
             for (auto udfPtr : functions) {
                 auto& udf = *udfPtr;
-                TStringBuf moduleName, funcName;
+                TStringBuf moduleName;
+                TStringBuf funcName;
                 if (!SplitUdfName(udf.Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
                     ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Incorrect format of function name: " << udf.Name));
                     hasErrors = true;
@@ -246,5 +248,4 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     return !hasErrors;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

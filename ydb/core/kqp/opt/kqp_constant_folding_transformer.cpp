@@ -10,7 +10,7 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 namespace {
-    THashSet<TString> notAllowedDataTypeForSafeCast{"JsonDocument", "DyNumber"};
+    const THashSet<TString> notAllowedDataTypeForSafeCast{"JsonDocument", "DyNumber"};
 
     bool IsSuitableToExtractExpr(const TExprNode::TPtr &input) {
         if (auto maybeSafeCast = TExprBase(input).Maybe<TCoSafeCast>()) {
@@ -86,10 +86,6 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
     TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
 
-    if (!Config->GetEnableConstantFolding()) {
-        return IGraphTransformer::TStatus::Ok;
-    }
-
     bool foldUdfs = Config->GetEnableFoldUdfs();
 
     TNodeOnNodeOwnedMap replaces;
@@ -116,7 +112,6 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
 
     if (replaces.empty()) {
         return IGraphTransformer::TStatus::Ok;
-        ;
     } else {
         TOptimizeExprSettings settings(&TypeCtx);
         settings.VisitTuples = false;

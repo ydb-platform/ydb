@@ -18,7 +18,6 @@ from contextlib import AbstractContextManager, contextmanager
 from functools import cached_property
 from random import Random
 from sys import float_info
-from types import ModuleType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -126,6 +125,30 @@ CacheKeyT: TypeAlias = tuple[ChoiceTypeT, tuple[Any, ...]]
 CacheValueT: TypeAlias = tuple[tuple["ConstantT", ...], tuple["ConstantT", ...]]
 CONSTANTS_CACHE: LRUCache[CacheKeyT, CacheValueT] = LRUCache(1024)
 
+
+_constants_integers = (
+    # powers of 2
+    [2**n for n in range(16, 66)]
+    # powers of 10
+    + [10**n for n in range(5, 20)]
+    # factorials
+    + [math.factorial(n) for n in range(9, 21)]
+    # a few primorial numbers https://en.wikipedia.org/wiki/Primorial
+    + [
+        510510,
+        6469693230,
+        304250263527210,
+        32589158477190044730,
+    ]
+)
+_constants_integers.extend(
+    [n - 1 for n in _constants_integers] + [n + 1 for n in _constants_integers]
+)
+_constants_integers.extend([-x for x in _constants_integers])
+
+# arbitrary cutoffs to keep our list bounded
+assert all(50_000 <= abs(n) <= 2**66 for n in _constants_integers)
+
 _constant_floats = (
     [
         0.5,
@@ -193,14 +216,14 @@ _constant_strings = {
     "Ⱥ",
     "Ⱦ",
     # ligatures
-    "æœÆŒﬀʤʨß"
+    "æœÆŒﬀʤʨß",
     # emoticons
     "(╯°□°）╯︵ ┻━┻)",
     # emojis
     "😍",
     "🇺🇸",
     # emoji modifiers
-    "🏻"  # U+1F3FB Light Skin Tone,
+    "🏻",  # U+1F3FB Light Skin Tone,
     "👍🏻",  # 👍 followed by U+1F3FB
     # RTL text
     "الكل في المجمو عة",
@@ -234,7 +257,7 @@ _constant_strings = {
 # we don't actually care what order the constants are sorted in, just that the
 # ordering is deterministic.
 GLOBAL_CONSTANTS = Constants(
-    integers=SortedSet(),
+    integers=SortedSet(_constants_integers),
     floats=SortedSet(_constant_floats, key=float_to_int),
     bytes=SortedSet(),
     strings=SortedSet(_constant_strings),
@@ -250,7 +273,9 @@ _local_constants = Constants(
 # are all modules, not necessarily local ones. This lets us quickly see which
 # modules are new without an expensive path.resolve() or is_local_module_file
 # cache lookup.
-_seen_modules: set[ModuleType] = set()
+# We track by module object when hashable, falling back to the module name
+# (str key in sys.modules) for unhashable entries like SimpleNamespace.
+_seen_modules: set = set()
 _sys_modules_len: int | None = None
 
 
@@ -286,20 +311,28 @@ def _get_local_constants() -> Constants:
     # careful: store sys.modules length when we first check to avoid race conditions
     # with other threads loading a module before we set _sys_modules_len.
     if (sys_modules_len := len(sys.modules)) != _sys_modules_len:
-        # set(_seen_modules) shouldn't typically be required, but I have run into
-        # a "set changed size during iteration" error here when running
-        # test_provider_conformance_crosshair.
-        new_modules = set(sys.modules.values()) - set(_seen_modules)
+        new_modules = []
+        for name, module in list(sys.modules.items()):
+            try:
+                seen = module in _seen_modules
+            except TypeError:
+                # unhashable module (e.g. SimpleNamespace); fall back to name
+                seen = name in _seen_modules
+            if not seen:
+                new_modules.append((name, module))
         # Repeated SortedSet unions are expensive. Do the initial unions on a
         # set(), then do a one-time union with _local_constants after.
         new_constants = Constants()
-        for module in new_modules:
+        for name, module in new_modules:
             if (
                 module_file := getattr(module, "__file__", None)
             ) is not None and is_local_module_file(module_file):
                 new_constants |= constants_from_module(module)
+            try:
+                _seen_modules.add(module)
+            except TypeError:
+                _seen_modules.add(name)
         _local_constants |= new_constants
-        _seen_modules.update(new_modules)
         _sys_modules_len = sys_modules_len
 
     # if we add any new constant, invalidate the constant cache for permitted values.
@@ -731,7 +764,7 @@ class HypothesisProvider(PrimitiveProvider):
 
         # split constants into two pools, so we still have a good chance to draw
         # global constants even if there are many local constants.
-        (global_constants, local_constants) = CONSTANTS_CACHE[key]
+        global_constants, local_constants = CONSTANTS_CACHE[key]
         constants_lists = ([global_constants] if global_constants else []) + (
             [local_constants] if local_constants else []
         )

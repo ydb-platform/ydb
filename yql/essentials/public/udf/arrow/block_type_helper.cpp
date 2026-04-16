@@ -1,10 +1,8 @@
 #include "block_type_helper.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 IBlockTypeHelper::IBlockTypeHelper() {
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

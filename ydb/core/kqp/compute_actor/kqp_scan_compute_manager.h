@@ -25,7 +25,7 @@ public:
 class TComputeTaskData;
 
 class TShardScannerInfo {
-private:
+public:
     std::optional<TActorId> ActorId;
     const ui64 ScanId;
     const ui64 TabletId;
@@ -156,6 +156,26 @@ public:
     ui64 GetPendingTimeUs() const {
         return WaitOutputTime.MicroSeconds();
     }
+
+    TDuration GetWaitOutputTime() const {
+        return WaitOutputTime;
+    }
+
+    bool IsFinished() const {
+        return Finished;
+    }
+
+    bool HasActorId() const {
+        return ActorId.has_value();
+    }
+
+    NActors::TActorId GetActorId() const {
+        return ActorId.value_or(NActors::TActorId());
+    }
+
+    TString GetActorIdStr() const {
+        return ActorId ? ::ToString(*ActorId) : "none";
+    }
 };
 
 class TComputeTaskData {
@@ -203,6 +223,9 @@ public:
     private:
         YDB_READONLY_DEF(NActors::TActorId, ActorId);
         YDB_READONLY(ui64, FreeSpace, 0);
+        YDB_READONLY(ui64, DataChunksSent, 0);
+        YDB_READONLY(ui64, AcksReceived, 0);
+        YDB_READONLY(ui64, TotalAcksFromCompute, 0);
         std::deque<std::unique_ptr<TComputeTaskData>> DataQueue;
 
         bool SendData() {
@@ -213,6 +236,7 @@ public:
                 DataQueue.front()->Finish();
                 DataQueue.pop_front();
                 FreeSpace = 0;
+                ++DataChunksSent;
                 return true;
             }
             return false;
@@ -223,6 +247,10 @@ public:
             return DataQueue.size();
         }
 
+        void IncTotalAcksFromCompute() {
+            ++TotalAcksFromCompute;
+        }
+
         TComputeActorInfo(const NActors::TActorId& actorId)
             : ActorId(actorId) {
         }
@@ -231,6 +259,7 @@ public:
             AFL_ENSURE(!FreeSpace);
             AFL_ENSURE(freeSpace);
             FreeSpace = freeSpace;
+            ++AcksReceived;
             SendData();
         }
 
@@ -248,6 +277,7 @@ public:
 private:
     std::deque<std::unique_ptr<TComputeTaskData>> UndefinedShardTaskData;
     std::deque<TComputeActorInfo> ComputeActors;
+public:
     THashMap<TActorId, TComputeActorInfo*> ComputeActorsById;
 
 public:
@@ -272,10 +302,18 @@ public:
         return sb;
     }
 
+    template <typename TFunc>
+    void ForEachCompute(TFunc&& func) const {
+        for (auto& [actorId, info] : ComputeActorsById) {
+            func(actorId, *info);
+        }
+    }
+
     bool OnComputeAck(const TActorId& computeActorId, const ui64 freeSpace) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "ack")("compute_actor_id", computeActorId);
         auto it = ComputeActorsById.find(computeActorId);
         AFL_ENSURE(it != ComputeActorsById.end())("compute_actor_id", computeActorId);
+        it->second->IncTotalAcksFromCompute();
         if (it->second->IsFree()) {
             return false;
         }
@@ -448,6 +486,13 @@ public:
     }
     ui32 GetShardsCount() const {
         return Shards.size();
+    }
+
+    template <typename TFunc>
+    void ForEachScanner(TFunc&& func) const {
+        for (auto& [tabletId, scanner] : ShardScanners) {
+            func(tabletId, *scanner);
+        }
     }
     TShardState::TPtr Put(TShardState&& state);
 };

@@ -66,6 +66,15 @@ namespace NUnifiedAgent {
             return *this;
         }
 
+        // Force-cancel and recreate active grpc stream if there are inflight messages,
+        // but no grpc callback activity for too long. This is a fail-safe for transport stalls.
+        //
+        // Default: 30 sec (use 0 to disable)
+        TClientParameters& SetGrpcCallInactivityTimeout(TDuration timeout) {
+            GrpcCallInactivityTimeout = timeout;
+            return *this;
+        }
+
         // Grpc usually writes data to the socket faster than it comes from the client.
         // This means that it's possible that each TClientMessage would be sent in it's own grpc message.
         // This is expensive in terms of cpu, since grpc makes at least one syscall
@@ -119,6 +128,7 @@ namespace NUnifiedAgent {
         static const size_t DefaultMaxInflightBytes;
         static const size_t DefaultGrpcMaxMessageSize;
         static const TDuration DefaultGrpcSendDelay;
+        static const TDuration DefaultGrpcCallInactivityTimeout;
 
     public:
         TString Uri;
@@ -127,6 +137,7 @@ namespace NUnifiedAgent {
         TLog Log;
         TMaybe<size_t> LogRateLimitBytes;
         TDuration GrpcReconnectDelay;
+        TDuration GrpcCallInactivityTimeout;
         TDuration GrpcSendDelay;
         bool EnableForkSupport;
         size_t GrpcMaxMessageSize;

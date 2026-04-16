@@ -91,7 +91,7 @@ public:
             std::min(ExpirationCheckInterval, IdleChannelTtl_)))
     { }
 
-    void Initialize()
+    void InitializeRefCounted()
     {
         ExpirationExecutor_->Start();
     }
@@ -265,11 +265,9 @@ IChannelFactoryPtr CreateCachingChannelFactory(
 {
     YT_VERIFY(underlyingFactory);
 
-    auto factory = New<TCachingChannelFactory>(
+    return New<TCachingChannelFactory>(
         std::move(underlyingFactory),
         idleChannelTtl);
-    factory->Initialize();
-    return factory;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

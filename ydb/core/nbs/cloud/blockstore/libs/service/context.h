@@ -8,8 +8,7 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCallContext final
-    : public TCallContextBase
+struct TCallContext final: public TCallContextBase
 {
 private:
     TAtomic SilenceRetriableErrors = false;

@@ -439,6 +439,11 @@
                 "ColumnType": "Uint64"
             },
             {
+                "ColumnId": 122,
+                "ColumnName": "AppliedGroupGeneration",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 6,
                 "ColumnName": "DesiredVDiskCategory",
                 "ColumnType": "Uint64"
@@ -550,6 +555,7 @@
                     4,
                     121,
                     5,
+                    122,
                     6,
                     7,
                     8,
@@ -874,6 +880,11 @@
                 "ColumnId": 15,
                 "ColumnName": "DDiskNumVChunksClaimed",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "PersistentBufferRefs",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -894,7 +905,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

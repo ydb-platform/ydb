@@ -181,7 +181,7 @@ void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const T
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(false),
+        MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), StatisticsAggregatorId.value(), true),
         IEventHandle::FlagTrackDelivery
     );
@@ -224,17 +224,35 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(false),
+        MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),
         IEventHandle::FlagTrackDelivery
     );
 }
 
+void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
+    ALOG_NOTICE(
+        NKikimrServices::KQP_GATEWAY,
+        "got TEvAbortExecution, issues: " << ev->Get()->GetIssues().ToOneLineString());
+
+    if (StatisticsAggregatorId) {
+        // We already sent the request to StatisticsAggregator, make a best-effort attempt to cancel it.
+        auto cancelRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyzeCancel>();
+        cancelRequest->Record.SetOperationId(OperationId);
+        Send(
+            MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
+            new TEvPipeCache::TEvForward(cancelRequest.release(), StatisticsAggregatorId.value(), false));
+    }
+
+    Promise.SetValue(
+        NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(ev->Get()->GetIssues()));
+    this->Die(ctx);
+}
+
 void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
     ALOG_CRIT(
         NKikimrServices::KQP_GATEWAY,
-        "TAnalyzeActor, unexpected event, request type: " << typeRewrite;
-    );
+        "TAnalyzeActor, unexpected event, request type: " << typeRewrite);
 
     Promise.SetValue(
         NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
@@ -246,6 +264,11 @@ void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
     );
 
     this->PassAway();
+}
+
+void TAnalyzeActor::PassAway() {
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
+    TActorBootstrapped::PassAway();
 }
 
 }// end of NKikimr::NKqp

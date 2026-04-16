@@ -71,7 +71,7 @@ private:
 
     void ScheduleRequestSqsQueuesList();
     void RequestSqsQueuesList();
-    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId) Y_WARN_UNUSED_RESULT;
+    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled = true) Y_WARN_UNUSED_RESULT;
 
     void RemoveQueue(const TString& userName, const TString& queue);
     TUsersMap::iterator MutableUserIter(const TString& userName, bool moveUserRequestsToUserRecord = true, bool* requestsWereMoved = nullptr);
@@ -79,7 +79,7 @@ private:
     void RemoveUser(const TString& userName);
     std::map<TString, TQueueInfoPtr>::iterator AddQueue(const TString& userName, const TString& queue, ui64 leaderTabletId,
                                                         const TString& customName, const TString& folderId, const ui32 tablesFormat, const ui64 version,
-                                                        const ui64 shardsCount, const TInstant createdTimestamp, bool isFifo);
+                                                        const ui64 shardsCount, const TInstant createdTimestamp, bool isFifo, bool topicCreated);
 
     void AnswerNoUserToRequests();
     void AnswerNoQueueToRequests(const TUserInfoPtr& user);

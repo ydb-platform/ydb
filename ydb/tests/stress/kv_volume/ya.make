@@ -1,14 +1,37 @@
-PY3_PROGRAM(workload_keyvalue_volume)
+PROGRAM(workload_keyvalue_volume)
 
-PY_SRCS(
-    __main__.py
+IF (OS_LINUX)
+    ALLOCATOR(TCMALLOC_256K)
+ENDIF()
+
+SRCS(
+    main.cpp
+    utils.cpp
+    initial_load_progress.cpp
+    initial_load_display.cpp
+    run_stats.cpp
+    worker_load.cpp
+    run_display.cpp
+    run_tui.cpp
+    scroller.cpp
+    action_pool.cpp
+    grpc_async_executor.cpp
+    key_bucket.cpp
+    execution_context.cpp
+    keyvalue_client.cpp
+    keyvalue_client_v1.cpp
+    keyvalue_client_v2.cpp
+    worker.cpp
 )
 
 PEERDIR(
-    ydb/tests/stress/common
-    ydb/tests/library/clients
-    ydb/tests/library
-    ydb/tests/stress/kv_volume/workload
+    contrib/libs/ftxui
+    contrib/libs/grpc
+    contrib/libs/protobuf
+    library/cpp/getopt
+    ydb/public/api/grpc
+    ydb/public/api/protos
+    ydb/tests/stress/kv_volume/protos
 )
 
 END()

@@ -53,6 +53,7 @@ public:
    *
    * By default, a no-op EventLoggerProvider is returned. This will never return a
    * nullptr EventLoggerProvider.
+   * @deprecated
    */
   OPENTELEMETRY_DEPRECATED static nostd::shared_ptr<EventLoggerProvider>
   GetEventLoggerProvider() noexcept
@@ -63,6 +64,7 @@ public:
 
   /**
    * Changes the singleton EventLoggerProvider.
+   * @deprecated
    */
   OPENTELEMETRY_DEPRECATED static void SetEventLoggerProvider(
       const nostd::shared_ptr<EventLoggerProvider> &tp) noexcept
@@ -80,31 +82,11 @@ private:
   }
 
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
-  OPENTELEMETRY_DEPRECATED
   OPENTELEMETRY_API_SINGLETON static nostd::shared_ptr<EventLoggerProvider> &
   GetEventProvider() noexcept
   {
-#  if defined(_MSC_VER)
-#    pragma warning(push)
-#    pragma warning(disable : 4996)
-#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#  elif defined(__clang__) || defined(__apple_build_version__)
-#    pragma clang diagnostic push
-#    pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#  endif
-
     static nostd::shared_ptr<EventLoggerProvider> provider(new NoopEventLoggerProvider);
     return provider;
-
-#  if defined(_MSC_VER)
-#    pragma warning(pop)
-#  elif defined(__GNUC__) && !defined(__clang__) && !defined(__apple_build_version__)
-#    pragma GCC diagnostic pop
-#  elif defined(__clang__) || defined(__apple_build_version__)
-#    pragma clang diagnostic pop
-#  endif
   }
 #endif
 

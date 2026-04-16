@@ -62,8 +62,6 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>()); // TODO: Generate code instead of call CloneArray.
-
         const auto list = GetNodeValue(List, ctx, block);
 
         const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
@@ -85,14 +83,10 @@ public:
 
         const auto idxType = Type::getInt32Ty(context);
 
-        Value* array = nullptr;
-        const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
+        const auto array = EmitFunctionCall<&THolderFactory::CloneArray>(valueType, {fact, list, itemsPtr}, ctx, block); // TODO: Generate code instead of call CloneArray.
 
         result->addIncoming(array, block);
 
-        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THeapWrapper::Do>());
         const auto self = ConstantInt::get(Type::getInt64Ty(context), (uintptr_t)(this));
 
         const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
@@ -101,10 +95,8 @@ public:
         const auto end = GetElementPtrInst::CreateInBounds(valueType, items, {size}, "end", block);
 
         const auto selfPtr = CastInst::Create(Instruction::IntToPtr, self, PointerType::getUnqual(StructType::get(context)), "comp", block);
-        const auto doType = FunctionType::get(Type::getVoidTy(context), {selfPtr->getType(), ctx.Ctx->getType(), begin->getType(), end->getType()}, false);
-        const auto doPtr = CastInst::Create(Instruction::IntToPtr, algo, PointerType::getUnqual(doType), "do", block);
 
-        CallInst::Create(doType, doPtr, {selfPtr, ctx.Ctx, begin, end}, "", block);
+        EmitFunctionCall<&THeapWrapper::Do>(Type::getVoidTy(context), {selfPtr, ctx.Ctx, begin, end}, ctx, block);
 
         BranchInst::Create(done, block);
 
@@ -232,8 +224,6 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>()); // TODO: Generate code instead of call CloneArray.
-
         const auto list = GetNodeValue(List, ctx, block);
         const auto midv = GetNodeValue(Middle, ctx, block);
         const auto middle = GetterFor<ui64>(midv, context, block);
@@ -263,14 +253,10 @@ public:
 
         const auto idxType = Type::getInt32Ty(context);
 
-        Value* array = nullptr;
-        const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
+        const auto array = EmitFunctionCall<&THolderFactory::CloneArray>(valueType, {fact, list, itemsPtr}, ctx, block); // TODO: Generate code instead of call CloneArray.
 
         result->addIncoming(array, block);
 
-        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TNthWrapper::Do>());
         const auto self = ConstantInt::get(Type::getInt64Ty(context), (uintptr_t)(this));
 
         const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
@@ -280,10 +266,8 @@ public:
         const auto end = GetElementPtrInst::CreateInBounds(valueType, items, {size}, "end", block);
 
         const auto selfPtr = CastInst::Create(Instruction::IntToPtr, self, PointerType::getUnqual(StructType::get(context)), "comp", block);
-        const auto doType = FunctionType::get(Type::getVoidTy(context), {selfPtr->getType(), ctx.Ctx->getType(), begin->getType(), mid->getType(), end->getType()}, false);
-        const auto doPtr = CastInst::Create(Instruction::IntToPtr, algo, PointerType::getUnqual(doType), "do", block);
 
-        CallInst::Create(doType, doPtr, {selfPtr, ctx.Ctx, begin, mid, end}, "", block);
+        EmitFunctionCall<&TNthWrapper::Do>(Type::getVoidTy(context), {selfPtr, ctx.Ctx, begin, mid, end}, ctx, block);
 
         BranchInst::Create(done, block);
 

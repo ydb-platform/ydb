@@ -42,12 +42,20 @@ bool TErasureCounterBase::IsLocked(const TVDiskInfo &vdisk, TClusterInfoPtr info
         || vdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration);
 }
 
-bool TErasureCounterBase::GroupAlreadyHasLockedDisks() const {
-    return HasAlreadyLockedDisks;
-}
+ bool TErasureCounterBase::IsLockedByRequest(const TVDiskInfo& vdisk, TClusterInfoPtr info,
+        const TString &requestId)
+{
+    const auto &node = info->Node(vdisk.NodeId);
+    const auto &pdisk = info->PDisk(vdisk.PDiskId);
 
-bool TErasureCounterBase::GroupHasMoreThanOneDiskPerNode() const {
-    return HasMoreThanOneDiskPerNode;
+    // Check we received info for VDisk.
+    if (!vdisk.NodeId || !vdisk.PDiskId) {
+        return false;
+    }
+
+    return node.IsLockedByRequest(requestId)
+        || pdisk.IsLockedByRequest(requestId)
+        || vdisk.IsLockedByRequest(requestId);
 }
 
 static TString DumpVDisksInfo(const THashMap<TVDiskID, TString>& vdisks, TClusterInfoPtr info) {
@@ -76,7 +84,7 @@ static TString DumpVDisksInfo(const THashMap<TVDiskID, TString>& vdisks, TCluste
 
 bool TErasureCounterBase::CheckForMaxAvailability(TClusterInfoPtr info, TErrorInfo &error, TInstant &defaultDeadline, bool allowPartial) const {
     if (Locked.size() + Down.size() > 1) {
-        if (HasAlreadyLockedDisks && !allowPartial) {
+        if (HasAlreadyTempLockedDisks && !allowPartial) {
             error.Code = TStatus::DISALLOW;
             error.Reason = "The request is incorrect: too many disks from the one group. "
                            "Fix the request or set PartialPermissionAllowed to true";
@@ -98,8 +106,22 @@ bool TErasureCounterBase::CheckForMaxAvailability(TClusterInfoPtr info, TErrorIn
     return true;
 }
 
+bool TErasureCounterBase::CheckForSmartAvailability(TClusterInfoPtr info, TErrorInfo &error, TInstant &defaultDeadline, bool allowPartial) const {
+    if (CheckForMaxAvailability(info, error, defaultDeadline, allowPartial)) {
+        return true;
+    }
+
+    if (!HasAlreadyLockedDisks) {
+        if (CheckForKeepAvailability(info, error, defaultDeadline, allowPartial)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration retryTime,
-        TDuration duration, TErrorInfo &error)
+        TDuration duration, TErrorInfo &error, const TString &requestId)
 {
     Y_DEBUG_ABORT_UNLESS(vdisk.VDiskId != VDisk.VDiskId);
 
@@ -111,6 +133,10 @@ bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr in
         error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": " << err.Reason;
         error.Deadline = Max(error.Deadline, err.Deadline);
+
+        if (IsLockedByRequest(vdisk, info, requestId)) {
+            HasAlreadyLockedDisks = true;
+        }
         return true;
     }
 
@@ -127,21 +153,24 @@ bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr in
     return false;
 }
 
-void TErasureCounterBase::CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) {
+void TErasureCounterBase::CountGroupState(TClusterInfoPtr info, TDuration retryTime,
+        TDuration duration, TErrorInfo &error, const TString &requestId)
+{
     const auto& group = info->BSGroup(GroupId);
 
     TSet<ui32> groupNodes;
     for (const auto &vdId : group.VDisks) {
         const auto &vd = info->VDisk(vdId);
         if (vd.VDiskId != VDisk.VDiskId)
-            CountVDisk(vd, info, retryTime, duration, error);
+            CountVDisk(vd, info, retryTime, duration, error, requestId);
         groupNodes.insert(vd.NodeId);
     }
 
     HasMoreThanOneDiskPerNode = group.VDisks.size() > groupNodes.size();
 
+    // Check if vdisks in group are locked by temp lock
     if (Locked && error.Code == TStatus::DISALLOW) {
-        HasAlreadyLockedDisks = true;
+        HasAlreadyTempLockedDisks = true;
     }
 
     Locked.emplace(VDisk.VDiskId, TStringBuilder() << VDisk.PrettyItemName() << " is locked by this request");
@@ -150,7 +179,7 @@ void TErasureCounterBase::CountGroupState(TClusterInfoPtr info, TDuration retryT
 bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
         TInstant &defaultDeadline, bool allowPartial) const
 {
-    if (HasAlreadyLockedDisks && !HasMoreThanOneDiskPerNode && allowPartial) {
+    if (HasAlreadyTempLockedDisks && !HasMoreThanOneDiskPerNode && allowPartial) {
         CmsCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = "You cannot get two or more disks from the same group at the same time"
@@ -160,7 +189,7 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
     }
 
     if (Down.size() + Locked.size() > info->BSGroup(GroupId).Erasure.ParityParts()) {
-        if (HasAlreadyLockedDisks && !allowPartial) {
+        if (HasAlreadyTempLockedDisks && !allowPartial) {
             error.Code = TStatus::DISALLOW;
             error.Reason = "The request is incorrect: too many disks from the one group. "
                            "Fix the request or set PartialPermissionAllowed to true";
@@ -185,7 +214,7 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
 bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
         TInstant &defaultDeadline, bool allowPartial) const
 {
-    if (HasAlreadyLockedDisks && !HasMoreThanOneDiskPerNode && allowPartial) {
+    if (HasAlreadyTempLockedDisks && !HasMoreThanOneDiskPerNode && allowPartial) {
         CmsCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = "You cannot get two or more disks from the same group at the same time"
@@ -204,7 +233,7 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
         return true;
     }
 
-    if (HasAlreadyLockedDisks && !allowPartial) {
+    if (HasAlreadyTempLockedDisks && !allowPartial) {
         error.Code = TStatus::DISALLOW;
         error.Reason = "The request is incorrect: too many disks from the one group. "
                        "Fix the request or set PartialPermissionAllowed to true";
@@ -239,17 +268,19 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
 }
 
 bool TMirror3dcCounter::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration retryTime,
-        TDuration duration, TErrorInfo &error)
+        TDuration duration, TErrorInfo &error, const TString &requestId)
 {
-    const bool disabled = TErasureCounterBase::CountVDisk(vdisk, info, retryTime, duration, error);
+    const bool disabled = TErasureCounterBase::CountVDisk(vdisk, info, retryTime, duration, error, requestId);
     if (disabled) {
         ++DataCenterDisabledNodes[vdisk.VDiskId.FailRealm];
     }
     return disabled;
 }
 
-void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) {
-    TErasureCounterBase::CountGroupState(info, retryTime, duration, error);
+void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info,
+        TDuration retryTime, TDuration duration, TErrorInfo &error, const TString &requestId)
+{
+    TErasureCounterBase::CountGroupState(info, retryTime, duration, error, requestId);
     ++DataCenterDisabledNodes[VDisk.VDiskId.FailRealm];
 }
 

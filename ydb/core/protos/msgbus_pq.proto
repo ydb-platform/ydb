@@ -1,4 +1,5 @@
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/pqdata_transaction.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
@@ -38,6 +39,11 @@ message TPersQueuePartitionRequest {
         optional int64 LastOffset = 17;
 
         optional uint64 SizeEstimate = 18;
+    }
+
+    message TCmdUpdateReadMetrics {
+        optional string ClientId = 1; // mandatory
+        optional uint64 InFlightLimitReachedDurationMs = 2; // if not set, then treat as 0
     }
 
     message TCmdPublishDirectRead {
@@ -103,6 +109,9 @@ message TPersQueuePartitionRequest {
 
         optional bool EnableKafkaDeduplication = 18 [ default = false ];
         optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
+
+        optional bytes ChoosePartitionKey = 20; // Bytes that are used to choose partition for the message
+        optional string MessageDeduplicationId = 21; // Deduplication id for the message
     }
 
     message TCmdUpdateWriteTimestamp {
@@ -167,6 +176,7 @@ message TPersQueuePartitionRequest {
     optional TCmdRegisterMessageGroup CmdRegisterMessageGroup = 20;
     optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
+    optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
 
     optional NActorsProto.TActorId PipeClient = 15;
 
@@ -261,7 +271,7 @@ message TPersQueueRequest {
 
     //only one from data, meta or fetch request must be set.
     optional string SecurityToken = 5 [(Ydb.sensitive) = true];
-    optional string Ticket = 6; //if set, check for acl
+    optional string Ticket = 6 [(Ydb.sensitive) = true]; // if set, check for acl
 
     optional string RequestId = 100; //for logging
 }

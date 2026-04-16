@@ -3,8 +3,7 @@
 
 #include <util/thread/singleton.h>
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 namespace {
 
 struct TThrowedLogContext {
@@ -111,5 +110,4 @@ void TYqlLogContextLocation::SetThrowedLogContextPath() const {
     tlc->LocationWithLogContext = ss.Str();
 }
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

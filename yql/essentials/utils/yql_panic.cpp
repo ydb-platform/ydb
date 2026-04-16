@@ -1,7 +1,6 @@
 #include "yql_panic.h"
 
-namespace NYql {
-namespace NDetail {
+namespace NYql::NDetail {
 
 void YqlPanic(const ::NPrivate::TStaticBuf& file, int line, const char* function,
               const TStringBuf& condition, const TStringBuf& message) {
@@ -12,5 +11,4 @@ void YqlPanic(const ::NPrivate::TStaticBuf& file, int line, const char* function
         << (message.empty() ? "" : message);
 }
 
-} // namespace NDetail
-} // namespace NYql
+} // namespace NYql::NDetail

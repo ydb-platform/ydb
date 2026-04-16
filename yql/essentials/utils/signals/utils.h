@@ -8,7 +8,7 @@ class Message;
 
 namespace NYql {
 
-void ProcTitleInit(int argc, const char* argv[]);
+void ProcTitleInit(int argc, const char** argv);
 void SetProcTitle(const char* title);
 void AddProcTitleSuffix(const char* suffix);
 const char* GetProcTitle();

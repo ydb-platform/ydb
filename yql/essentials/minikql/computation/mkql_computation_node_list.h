@@ -5,8 +5,7 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 template <typename T>
 struct TListChunk {
 private:
@@ -434,5 +433,4 @@ private:
 
 using TDefaultListRepresentation = TListRepresentation<NUdf::TUnboxedValue>;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

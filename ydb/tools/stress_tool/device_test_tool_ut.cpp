@@ -11,6 +11,7 @@
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
 #include "device_test_tool_pdisk_test.h"
+#include "device_test_tool_pb_test.h"
 #include "device_test_tool_trim_test.h"
 
 namespace NKikimr {
@@ -24,6 +25,7 @@ constexpr ui32 TestChunkSize = 32 << 20; // 32 MiB
 
 using TPDiskTest32 = NKikimr::TPDiskTest<TestChunkSize>;
 using TDDiskTest32 = NKikimr::TDDiskTest<TestChunkSize>;
+using TPersistentBufferTest32 = NKikimr::TPersistentBufferTest<TestChunkSize>;
 
 struct TPrinterStub : NKikimr::IResultPrinter {
     TVector<std::pair<TString, TString>> Results;
@@ -241,7 +243,7 @@ Y_UNIT_TEST(DDiskTestWrite) {
     TStringStream perfCfg;
     perfCfg << R"___(
         DDiskTestList: {
-            DDiskWriteLoad: {
+            DDiskLoad: {
                 Tag: 4
                 DDiskId: {
                     NodeId: 1
@@ -250,7 +252,7 @@ Y_UNIT_TEST(DDiskTestWrite) {
                 }
                 Areas: { AreaSize: 10485760 Sequential: false }
                 DurationSeconds: )___" << TestDurationSec << R"___(
-                InFlightWrites: 64
+                InFlight: 64
                 IntervalMsMin: 0
                 IntervalMsMax: 0
                 ExpectedChunkSize: 10485760
@@ -259,6 +261,52 @@ Y_UNIT_TEST(DDiskTestWrite) {
     )___";
 
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
+}
+
+Y_UNIT_TEST(DDiskTestRead) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        DDiskTestList: {
+            DDiskLoad: {
+                Tag: 5
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                Areas: { AreaSize: 10485760 Sequential: false }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlight: 64
+                IntervalMsMin: 0
+                IntervalMsMax: 0
+                ExpectedChunkSize: 10485760
+                IsReadLoad: true
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
+}
+
+Y_UNIT_TEST(PersistentBufferTestWrite) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        PersistentBufferTestList: {
+            PersistentBufferWriteLoad: {
+                Tag: 4
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                WriteInfos: { Size: 4096 Weight: 1 }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlightWrites: 64
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TPersistentBufferTest, TPersistentBufferTest32>(perfCfg.Str(), true);
 }
 
 Y_UNIT_TEST(PDiskTestLogWrite) {

@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.13)
+VERSION(2.14)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.13.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.14.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -119,6 +119,8 @@ RECURSE(
     test/ignore-single-mmap.t
     test/init-mem.t
     test/io-cancel.t
+    test/io-wq-exit.t
+    test/io-wq-unused-exit.t
     test/io_uring_enter.t
     test/io_uring_passthrough.t
     test/io_uring_register.t
@@ -171,6 +173,7 @@ RECURSE(
     test/poll-race-mshot.t
     test/poll-race.t
     test/poll-ring.t
+    test/poll-update-trigger.t
     test/poll-v-poll.t
     test/poll.t
     test/pollfree.t
@@ -211,6 +214,7 @@ RECURSE(
     test/send_recv.t
     test/send_recvmsg.t
     test/sendmsg_iov_clean.t
+    test/sendzc-bug.t
     test/shared-wq.t
     test/short-read.t
     test/shutdown.t
@@ -250,6 +254,7 @@ RECURSE(
     test/timeout-new.t
     test/timeout.t
     test/timerfd-short-read.t
+    test/timestamp-bug.t
     test/timestamp.t
     test/truncate.t
     test/tty-write-dpoll.t

@@ -1,4 +1,5 @@
 #include "kqp_partitioned_executer.h"
+#include "kqp_executer_stats.h"
 #include "kqp_executer.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -28,6 +29,33 @@ namespace {
 #define PE_STLOG_W(MESSAGE, ...) STLOG(PRI_WARN,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
 #define PE_STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
 #define PE_STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
+
+void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGateway::TExecPhysicalRequest& from) {
+    request.AllowTrailingResults = from.AllowTrailingResults;
+    request.QueryType = from.QueryType;
+    request.PerRequestDataSizeLimit = from.PerRequestDataSizeLimit;
+    request.MaxShardCount = from.MaxShardCount;
+    request.LocksOp = from.LocksOp;
+    request.AcquireLocksTxId = from.AcquireLocksTxId;
+    request.Timeout = from.Timeout;
+    request.CancelAfter = from.CancelAfter;
+    request.MaxComputeActors = from.MaxComputeActors;
+    request.MaxAffectedShards = from.MaxAffectedShards;
+    request.TotalReadSizeLimitBytes = from.TotalReadSizeLimitBytes;
+    request.MkqlMemoryLimit = from.MkqlMemoryLimit;
+    request.PerShardKeysSizeLimitBytes = from.PerShardKeysSizeLimitBytes;
+    request.StatsMode = from.StatsMode;
+    request.ProgressStatsPeriod = from.ProgressStatsPeriod;
+    request.Snapshot = from.Snapshot;
+    request.ResourceManager_ = from.ResourceManager_;
+    request.CaFactory_ = from.CaFactory_;
+    request.IsolationLevel = from.IsolationLevel;
+    request.RlPath = from.RlPath;
+    request.NeedTxId = from.NeedTxId;
+    request.UseImmediateEffects = from.UseImmediateEffects;
+    request.UserTraceId = from.UserTraceId;
+    request.OutputChunkMaxSize = from.OutputChunkMaxSize;
+}
 
 /**
  * TKqpPartitionedExecuter only executes BATCH UPDATE/DELETE queries
@@ -63,6 +91,7 @@ public:
 
     explicit TKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : Request(std::move(settings.Request))
+        , Stats(Request.StatsMode)
         , SessionActorId(std::move(settings.SessionActorId))
         , FuncRegistry(std::move(settings.FuncRegistry))
         , TimeProvider(std::move(settings.TimeProvider))
@@ -71,6 +100,7 @@ public:
         , UserToken(std::move(settings.UserToken))
         , RequestCounters(std::move(settings.RequestCounters))
         , TableServiceConfig(std::move(settings.ExecuterConfig.TableServiceConfig))
+        , TliConfig(std::move(settings.ExecuterConfig.TliConfig))
         , MutableExecuterConfig(std::move(settings.ExecuterConfig.MutableConfig))
         , UserRequestContext(std::move(settings.UserRequestContext))
         , StatementResultIndex(std::move(settings.StatementResultIndex))
@@ -82,6 +112,8 @@ public:
         , WriteBufferInitialMemoryLimit(std::move(settings.WriteBufferInitialMemoryLimit))
         , WriteBufferMemoryLimit(std::move(settings.WriteBufferMemoryLimit))
         , ChannelService(channelService)
+        , QuerySpanId(settings.QuerySpanId)
+        , UserCtx(settings.UserCtx)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
@@ -103,6 +135,7 @@ public:
         Become(&TKqpPartitionedExecuter::PrepareState);
 
         PE_STLOG_I("Start resolving table partitions");
+        Stats.StartTs = TInstant::Now();
 
         FillTableMetaInfo();
         ResolvePartitioning();
@@ -145,7 +178,7 @@ public:
                 << "Could not resolve a partitioning of the table, partitioning is null")}));
         }
 
-        if (result->Partitioning->empty()) {
+        if (result->Partitioning->Empty()) {
             return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "Could not resolve a partitioning of the table, partitioning is empty, "
                 << "TableId = " << result->TableId)}));
@@ -154,7 +187,7 @@ public:
         TablePartitioning = result->Partitioning;
 
         PE_STLOG_T("Partitions were resolved",
-            (PartitionsCount, result->Partitioning->size()));
+            (PartitionsCount, result->Partitioning->Size()));
 
         CreateExecutersWithBuffers();
     }
@@ -254,12 +287,13 @@ public:
     void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
         RequestCounters->Counters->BatchOperationRetries->Inc();
 
-        auto& partInfo = StartedPartitions[ev->Get()->PartitionIdx];
-
         PE_STLOG_D("Delayed execution timer fired",
             (PartitionIndex, ev->Get()->PartitionIdx));
 
-        RetryPartExecution(partInfo);
+        auto it = StartedPartitions.find(ev->Get()->PartitionIdx);
+        if (it != StartedPartitions.end()) {
+            RetryPartExecution(it->second);
+        }
     }
 
     void HandleExecute(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -413,6 +447,8 @@ private:
                 return "BATCH UPDATE";
             case TKeyDesc::ERowOperation::Erase:
                 return "BATCH DELETE";
+            case TKeyDesc::ERowOperation::Unknown:
+                return "BATCH";
             default:
                 return "";
         }
@@ -449,6 +485,7 @@ private:
         switch (settings->GetType()) {
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
@@ -502,11 +539,11 @@ private:
     void CreateExecutersWithBuffers() {
         Become(&TKqpPartitionedExecuter::ExecuteState);
 
-        YQL_ENSURE(TablePartitioning && !TablePartitioning->empty(), "No partitions to execute");
-        auto partCount = std::min(Settings.PartitionExecutionLimit, TablePartitioning->size());
+        YQL_ENSURE(TablePartitioning && !TablePartitioning->Empty(), "No partitions to execute");
+        auto partCount = std::min(Settings.PartitionExecutionLimit, TablePartitioning->Size());
 
         PE_STLOG_I("Starting execution, creating executers with buffers",
-            (PartitionsCount, TablePartitioning->size()),
+            (PartitionsCount, TablePartitioning->Size()),
             (InFlightPartitionsCount, partCount));
 
         while (NextPartitionIndex < partCount) {
@@ -515,14 +552,15 @@ private:
     }
 
     TBatchPartitionInfo::TPtr CreatePartition(TPartitionIndex idx) {
-        YQL_ENSURE(idx < TablePartitioning->size());
+        const auto& partitions = TablePartitioning->GetTablePartitioning();
+        YQL_ENSURE(idx < partitions.size());
 
         auto partition = std::make_shared<TBatchPartitionInfo>();
         StartedPartitions[idx] = partition;
 
-        partition->EndRange = TablePartitioning->at(idx).Range;
-        if (idx > 0 && !TablePartitioning->at(idx).Range.Empty()) {
-            partition->BeginRange = TablePartitioning->at(idx - 1).Range;
+        partition->EndRange = partitions.at(idx).Range;
+        if (idx > 0 && !partitions.at(idx).Range.Empty()) {
+            partition->BeginRange = partitions.at(idx - 1).Range;
             partition->BeginRange->IsInclusive = !partition->BeginRange->IsInclusive;
         }
 
@@ -541,11 +579,21 @@ private:
     }
 
     void CreateExecuterWithBuffer(TPartitionIndex partitionIndex, bool isRetry) {
-        auto partInfo = (isRetry) ? StartedPartitions[partitionIndex] : CreatePartition(partitionIndex);
+        TBatchPartitionInfo::TPtr partInfo;
+        if (isRetry) {
+            auto it = StartedPartitions.find(partitionIndex);
+            if (it == StartedPartitions.end()) {
+                return;
+            }
+            partInfo = it->second;
+        } else {
+            partInfo = CreatePartition(partitionIndex);
+        }
         auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
 
         IKqpGateway::TExecPhysicalRequest newRequest(txAlloc);
-        IKqpGateway::TExecPhysicalRequest::FillRequestFrom(newRequest, Request);
+        FillRequestFrom(newRequest, Request);
+        newRequest.AcquireLocksTxId = 0;
         for (auto& tx : Request.Transactions) {
             newRequest.Transactions.emplace_back(tx.Body, tx.Params);
         }
@@ -566,9 +614,11 @@ private:
             .SessionActorId = SelfId(),
             .TxManager = txManager,
             .TraceId = Request.TraceId.GetTraceId(),
+            .QuerySpanId = QuerySpanId,
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
-            .Alloc = std::move(alloc)
+            .Alloc = std::move(alloc),
+            .UserCtx = UserCtx
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
@@ -584,11 +634,11 @@ private:
         }
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
-        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
+        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig, UserCtx);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
-            llvmSettings, {}, 0, ChannelService);
+            FederatedQuerySetup, GUCSettings, prunerConfig, /* tableIdsForSnapshot */ {}, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
+            llvmSettings, /* queryServiceConfig */ {}, 0, ChannelService);
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;
@@ -641,6 +691,9 @@ private:
     }
 
     void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
+        Stats.TakeExecStats(std::move(*ev->Record.MutableResponse()->MutableResult()->MutableStats()));
+        Stats.AffectedPartitions.insert(partInfo->PartitionIndex);
+
         TSerializedCellVec minKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (minKey) {
             if (!IsKeyInPartition(minKey.GetCells(), partInfo)) {
@@ -663,7 +716,7 @@ private:
 
         ForgetPartition(partInfo);
 
-        if (NextPartitionIndex < TablePartitioning->size()) {
+        if (NextPartitionIndex < TablePartitioning->Size()) {
             return CreateExecuterWithBuffer(NextPartitionIndex++, /* isRetry */ false);
         }
 
@@ -803,6 +856,9 @@ private:
                 (Status, Ydb::StatusIds_StatusCode_Name(ReturnStatus)),
                 (Issues, ReturnIssues.ToOneLineString()));
 
+            Stats.FinishTs = TInstant::Now();
+            Stats.ExportExecStats(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+
             if (ReturnStatus != Ydb::StatusIds::SUCCESS) {
                 return ReplyErrorAndDie(ReturnStatus, ReturnIssues);
             }
@@ -812,7 +868,7 @@ private:
 
         PE_STLOG_D("Not all partitions have been processed, cannot finish execution",
             (RemainingPartitionsCount, StartedPartitions.size()),
-            (TotalPartitions, TablePartitioning ? TablePartitioning->size() : 0));
+            (TotalPartitions, TablePartitioning ? TablePartitioning->Size() : 0));
     }
 
     void AbortWithError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
@@ -865,6 +921,7 @@ private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NBatchOperations::TSettings Settings;
 
+    TBatchOperationExecutionStats Stats;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 
@@ -872,14 +929,14 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     THashMap<ui32, size_t> KeyColumnIdToPos;
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TablePartitioning;
+    std::shared_ptr<const TPartitioning> TablePartitioning;
     THashMap<TPartitionIndex, TBatchPartitionInfo::TPtr> StartedPartitions;
     TPartitionIndex NextPartitionIndex = 0;
 
     THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterToPartition;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferToPartition;
 
-    TKeyDesc::ERowOperation OperationType;
+    TKeyDesc::ERowOperation OperationType = TKeyDesc::ERowOperation::Unknown;
     TTableId TableId;
 
     const TActorId SessionActorId;
@@ -892,6 +949,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr RequestCounters;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
+    NKikimrConfig::TTliConfig TliConfig;
     TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
@@ -905,6 +963,8 @@ private:
     const ui64 WriteBufferInitialMemoryLimit;
     const ui64 WriteBufferMemoryLimit;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
+    ui64 QuerySpanId = 0;
+    NACLib::TUserContext::TPtr UserCtx;
 };
 
 } // namespace

@@ -117,11 +117,11 @@ The term **interactive transactions** refers to transactions that are split into
 
 ### Sessions
 
-Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution.md#sessions).
+Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution/index.md#sessions).
 
 ### Multi-version concurrency control {#mvcc}
 
-[**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).
+[**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
 
 ### Topology {#topology}
 
@@ -136,6 +136,14 @@ A **region** is a large geographic area containing multiple availability zones. 
 #### Rack {#rack}
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
+
+#### Pile {#pile}
+
+A **pile** is a set of nodes that can fail or be disconnected simultaneously while other cluster parts (pile) remain operational. A pile can remain operational when other cluster nodes are disconnected. Pile are used in [bridge mode](#bridge) to divide the cluster into several parts with synchronous replication between them. A pile can consist of nodes from one or more regions.
+
+#### Bridge mode {#bridge}
+
+**Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [pile](#pile). Mode details are described in [{#T}](topology.md#bridge) and in [{#T}](bridge.md).
 
 ### Table {#table}
 
@@ -163,16 +171,22 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 #### Secondary index {#secondary-index}
 
-A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
+A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [Secondary indexes](query_execution/secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
-A special type of **secondary index** is singled out separately - [vector index](#vector-index).
+A special type of **secondary index** is singled out separately - [vector index](#vector-index) and [fulltext index](#fulltext-index).
 
 #### Vector Index {#vector-index}
 
-**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
+**Vector index** is an additional data structure used to speed up the [vector search](query_execution/vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
 The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
-**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
+**Vector index** is a specialized type of [secondary index](#secondary-index) designed for similarity-based searching, which differs from traditional secondary indexes that optimize for equality or range queries.
+
+#### Fulltext index {#fulltext-index}
+
+**Fulltext index** is an additional data structure used to speed up text search in a table column by words and phrases (and, with n-grams, by substrings).
+
+The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
 
 #### Column family {#column-family}
@@ -265,7 +279,7 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 **Federated queries** is a feature that allows querying data stored in systems external to the {{ ydb-short-name }} cluster.
 
-A few terms related to federated queries are listed below. How {{ ydb-short-name }} federated queries work is explained in more detail in a separate article [{#T}](federated_query/index.md).
+A few terms related to federated queries are listed below. How {{ ydb-short-name }} federated queries work is explained in more detail in a separate article [Federated query](query_execution/federated_query/index.md).
 
 #### External data source {#external-data-source}
 
@@ -393,7 +407,7 @@ Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that ar
 
 ### Query optimizer {#optimizer}
 
-[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](optimizer.md) section.
+[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](query_execution/optimizer.md) section.
 
 ## Advanced terminology {#advanced-terminology}
 
@@ -514,7 +528,7 @@ A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} 
 
 **Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate query data to external storage when such data exceeds the available node RAM capacity. In {{ ydb-short-name }}, disk storage is currently used for spilling.
 
-For more details on spilling, see [{#T}](spilling.md).
+For more details on spilling, see [{#T}](query_execution/spilling.md).
 
 ### Tablet types {#tablet-types}
 
@@ -587,6 +601,14 @@ Information in state storage is volatile. Thus, it is lost when the power is tur
 
 Due to its nature, the state storage service operates in a best-effort manner. For example, the absence of several tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not state storage.
 
+### Board {#board}
+
+**Board** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [endpoints](connect.md#endpoint).
+
+### Scheme board {#scheme-board}
+
+**SchemeBoard** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [schemes](#global-schema).
+
 #### Compaction {#compaction}
 
 **Compaction** is the internal background process of rebuilding [LSM tree](#lsm-tree) data. The data in [VDisks](#vdisk) and [local databases](#local-database) are organized in the form of an LSM tree. Therefore, there is a distinction between **VDisk compaction** and **Tablet compaction**. The compaction process is usually quite resource-intensive, so efforts are made to minimize the overhead associated with it, for example, by limiting the number of concurrent compactions.
@@ -594,6 +616,12 @@ Due to its nature, the state storage service operates in a best-effort manner. F
 #### gRPC proxy {#grpc-proxy}
 
 A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#actor-system-interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
+
+### Distributed configuration {#distributed-configuration}
+
+**Distributed configuration** or **DistConf** is an internal cluster [configuration](../devops/configuration-management/configuration-v2/config-overview.md) mechanism that handles startup and configuration of [static nodes](#static-node), automatic management of [static storage groups](#static-group), and [State storage](#state-storage). Distributed configuration starts before any [tablets](#tablet), [storage groups](#storage-group), or [State storage](#state-storage).
+
+For more on how distributed configuration works, see [{#T}](../contributor/configuration-v2.md).
 
 ### Distributed storage implementation {#distributed-storage-implementation}
 
@@ -693,6 +721,10 @@ Terms related to the implementation of [distributed transactions](#transactions)
 #### Optimistic locking {#optimistic-locking}
 
 As in many other database management systems, {{ ydb-short-name }} queries can put locks on certain pieces of data, like table rows, to ensure that concurrent access does not modify them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but during commit attempts. The former is called **pessimistic locking** (used in PostgreSQL, for example), while the latter is called **optimistic locking** (used in {{ ydb-short-name }}).
+
+#### Transaction lock invalidation {#tli}
+
+**Transaction lock invalidation** (TLI) is the standard behavior of {{ ydb-short-name }} when parallel transactions conflict under [optimistic locking](#optimistic-locking). If one transaction (the breaker) writes data and thereby breaks the locks of another transaction (the victim), {{ ydb-short-name }} detects this at the victim's commit time and rolls it back with a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
 
 #### Prepare stage {#prepare-stage}
 

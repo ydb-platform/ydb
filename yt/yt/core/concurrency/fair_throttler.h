@@ -22,6 +22,9 @@ struct TFairThrottlerConfig
 
     std::optional<std::string> IpcPath;
 
+    // COMPAT(babenko)
+    bool UseShmem;
+
     REGISTER_YSON_STRUCT(TFairThrottlerConfig);
 
     static void Register(TRegistrar registrar);

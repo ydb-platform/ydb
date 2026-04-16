@@ -14,12 +14,13 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
 class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
-    typedef TSaver<TExprTypeSaver<TSaver>> TBase;
+    using TBase = TSaver<TExprTypeSaver<TSaver>>;
 
     struct TStructAdaptor {
         const TStructExprType* Type;
@@ -285,14 +286,14 @@ TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat form
 }
 
 struct TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
 
     TExprContext& Ctx;
     TPosition Pos;
 
-    explicit TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    explicit TExprTypeLoader(TExprContext& ctx, TPosition pos = TPosition())
         : Ctx(ctx)
-        , Pos(pos)
+        , Pos(std::move(pos))
     {
     }
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
@@ -434,7 +435,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContex
 }
 
 struct TOrderAwareExprTypeLoader: public TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
     TColumnOrder& TopLevelColumns;
 
     TOrderAwareExprTypeLoader(TExprContext& ctx, const TPosition& pos, TColumnOrder& topLevelColumns)
@@ -477,5 +478,4 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationN
     }
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

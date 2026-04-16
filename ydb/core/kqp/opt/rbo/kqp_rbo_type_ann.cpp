@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
+const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -32,48 +32,80 @@ std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode*
     return {std::move(tableName), tableDesc};
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
-    auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+bool IsNeededToUpdateOlapReadType(TExprNode::TPtr lambda) {
+    if (!lambda) {
+        return false;
+    }
+    // Only olap projection can change the return type.
+    return !!FindNode(lambda, [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapProjections>(node); });
+}
+
+TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
+    const auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
-        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve table";
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve tablei.";
         return TStatus::Error;
     }
 
-    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata");
-
-    auto meta = table.second->Metadata;
+    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata.");
+    const auto meta = table.second->Metadata;
 
     TVector<TCoAtom> columns;
-    for (auto c : read->Columns) {
-        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, read->Pos).Value(c).Done());
+    for (const auto& column : read->Columns) {
+        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, read->Pos).Value(column).Done());
     }
-
-    auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, read->Pos).Add(columns).Done();
+    const auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, read->Pos).Add(columns).Done();
 
     const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx.ExprCtx, *ctx.KqpCtx.Tables, ctx.KqpCtx.Cluster, 
         table.first, columnsList, ctx.KqpCtx.Config->SystemColumnsEnabled());
     if (!rowType) {
-        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not get row type";
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not get row type.";
         return TStatus::Error;
     }
 
-    TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
+    const auto structType = rowType->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes = structType->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (const auto* t : structItemTypes) {
-        TString columnName = TString(t->GetName());
-        auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
-        auto columnIndex = std::distance(read->Columns.begin(), it);
-        auto fullName = read->OutputIUs[columnIndex].GetFullName();
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
+    for (const auto itemType : structItemTypes) {
+        const TString columnName = TString(itemType->GetName());
+        const auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
+        const auto columnIndex = std::distance(read->Columns.begin(), it);
+        const auto fullName = read->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+    }
+    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
+
+    if (IsNeededToUpdateOlapReadType(read->OlapFilterLambda)) {
+        auto& lambda = read->OlapFilterLambda;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {ctx.ExprCtx.MakeType<TFlowExprType>(structType)}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update olap filter lambda arg types.";
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok, "Cannot type annotate olap lambda.");
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        } while (status == IGraphTransformer::TStatus::Repeat);
+        Y_ENSURE(status == IGraphTransformer::TStatus::Ok && lambda->GetTypeAnn());
+
+        // Clear old items list, we will update it based on olap filter/projections types.
+        newItemTypes.clear();
+        newStructType = lambda->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
+        const auto alias = read->Alias;
+        for (const auto itemType : newStructType->GetItems()) {
+            const auto colName = TInfoUnit(alias, TString(itemType->GetName()));
+            const auto fullName = colName.GetFullName();
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+        }
+        newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
     }
 
-    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
     read->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
-
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpEmptySource> emptySource, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpEmptySource> emptySource, TRBOContext & ctx) {
     TVector<const TItemExprType*> resultItems;
     auto resultType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);
 
@@ -93,7 +125,7 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
         auto subplanEntry = props.Subplans.PlanMap.at(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
             auto subplan = subplanEntry.Plan;
-            auto subplanTupleType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            auto subplanTupleType = CastOperator<IOperator>(subplan)->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             subplanType = subplanTupleType->GetItems()[0]->GetItemType();
         } else {
             if (!props.PgSyntax) {
@@ -109,7 +141,7 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
     return ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanProps& props) {
+TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanProps& props) {
     const TTypeAnnotationNode* inputType = filter->GetInput()->Type;
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, inputType: " << *inputType;
 
@@ -129,21 +161,21 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
 
 
-    auto& lambda = filter->FilterLambda;
+    auto& lambda = filter->FilterExpr.Node;
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.ExprCtx)) {
         YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
         return IGraphTransformer::TStatus::Error;
     }
 
-    ctx.TypeAnnTransformer->Rewind();
+    ctx.TypeAnnTransformer.Rewind();
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
+        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
 
     } while (status == IGraphTransformer::TStatus::Repeat);
 
-    auto lambdaType = lambda->GetTypeAnn();
+    const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
     if (!lambdaType) {
         YQL_CLOG(TRACE, CoreDq) << "Could not infer lambda types, status = " << status;
         return IGraphTransformer::TStatus::Error;
@@ -173,7 +205,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -189,40 +221,27 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
     }
 
     for (auto& mapElement : map->MapElements) {
-        if (mapElement.IsRename()) {
-            const TInfoUnit from = mapElement.GetRename();
-            auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t) { return from.GetFullName() == t->GetName(); });
-            if (typeIt == typeItems.end()) {
-                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " << from.GetFullName() << " in " << *inputType << " while processing map "
-                                        << map->ToString(ctx.ExprCtx);
-            }
-            Y_ENSURE(typeIt != typeItems.end());
-
-            auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), (*typeIt)->GetItemType());
-            resStructItemTypes.push_back(renameType);
-        } else {
-            // This is type annotation update inplace, which is different comparing to yql type annotation.
-            auto& lambda = mapElement.GetExpression();
-            if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            ctx.TypeAnnTransformer->Rewind();
-            IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-            do {
-                status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
-            // Could we have an infinity loop?
-            } while (status == IGraphTransformer::TStatus::Repeat);
-
-            if (status == IGraphTransformer::TStatus::Error) {
-                return status;
-            }
-
-            auto lambdaType = lambda->GetTypeAnn();
-            Y_ENSURE(lambdaType);
-            auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
-            resStructItemTypes.push_back(mapLambdaType);
+        // This is type annotation update inplace, which is different comparing to yql type annotation.
+        auto& lambda = mapElement.GetExpressionRef().Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+            return IGraphTransformer::TStatus::Error;
         }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        // Could we have an infinity loop?
+        } while (status == IGraphTransformer::TStatus::Repeat);
+
+        if (status == IGraphTransformer::TStatus::Error) {
+            return status;
+        }
+
+        const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
+        Y_ENSURE(lambdaType);
+        auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
+        resStructItemTypes.push_back(mapLambdaType);
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
@@ -233,7 +252,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpAddDependencies> addDeps, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpAddDependencies> addDeps, TRBOContext& ctx) {
     const TTypeAnnotationNode* inputType = addDeps->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto resStructItemTypes = structType->GetItems();
@@ -248,7 +267,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpAddDependencies> addDeps, TRBOContext& c
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
     Y_UNUSED(ctx);
     auto leftInputType = unionAll->GetLeftInput()->Type;
     // TODO: Add sanity checks.
@@ -256,13 +275,13 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
-    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
-    for (const auto* itemType : structType->GetItems()) {
+    for (const auto itemType : structType->GetItems()) {
         const auto itemName = itemType->GetName();
         aggTraitsMap.emplace(itemName, itemType->GetItemType());
     }
@@ -299,7 +318,23 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
+TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& types, TRBOContext& rboCtx) {
+    auto& ctx = rboCtx.ExprCtx;
+    TVector<const TItemExprType*> optionalTypes;
+    for (ui32 i = 0, e = types.size(); i < e; ++i) {
+        const auto itemType = types[i]->GetItemType();
+        if (!itemType->IsOptionalOrNull()) {
+            optionalTypes.push_back(ctx.MakeType<TItemExprType>(types[i]->GetName(), ctx.MakeType<TOptionalExprType>(itemType)));
+        } else {
+            optionalTypes.push_back(types[i]);
+        }
+    }
+    return optionalTypes;
+}
+
+TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
+    Y_ENSURE(join->JoinFilters.empty(), "Type inference for join filters not supported");
+    
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
 
@@ -312,9 +347,12 @@ TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
 
     if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
         rightItemTypes = {};
-    }
-    if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
+    } else if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
         leftItemTypes = {};
+    } else if (join->JoinKind == "Left") {
+        rightItemTypes = AddOptional(rightItemTypes, ctx);
+    } else if (join->JoinKind == "Right") {
+        leftItemTypes = AddOptional(leftItemTypes, ctx);
     }
 
     structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
@@ -327,15 +365,31 @@ TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
-    Y_UNUSED(ctx);
+TStatus ComputeTypes(TIntrusivePtr<TOpLimit> limit, TRBOContext& ctx) {
     auto inputType = limit->GetInput()->Type;
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    auto& lambda = limit->LimitCond.Node;
+    if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    ctx.TypeAnnTransformer.Rewind();
+    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+    do {
+        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+    } while (status == IGraphTransformer::TStatus::Repeat);
+
+    if (status == IGraphTransformer::TStatus::Error) {
+        return status;
+    }
+
     // TODO: Add sanity checks.
     limit->Type = inputType;
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpSort> sort, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
     Y_UNUSED(ctx);
     auto inputType = sort->GetInput()->Type;
     // TODO: Add sanity checks.
@@ -343,9 +397,9 @@ TStatus ComputeTypes(std::shared_ptr<TOpSort> sort, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props);
+TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props);
 
-TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPlanProps& props) {
+TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanProps& props) {
     for (auto op : cboTree->TreeNodes) {
         if (auto status = ComputeTypes(op, ctx, props); status != TStatus::Ok) {
             return status;
@@ -355,7 +409,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPla
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props) {
+TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props) {
     if (MatchOperator<TOpEmptySource>(op)) {
         return ComputeTypes(CastOperator<TOpEmptySource>(op), ctx);
     }
@@ -399,7 +453,7 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
 namespace NKikimr {
 namespace NKqp {
 
-TStatus TOpRoot::ComputeTypes(TRBOContext & ctx) {
+TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
     for (auto it = begin(); it != end(); it++) {
         auto status = ::ComputeTypes((*it).Current, ctx, PlanProps);
         if (status != TStatus::Ok) {

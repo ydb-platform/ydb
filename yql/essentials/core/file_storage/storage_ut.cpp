@@ -14,8 +14,12 @@
 using namespace NYql;
 using namespace NThreading;
 
-static TString DATA = "1234567890";
-static TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f";
+namespace {
+
+TString DATA = "1234567890";
+TString DATA_MD5 = "e807f1fcf82d132f9bb018ca6738a19f";
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TStorageTests) {
 
@@ -25,7 +29,7 @@ private:
 
 public:
     explicit TTestDir(const TString& name) {
-        Y_ENSURE(name.length() > 0, "have to specify name");
+        Y_ENSURE(!name.empty(), "have to specify name");
         Y_ENSURE(name.find('.') == TString::npos, "must be simple name");
         Y_ENSURE(name.find('/') == TString::npos, "must be simple name");
         Y_ENSURE(name.find('\\') == TString::npos, "must be simple name");
@@ -139,8 +143,8 @@ Y_UNIT_TEST(DisplaceByCount) {
     storage->GetRoot().ListNames(filesInStorage);
     UNIT_ASSERT_EQUAL(filesInStorage.size(), 4); // 2 files + 1 hardlink directory + 1 locks directory
 
-    auto beg = filesInStorage.begin(),
-         end = filesInStorage.end();
+    auto beg = filesInStorage.begin();
+    auto end = filesInStorage.end();
 
     // file1 was displaced
     UNIT_ASSERT(Find(beg, end, file1->GetStorageFileName()) == end);
@@ -176,8 +180,8 @@ Y_UNIT_TEST(DisplaceBySize) {
     storage->GetRoot().ListNames(filesInStorage);
     UNIT_ASSERT_EQUAL(filesInStorage.size(), 4); // 2 files + 1 hardlink directory + 1 locks folder
 
-    auto beg = filesInStorage.begin(),
-         end = filesInStorage.end();
+    auto beg = filesInStorage.begin();
+    auto end = filesInStorage.end();
 
     // file1 was displaced
     UNIT_ASSERT(Find(beg, end, file1->GetStorageFileName()) == end);

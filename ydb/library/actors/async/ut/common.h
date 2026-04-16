@@ -129,7 +129,7 @@ namespace NAsyncTest {
         std::function<bool(TAutoPtr<IEventHandle>& ev)> Handler;
 
         TAsyncTestActor(TState& state,
-                std::function<async<void>(TAsyncTestActor*)> callback,
+                std::function<async<void>(TAsyncTestActor*)> callback = {},
                 std::function<bool(TAutoPtr<IEventHandle>& ev)> handler = {})
             : State(state)
             , Callback(std::move(callback))
@@ -148,7 +148,9 @@ namespace NAsyncTest {
         void Bootstrap() {
             Become(&TThis::StateWork);
 
-            CallCallback();
+            if (Callback) {
+                CallCallback();
+            }
             State.CallbackReturned = true;
         }
 
@@ -225,6 +227,10 @@ namespace NAsyncTest {
                 Runtime.Send(new IEventHandle(ActorId, TActorId(), event, 0, cookie));
             }
 
+            void Send(IEventBase* event, ui64 cookie = 0) const {
+                Runtime.Send(new IEventHandle(ActorId, TActorId(), event, 0, cookie), 0, true);
+            }
+
             void Poison() const {
                 Receive(new TEvents::TEvPoison);
             }
@@ -237,8 +243,16 @@ namespace NAsyncTest {
                 Receive(new TAsyncTestActor::TEvPrivate::TEvRunAsync(std::move(callable)));
             }
 
+            void SendAsync(std::function<async<void>()> callable) const {
+                Send(new TAsyncTestActor::TEvPrivate::TEvRunAsync(std::move(callable)));
+            }
+
             void RunSync(std::function<void()> callable) const {
                 Receive(new TAsyncTestActor::TEvPrivate::TEvRunSync(std::move(callable)));
+            }
+
+            void SendSync(std::function<void()> callable) const {
+                Send(new TAsyncTestActor::TEvPrivate::TEvRunSync(std::move(callable)));
             }
 
         private:

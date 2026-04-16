@@ -7,16 +7,17 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 class TTypeHandleWrapper: public TMutableComputationNode<TTypeHandleWrapper> {
-    typedef TMutableComputationNode<TTypeHandleWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTypeHandleWrapper>;
 
 public:
-    TTypeHandleWrapper(TComputationMutables& mutables, const TString& yson, ui32 exprCtxMutableIndex)
+    TTypeHandleWrapper(TComputationMutables& mutables, TString yson, ui32 exprCtxMutableIndex)
         : TBaseComputation(mutables)
-        , Yson_(yson)
+        , Yson_(std::move(yson))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
     {
     }
@@ -45,5 +46,4 @@ IComputationNode* WrapTypeHandle(TCallable& callable, const TComputationNodeFact
     return new TTypeHandleWrapper(ctx.Mutables, yson, exprCtxMutableIndex);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

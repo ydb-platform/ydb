@@ -51,6 +51,10 @@ private:
     bool AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnSetCompression(const TRule_alter_table_alter_column_set_compression& node, TAlterTableParameters& params);
+    bool AlterTableCompact(const TRule_alter_table_compact& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_column_set_default& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_column_drop_default& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
@@ -59,25 +63,6 @@ private:
     bool FillSetClause(const TRule_set_clause& node, TVector<TString>& targetList, TVector<TNodePtr>& values);
     TSourcePtr Build(const TRule_set_clause_list& stmt);
     TSourcePtr Build(const TRule_multiple_column_assignment& stmt);
-
-    template <class TNode>
-    void ParseStatementName(const TNode& node, TString& internalStatementName, TString& humanStatementName) {
-        internalStatementName.clear();
-        humanStatementName.clear();
-        const auto& descr = AltDescription(node);
-        TVector<TString> parts;
-        Split(descr, "_", parts);
-        Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
-        parts.pop_back();
-        for (auto& part : parts) {
-            part.to_upper(0, 1);
-            internalStatementName += part;
-            if (!humanStatementName.empty()) {
-                humanStatementName += ' ';
-            }
-            humanStatementName += to_upper(part);
-        }
-    }
 
     const bool TopLevel_;
     const bool AllowTopLevelPragmas_;

@@ -14,7 +14,9 @@ struct TFmrJobPreparerSettings {
 IFmrJobPreparer::TPtr MakeFmrJobPreparer(
     TFileStoragePtr fileStorage,
     const TString& tableDataServiceDiscoveryFilePath,
-    const TFmrJobPreparerSettings& settings = TFmrJobPreparerSettings()
+    const TFmrJobPreparerSettings& settings = TFmrJobPreparerSettings(),
+    IFmrTvmClient::TPtr tvmClient = nullptr,
+    TTvmId destinationTvmId = 0
 );
 
 } // namespace NYql::NFmr

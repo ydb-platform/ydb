@@ -13,8 +13,7 @@
 #include <yql/essentials/parser/pg_wrapper/arena_ctx.h>
 #include <yql/essentials/parser/lexer_common/hints.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 TCheckState::TCheckState(const TChecksRequest& request)
     : Request_(request)
@@ -239,5 +238,4 @@ const TAstParseResult* TCheckState::TranslateSExpr(TIssues& issues) {
     return ParseSExpr(issues);
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

@@ -82,7 +82,6 @@ class TLogReader : public TLogReaderBase {
     ui64 LastNonce;
     ui64 LastDataNonce;
     bool OnEndOfSplice;
-    TPDiskStreamCypher Cypher;
     ui32 OffsetInSector;
     bool SetLastGoodToWritePosition;
     ui32 ChunkIdx;

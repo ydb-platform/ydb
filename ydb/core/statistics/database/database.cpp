@@ -218,7 +218,7 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
-        const TString& database, const TPathId& pathId, EStatType statType, ui32 columnTag) {
+        const TString& database, const TPathId& pathId, EStatType statType, std::optional<ui32> columnTag) {
     SA_LOG_D("[DispatchLoadStatisticsQuery] QueryId[ " << queryId
         << " ], PathId[ " << pathId << " ], " << " StatType[ " << static_cast<ui32>(statType)
         << " ], ColumnTag[ " << columnTag << " ]");
@@ -236,7 +236,7 @@ void DispatchLoadStatisticsQuery(
                 .AddMember("owner_id").Uint64(pathId.OwnerId)
                 .AddMember("local_path_id").Uint64(pathId.LocalPathId)
                 .AddMember("stat_type").Uint32(static_cast<ui32>(statType))
-                .AddMember("column_tag").Uint32(columnTag)
+                .AddMember("column_tag").OptionalUint32(columnTag)
             .EndStruct()
         .EndList();
     auto keys = keys_builder.Build();

@@ -1,4 +1,6 @@
+#include <util/datetime/base.h>
 #include <util/system/types.h>
+#include <library/cpp/sliding_window/sliding_window.h>
 #include <deque>
 
 namespace NKikimr::NPQ {
@@ -19,8 +21,10 @@ namespace NKikimr::NPQ {
 // Then the deque will be [2, 4, 4]
 struct TInFlightController {
     constexpr static ui64 MAX_LAYOUT_COUNT = 1024;
+    constexpr static TDuration SLIDING_WINDOW_SIZE = TDuration::Seconds(60);
+    constexpr static ui64 SLIDING_WINDOW_UNITS_COUNT = 60;
 
-    TInFlightController() = default;
+    TInFlightController();
     TInFlightController(ui64 MaxAllowedSize);
     
     ui64 LayoutUnitSize = 0;
@@ -28,11 +32,16 @@ struct TInFlightController {
     ui64 TotalSize = 0;
     ui64 MaxAllowedSize = 0;
 
+    TInstant InFlightFullSince = TInstant::Zero();
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<TDuration>> SlidingWindow;
+
     // Adds an offset with size
     bool Add(ui64 Offset, ui64 Size);
     // Removes offsets <= given offset
     bool Remove(ui64 Offset);
     bool IsMemoryLimitReached() const;
+
+    TDuration GetLimitReachedDuration();
 };
 
 } // namespace NKikimr::NPQ

@@ -29,32 +29,8 @@ TCommitOffsetActor::TCommitOffsetActor(
     Y_ASSERT(request);
 }
 
-TCommitOffsetActor::TCommitOffsetActor(
-        NKikimr::NGRpcService::IRequestOpCtx * ctx, const NPersQueue::TTopicsListController& topicsHandler,
-        const TActorId& schemeCache, const TActorId& newSchemeCache,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
-)
-    : TBase(ctx)
-    , SchemeCache(schemeCache)
-    , NewSchemeCache(newSchemeCache)
-    , AuthInitActor()
-    , Counters(counters)
-    , TopicsHandler(std::make_unique<NPersQueue::TTopicsListController>(topicsHandler))
-{
-    Y_ASSERT(ctx);
-}
-
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
-    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
-    , NewSchemeCache(MakeSchemeCacheID())
-    , AuthInitActor()
-    , Counters(nullptr)
-{
-}
-
-TCommitOffsetActor::TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request)
-    : TBase(request)
     , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
     , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()

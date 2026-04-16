@@ -40,13 +40,14 @@ public:
 
         TVector<TCoNameValueTuple> extractedMetadata;
         for (auto metadata : topic.Metadata()) {
-            if (membersSet.contains(metadata.Name())) {
-                columns.push_back(Build<TCoAtom>(ctx, read->Pos())
-                    .Value(metadata.Name())
-                    .Done());
+            auto metadataAtom = metadata.Value().Maybe<TCoAtom>().Cast();
+            if (membersSet.contains(metadataAtom.StringValue())) {
+                columns.push_back(metadataAtom);
                 extractedMetadata.push_back(metadata);
             }
         }
+
+        auto userSchemaColumnsNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
 
         return Build<TPqReadTopic>(ctx, read->Pos())
             .InitFrom(maybeReadTopic.Cast())
@@ -58,6 +59,7 @@ public:
             .Columns<TCoAtomList>()
                 .Add(columns)
                 .Build()
+            .UserSchemaColumns(std::move(userSchemaColumnsNode))
             .Done().Ptr();
     }
 
@@ -80,7 +82,7 @@ public:
             return write;
         }
 
-        auto* listType = maybeWriteTopic.Cast().Input().Ref().GetTypeAnn();
+        auto listType = maybeWriteTopic.Cast().Input().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
         return Build<TPqWriteTopic>(ctx, write->Pos())

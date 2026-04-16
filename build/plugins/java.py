@@ -4,7 +4,6 @@ import json
 import os
 import base64
 
-
 DELIM = '================================'
 CONTRIB_JAVA_PREFIX = 'contrib/java/'
 
@@ -382,4 +381,11 @@ def on_java_resource_tar_validate_extract_root(unit, extract_root):
         ymake.report_configure_error(
             'Macro JAVA_RESOURCE_TAR requires to set EXTRACT_ROOT. '
             'Usage JAVA_RESOURCE_TAR(tar_path EXTRACT_ROOT root_dir)'
+        )
+
+
+def onjavac_flags(unit, *args):
+    if '-proc:full' in args or '-proc:only' in args:
+        ymake.report_configure_error(
+            'Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses'
         )

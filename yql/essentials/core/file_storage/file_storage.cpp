@@ -44,7 +44,7 @@ namespace NYql {
 
 namespace {
 
-constexpr char ComponentName[] = "file_storage";
+constexpr const char* ComponentName = "file_storage";
 
 class TFileLockGuard {
 public:

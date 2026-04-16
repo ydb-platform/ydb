@@ -26,7 +26,7 @@ namespace sdk
 namespace common
 {
 
-bool GetRawEnvironmentVariable(const char *env_var_name, std::string &value)
+static bool GetRawEnvironmentVariable(const char *env_var_name, std::string &value)
 {
 #if !defined(NO_GETENV)
   const char *endpoint_from_env = nullptr;
@@ -97,7 +97,14 @@ static bool GetTimeoutFromString(const char *input, std::chrono::system_clock::d
 
   for (; *input && std::isdigit(*input); ++input)
   {
-    result = result * 10 + (*input - '0');
+    auto digit = (*input - '0');
+
+    if (result > (std::numeric_limits<decltype(result)>::max() - digit) / 10)
+    {
+      // Rejecting overflow as invalid.
+      return false;
+    }
+    result = result * 10 + digit;
   }
 
   if (result == 0)

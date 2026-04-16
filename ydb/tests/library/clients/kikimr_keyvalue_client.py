@@ -2,11 +2,8 @@
 # -*- coding: utf-8 -*-
 import time
 import os
-import asyncio
-
 
 import grpc
-import grpc.aio
 import six
 import logging
 
@@ -55,19 +52,11 @@ class KeyValueClient(object):
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.KeyValueServiceStub(self._channel)
         self._stub_v2 = grpc_server_v2.KeyValueServiceStub(self._channel)
-        self._async_channel = None
-        self._async_stub = None
-        self._async_stub_v2 = None
 
     def _get_invoke_callee(self, method, version):
         if version == 'v2':
             return getattr(self._stub_v2, method)
         return getattr(self._stub, method)
-
-    def _get_async_invoke_callee(self, method, version):
-        if version == 'v2':
-            return getattr(self._async_stub_v2, method)
-        return getattr(self._async_stub, method)
 
     def invoke(self, request, method, version):
         retry = self.__retry_count
@@ -83,24 +72,6 @@ class KeyValueClient(object):
                     raise
 
                 time.sleep(self.__retry_sleep_seconds)
-
-    async def ainvoke(self, request, method, version):
-        if self._async_channel is None:
-            self._async_channel = grpc.aio.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
-            self._async_stub = grpc_server.KeyValueServiceStub(self._async_channel)
-            self._async_stub_v2 = grpc_server_v2.KeyValueServiceStub(self._async_channel)
-        retry = self.__retry_count
-        while True:
-            try:
-                callee = self._get_async_invoke_callee(method, version)
-                return await callee(request)
-            except (RuntimeError, grpc.RpcError):
-                retry -= 1
-
-                if not retry:
-                    raise
-
-                await asyncio.sleep(self.__retry_sleep_seconds)
 
     def make_write_request(self, path, partition_id, kv_pairs, channel=None):
         request = keyvalue_api.ExecuteTransactionRequest()
@@ -121,14 +92,6 @@ class KeyValueClient(object):
     def kv_writes(self, path, partition_id, kv_pairs, channel=None, version='v1'):
         request = self.make_write_request(path, partition_id, kv_pairs, channel)
         return self.invoke(request, 'ExecuteTransaction', version)
-
-    async def a_kv_write(self, path, partition_id, key, value, channel=None, version='v1'):
-        request = self.make_write_request(path, partition_id, [(key, value)], channel)
-        return await self.ainvoke(request, 'ExecuteTransaction', version)
-
-    async def a_kv_writes(self, path, partition_id, kv_pairs, channel=None, version='v1'):
-        request = self.make_write_request(path, partition_id, kv_pairs, channel)
-        return await self.ainvoke(request, 'ExecuteTransaction', version)
 
     def make_delete_range_request(self, path, partition_id, from_key=None, to_key=None,
                                   from_inclusive=True, to_inclusive=False):
@@ -154,12 +117,6 @@ class KeyValueClient(object):
                                                  from_inclusive, to_inclusive)
         return self.invoke(request, 'ExecuteTransaction', version)
 
-    async def a_kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
-                                from_inclusive=True, to_inclusive=False, version='v1'):
-        request = self.make_delete_range_request(path, partition_id, from_key, to_key,
-                                                 from_inclusive, to_inclusive)
-        return await self.ainvoke(request, 'ExecuteTransaction', version)
-
     def make_read_request(self, path, partition_id, key, offset=None, size=None):
         request = keyvalue_api.ReadRequest()
         request.path = path
@@ -175,31 +132,15 @@ class KeyValueClient(object):
         request = self.make_read_request(path, partition_id, key, offset, size)
         return self.invoke(request, 'Read', version)
 
-    async def a_kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
-        request = self.make_read_request(path, partition_id, key, offset, size)
-        return await self.ainvoke(request, 'Read', version)
-
     def kv_get_tablets_read_state(self, path, partition_ids):
         for id in partition_ids:
             response = self.kv_read(path, id, "key")
-            return response
-
-    async def a_kv_get_tablets_read_state(self, path, partition_ids):
-        for id in partition_ids:
-            response = await self.a_kv_read(path, id, "key")
             return response
 
     def kv_get_tablets_write_state(self, path, partition_ids):
         states = list()
         for id in partition_ids:
             response = self.kv_write(path, id, "key", "value")
-            states.append(response)
-        return states
-
-    async def a_kv_get_tablets_write_state(self, path, partition_ids):
-        states = list()
-        for id in partition_ids:
-            response = await self.a_kv_write(path, id, "key", "value")
             states.append(response)
         return states
 
@@ -225,49 +166,13 @@ class KeyValueClient(object):
                     new_channel.media = media
         return self.invoke(request, 'CreateVolume', version='v1')
 
-    async def a_create_tablets(self, number_of_tablets, path, binded_channels=None):
-        request = keyvalue_api.CreateVolumeRequest()
-        request.path = path
-        request.partition_count = number_of_tablets
-        channels = None
-        if binded_channels:
-            channels = binded_channels
-        elif self._cluster is not None and hasattr(self._cluster, 'default_channel_bindings'):
-            channels = self._cluster.default_channel_bindings
-        elif channels_list() != '':
-            channels = {idx: value for idx, value in enumerate(channels_list().split(';'))}
-        if channels:
-            if isinstance(channels, dict):
-                for _ in range(len(channels.items())):
-                    new_channel = request.storage_config.channel.add()
-                    new_channel.media = 'hdd'
-            elif isinstance(channels, list):
-                for media in channels:
-                    new_channel = request.storage_config.channel.add()
-                    new_channel.media = media
-        return await self.ainvoke(request, 'CreateVolume', version='v1')
-
     def drop_tablets(self, path):
         request = keyvalue_api.DropVolumeRequest()
         request.path = path
         return self.invoke(request, 'DropVolume', version='v1')
 
-    async def a_drop_tablets(self, path):
-        request = keyvalue_api.DropVolumeRequest()
-        request.path = path
-        return await self.ainvoke(request, 'DropVolume', version='v1')
-
     def close(self):
         self._channel.close()
-
-    async def aclose(self):
-        if self._async_channel is not None:
-            await self._async_channel.close()
-
-    async def close_all(self):
-        self._channel.close()
-        if self._async_channel is not None:
-            await self._async_channel.close()
 
     def __del__(self):
         self.close()

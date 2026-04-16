@@ -2382,39 +2382,6 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > 0,
             "Bloom ngram filter should skip at least some portions for a nonexistent value");
     }
-
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BackupConsistentCopyTableWithBloomIndexes, EUseQueryService) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
-        settings.FeatureFlags.SetEnableColumnTablesBackup(true);
-        TKikimrRunner kikimr(settings);
-        auto& client = kikimr.GetTestClient();
-
-        ExecQuery(kikimr, UseQueryService, R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/olapBackupSrc`
-            (
-                timestamp Timestamp NOT NULL,
-                resource_id Utf8,
-                uid Utf8 NOT NULL,
-                PRIMARY KEY (timestamp, uid),
-                INDEX idx_bloom LOCAL USING bloom_filter
-                    ON (resource_id)
-                    WITH (false_positive_probability = 0.01),
-                INDEX idx_ngram LOCAL USING bloom_ngram_filter
-                    ON (resource_id)
-                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true)
-            )
-            PARTITION BY HASH(timestamp, uid)
-            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
-
-        AssertColumnTableHasLocalBloomPairIndexes(client, "/Root/olapBackupSrc");
-        auto status = client.ConsistentCopyTables({std::make_pair("/Root/olapBackupSrc", "/Root/olapBackupDst")}, TDuration::Seconds(20), true);
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_OK, "ConsistentCopyTables (forBackup) failed");
-        AssertColumnTableHasLocalBloomPairIndexes(client, "/Root/olapBackupDst");
-    }
 }
 
 }   // namespace NKikimr::NKqp

@@ -810,7 +810,10 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 lng->set_false_positive_probability(ng.GetFalsePositiveProbability());
                 break;
             }
-            default:
+            case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
+            case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch:
+            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex:
+            case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
                 break;
         }
     }
@@ -881,7 +884,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         olapIndex->SetId(nextIndexId++);
         olapIndex->SetName(index.name());
 
-        switch (index.type_case()) {
+        switch (index.type_case()) { 
             case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     return fail("Local bloom filter index support is disabled");
@@ -909,7 +912,14 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 ngram->SetColumnId(columnId);
                 break;
             }
-            default:
+            case Ydb::Table::TableIndex::kGlobalIndex:
+            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+            case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+            case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+            case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+            case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+            case Ydb::Table::TableIndex::kGlobalJsonIndex:
+            case Ydb::Table::TableIndex::TYPE_NOT_SET:
                 return fail("Unsupported index type for column table import");
         }
     }

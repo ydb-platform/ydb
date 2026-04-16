@@ -206,6 +206,7 @@ default_access:
 Уровни доступа задаются списками SID.
 
 Эти списки образуют иерархию, которая используется в [Embedded UI](../embedded-ui/ydb-monitoring.md), viewer и во многих других общекластерных действиях:
+
 - `administration_allowed_sids`
 - `monitoring_allowed_sids`
 - `viewer_allowed_sids`

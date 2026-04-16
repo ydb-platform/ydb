@@ -202,6 +202,7 @@ Both segments are used in combination: a [subject](../../concepts/glossary.md#ac
 Access levels are defined by SID lists.
 
 The lists form a hierarchy (used by the [Embedded UI](../embedded-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions):
+
 - `administration_allowed_sids`
 - `monitoring_allowed_sids`
 - `viewer_allowed_sids`

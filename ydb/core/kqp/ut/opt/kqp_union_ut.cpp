@@ -82,5 +82,242 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
+
+    Y_UNIT_TEST(ScatterConnection) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableScatterConnection(true);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto qSession = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int32 NULL,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int32 NULL,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto insertRes = qSession.ExecuteQuery(R"(
+            INSERT INTO `/Root/t1` (a, b) VALUES (1, 10), (2, 20), (3, 30);
+            INSERT INTO `/Root/t2` (a, b) VALUES (4, 40), (5, 50), (6, 60);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());
+
+        TVector<std::pair<TString, TString>> queries = {
+            {
+                R"(
+                    SELECT * FROM `/Root/t1`
+                    UNION ALL
+                    SELECT * FROM `/Root/t2`
+                    ORDER BY a;
+                )",
+                "UNION ALL + ORDER BY"
+            },
+            {
+                R"(
+                    SELECT * FROM `/Root/t1`
+                    UNION ALL
+                    SELECT * FROM `/Root/t2`
+                    ORDER BY a LIMIT 4;
+                )",
+                "UNION ALL + ORDER BY LIMIT"
+            },
+        };
+
+        for (const auto& [query, label] : queries) {
+            auto explainResult = qSession
+                .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                              NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, label);
+
+            auto ast = *explainResult.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("DqCnScatter") != std::string::npos,
+                          TStringBuilder() << label << ": DqCnScatter not found in plan: " << ast);
+            UNIT_ASSERT_C(ast.find("DqCnParallelUnionAll") == std::string::npos,
+                          TStringBuilder() << label << ": DqCnParallelUnionAll should be replaced by DqCnScatter: " << ast);
+
+            auto execResult = qSession
+                .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, label);
+
+            auto rs = execResult.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
+            auto rows = rs[0].GetRowsCount();
+            if (label == "UNION ALL + ORDER BY LIMIT") {
+                UNIT_ASSERT_VALUES_EQUAL_C(rows, 4, label);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(rows, 6, label);
+            }
+
+            // Verify ordering: column 'a' must be ascending
+            NYdb::TResultSetParser parser(rs[0]);
+            std::optional<i64> prev;
+            while (parser.TryNextRow()) {
+                auto val = parser.ColumnParser("a").GetInt64();
+                if (prev) {
+                    UNIT_ASSERT_C(val >= *prev,
+                                  TStringBuilder() << label << ": rows not sorted, got " << val << " after " << *prev);
+                }
+                prev = val;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ScatterConnectionMultiNode) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetNodeCount(3);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableScatterConnection(true);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto qSession = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/scatter_t` (
+                key Int64 NOT NULL,
+                val Utf8 NULL,
+                primary key(key)
+            )
+            PARTITION BY HASH(key)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        {
+            TStringBuilder insertQ;
+            insertQ << "INSERT INTO `/Root/scatter_t` (key, val) VALUES ";
+            for (i64 i = 1; i <= 100; ++i) {
+                if (i > 1) insertQ << ", ";
+                insertQ << "(" << i << ", \"v" << i << "\")";
+            }
+            insertQ << ";";
+            auto insertRes = qSession.ExecuteQuery(insertQ, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
+        }
+
+        {
+            TString query = R"(
+                SELECT * FROM `/Root/scatter_t`
+                ORDER BY key;
+            )";
+
+            auto explainResult = qSession
+                .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                              NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto plan = *explainResult.GetStats()->GetPlan();
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(plan, &planJson, true);
+            ui32 scatterNodes = CountPlanNodesByKv(planJson, "Node Type", "Scatter");
+            UNIT_ASSERT_C(scatterNodes > 0,
+                          TStringBuilder() << "Scatter not found in plan: " << plan);
+
+            auto execResult = qSession
+                .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                              NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full))
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+            auto rs = execResult.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rs[0].GetRowsCount(), 100);
+
+            NYdb::TResultSetParser parser(rs[0]);
+            i64 expected = 1;
+            while (parser.TryNextRow()) {
+                auto val = parser.ColumnParser("key").GetInt64();
+                UNIT_ASSERT_VALUES_EQUAL_C(val, expected,
+                    TStringBuilder() << "Expected key=" << expected << " got " << val);
+                ++expected;
+            }
+        }
+
+        {
+            TString query = R"(
+                SELECT * FROM `/Root/scatter_t`
+                ORDER BY key DESC
+                LIMIT 10;
+            )";
+
+            auto execResult = qSession
+                .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                              NYdb::NQuery::TExecuteQuerySettings())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+            auto rs = execResult.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rs[0].GetRowsCount(), 10);
+
+            NYdb::TResultSetParser parser(rs[0]);
+            i64 expected = 100;
+            while (parser.TryNextRow()) {
+                auto val = parser.ColumnParser("key").GetInt64();
+                UNIT_ASSERT_VALUES_EQUAL_C(val, expected,
+                    TStringBuilder() << "Expected key=" << expected << " got " << val);
+                --expected;
+            }
+        }
+
+        {
+            TString query = R"(
+                SELECT key, val FROM `/Root/scatter_t`
+                WHERE key > 50
+                ORDER BY key
+                LIMIT 25;
+            )";
+
+            auto execResult = qSession
+                .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                              NYdb::NQuery::TExecuteQuerySettings())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+            auto rs = execResult.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rs[0].GetRowsCount(), 25);
+
+            NYdb::TResultSetParser parser(rs[0]);
+            i64 expected = 51;
+            while (parser.TryNextRow()) {
+                auto val = parser.ColumnParser("key").GetInt64();
+                UNIT_ASSERT_VALUES_EQUAL_C(val, expected,
+                    TStringBuilder() << "Expected key=" << expected << " got " << val);
+                ++expected;
+            }
+        }
+    }
+
 }
 } // namespace NKikimr::NKqp

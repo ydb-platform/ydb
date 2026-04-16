@@ -1378,7 +1378,13 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             }
 
             case NKqpProto::TKqpPhyConnection::kScatter: {
-                BuildScatterChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
+                if (inputStageInfo.Tasks.size() <= 1 && stageInfo.Tasks.size() == 1) {
+                    LOG_D("Scatter downgraded to UnionAll: srcTasks=" << inputStageInfo.Tasks.size()
+                        << " dstTasks=" << stageInfo.Tasks.size());
+                    BuildUnionAllChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
+                } else {
+                    BuildScatterChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
+                }
                 break;
             }
 
@@ -1531,7 +1537,8 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
         }
 
         case TTaskOutputType::Scatter: {
-            outputDesc.MutableScatter()->set_primary_channel_idx(output.ScatterPrimaryChannelIdx);
+            auto* scatter = outputDesc.MutableScatter();
+            scatter->set_primary_channel_idx(output.ScatterPrimaryChannelIdx);
             break;
         }
 
@@ -2271,7 +2278,9 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kScatter: {
-                partitionsCount = std::max<ui64>(partitionsCount, std::min<ui64>(originStageInfo.Tasks.size(), nodesCount));
+                if (originStageInfo.Tasks.size() > 1) {
+                    partitionsCount = std::max<ui64>(partitionsCount, std::min<ui64>(originStageInfo.Tasks.size(), nodesCount));
+                }
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kVectorResolve: {

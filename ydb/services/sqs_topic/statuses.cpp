@@ -18,6 +18,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, NPQ::NDescriber::Description(topicPath, status));
                 break;
             case UNAUTHORIZED:
+            case UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::ACCESS_DENIED, NPQ::NDescriber::Description(topicPath, status));
                 break;
             case UNKNOWN_ERROR:

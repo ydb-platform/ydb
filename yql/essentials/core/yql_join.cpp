@@ -198,7 +198,8 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        std::optional<std::unordered_set<std::string_view>> leftHints, rightHints;
+        std::optional<std::unordered_set<std::string_view>> leftHints;
+        std::optional<std::unordered_set<std::string_view>> rightHints;
         bool hasJoinStrategyHint = false;
         bool isMultiget = false;
         for (auto child : linkOptions->Children()) {
@@ -1985,7 +1986,7 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
         }
     }
 
-    if (commonParts.size() == 0) {
+    if (commonParts.empty()) {
         return originalPredicate;
     }
 
@@ -2012,12 +2013,12 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
             restAndArgs.push_back(part);
         }
 
-        if (restAndArgs.size() >= 1) {
+        if (!restAndArgs.empty()) {
             orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(restAndArgs)));
         }
     }
 
-    if (orArgs.size() >= 1) {
+    if (!orArgs.empty()) {
         andArgs.push_back(ctx.NewCallable(predicate->Pos(), "Or", std::move(orArgs)));
     }
 
@@ -2299,7 +2300,8 @@ TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabel
 
 bool IsNoPullColumn(TStringBuf columnName) {
     if (columnName.Contains('.')) {
-        TStringBuf table, column;
+        TStringBuf table;
+        TStringBuf column;
         SplitTableName(columnName, table, column);
         columnName = column;
     }

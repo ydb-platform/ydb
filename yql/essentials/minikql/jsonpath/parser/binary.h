@@ -109,7 +109,7 @@ struct TJsonPathItem {
         bool>
         Data;
 
-    const TStringBuf GetString() const;
+    TStringBuf GetString() const;
     const TVector<TArraySubscriptOffsets>& GetSubscripts() const;
     const TBinaryOpArgumentsOffset& GetBinaryOpArguments() const;
     const NReWrapper::IRePtr& GetRegex() const;
@@ -254,7 +254,7 @@ private:
 
     EJsonPathMode ReadMode(TUint& pos);
 
-    const TStringBuf ReadString(TUint& pos);
+    TStringBuf ReadString(TUint& pos);
 
     TVector<TArraySubscriptOffsets> ReadSubscripts(TUint& pos);
 

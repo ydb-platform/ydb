@@ -43,15 +43,15 @@ To enable data eviction, an [external data source](../../../concepts/datamodel/e
 In the example below, an external data source `/Root/s3_cold_data` is created. It describes a connection to bucket `test_cold_data` located in Yandex Object Storage with authorization by static access keys provided via secrets `access_key` and `secret_key`.
 
 ```yql
-CREATE OBJECT access_key (TYPE SECRET) WITH (value="...");
-CREATE OBJECT secret_key (TYPE SECRET) WITH (value="...");
+CREATE SECRET access_key WITH (value="...");
+CREATE SECRET secret_key WITH (value="...");
 
 CREATE EXTERNAL DATA SOURCE `/Root/s3_cold_data` WITH (
     SOURCE_TYPE="ObjectStorage",
     AUTH_METHOD="AWS",
     LOCATION="http://storage.yandexcloud.net/test_cold_data",
-    AWS_ACCESS_KEY_ID_SECRET_NAME="access_key",
-    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key",
+    AWS_ACCESS_KEY_ID_SECRET_PATH="access_key",
+    AWS_SECRET_ACCESS_KEY_SECRET_PATH="secret_key",
     AWS_REGION="ru-central1"
 )
 ```

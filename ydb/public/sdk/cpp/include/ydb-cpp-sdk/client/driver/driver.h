@@ -3,6 +3,8 @@
 #include "fwd.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/trace/trace.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
@@ -165,6 +167,12 @@ public:
     //! Set executor for async responses.
     //! If not set, default executor will be used.
     TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
+
+    //! Set external metrics registry implementation.
+    TDriverConfig& SetMetricRegistry(std::shared_ptr<NMetrics::IMetricRegistry> registry);
+
+    //! Set external trace provider implementation.
+    TDriverConfig& SetTraceProvider(std::shared_ptr<NTrace::ITraceProvider> provider);
 
 private:
     class TImpl;

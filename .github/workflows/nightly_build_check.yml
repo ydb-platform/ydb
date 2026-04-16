@@ -1,0 +1,85 @@
+name: Nightly-Build-Check
+run-name: "Nightly build check: ${{ inputs.build-target || 'ydb/apps/ydb' }}"
+
+on:
+  schedule:
+    - cron: "0 4 * * 1-5"  # 4:00 UTC (7:00 MSK), weekdays only
+  workflow_dispatch:
+    inputs:
+      build-target:
+        description: 'Path to build target'
+        type: string
+        default: "ydb/apps/ydb"
+      binary-name:
+        description: 'Binary name'
+        type: string
+        default: "ydb"
+      telegram-chat-id:
+        description: 'Telegram chat ID for failure notifications'
+        type: string
+        default: "311589523"
+      build-linux-amd:
+        type: boolean
+        description: Build for Linux (amd64)
+        default: false
+      build-linux-arm:
+        type: boolean
+        description: Build for Linux (arm64)
+        default: false
+      build-darwin-amd:
+        type: boolean
+        description: Build for MacOS (amd64)
+        default: false
+      build-darwin-arm:
+        type: boolean
+        description: Build for MacOS (arm64)
+        default: true
+      build-windows-amd:
+        type: boolean
+        description: Build for Windows (amd64)
+        default: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    uses: ./.github/workflows/build_binaries.yml
+    with:
+      build-target: ${{ inputs.build-target || 'ydb/apps/ydb' }}
+      binary-name: ${{ inputs.binary-name || 'ydb' }}
+      ref: main
+      build-linux-amd: ${{ github.event_name != 'schedule' && inputs.build-linux-amd || false }}
+      build-linux-arm: ${{ github.event_name != 'schedule' && inputs.build-linux-arm || false }}
+      build-darwin-amd: ${{ github.event_name != 'schedule' && inputs.build-darwin-amd || false }}
+      build-darwin-arm: ${{ github.event_name == 'schedule' || inputs.build-darwin-arm }}
+      build-windows-amd: ${{ github.event_name == 'schedule' || inputs.build-windows-amd }}
+
+  notify:
+    needs: build
+    if: always() && (success() || failure())
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts/telegram
+      - name: Install dependencies
+        run: pip install requests
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+        run: |
+          BUILD_TARGET="${{ inputs.build-target || 'ydb/apps/ydb' }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          CHAT_ID="${{ inputs.telegram-chat-id || '311589523' }}"
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            STATUS="OK"
+          else
+            STATUS="FAILED"
+          fi
+          python .github/scripts/telegram/send_telegram_message.py \
+            --bot-token "$TELEGRAM_BOT_TOKEN" \
+            --chat-id "$CHAT_ID" \
+            --message "Nightly build check ${STATUS} for *${BUILD_TARGET}*. [View run](${RUN_URL})"

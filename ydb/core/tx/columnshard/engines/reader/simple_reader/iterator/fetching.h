@@ -109,6 +109,8 @@ private:
     using TBase = IFetchingStep;
     const ui32 StartIndex;
     const ui32 RecordsCount;
+    bool IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const;
+    std::shared_ptr<arrow::Table> BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(

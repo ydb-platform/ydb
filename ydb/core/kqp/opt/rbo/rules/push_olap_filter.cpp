@@ -94,8 +94,9 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     // clang-format on
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
 
+    // FIXME: We should add a filter anyway because of coalesce in physical plan.
     return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(),
-                                     read->Pos);
+                                  read->Limit, read->GetRanges(), read->SortDir, read->Props, read->Pos);
 }
 }
 }

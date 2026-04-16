@@ -512,10 +512,23 @@ struct Schema : NIceDb::Schema {
         struct Parent:          Column<10, NScheme::NTypeIds::Uint32> {};
         // Adjacent parent partition for merge operation
         struct AdjacentParent:  Column<11, NScheme::NTypeIds::Uint32> {};
+        struct CreationTimestampSeconds: Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PqId>;
-        using TColumns = TableColumns<PathId, PqId, ShardIdx, AlterVersion, GroupId, RangeBegin, RangeEnd,
-                                      CreateVersion, Status, Parent, AdjacentParent>;
+        using TColumns = TableColumns<
+            PathId,
+            PqId,
+            ShardIdx,
+            AlterVersion,
+            GroupId,
+            RangeBegin,
+            RangeEnd,
+            CreateVersion,
+            Status,
+            Parent,
+            AdjacentParent,
+            CreationTimestampSeconds
+        >;
     };
 
     struct RtmrVolumes : Table<20> {
@@ -1823,6 +1836,7 @@ struct Schema : NIceDb::Schema {
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
+        struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1836,7 +1850,8 @@ struct Schema : NIceDb::Schema {
             AwsRegion,
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
-            UserSIDs
+            UserSIDs,
+            TraceIds
         >;
     };
 
@@ -1852,6 +1867,7 @@ struct Schema : NIceDb::Schema {
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
+        struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1865,7 +1881,8 @@ struct Schema : NIceDb::Schema {
             AwsRegion,
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
-            UserSIDs
+            UserSIDs,
+            TraceIds
         >;
     };
 

@@ -235,6 +235,13 @@ int TClientCommand::Process(TConfig& config) {
     try {
         Prepare(config);
         return ValidateAndRun(config);
+    } catch (const TInitializationException& e) {
+        Cerr << "Error";
+        if (e.HasErrorCode()) {
+            Cerr << " [" << *e.GetErrorCode() << "]";
+        }
+        Cerr << ": " << e.what() << Endl;
+        return e.GetCode();
     } catch (const TNeedToExitWithCode& e) {
         return e.GetCode();
     }

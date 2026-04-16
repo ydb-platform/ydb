@@ -17,9 +17,6 @@ namespace NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStorageConfig;
-using TStorageConfigPtr = std::shared_ptr<TStorageConfig>;
-
 struct IWriteBlocksHandler;
 using IWriteBlocksHandlerPtr = std::shared_ptr<IWriteBlocksHandler>;
 

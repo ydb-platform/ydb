@@ -1,8 +1,11 @@
 #pragma once
-#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
+
+namespace NKikimrConfig {
+    class TGeneralCacheConfig;
+}
 
 namespace NKikimr::NGeneralCache::NPublic {
 

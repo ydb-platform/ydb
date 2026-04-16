@@ -331,6 +331,7 @@ message LocalBloomNgramFilterIndex {
     uint32 filter_size_bytes = 3;
     uint32 records_count = 4;
     optional bool case_sensitive = 5;
+    optional double false_positive_probability = 6;
 }
 
 message GlobalJsonIndex {
@@ -471,6 +472,8 @@ message Changefeed {
     bool schema_changes = 11;
     // Emit user security identifier (SID) or not.
     bool user_sids = 12;
+    // Emit user trace identifier (trace_id) or not.
+    bool trace_ids = 13;
 }
 
 message ChangefeedDescription {
@@ -516,6 +519,8 @@ message ChangefeedDescription {
     bool schema_changes = 10;
     // State of emitting of user security identifier (SID)
     bool user_sids = 11;
+    // State of emitting of user trace identifier (trace_id) or not.
+    bool trace_ids = 12;
 }
 
 message StoragePool {

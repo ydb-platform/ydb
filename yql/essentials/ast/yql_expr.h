@@ -2443,13 +2443,7 @@ public:
 
     TExprNode& operator=(TExprNode&&) = delete;
 
-    ~TExprNode() {
-        Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
-                       UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
-        Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
-                       UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
-        DestroyPtrs();
-    }
+    ~TExprNode();
 
 private:
     static void DestroyNode(TExprNode::TPtr& node, TExprNode*& root);
@@ -2924,7 +2918,7 @@ struct TExprContext: private TNonCopyable {
 
     TStringBuf AppendString(const TStringBuf& buf) {
         ENSURE_NOT_FROZEN_CTX
-        if (buf.size() == 0) {
+        if (buf.empty()) {
             return ZeroString;
         }
 

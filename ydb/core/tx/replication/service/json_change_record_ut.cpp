@@ -1,6 +1,7 @@
 #include "json_change_record.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/aclib/aclib.h>
 
 namespace NKikimr::NReplication::NService {
 

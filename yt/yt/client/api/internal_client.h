@@ -139,6 +139,12 @@ struct TForsakeChaosCoordinatorOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TRemoveChaosCellMailboxOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TGetConnectionOrchidValueOptions
     : public TTimeoutOptions
 {
@@ -231,8 +237,13 @@ struct IInternalClient
 
     virtual TFuture<void> ForsakeChaosCoordinator(
         NHydra::TCellId chaosCellId,
-        NHydra::TCellId coordiantorCellId,
+        NHydra::TCellId coordinatorCellId,
         const TForsakeChaosCoordinatorOptions& options = {}) = 0;
+
+    virtual TFuture<void> RemoveChaosCellMailbox(
+        NHydra::TCellId chaosCellId,
+        NHydra::TCellId destinationCellId,
+        const TRemoveChaosCellMailboxOptions& options = {}) = 0;
 
     virtual TFuture<NYson::TYsonString> GetConnectionOrchidValue(
         const TGetConnectionOrchidValueOptions& options = {}) = 0;

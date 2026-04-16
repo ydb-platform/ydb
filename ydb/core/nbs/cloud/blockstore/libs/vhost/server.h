@@ -26,6 +26,7 @@ struct TStorageOptions
     ui32 BlockSize = 0;
     ui64 StripeSize = 0;
     ui64 BlocksCount = 0;
+    ui64 VChunkSize = 0;
     ui32 VhostQueuesCount = 0;
     bool UnalignedRequestsDisabled = false;
     bool CreateOverlappedRequestsGuard = true;

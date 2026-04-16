@@ -69,6 +69,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/secret
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types

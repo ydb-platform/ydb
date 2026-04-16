@@ -1,0 +1,14 @@
+USE plato;
+
+PRAGMA yt.UseNativeDescSort;
+
+$result = (
+    SELECT
+        *
+    FROM Input
+    WHERE key == "200"
+);
+
+DISCARD SELECT * FROM $result ORDER BY subkey DESC;
+
+DISCARD SELECT key FROM $result;

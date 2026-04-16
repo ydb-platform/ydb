@@ -504,6 +504,9 @@ def main() -> int:
             "mergeable": mergeable,
             "mergeable_state": mergeable_state,
             "merge_commit_sha": merge_commit_sha,
+            "merge_commit_url": (
+                f"https://github.com/{repo}/commit/{merge_commit_sha}" if merge_commit_sha is not None else None
+            ),
             "merge_commit_created_at": (
                 get_commit_created_at_utc(merge_commit_sha) if merge_commit_sha is not None else None
             ),
@@ -520,7 +523,7 @@ def main() -> int:
         log(
             "Completed successfully: "
             f"mergeable={payload['mergeable']}, merge_commit_sha={payload['merge_commit_sha']}, "
-            f"merge_ref={payload['merge_ref']}"
+            f"merge_commit_url={payload['merge_commit_url']}, merge_ref_url={payload['merge_ref_url']}"
         )
         if args.get_info:
             # "get-info" is successful if we could produce structured output,

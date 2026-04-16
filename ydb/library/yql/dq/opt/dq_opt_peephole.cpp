@@ -1196,21 +1196,9 @@ NNodes::TExprBase DqPeepholeDropUnusedBlockHashJoinColumns(const NNodes::TExprBa
         return node;
     }
 
-    const auto& lambda = node.Ref().Tail();
-
-    std::vector<ui32> unused;
-    for (ui32 i = 0; i < lambda.Head().ChildrenSize(); ++i) {
-        if (lambda.Head().Child(i)->Unique()) {
-            unused.push_back(i);
-        }
-    }
-
-    if (unused.empty()) {
-        return node;
-    }
+    const auto& directInput = node.Ref().Head();
 
     const TExprNode* blockHashJoin = nullptr;
-    const auto& directInput = node.Ref().Head();
 
     if (directInput.IsCallable("BlockHashJoinCore")) {
         blockHashJoin = &directInput;
@@ -1224,7 +1212,24 @@ NNodes::TExprBase DqPeepholeDropUnusedBlockHashJoinColumns(const NNodes::TExprBa
         return node;
     }
 
-    YQL_CLOG(DEBUG, ProviderDq) << node.Ref().Content() << " over BlockHashJoinCore with " << unused.size() << " unused fields.";
+    const auto& lambda = node.Ref().Tail();
+
+    std::vector<ui32> unused;
+    for (ui32 i = 0; i < lambda.Head().ChildrenSize(); ++i) {
+        if (lambda.Head().Child(i)->Unique()) {
+            unused.push_back(i);
+        }
+    }
+
+    YQL_CLOG(DEBUG, ProviderDq) << node.Ref().Content() << " over BlockHashJoinCore"
+        << " via " << directInput.Content()
+        << ": " << lambda.Head().ChildrenSize() << " args, " << unused.size() << " unused";
+
+    if (unused.empty()) {
+        return node;
+    }
+
+    YQL_CLOG(DEBUG, ProviderDq) << "Dropping " << unused.size() << " unused columns from BlockHashJoinCore output.";
 
     auto joinChildren = blockHashJoin->ChildrenList();
     DropUnusedRenames(joinChildren[TDqBlockHashJoinCore::idx_LeftRenames], unused, ctx);

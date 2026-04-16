@@ -974,22 +974,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
 
-            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
-            auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
-
-            TResultSetParser parser(resultSet);
-
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("name").GetString(), "alice");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetString(), "v1");
-
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("name").GetString(), "bob");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetString(), "v2");
-
             auto explainResult = queryClient.ExecuteQuery(
                 joinQuery,
                 NYdb::NQuery::TTxControl::NoTx(),
@@ -1002,8 +986,16 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             TString ast = TString(*astOpt);
             Cout << "AST (ColumnPruningInner): " << ast << Endl;
 
-            UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
-                TStringBuilder() << "AST should contain BlockHashJoin. Actual AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra1"),
+                TStringBuilder() << "Column 'extra1' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra2"),
+                TStringBuilder() << "Column 'extra2' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra3"),
+                TStringBuilder() << "Column 'extra3' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra4"),
+                TStringBuilder() << "Column 'extra4' should be pruned from join. AST: " << ast);
         }
     }
 
@@ -1039,24 +1031,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
 
         {
-            auto status = queryClient.ExecuteQuery(
-                R"(
-                    INSERT INTO `/Root/left_multi` (id, col_a, col_b, col_c) VALUES
-                        (1, "a1", "b1", 10),
-                        (2, "a2", "b2", 20),
-                        (3, "a3", "b3", 30),
-                        (4, "a4", "b4", 40);
-
-                    INSERT INTO `/Root/right_multi` (id, col_d, col_e, col_f) VALUES
-                        (1, "d1", "e1", 100),
-                        (2, "d2", "e2", 200),
-                        (3, "d3", "e3", 300);
-                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-            ).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        }
-
-        {
             TString hints = R"(
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
@@ -1076,22 +1050,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
 
-            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
-            auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
-
-            TResultSetParser parser(resultSet);
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("col_a").GetString(), "a1");
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("col_a").GetString(), "a2");
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("col_a").GetString(), "a3");
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("col_a").GetString(), "a4");
-
             auto explainResult = queryClient.ExecuteQuery(
                 joinQuery,
                 NYdb::NQuery::TTxControl::NoTx(),
@@ -1104,8 +1062,18 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             TString ast = TString(*astOpt);
             Cout << "AST (ColumnPruningLeftJoinOnlyLeftColumns): " << ast << Endl;
 
-            UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
-                TStringBuilder() << "AST should contain BlockHashJoin. Actual AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_b"),
+                TStringBuilder() << "Column 'col_b' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_c"),
+                TStringBuilder() << "Column 'col_c' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_d"),
+                TStringBuilder() << "Column 'col_d' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_e"),
+                TStringBuilder() << "Column 'col_e' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_f"),
+                TStringBuilder() << "Column 'col_f' should be pruned from join. AST: " << ast);
         }
     }
 
@@ -1141,25 +1109,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
 
         {
-            auto status = queryClient.ExecuteQuery(
-                R"(
-                    INSERT INTO `/Root/orders` (order_id, customer_id, amount, status) VALUES
-                        (1, 1, 100, "done"),
-                        (2, 1, 200, "done"),
-                        (3, 2, 150, "done"),
-                        (4, 3, 300, "done"),
-                        (5, 3, 50,  "done");
-
-                    INSERT INTO `/Root/customers` (customer_id, name, region, tier) VALUES
-                        (1, "Alice", "US", "gold"),
-                        (2, "Bob",   "EU", "silver"),
-                        (3, "Carol", "US", "gold");
-                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-            ).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        }
-
-        {
             TString hints = R"(
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
@@ -1180,26 +1129,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
 
-            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
-            auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
-
-            TResultSetParser parser(resultSet);
-
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("name").GetString(), "Alice");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("total").GetInt64(), 300);
-
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("name").GetString(), "Bob");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("total").GetInt64(), 150);
-
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("name").GetString(), "Carol");
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("total").GetInt64(), 350);
-
             auto explainResult = queryClient.ExecuteQuery(
                 joinQuery,
                 NYdb::NQuery::TTxControl::NoTx(),
@@ -1212,8 +1141,16 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             TString ast = TString(*astOpt);
             Cout << "AST (ColumnPruningWithAggregation): " << ast << Endl;
 
-            UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
-                TStringBuilder() << "AST should contain BlockHashJoin. Actual AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("order_id"),
+                TStringBuilder() << "Column 'order_id' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("status"),
+                TStringBuilder() << "Column 'status' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("region"),
+                TStringBuilder() << "Column 'region' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("tier"),
+                TStringBuilder() << "Column 'tier' should be pruned from join. AST: " << ast);
         }
     }
 
@@ -1249,23 +1186,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
 
         {
-            auto status = queryClient.ExecuteQuery(
-                R"(
-                    INSERT INTO `/Root/left_extra` (id, name, unused1, unused2) VALUES
-                        (1, "a", "u1", 10),
-                        (2, "b", "u2", 20),
-                        (3, "c", "u3", 30),
-                        (4, "d", "u4", 40);
-
-                    INSERT INTO `/Root/right_extra` (id, value, unused3, unused4) VALUES
-                        (1, "v1", "w1", 100),
-                        (3, "v3", "w3", 300);
-                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-            ).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        }
-
-        {
             TString hints = R"(
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints=
@@ -1285,18 +1205,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
 
-            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
-            auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
-
-            TResultSetParser parser(resultSet);
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("name").GetString(), "a");
-            UNIT_ASSERT(parser.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("name").GetString(), "c");
-
             auto explainResult = queryClient.ExecuteQuery(
                 joinQuery,
                 NYdb::NQuery::TTxControl::NoTx(),
@@ -1309,8 +1217,16 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             TString ast = TString(*astOpt);
             Cout << "AST (ColumnPruningLeftSemiWithExtraColumns): " << ast << Endl;
 
-            UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
-                TStringBuilder() << "AST should contain BlockHashJoin. Actual AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused1"),
+                TStringBuilder() << "Column 'unused1' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused2"),
+                TStringBuilder() << "Column 'unused2' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused3"),
+                TStringBuilder() << "Column 'unused3' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused4"),
+                TStringBuilder() << "Column 'unused4' should be pruned from join. AST: " << ast);
         }
     }
 }

@@ -1200,16 +1200,17 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // BlockHashJoin expects 8 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
-    if (!EnsureArgsCount(*node, 8, ctx)) {
+    if (!EnsureArgsCount(*node, 10, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
-    const auto& leftInputNode = *node->Child(0);
-    const auto& rightInputNode = *node->Child(1);
-    const auto& joinTypeNode = *node->Child(2);
-    auto& leftKeysNode = *node->Child(3);
-    auto& rightKeysNode = *node->Child(4);
+    const auto& leftInputNode = *node->Child(TDqBlockHashJoinCore::idx_LeftInput);
+    const auto& rightInputNode = *node->Child(TDqBlockHashJoinCore::idx_RightInput);
+    const auto& joinTypeNode = *node->Child(TDqBlockHashJoinCore::idx_JoinKind);
+    auto& leftKeysNode = *node->Child(TDqBlockHashJoinCore::idx_LeftKeyColumns);
+    auto& rightKeysNode = *node->Child(TDqBlockHashJoinCore::idx_RightKeyColumns);
+    auto& leftRenamesNode = *node->Child(TDqBlockHashJoinCore::idx_LeftRenames);
+    auto& rightRenamesNode = *node->Child(TDqBlockHashJoinCore::idx_RightRenames);
 
     if (!EnsureAtom(joinTypeNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
@@ -1225,14 +1226,12 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
-    // Remove length column
     leftItemTypes.pop_back();
 
     TTypeAnnotationNode::TListType rightItemTypes;
     if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
-    // Remove length column
     rightItemTypes.pop_back();
 
     if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
@@ -1241,32 +1240,52 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
+    if (!EnsureTupleOfAtoms(leftRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
 
     if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
         ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
-    std::vector<const TTypeAnnotationNode*> resultItems;
-
-    // Add left side columns
-    for (auto itemType : leftItemTypes) {
-        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    if (leftRenamesNode.ChildrenSize() % 2 != 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(leftRenamesNode.Pos()), "LeftRenames must have even number of elements (pairs)"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (rightRenamesNode.ChildrenSize() % 2 != 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightRenamesNode.Pos()), "RightRenames must have even number of elements (pairs)"));
+        return IGraphTransformer::TStatus(TStatus::Error);
     }
 
-    // Add right side columns
-    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
-        for (auto itemType : rightItemTypes) {
-            if (joinType == "Left") {
-                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
-                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
-                }
+    const ui32 outputWidth = leftRenamesNode.ChildrenSize() / 2 + rightRenamesNode.ChildrenSize() / 2;
+    std::vector<const TTypeAnnotationNode*> resultItems(outputWidth);
+
+    for (ui32 i = 0; i < leftRenamesNode.ChildrenSize(); i += 2) {
+        const auto srcIdx = FromString<ui32>(leftRenamesNode.Child(i)->Content());
+        const auto dstIdx = FromString<ui32>(leftRenamesNode.Child(i + 1)->Content());
+        YQL_ENSURE(srcIdx < leftItemTypes.size(), "Left rename source index out of range");
+        YQL_ENSURE(dstIdx < outputWidth, "Left rename destination index out of range");
+        resultItems[dstIdx] = ctx.MakeType<TBlockExprType>(leftItemTypes[srcIdx]);
+    }
+
+    for (ui32 i = 0; i < rightRenamesNode.ChildrenSize(); i += 2) {
+        const auto srcIdx = FromString<ui32>(rightRenamesNode.Child(i)->Content());
+        const auto dstIdx = FromString<ui32>(rightRenamesNode.Child(i + 1)->Content());
+        YQL_ENSURE(srcIdx < rightItemTypes.size(), "Right rename source index out of range");
+        YQL_ENSURE(dstIdx < outputWidth, "Right rename destination index out of range");
+        auto itemType = rightItemTypes[srcIdx];
+        if (joinType == "Left") {
+            if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
             }
-            resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
         }
+        resultItems[dstIdx] = ctx.MakeType<TBlockExprType>(itemType);
     }
 
-    // Add scalar length column at the end
     resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));

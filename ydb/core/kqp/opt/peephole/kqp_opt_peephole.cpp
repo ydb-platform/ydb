@@ -103,6 +103,8 @@ public:
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
         AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
+        AddHandler(0, &TDqBlockHashJoinCore::Match, HNDL(OptimizeBlockHashJoinInputs));
+        AddHandler(0, &TCoWideMap::Match, HNDL(DropUnusedBlockHashJoinColumns));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
@@ -168,6 +170,18 @@ protected:
     TMaybeNode<TExprBase> RewriteBlockHashJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewriteBlockHashJoin(node, ctx);
         DumpAppliedRule("RewriteBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> OptimizeBlockHashJoinInputs(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeOptimizeBlockHashJoinInputs(node, ctx);
+        DumpAppliedRule("OptimizeBlockHashJoinInputs", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> DropUnusedBlockHashJoinColumns(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeDropUnusedBlockHashJoinColumns(node, ctx);
+        DumpAppliedRule("DropUnusedBlockHashJoinColumns", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

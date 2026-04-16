@@ -1418,6 +1418,12 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
             return;
         }
 
+        auto partitionStreamIt = PartitionStreams.find(response.partition_session_id());
+        if (partitionStreamIt == PartitionStreams.end()) {
+            LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got DirectReadResponse for unknown partition session id: " << response.partition_session_id() << ".");
+            return;
+        }
+
         {
             // Send DirectReadAck.
             TClientMessage<false> req;
@@ -1425,19 +1431,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
             ack.set_direct_read_id(response.direct_read_id());
             ack.set_partition_session_id(response.partition_session_id());
             WriteToProcessorImpl(std::move(req));
-        }
-
-        auto partitionStreamIt = PartitionStreams.find(response.partition_session_id());
-        if (partitionStreamIt == PartitionStreams.end()) {
-            // Same race as in OnReadDoneImpl(ReadResponse): the subsession may deliver data after
-            // StopPartitionSession removed the partition stream. We still must release the read budget
-            // and clear WaitingReadResponse, otherwise ContinueReadingDataImpl never runs again.
-            LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got DirectReadResponse for unknown partition session id: " << response.partition_session_id() << ".");
-            ReadSizeBudget += response.bytes_size();
-            ReadSizeServerDelta -= response.bytes_size();
-            WaitingReadResponse = false;
-            ContinueReadingDataImpl();
-            return;
         }
 
         auto& partitionStream = partitionStreamIt->second;

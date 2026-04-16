@@ -1,6 +1,7 @@
-#include "openid_connect.h"
-#include "oidc_session_create.h"
 #include "oidc_cleanup_page.h"
+
+#include "oidc_session_create.h"
+#include "openid_connect.h"
 
 namespace NMVP::NOIDC {
 
@@ -9,7 +10,8 @@ THandlerCleanup::THandlerCleanup(const NActors::TActorId& sender,
                                  const NActors::TActorId& httpProxyId,
                                  const TOpenIdConnectSettings& settings,
                                  const TString& cookieName)
-    : Sender(sender)
+    : TMvpLogContextProvider(CreateMvpLogContext(request))
+    , Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
@@ -22,6 +24,7 @@ void THandlerCleanup::Bootstrap() {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(CookieName));
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(&responseHeaders, GetLogContext());
 
     ReplyAndPassAway(Request->CreateResponse("200", "OK", responseHeaders));
 }

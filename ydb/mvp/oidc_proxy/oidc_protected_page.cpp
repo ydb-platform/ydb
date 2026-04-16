@@ -12,7 +12,8 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
                                                          const NHttp::THttpIncomingRequestPtr& request,
                                                          const NActors::TActorId& httpProxyId,
                                                          const TOpenIdConnectSettings& settings)
-    : Sender(sender)
+    : TMvpLogContextProvider(CreateMvpLogContext(request))
+    , Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
@@ -22,7 +23,7 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
     Send(Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), NActors::IEventHandle::FlagTrackDelivery);
     if (!ProtectedPage.IsHttpSchemeAllowed() || !ProtectedPage.IsRequestedHostAllowed(Settings.AllowedProxyHosts)) {
-        return ReplyAndPassAway(CreateResponseForbiddenHost(Request, ProtectedPage));
+        return ReplyAndPassAway(CreateResponseForbiddenHost(Request, ProtectedPage, GetLogContext()));
     }
     NHttp::THeaders headers(Request->Headers);
     TStringBuf authHeader = headers.Get(AUTHORIZATION_HEADER);
@@ -50,6 +51,8 @@ void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEv
         NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
         BLOG_D("Incoming incomplete response for protected resource: " << response->Status);
 
+        // Do not add X-Request-Id to streaming response headers for now.
+        // This path forwards an incomplete upstream response without rebuilding headers.
         StreamResponse = Request->CreateResponseString(response->AsString());
         StreamConnection = event->Sender;
 
@@ -57,7 +60,7 @@ void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEv
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
         BLOG_D("Can not process incomplete request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-        ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(Request, "Failed to process streaming response"));
+        ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(Request, "Failed to process streaming response", GetLogContext()));
     }
 }
 
@@ -121,6 +124,7 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool
     auto timeout = GetRequestTimeout();
     ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
     ExtensionManager->SetExtensionTimeout(timeout);
+    ExtensionManager->SetLogContext(*GetLogContext());
     ExtensionManager->ArrangeExtensions(Request);
 
     TProxiedRequestParams params(Request, authHeader, secure, ProtectedPage, Settings);

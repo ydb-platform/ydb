@@ -16,6 +16,7 @@ public:
                       const TCrackedPage& protectedPage,
                       const TString authHeader);
     void SetExtensionTimeout(TDuration timeout);
+    void SetLogContext(const TMvpLogContext& logContext);
     void ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& request);
     void StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
                                NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event = nullptr);

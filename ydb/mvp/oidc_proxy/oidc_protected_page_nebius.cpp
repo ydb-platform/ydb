@@ -45,6 +45,7 @@ void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvH
         BLOG_D("Getting access token: Bad Request");
         NHttp::THeadersBuilder responseHeaders;
         SetCORS(Request, &responseHeaders);
+        SetRequestIdHeader(&responseHeaders, GetLogContext());
         responseHeaders.Set("Content-Type", "text/plain");
         return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
     }
@@ -72,6 +73,7 @@ void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvH
     // don't know what to do, just forward response
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Parse(response->Headers);
+    SetRequestIdHeader(&responseHeaders, GetLogContext());
     ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
 }
 
@@ -121,6 +123,7 @@ void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
     BLOG_D("Clear impersonated cookie (" << impersonatedCookieName << ") and retry");
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(&responseHeaders, GetLogContext());
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
     responseHeaders.Set("Location", Request->URL);
     ReplyAndPassAway(Request->CreateResponse("307", "Temporary Redirect", responseHeaders));
@@ -128,7 +131,7 @@ void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
 
 void THandlerSessionServiceCheckNebius::RequestAuthorizationCode() {
     BLOG_D("Request authorization code");
-    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings);
+    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, GetLogContext());
     ReplyAndPassAway(std::move(httpResponse));
 }
 

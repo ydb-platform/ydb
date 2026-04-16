@@ -274,7 +274,7 @@ private:
         if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
             && status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready)
         {
-            LOG_SQS_WARN("Deferred topic: CreatePersQueueGroup failed for [" << UserName_ << "/" << QueueName_ << "]: " << record);
+            LOG_SQS_WARN("Deferred topic: CreateTopic failed for [" << UserName_ << "/" << QueueName_ << "]: " << record);
             Finish(false);
             return;
         }

@@ -72,6 +72,8 @@ private:
     void ScheduleRequestSqsUsersList();
     void RequestSqsUsersList();
 
+    TString MakeDeferredTopicCreationKey(const TString& userName, const TString& queueName) const;
+
     void ScheduleRequestSqsQueuesList();
     void RequestSqsQueuesList();
 

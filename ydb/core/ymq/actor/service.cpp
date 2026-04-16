@@ -66,7 +66,7 @@ constexpr ui64 LIST_USERS_WAKEUP_TAG = 1;
 constexpr ui64 LIST_QUEUES_WAKEUP_TAG = 2;
 constexpr ui64 CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG = 3;
 
-constexpr TDuration PERIODIC_CREATE_TOPIC_INTERVAL = TDuration::Minutes(1);
+constexpr TDuration PERIODIC_CREATE_TOPIC_INTERVAL = TDuration::Seconds(20);
 
 constexpr size_t EARLY_REQUEST_USERS_LIST_MAX_BUDGET = 10;
 constexpr i64 EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET = 5; // per user
@@ -1449,7 +1449,17 @@ void TSqsService::ProcessConnectTimeoutToLeader() {
     }
 }
 
+TString TSqsService::MakeDeferredTopicCreationKey(const TString& userName, const TString& queueName) const {
+    TString key;
+    key.reserve(userName.size() + 1 + queueName.size());
+    key = userName;
+    key.push_back('\0');
+    key.append(queueName);
+    return key;
+}
+
 void TSqsService::HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::TPtr&) {
+    LOG_SQS_DEBUG("HandlePeriodicCreateTopic");
     if (!AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation()) {
         SchedulePeriodicCreateTopic();
         return;
@@ -1458,17 +1468,15 @@ void TSqsService::HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::
     for (const auto& user : Users_) {
         for (const auto& queue : user.second->Queues_) {
             const TQueueInfoPtr& q = queue.second;
-            if (q->TopicCreated_ || q->TablesFormat_ != 1) {
+            if (q->TopicCreated_) {
                 continue;
             }
-            TString key;
-            key.reserve(user.first.size() + 1 + q->QueueName_.size());
-            key = user.first;
-            key.push_back('\0');
-            key.append(q->QueueName_);
+            TString key = MakeDeferredTopicCreationKey(user.first, q->QueueName_);
             if (PendingDeferredTopicCreations_.contains(key)) {
                 continue;
             }
+
+            LOG_SQS_DEBUG("HandlePeriodicCreateTopic: Inserting deferred topic creation key: " << key);
             PendingDeferredTopicCreations_.insert(key);
             Register(CreateDeferredCreateTopicActor(
                 SelfId(),
@@ -1489,11 +1497,7 @@ void TSqsService::HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::
 }
 
 void TSqsService::HandleDeferredTopicCreationResult(TSqsEvents::TEvDeferredTopicCreationResult::TPtr& ev) {
-    TString key;
-    key.reserve(ev->Get()->UserName.size() + 1 + ev->Get()->QueueName.size());
-    key = ev->Get()->UserName;
-    key.push_back('\0');
-    key.append(ev->Get()->QueueName);
+    TString key = MakeDeferredTopicCreationKey(ev->Get()->UserName, ev->Get()->QueueName);
     PendingDeferredTopicCreations_.erase(key);
 
     if (!ev->Get()->Success) {

@@ -523,7 +523,8 @@ def main() -> int:
         log(
             "Completed successfully: "
             f"mergeable={payload['mergeable']}, merge_commit_sha={payload['merge_commit_sha']}, "
-            f"merge_commit_url={payload['merge_commit_url']}, merge_ref_url={payload['merge_ref_url']}"
+            f"merge_commit_url={payload['merge_commit_url']} ,"
+            f"merge_ref_url={payload['merge_ref_url']}"
         )
         if args.get_info:
             # "get-info" is successful if we could produce structured output,

@@ -12,6 +12,8 @@
 #include "sqs_workload/sqs_workload.h"
 #endif
 
+#include <ydb/public/lib/ydb_cli/common/build_info.h>
+
 #include "ydb_benchmark.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -155,6 +157,9 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
     if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);
     }
+
+    AppendYdbCliBuildInfo(driverConfig, config.GetBuildInfo(), config.GetBuildInfoCommandTag());
+
     Driver = std::make_unique<NYdb::TDriver>(NYdb::TDriver(driverConfig));
     auto tableClientSettings = NTable::TClientSettings()
                         .SessionPoolSettings(
@@ -379,6 +384,7 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
     , Params(params)
     , Type(workload.Type)
 {
+    Aliases = workload.Aliases;
 }
 
 int TWorkloadCommandRun::Run(TConfig& config) {

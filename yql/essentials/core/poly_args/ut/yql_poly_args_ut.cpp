@@ -36,6 +36,15 @@ Y_UNIT_TEST(TypePredicate) {
     UNIT_ASSERT_VALUES_EQUAL(poly->GetPredicatesCount(), 2);
 }
 
+Y_UNIT_TEST(KindPredicate) {
+    TString yson = R"([
+        [{cmd=kind;arg=T0;value=Data};{}];
+        [[];{}]
+    ])";
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    UNIT_ASSERT_VALUES_EQUAL(poly->GetPredicatesCount(), 2);
+}
+
 Y_UNIT_TEST(VerPredicate) {
     TString yson = R"([
         [{cmd=ver;value="2025.05"};{}];
@@ -81,7 +90,8 @@ Y_UNIT_TEST(ActionArgsType) {
     TString yson = R"([
         [[];{type=[CallableType;[];[[Universal]];[[DataType;Int64]]]}]
     ])";
-    ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    UNIT_ASSERT(!poly->GetUnresolvedInput(0).Defined());
 }
 
 } // Y_UNIT_TEST_SUITE(PolyArgsParser)
@@ -94,7 +104,7 @@ Y_UNIT_TEST(UnresolvedEmpty) {
     ])";
     auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
     UNIT_ASSERT_VALUES_EQUAL(poly->GetPredicatesCount(), 1);
-    UNIT_ASSERT(!poly->GetUnresolvedInput(0).Defined());
+    UNIT_ASSERT(poly->GetUnresolvedInput(0).Defined());
 }
 
 Y_UNIT_TEST(UnresolvedVer) {
@@ -171,6 +181,30 @@ Y_UNIT_TEST(MatchTypeFail) {
     auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
     IPolyArgs::TArgs args = {
         {"T0", NYT::NodeFromYsonString("[DataType;String]")},
+    };
+    UNIT_ASSERT_VALUES_EQUAL(poly->Match(args, MinLangVersion).Index, 1);
+}
+
+Y_UNIT_TEST(MatchKindOk) {
+    TString yson = R"([
+        [{cmd=kind;arg=T0;value=Data};{}];
+        [[];{}]
+    ])";
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    IPolyArgs::TArgs args = {
+        {"T0", NYT::NodeFromYsonString("[DataType;Yson]")},
+    };
+    UNIT_ASSERT_VALUES_EQUAL(poly->Match(args, MinLangVersion).Index, 0);
+}
+
+Y_UNIT_TEST(MatchKindFail) {
+    TString yson = R"([
+        [{cmd=kind;arg=T0;value=Resource};{}];
+        [[];{}]
+    ])";
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    IPolyArgs::TArgs args = {
+        {"T0", NYT::NodeFromYsonString("[DataType;Yson]")},
     };
     UNIT_ASSERT_VALUES_EQUAL(poly->Match(args, MinLangVersion).Index, 1);
 }

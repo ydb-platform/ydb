@@ -8,7 +8,7 @@ items:
   include:
     mode: link
     path: concepts/toc_p.yaml
-- name: For DevOps
+- name: For Database Administrators
   href: devops/index.md
   include:
     mode: link

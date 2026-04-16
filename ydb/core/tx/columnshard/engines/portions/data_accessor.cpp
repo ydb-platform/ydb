@@ -358,6 +358,24 @@ ui64 TPortionDataAccessor::GetIndexRawBytes(const std::set<ui32>& entityIds, con
     return sum;
 }
 
+ui64 TPortionDataAccessor::GetIndexBlobBytes(const std::set<ui32>& entityIds, const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetDataSize();
+    };
+    AggregateIndexChunksData(aggr, GetIndexesVerified(), &entityIds, validation);
+    return sum;
+}
+
+ui64 TPortionDataAccessor::GetIndexBlobBytes(const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetDataSize();
+    };
+    AggregateIndexChunksData(aggr, GetIndexesVerified(), nullptr, validation);
+    return sum;
+}
+
 ui64 TPortionDataAccessor::GetIndexRawBytes(const bool validation /*= true*/) const {
     ui64 sum = 0;
     const auto aggr = [&](const TIndexChunk& r) {

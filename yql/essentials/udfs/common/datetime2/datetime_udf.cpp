@@ -3563,7 +3563,8 @@ SIMPLE_MODULE(TDateTime2Module,
               TLangVerForked<
                   NYql::MakeLangVersion(2025, 03),
                   NLegacy::TIntervalFromSeconds,
-                  NActual::TIntervalFromSeconds>,
+                  NActual::TIntervalFromSeconds,
+                  /*SupportsPolyArgs=*/true>,
 
               TIntervalFromMilliseconds,
               TIntervalFromMicroseconds,

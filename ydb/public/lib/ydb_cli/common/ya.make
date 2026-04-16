@@ -2,6 +2,7 @@ LIBRARY(common)
 
 SRCS(
     aws.cpp
+    build_info.cpp
     cert_format_converter.cpp
     client_command_options.cpp
     colors.cpp

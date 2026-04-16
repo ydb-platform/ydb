@@ -468,6 +468,8 @@ public:
     ui64 GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
+    ui64 GetIndexBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
+    ui64 GetIndexBlobBytes(const bool validation = true) const;
     ui64 GetIndexRawBytes(const bool validation = true) const;
 
     void FillBlobRangesByStorage(

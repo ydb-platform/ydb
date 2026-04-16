@@ -49,7 +49,7 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(AddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+    Y_UNIT_TEST(AddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramAddIndexThenUpsertIndexChangesFilterParams, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramAddIndexThenUpsertIndexChangesFilterParams, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                              << " filter_size_bytes=" << filterBytesAfter);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramIndexCreatedViaAlterObjectWithFalsePositiveProbability, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramIndexCreatedViaAlterObjectWithFalsePositiveProbability, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(found, "idx_ngram bloom ngram index should appear after UPSERT_INDEX with false_positive_probability");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramAlterObjectUpsertRejectsMixingFppAndFilterSizeBytes, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramAlterObjectUpsertRejectsMixingFppAndFilterSizeBytes, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         assertMixRejected(alterMixHashesCount);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
+    Y_UNIT_TEST(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(hasDefault, "SHOW CREATE should contain case_sensitive default true, got: " << createText);
     }
 
-Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
+Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -389,7 +389,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             "SHOW CREATE should not contain case_sensitive for bloom filter, got: " << createText);
 }
 
-Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
+Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -430,7 +430,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBloom` DROP INDEX idx_bloom_renamed;");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomNgramIndex, EUseQueryService) {
+    Y_UNIT_TEST(RenameLocalBloomNgramIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -471,7 +471,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameNgram` DROP INDEX idx_ngram_renamed;");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomAndBloomNgramIndexes, EUseQueryService) {
+    Y_UNIT_TEST(RenameLocalBloomAndBloomNgramIndexes, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -516,7 +516,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX ngram_renamed;");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckSchemaChangesDuringTheTime, EUseQueryService) {
+    Y_UNIT_TEST(CheckSchemaChangesDuringTheTime, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -565,7 +565,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         }
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckForConflictsWithAlreadyExistingIndices, EUseQueryService) {
+    Y_UNIT_TEST(CheckForConflictsWithAlreadyExistingIndices, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -634,7 +634,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
     }
 
     // DEPRECATED: old syntax
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
+    Y_UNIT_TEST(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -680,7 +680,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableNgramDeprecatedSyntax` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalIndexCannotBeUsedInTableView, EUseQueryService) {
+    Y_UNIT_TEST(LocalIndexCannotBeUsedInTableView, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -708,7 +708,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT(!result.IsSuccess());
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TablesInStore, EUseQueryService) {
+    Y_UNIT_TEST(TablesInStore, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -735,7 +735,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesActualization, EUseQueryService) {
+    Y_UNIT_TEST(IndexesActualization, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
@@ -801,7 +801,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         }
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CountMinSketchIndex, EUseQueryService) {
+    Y_UNIT_TEST(CountMinSketchIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -914,7 +914,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         }
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(SchemeActualizationOnceOnStart, EUseQueryService) {
+    Y_UNIT_TEST(SchemeActualizationOnceOnStart, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1495,19 +1495,19 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         }
     };
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesInBS, EUseQueryService) {
+    Y_UNIT_TEST(IndexesInBS, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteSkipIndexesScenario();
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesInLocalMetadata, EUseQueryService) {
+    Y_UNIT_TEST(IndexesInLocalMetadata, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteSkipIndexesScenario();
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckCompactionFailingOnIndexes, EUseQueryService) {
+    Y_UNIT_TEST(CheckCompactionFailingOnIndexes, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteAddColumnWithIndexesScenario();
@@ -1539,7 +1539,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteDifferentConfigurationScenarios(__SCRIPT_CONTENT, "ILIKE");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckThatIndexIsUsedInQueries, EUseQueryService) {
+    Y_UNIT_TEST(CheckThatIndexIsUsedInQueries, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -1592,7 +1592,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT_C(skipAfter > skipBefore, "Expected bloom index to skip at least one portion");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckThatIndexIsNotUsedInQueries, EUseQueryService) {
+    Y_UNIT_TEST(CheckThatIndexIsNotUsedInQueries, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -1647,7 +1647,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(skipAfter, skipBefore, TStringBuilder() << "Bloom index must not be checked for predicate on non-indexed column. before=" << skipBefore << ", after=" << skipAfter);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestCompatibilityWithOtherIndices, EUseQueryService) {
+    Y_UNIT_TEST(TestCompatibilityWithOtherIndices, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -1721,7 +1721,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT_C(expectedIndexNames.empty(), "Some expected indexes were not found in schema");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios, EUseQueryService) {
+    Y_UNIT_TEST(VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -1929,7 +1929,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
 
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesModificationError, EUseQueryService) {
+    Y_UNIT_TEST(IndexesModificationError, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

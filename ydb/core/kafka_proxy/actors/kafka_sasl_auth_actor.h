@@ -106,7 +106,7 @@ private:
     [[nodiscard]] bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
     void CleanupAndDie(const NActors::TActorContext& ctx);
     void SendResponse();
-    void SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx);
+    void SendResponseAndDie(EKafkaErrors errorCode, Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx);
     void GetPathByPathId(const TPathId& pathId);
 
 private:

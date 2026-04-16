@@ -2,6 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 using namespace NMonitoring;
@@ -90,7 +91,7 @@ namespace {
     struct TFixture {
         TFixture(
             TIntrusivePtr<TSettings> settings,
-            TMockBackend::TWriteImpl writeImpl = ThrowAlways)
+            TMockBackend::TWriteImpl writeImpl = ThrowAlways) : Settings(settings)
         {
             Runtime.Initialize();
             LogBackend.reset(new TMockBackend{writeImpl});
@@ -103,6 +104,18 @@ namespace {
         TFixture(TMockBackend::TWriteImpl writeImpl = ThrowAlways)
             : TFixture(DefaultSettings(), writeImpl)
         {}
+
+        // Emulate log context
+        const NLog::TSettings* LoggerSettings() {
+            return Settings.Get();
+        }
+
+        void Send(TAutoPtr<IEventHandle> ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false) {
+            auto logEvent = ev->StaticCastAsLocal<TEvLog>();
+
+            auto ts  = Runtime.GetCurrentTime() - TDuration::Seconds(10);
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(ts, logEvent->Level, 0, logEvent->Line)}, senderNodeIndex, viaActorSystem);
+        }
 
         void WriteLog() {
             Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(TInstant::Zero(), TLevel{EPrio::Emerg}, 0, "foo")});
@@ -120,10 +133,30 @@ namespace {
             Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvents::TEvWakeup});
         }
 
+        void StartAccumulteMessages() {
+            auto acceptWrites = [&] (const TLogRecord& r) {
+                TReceivedMessage received;
+                received.Text = TString(r.Data, r.Len);
+                ReceivedMessages.push_back(received);
+
+                Cerr << "Received: " << received.Text << Endl;
+            };
+            LogBackend->SetWriteImpl(acceptWrites);
+
+            Wakeup();
+            Runtime.AdvanceCurrentTime(TDuration::Days(1));
+        }
+
         TIntrusivePtr<TDynamicCounters> Counters{MakeIntrusive<TDynamicCounters>()};
         std::shared_ptr<TMockBackend> LogBackend;
         TActorId LoggerActor;
         TTestActorRuntimeBase Runtime;
+        TIntrusivePtr<NLog::TSettings> Settings;
+
+        struct TReceivedMessage {
+            TString Text;
+        };
+        std::vector<TReceivedMessage> ReceivedMessages;
     };
 }
 
@@ -247,5 +280,27 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
         auto outputLogSize = BufferTest(test, LOG_COUNT);
 
         UNIT_ASSERT(outputLogSize < LOG_COUNT);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TWriteLogTest) {
+
+    TString GetDataAsString(const TLogRecord& record) {
+        return TString(record.Data, record.Len);
+    }
+
+    Y_UNIT_TEST(ViaMemLogAdapter) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulteMessages();
+
+        MemLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, "fileName", 0, "My log message");
+        MemLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, "fileName", 0, "My log message1");
+        MemLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, "fileName", 0, "My log message2");
+
+        env.FlushLogBuffer();
+
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages[0].Text, "1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message");
     }
 }

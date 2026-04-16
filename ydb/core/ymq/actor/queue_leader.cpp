@@ -33,7 +33,7 @@ LWTRACE_USING(SQS_PROVIDER);
 namespace NKikimr::NSQS {
 
 constexpr ui64 UPDATE_COUNTERS_TAG = 0;
-constexpr ui64 YDBLOG_UPDATE_MESSAGES_METRICS_TAG = 1;
+constexpr ui64 UPDATE_MESSAGES_METRICS_TAG  = 1;
 constexpr ui64 REQUEST_CONFIGURATION_TAG = 2;
 constexpr ui64 RELOAD_INFLY_TAG = 1000;
 
@@ -96,7 +96,7 @@ void TQueueLeader::BecomeWorking() {
     } else {
         Schedule(TDuration::MilliSeconds(randomTimeToWait), new TEvWakeup(UPDATE_COUNTERS_TAG));
     }
-    Schedule(TDuration::Seconds(1), new TEvWakeup(YDBLOG_UPDATE_MESSAGES_METRICS_TAG));
+    Schedule(TDuration::Seconds(1), new TEvWakeup(UPDATE_MESSAGES_METRICS_TAG ));
 
     std::vector<TSqsEvents::TEvExecute::TPtr> requests;
     requests.swap(ExecuteRequests_);
@@ -234,12 +234,12 @@ void TQueueLeader::HandleWakeup(TEvWakeup::TPtr& ev) {
         StartGatheringMetrics();
         break;
     }
-    case YDBLOG_UPDATE_MESSAGES_METRICS_TAG: {
+    case UPDATE_MESSAGES_METRICS_TAG : {
         CheckStillDLQ();
         PlanningRetentionWakeup();
         ReportOldestTimestampMetricsIfReady();
         ReportMessagesCountMetricsIfReady();
-        Schedule(TDuration::Seconds(1), new TEvWakeup(YDBLOG_UPDATE_MESSAGES_METRICS_TAG));
+        Schedule(TDuration::Seconds(1), new TEvWakeup(UPDATE_MESSAGES_METRICS_TAG ));
         break;
     }
     case REQUEST_CONFIGURATION_TAG: {

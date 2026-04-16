@@ -157,8 +157,8 @@ jobs:
           script_exit=$?
           set -e
 
-          if [[ $script_exit -eq 1 ]]; then
-            echo "prepare_merge_ref.py failed to collect merge info"
+          if [[ $script_exit -ne 0 && $script_exit -ne 2 ]]; then
+            echo "prepare_merge_ref.py failed unexpectedly with exit code $script_exit"
             exit 1
           fi
 

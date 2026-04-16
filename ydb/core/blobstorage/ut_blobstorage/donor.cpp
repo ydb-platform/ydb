@@ -138,18 +138,18 @@ Y_UNIT_TEST_SUITE(Donor) {
         };
     }
 
-    NKikimrBlobStorage::TConfigResponse InvokeManualReassign(TEnvironmentSetup& env, ui32 groupId,
-            const NKikimrBlobStorage::TBaseConfig::TVSlot& slot, ui32 targetNodeId, ui32 targetPDiskId) {
+    NKikimrBlobStorage::TConfigResponse InvokeManualReassign(TEnvironmentSetup& env,
+            const TManualReassignScenario& scenario) {
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
-        cmd->SetGroupId(groupId);
-        cmd->SetGroupGeneration(slot.GetGroupGeneration());
-        cmd->SetFailRealmIdx(slot.GetFailRealmIdx());
-        cmd->SetFailDomainIdx(slot.GetFailDomainIdx());
-        cmd->SetVDiskIdx(slot.GetVDiskIdx());
+        cmd->SetGroupId(scenario.GroupId);
+        cmd->SetGroupGeneration(scenario.Source.GetGroupGeneration());
+        cmd->SetFailRealmIdx(scenario.Source.GetFailRealmIdx());
+        cmd->SetFailDomainIdx(scenario.Source.GetFailDomainIdx());
+        cmd->SetVDiskIdx(scenario.Source.GetVDiskIdx());
         auto *target = cmd->MutableTargetPDiskId();
-        target->SetNodeId(targetNodeId);
-        target->SetPDiskId(targetPDiskId);
+        target->SetNodeId(scenario.SparePDisk.GetNodeId());
+        target->SetPDiskId(scenario.SparePDisk.GetPDiskId());
         return env.Invoke(request);
     }
 
@@ -191,8 +191,7 @@ Y_UNIT_TEST_SUITE(Donor) {
         env.Sim(TDuration::Seconds(30));
 
         const auto scenario = PrepareManualCrossNodeReassignScenario(env);
-        auto response = InvokeManualReassign(env, scenario.GroupId, scenario.Source, scenario.SparePDisk.GetNodeId(),
-            scenario.SparePDisk.GetPDiskId());
+        auto response = InvokeManualReassign(env, scenario);
         UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
         UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.DebugString());
 

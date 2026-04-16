@@ -181,7 +181,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
 
-        // Две очереди — два тика periodic (интервал 1 мин); 150 с хватает с запасом на propose/deferred.
         WaitBothStdMigrationTopicsPresent(topicClient, schemeClient, resourceDirA, resourceDirB, TDuration::Seconds(150));
 
         driver.Stop(true);

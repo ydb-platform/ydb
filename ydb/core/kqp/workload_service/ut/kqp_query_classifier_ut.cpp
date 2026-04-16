@@ -101,10 +101,10 @@ Y_UNIT_TEST_SUITE(KqpQueryPreClassifier) {
     }
 
     Y_UNIT_TEST(ShouldResolveDefaultOnPreClassify) {
-        auto reject = IWmQueryClassifier::TResolvedPoolId{
+        auto resolve = IWmQueryClassifier::TResolvedPoolId{
             .PoolId = DEFAULT_POOL_ID
         };
-        auto reply = RunQueryWithPreClassify(reject);
+        auto reply = RunQueryWithPreClassify(resolve);
         UNIT_ASSERT_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
     }
 
@@ -129,10 +129,10 @@ Y_UNIT_TEST_SUITE(KqpQueryPostClassifier) {
     }
 
     Y_UNIT_TEST(ShouldResolveDefaultOnPostClassify) {
-        auto reject = IWmQueryClassifier::TResolvedPoolId{
+        auto resolve = IWmQueryClassifier::TResolvedPoolId{
             .PoolId = DEFAULT_POOL_ID
         };
-        auto reply = RunQueryWithPostClassify(reject);
+        auto reply = RunQueryWithPostClassify(resolve);
         UNIT_ASSERT_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
     }
 

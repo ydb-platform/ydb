@@ -565,6 +565,49 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
     Y_UNIT_TEST(ReassignGroupDisk) {
         const ui32 numNodes = 12;
+        const ui32 numGroups = 8;
+        TEnvironmentSetup env(numNodes, 1);
+
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            NKikimrBlobStorage::TConfigResponse response;
+
+            auto invoke = [&] {
+                response = env.Invoke(std::exchange(request, {}));
+                auto fmt = [&] {
+                    google::protobuf::TextFormat::Printer p;
+                    p.SetSingleLineMode(true);
+                    TString s;
+                    p.PrintToString(response, &s);
+                    return s;
+                };
+                Cerr << Sprintf("Response# %s", fmt().data());
+            };
+
+            env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "storage pool", numGroups, NKikimrBlobStorage::ROT, {}, request);
+
+            invoke();
+
+            auto *cmd = request.AddCommand()->MutableUpdateDriveStatus();
+            cmd->MutableHostKey()->SetNodeId(1);
+            cmd->SetPath("/dev/disk");
+            cmd->SetStatus(NKikimrBlobStorage::INACTIVE);
+
+            invoke();
+
+            auto *cmd2 = request.AddCommand()->MutableReassignGroupDisk();
+            cmd2->SetGroupId(2147483649);
+            cmd2->SetGroupGeneration(1);
+            cmd2->SetFailDomainIdx(3);
+        });
+    }
+
+    Y_UNIT_TEST(ReassignGroupDiskRejectsInvalidManualTarget) {
+        const ui32 numNodes = 12;
         const ui32 numGroups = 1;
         TEnvironmentSetup env(numNodes, 1);
 

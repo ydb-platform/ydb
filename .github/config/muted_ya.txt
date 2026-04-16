@@ -16,6 +16,8 @@ ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
+ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnSingleShardTable
+ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.test_scheme_directory
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_topic_data_cdc
@@ -26,6 +28,7 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTest
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.LOGBROKER_7820
 ydb/services/persqueue_v1/ut unittest.[*/*] chunk
+ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes

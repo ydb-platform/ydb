@@ -287,7 +287,7 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& 
 template <typename TSettings>
 void TCommandImportBase::FillItemsFromIncludeParam(TSettings& settings) const {
     for (const TString& path : IncludePaths) {
-        settings.AppendItem({.Src = {}, .Dst = {}, .SrcPath = path});
+        settings.AppendItem({{} /*Src*/, {} /*Dst*/, path /*SrcPath / SrcPathDb*/});
     }
 }
 

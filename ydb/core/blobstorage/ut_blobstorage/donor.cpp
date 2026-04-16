@@ -166,18 +166,6 @@ Y_UNIT_TEST_SUITE(Donor) {
         return nullptr;
     }
 
-    const NKikimrBlobStorage::TBaseConfig::TVSlot *FindSlotById(const NKikimrBlobStorage::TBaseConfig& baseConfig,
-            const NKikimrBlobStorage::TVSlotId& vslotId) {
-        for (const auto& slot : baseConfig.GetVSlot()) {
-            if (slot.GetVSlotId().GetNodeId() == vslotId.GetNodeId()
-                    && slot.GetVSlotId().GetPDiskId() == vslotId.GetPDiskId()
-                    && slot.GetVSlotId().GetVSlotId() == vslotId.GetVSlotId()) {
-                return &slot;
-            }
-        }
-        return nullptr;
-    }
-
     Y_UNIT_TEST(ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry) {
         TEnvironmentSetup env{{
             .NodeCount = 12,

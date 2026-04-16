@@ -20,6 +20,7 @@
               "pr_blocked_by_failed_tests_rich": "test_results/analytics/pr_blocked_by_failed_tests_rich",
               "pr_blocked_by_tests": "test_results/analytics/pr_blocked_by_tests",
               "pr_check_failures_by_attempt": "test_results/analytics/pr_check_failures_by_attempt",
+              "mute_control_state": "test_results/analytics/mute_control_state",
               "binary_size": "binary_size",
               "issues": "github_data/issues",
               "pull_requests": "github_data/pull_requests",

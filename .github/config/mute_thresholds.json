@@ -1,0 +1,12 @@
+{
+  "mute_default_window_days": 4,
+  "mute_default_total_runs_split": 10,
+  "mute_default_fail_threshold_low_runs": 2,
+  "mute_default_fail_threshold_high_runs": 3,
+  "mute_default_unmute_window_days": 7,
+  "mute_default_unmute_min_passes": 3,
+  "mute_manual_unmute_window_days": 2,
+  "mute_manual_unmute_min_passes": 2,
+  "delete_default_window_days": 7,
+  "control_comment_part_max_tests": 200
+}

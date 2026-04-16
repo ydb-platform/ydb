@@ -44,6 +44,16 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       continue-on-error: true
       run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+    - name: Sync manual unmute comments
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/tests/update_mute_issues.py sync-manual-comments --branch=main --build-type=relwithdebinfo --updated-since-hours=24
+    - name: Export mute control state
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_mute_control_state_to_ydb.py
     - name: Export GitHub pull_requests
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

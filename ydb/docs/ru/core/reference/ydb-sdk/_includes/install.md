@@ -10,7 +10,7 @@
 
 - C++
 
-  Склонируйте репозпторий [ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) и выполните команду из командной строки:
+  Склонируйте репозиторий [ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) и выполните команду из командной строки:
 
   {% include [install/cmd_cpp.md](install/cmd_cpp.md) %}
 

@@ -1480,7 +1480,7 @@
     ```cpp
     #include <ydb-cpp-sdk/client/query/client.h>
 
-    void SnapshotReadWriteExample((NYdb::NQuery::TSession session) {
+    void SnapshotReadWriteExample(NYdb::NQuery::TSession session) {
         auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
         auto result = session.ExecuteQuery(
             "SELECT 1",

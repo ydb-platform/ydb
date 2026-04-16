@@ -31,6 +31,7 @@
 
   ```cpp
   #include <ydb-cpp-sdk/client/query/client.h>
+  #include <ydb-cpp-sdk/client/query/client.h>
 
   int main() {
       auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database);

@@ -246,7 +246,7 @@
     * `get_session_timeout` (актуально только для `ydb::OperationSettings`) - таймаут на получение сессии
     * `get_session_settings`, `commit_settings` и `rollback_settings` (актуально только для `ydb::RetryTxSettings`) - настройки для запросов получения сессии, коммита или отката транзакции
 
-    `ydb::RetryTxSettings` используeтся только для метода `ydb::TableClient::RetryTx`, который выполняет интерактивную транзакцию с выполненем повторных попыток при ошибках для всей транзакции.
+    `ydb::RetryTxSettings` используется только для метода `ydb::TableClient::RetryTx`, который выполняет интерактивную транзакцию с выполнением повторных попыток при ошибках для всей транзакции.
 
     Секция [`ydb.operation-settings`](https://github.com/userver-framework/userver/blob/develop/ydb/src/ydb/component.yaml) в static config задаёт значения по умолчанию: если при вызове в коде поле не задано (`std::nullopt` или ноль там, где это означает "не задано"), используется значение из конфига, иначе из кода.
 

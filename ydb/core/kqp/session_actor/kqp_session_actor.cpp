@@ -4,10 +4,6 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
-#include <util/generic/overloaded.h>
-#include <ydb/core/kqp/proxy_service/kqp_session_state.h>
-#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
-
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
@@ -30,6 +26,8 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/proxy_service/kqp_session_state.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -55,6 +53,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/string/printf.h>
+#include <util/generic/overloaded.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -338,7 +337,8 @@ public:
     template<typename T>
     void PassRequestToResourcePool(T stateFnc) {
         // If PoolConfig is filled WM is not required
-        Y_ENSURE(!QueryState->UserRequestContext->PoolConfig);
+        Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
+            "Cannot send to workload manager: PoolConfig is already resolved");
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->UserRequestContext->DatabaseId,
@@ -608,7 +608,8 @@ public:
         }
 
         STLOG_W("Failed to deliver request to workload service, bypassing WLM",
-            (trace_id, TraceId()));
+            (trace_id, TraceId()),
+            (reason, ev->Get()->Reason));
 
         // This pool ID is only needed for legacy tests to run
         QueryState->UserRequestContext->PoolId = DEFAULT_POOL_ID;
@@ -3555,10 +3556,10 @@ public:
             throw;
         } catch (const TRequestFail& ex) {
             ReplyQueryError(ex.Status, ex.what(), ex.Issues);
-        } catch (const yexception& ex) {
-            InternalError(ex.what());
         } catch (const TMemoryLimitExceededException&) {
             ReplyQueryError(status, BuildMemoryLimitExceptionMessage());
+        } catch (const std::exception& ex) {
+            InternalError(ex.what());
         }
     }
 
@@ -3570,14 +3571,13 @@ public:
             hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
             hFunc(TEvKqp::TEvQueryRequest, Handle);
             hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
-            default:
-                return false;
+        default:
+            return false;
         }
         return true;
     }
 
     STFUNC(ReadyState) {
-        if (HandleCommonEvents(ev)) return;
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
@@ -3597,14 +3597,16 @@ public:
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
             default:
-                UnexpectedEvent("ReadyState", ev);
+                if (!HandleCommonEvents(ev)) {
+                    UnexpectedEvent("ReadyState", ev);
+                }
             }
-        } catch (...) { HandleException(Ydb::StatusIds::INTERNAL_ERROR); }
+        } catch (...) {
+            HandleException(Ydb::StatusIds::INTERNAL_ERROR);
+        }
     }
 
-    bool HandleWmAdmissionEvents(STFUNC_SIG) {
-        if (HandleCommonEvents(ev)) return true;
-
+    void HandleWmAdmissionEvents(STFUNC_SIG, const TString& stateName) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NWorkload::TEvContinueRequest, Handle);
@@ -3618,33 +3620,25 @@ public:
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
-                return true;
             default:
-                return false;
+                if (!HandleCommonEvents(ev)) {
+                    UnexpectedEvent(stateName, ev);
+                }
             }
         } catch (...) {
             HandleException(Ydb::StatusIds::INTERNAL_ERROR);
-            return true;
         }
-
-        // fix compilation error
-        return true;
     }
 
     STATEFN(PreCompileState) {
-        if (!HandleWmAdmissionEvents(ev)) {
-            UnexpectedEvent("PreCompileState", ev);
-        }
+        HandleWmAdmissionEvents(ev, "PreCompileState");
     }
 
     STATEFN(PostCompileState) {
-        if (!HandleWmAdmissionEvents(ev)) {
-            UnexpectedEvent("PostCompileState", ev);
-        }
+        HandleWmAdmissionEvents(ev, "PostCompileState");
     }
 
     STATEFN(CompileState) {
-        if (HandleCommonEvents(ev)) return;
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
@@ -3660,13 +3654,16 @@ public:
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
             default:
-                UnexpectedEvent("CompileState", ev);
+                if (!HandleCommonEvents(ev)) {
+                    UnexpectedEvent("CompileState", ev);
+                }
             }
-        } catch (...) { HandleException(Ydb::StatusIds::INTERNAL_ERROR); }
+        } catch (...) {
+            HandleException(Ydb::StatusIds::INTERNAL_ERROR);
+        }
     }
 
     STATEFN(ExecuteState) {
-        if (HandleCommonEvents(ev)) return;
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
@@ -3696,14 +3693,17 @@ public:
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
             default:
-                UnexpectedEvent("ExecuteState", ev);
+                if (!HandleCommonEvents(ev)) {
+                    UnexpectedEvent("ExecuteState", ev);
+                }
             }
-        } catch (...) { HandleException(Ydb::StatusIds::UNDETERMINED); }
+        } catch (...) {
+            HandleException(Ydb::StatusIds::UNDETERMINED);
+        }
     }
 
     // optional -- only if there were any TransactionsToBeAborted
     STATEFN(CleanupState) {
-        if (HandleCommonEvents(ev)) return;
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
@@ -3728,9 +3728,13 @@ public:
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop);
             default:
-                UnexpectedEvent("CleanupState", ev);
+                if (!HandleCommonEvents(ev)) {
+                    UnexpectedEvent("CleanupState", ev);
+                }
             }
-        } catch (...) { HandleException(Ydb::StatusIds::INTERNAL_ERROR); }
+        } catch (...) {
+            HandleException(Ydb::StatusIds::INTERNAL_ERROR);
+        }
     }
 
     STATEFN(FinalCleanupState) {

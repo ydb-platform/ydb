@@ -27,7 +27,7 @@
 
 namespace NKikimr::NKqp {
 
-struct IWmQueryClassifier;
+class IWmQueryClassifier;
 
 class TKqpQueryCache;
 

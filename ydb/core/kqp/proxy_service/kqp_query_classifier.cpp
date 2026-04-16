@@ -52,8 +52,8 @@ bool MatchesDynamic(const NResourcePool::TClassifierSettings&, const TPreparedQu
 
 } // anonymous namespace
 
-TWmQueryClassifier::TWmQueryClassifier(const TPoolInfoSnapshotPtr poolInfoSnapshot,
-    const TClassifierSnapshotPtr classifierSnapshot, const TClassifyContext context)
+TWmQueryClassifier::TWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+    TClassifierSnapshotPtr classifierSnapshot, TClassifyContext context)
     : PoolInfoSnapshot(std::move(poolInfoSnapshot))
     , ClassifierSnapshot(std::move(classifierSnapshot))
     , Context(std::move(context))
@@ -114,8 +114,8 @@ void TWmQueryClassifier::PreCompileClassify() {
 }
 
 IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const {
-    Y_ENSURE(Configs, "Post compile classify without configuration");
-    Y_ENSURE(ResumeRank, "Post compile classify without next rank");
+    Y_VALIDATE(Configs, "Post compile classify without configuration");
+    Y_VALIDATE(ResumeRank, "Post compile classify without next rank");
 
     for (auto it = Configs->lower_bound(*ResumeRank); it != Configs->end(); ++it) {
         const auto& settings = it->second.GetClassifierSettings();

@@ -60,7 +60,8 @@ private:
 ///
 /// Manages per-query workload manager policies
 ///
-struct IWmQueryClassifier {
+class IWmQueryClassifier {
+public:
     static inline const NResourcePool::TPoolSettings EMPTY_POOL{};
 
     struct TResolvedPoolId {
@@ -96,9 +97,9 @@ public:
     using TPoolInfoSnapshotPtr = std::shared_ptr<const TPoolInfoSnapshot>;
 
 public:
-    TWmQueryClassifier(const TPoolInfoSnapshotPtr poolInfoSnapshot,
-                       const TClassifierSnapshotPtr classifierSnapshot,
-                       const TClassifyContext context);
+    TWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+                       TClassifierSnapshotPtr classifierSnapshot,
+                       TClassifyContext context);
 
     ~TWmQueryClassifier() = default;
 
@@ -115,6 +116,7 @@ public:
     }
 
     /// Runs classification before the query is compiled
+    [[nodiscard]]
     TPreClassifyResult GetPreClassifyResult() const override;
 
     void PreCompileClassify();

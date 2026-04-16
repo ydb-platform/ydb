@@ -18,8 +18,8 @@
 #include <memory>
 
 namespace NKikimr::NKqp {
-struct IWmSessionUpdater;
-struct IWmQueryClassifier;
+class IWmSessionUpdater;
+class IWmQueryClassifier;
 }
 
 namespace NKikimr::NKqp::NPrivateEvents {

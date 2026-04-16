@@ -1,5 +1,6 @@
-#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/snapshot.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/library/aclib/aclib.h>
 
@@ -57,7 +58,15 @@ std::shared_ptr<TPoolInfoSnapshot> MakePoolInfoSnapshot(
 TPoolInfoSnapshot::TPoolEntry MakePoolEntry(i32 concurrentQueryLimit = -1) {
     NResourcePool::TPoolSettings settings;
     settings.ConcurrentQueryLimit = concurrentQueryLimit;
-    return {.Config = settings, .SecurityObject = std::nullopt};
+    return {.Config = settings};
+}
+
+template <typename... TArgs>
+TString _JoinPath(TArgs&&... args) {
+    TVector<TString> path;
+    path.reserve(sizeof...(args));
+    (path.push_back(TString(std::forward<TArgs>(args))), ...);
+    return JoinPath(path);
 }
 
 struct TClassifyTestCase {
@@ -94,14 +103,14 @@ struct TClassifyTestCase {
         auto classifierSnap = MakeClassifierSnapshot(TEST_DB, std::move(configs));
 
         std::vector<std::pair<TString, TPoolInfoSnapshot::TPoolEntry>> poolEntries = {
-            {TEST_DB + "/" + ResourcePool, MakePoolEntry(10)},
-            {TEST_DB + "/default", MakePoolEntry(10)},
+            {_JoinPath(TEST_DB, ResourcePool), MakePoolEntry(10)},
+            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
         };
         for (const auto& extra : ExtraClassifiers) {
-            poolEntries.push_back({TEST_DB + "/" + extra.ResourcePool, MakePoolEntry(10)});
+            poolEntries.push_back({_JoinPath(TEST_DB, extra.ResourcePool), MakePoolEntry(10)});
         }
         for (const auto& [name, limit] : ExtraPools) {
-            poolEntries.push_back({TEST_DB + "/" + name, MakePoolEntry(limit)});
+            poolEntries.push_back({_JoinPath(TEST_DB, name), MakePoolEntry(limit)});
         }
         auto poolSnap = MakePoolInfoSnapshot(std::move(poolEntries));
 
@@ -129,16 +138,12 @@ struct TClassifyTestCase {
 
 TString GetPoolId(const IWmQueryClassifier::TPreClassifyResult& result) {
     UNIT_ASSERT_C(std::holds_alternative<IWmQueryClassifier::TResolvedPoolId>(result),
-        "Expected TResolvedPoolId but got different variant");
+        TStringBuilder()
+            << "Expected TResolvedPoolId, with index: " << ToString(std::variant_size_v<IWmQueryClassifier::TPreClassifyResult>)
+            << ", but got variant with index: " << result.index()
+    );
     return std::get<IWmQueryClassifier::TResolvedPoolId>(result).PoolId;
 }
-
-/*
-TString GetPoolId(const IWmQueryClassifier::TPostClassifyResult& result) {
-    UNIT_ASSERT_C(std::holds_alternative<IWmQueryClassifier::TResolvedPoolId>(result),
-        "Expected TResolvedPoolId but got different variant");
-    return std::get<IWmQueryClassifier::TResolvedPoolId>(result).PoolId;
-}*/
 
 } // anonymous namespace
 
@@ -157,7 +162,7 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
         });
 
         auto poolSnap = MakePoolInfoSnapshot({
-            {TEST_DB + "/pool_target", MakePoolEntry(10)},
+            {_JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10)},
         });
 
         auto token = MakeIntrusive<NACLib::TUserToken>(
@@ -189,7 +194,7 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
         });
 
         auto poolSnap = MakePoolInfoSnapshot({
-            {TEST_DB + "/pool_target", MakePoolEntry(10)},
+            {_JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10)},
         });
 
         TClassifyContext ctx{
@@ -242,4 +247,3 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierRankPriority) {
 }
 
 } // namespace NKikimr::NKqp
-

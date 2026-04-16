@@ -1582,7 +1582,7 @@ private:
         }
     }
 
-    void Classify(const TEvKqp::TEvQueryRequest::TPtr& ev, TWmQueryClassifier& cl) {
+    void ClassifyForWorkloadManager(const TEvKqp::TEvQueryRequest::TPtr& ev, TWmQueryClassifier& cl) {
         const auto& databaseId = ev->Get()->GetDatabaseId();
 
         if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
@@ -1614,7 +1614,7 @@ private:
         auto classifier = std::make_shared<TWmQueryClassifier>(
             ResourcePoolsCache.LastPoolInfoSnapshot, ResourcePoolsCache.LastClassifierSnapshot, context);
 
-        Classify(ev, *classifier);
+        ClassifyForWorkloadManager(ev, *classifier);
         const auto status = classifier->GetPreClassifyResult();
 
         bool isSuccess = std::visit(TOverloaded {

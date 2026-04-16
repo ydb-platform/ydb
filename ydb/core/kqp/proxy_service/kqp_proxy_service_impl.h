@@ -1,6 +1,5 @@
 #pragma once
 
-#include <util/generic/overloaded.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -20,6 +19,8 @@
 
 #include <util/datetime/base.h>
 #include <limits>
+
+#include <util/generic/overloaded.h>
 
 namespace NKikimr::NKqp {
 
@@ -531,7 +532,7 @@ public:
         return !databaseInfo || !databaseInfo->Serverless;
     }
 
-   TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
+    TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
         TString resultPoolId;
         i64 resultRank = std::numeric_limits<i64>::max();
 
@@ -651,7 +652,7 @@ private:
         pools.reserve(PoolsCache.size());
         for (const auto& [key, info] : PoolsCache) {
             if (!info.Expired) {
-                pools.emplace(key, TPoolInfoSnapshot::TPoolEntry{info.Config, info.SecurityObject})
+                pools.emplace(key, TPoolInfoSnapshot::TPoolEntry{info.Config, info.SecurityObject});
             }
         }
         

@@ -41,7 +41,8 @@ TAutoPtr<IGraphTransformer> CreatePartialTypeAnnotationTransformer(
 
 bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
     std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory,
-    std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser);
+    std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser,
+    std::function<TString (const TTypeAnnotationNode*)> typeWriter);
 
 void CheckFatalTypeError(IGraphTransformer::TStatus status);
 

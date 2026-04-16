@@ -332,22 +332,22 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
-            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextPlain, index.global_fulltext_plain_index().fulltext_settings(), explain)) {
+            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextPlain, index.global_fulltext_plain_index().fulltext_settings(), explain)) {
                 return false;
             }
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex:
-            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextRelevance, index.global_fulltext_relevance_index().fulltext_settings(), explain)) {
+            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextRelevance, index.global_fulltext_relevance_index().fulltext_settings(), explain)) {
                 return false;
             }
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactIndex:
-            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextCompact, index.global_fulltext_compact_index().fulltext_settings(), explain)) {
+            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextCompact, index.global_fulltext_compact_index().fulltext_settings(), explain)) {
                 return false;
             }
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactRelevanceIndex:
-            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextCompactRelevance, index.global_fulltext_compact_relevance_index().fulltext_settings(), explain)) {
+            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextCompactRelevance, index.global_fulltext_compact_relevance_index().fulltext_settings(), explain)) {
                 return false;
             }
             break;
@@ -389,7 +389,7 @@ private:
         return true;
     }
 
-    bool PrepareFulltext(NKikimrSchemeOp::EIndexType indexType, const Ydb::Table::FulltextIndexSettings& settings, TString& explain) {
+    bool PrepareFulltext(TIndexBuildInfo& buildInfo, NKikimrSchemeOp::EIndexType indexType, const Ydb::Table::FulltextIndexSettings& settings, TString& explain) {
         if (!Self->EnableFulltextIndex) {
             explain = "Fulltext index support is disabled";
             return false;

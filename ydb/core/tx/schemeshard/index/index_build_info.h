@@ -720,6 +720,19 @@ public:
         return BuildKind == EBuildKind::BuildFulltext;
     }
 
+    bool IsBuildFulltextRelevance() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+    }
+
+    bool IsBuildFulltextCompact() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+    }
+
     virtual bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }

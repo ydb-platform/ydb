@@ -4,8 +4,6 @@
 #include "topic_workload_configurator.h"
 #include "topic_workload_describe.h"
 
-#include <ydb/core/persqueue/public/constants.h>
-
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 

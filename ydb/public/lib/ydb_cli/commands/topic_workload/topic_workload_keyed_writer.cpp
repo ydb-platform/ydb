@@ -2,8 +2,6 @@
 #include "topic_workload_keyed_writer_producer.h"
 #include "topic_workload_writer_worker_common.h"
 
-#include <ydb/core/persqueue/public/constants.h>
-
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 

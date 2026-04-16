@@ -560,7 +560,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
 
 TLongTxServiceActor::TProxyLockState&
 TLongTxServiceActor::SubscribeToProxyLock(TProxyNodeState& node, ui64 lockId) {
-    auto& lock = node.Locks.try_emplace(lockId, lockId, node).first->second;
+    auto emplaceRes = node.Locks.try_emplace(lockId, lockId, node);
+    if (Settings.Counters && emplaceRes.second) {
+        Settings.Counters->RemoteLockSubscriptions->Inc();
+    }
+    auto& lock = emplaceRes.first->second;
     if (lock.State == EProxyLockState::Subscribed) {
         return lock;
     }
@@ -763,6 +767,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
 
     node->CookieToLock.erase(lock.Cookie);
     node->Locks.erase(itLock);
+    if (Settings.Counters) {
+        Settings.Counters->RemoteLockSubscriptions->Dec();
+    }
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev) {
@@ -802,6 +809,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
             }
             node->CookieToLock.erase(lock.Cookie);
             node->Locks.erase(itLock);
+            if (Settings.Counters) {
+                Settings.Counters->RemoteLockSubscriptions->Dec();
+            }
         }
 
         return;
@@ -1154,7 +1164,10 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
 
     RemoveWaitNodeEdges(lock.WaitNode);
 
-    node.Locks.erase(lockId);
+    const bool erased = node.Locks.erase(lockId);
+    if (Settings.Counters && erased) {
+        Settings.Counters->RemoteLockSubscriptions->Dec();
+    }
 }
 
 TLongTxServiceActor::TLockStateHandle TLongTxServiceActor::GetAwaiterHandle(const TLockInfo& awaiterInfo) {
@@ -1224,6 +1237,13 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         Y_ABORT_UNLESS(insertHappened);
         actuallyAdded.push_back(addedEdge);
 
+        if (Settings.Counters) {
+            Settings.Counters->WaitGraphEdges->Inc();
+            if (addedEdge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
+                Settings.Counters->LocalWaitGraphEdges->Inc();
+            }
+        }
+
         TXLOG_DEBUG("Added wait edge id: " << addedEdge.Id
             << ", awaiter: " << awaiterInfo
             << ", blocker: " << addedEdge.Blocker);
@@ -1249,6 +1269,13 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         WaitEdges.erase(it);
         actuallyRemoved.push_back(id);
 
+        if (Settings.Counters) {
+            Settings.Counters->WaitGraphEdges->Dec();
+            if (id.OwnerId.NodeId() == SelfId().NodeId()) {
+                Settings.Counters->LocalWaitGraphEdges->Dec();
+            }
+        }
+
         TXLOG_DEBUG("Removed wait edge id: " << id
             << ", awaiter: " << awaiterInfo
             << ", blocker: " << blockerInfo);
@@ -1270,6 +1297,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
                         if (edgeId.OwnerId.NodeId() != subscriber.NodeId()) {
                             updateEv->AddRemovedEdge(edgeId);
                         }
+                    }
+
+                    if (Settings.Counters) {
+                        Settings.Counters->WaitGraphEdgesSent->Add(
+                            updateEv->Record.GetAdded().size() + updateEv->Record.GetRemoved().size());
                     }
 
                     if (!updateEv->Empty()) {
@@ -1294,6 +1326,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
                 if (edgeId.OwnerId.NodeId() == SelfId().NodeId()) {
                     updateEv->AddRemovedEdge(edgeId);
                 }
+            }
+
+            if (Settings.Counters) {
+                Settings.Counters->WaitGraphEdgesSent->Add(
+                    updateEv->Record.GetAdded().size() + updateEv->Record.GetRemoved().size());
             }
 
             if (!updateEv->Empty()) {
@@ -1344,11 +1381,21 @@ void TLongTxServiceActor::SyncLockWaitEdgesSubset(
 }
 
 void TLongTxServiceActor::RemoveWaitNodeEdges(TWaitNode& waitNode) {
+    auto remove = [&](const TWaitEdgeId& id) {
+        const bool local = id.OwnerId.NodeId() == SelfId().NodeId();
+        const bool erased = WaitEdges.erase(id); // Unlinks the edge from the list.
+        if (Settings.Counters && erased) {
+            Settings.Counters->WaitGraphEdges->Dec();
+            if (local) {
+                Settings.Counters->LocalWaitGraphEdges->Dec();
+            }
+        }
+    };
     while (!waitNode.Awaiters.Empty()) {
-        WaitEdges.erase(waitNode.Awaiters.Back()->Id); // Unlinks the edge from the list.
+        remove(waitNode.Awaiters.Back()->Id);
     }
     while (!waitNode.Blockers.Empty()) {
-        WaitEdges.erase(waitNode.Blockers.Back()->Id); // Unlinks the edge from the list.
+        remove(waitNode.Blockers.Back()->Id);
     }
 }
 
@@ -1394,6 +1441,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr&
         << " for awaiter: " << awaiterInfo
         << ", added count: " << record.GetAdded().size()
         << ", removed count: " << record.GetRemoved().size());
+
+    if (Settings.Counters) {
+        Settings.Counters->WaitGraphEdgesReceived->Add(
+            record.GetAdded().size() + record.GetRemoved().size());
+    }
 
     auto awaiter = GetAwaiterHandle(awaiterInfo);
     if (!awaiter) {
@@ -1515,6 +1567,9 @@ void TLongTxServiceActor::RunDeadlockDetection() {
             Send(
                 edge->Id.OwnerId,
                 new TEvLongTxService::TEvWaitingLockDeadlock(edge->Id.RequestId));
+            if (Settings.Counters) {
+                Settings.Counters->WaitGraphEdgesBroken->Inc();
+            }
         }
     }
 

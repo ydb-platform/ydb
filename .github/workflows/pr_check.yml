@@ -137,7 +137,7 @@ jobs:
         if: steps.check-ownership-membership.outputs.result == 'true'
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           sparse-checkout: |
             .github/scripts/prepare_merge_ref.py
           sparse-checkout-cone-mode: false

@@ -235,7 +235,16 @@ def build_merge_commit(
     log(f"Creating local merge branch: {merge_branch} from origin/{ctx.base_ref}")
     git("checkout", "-B", merge_branch, f"origin/{ctx.base_ref}")
 
-    merge_cmd = ["merge", "--no-ff", "--no-edit", merge_input]
+    merge_cmd = [
+        "-c",
+        "user.name=github-actions[bot]",
+        "-c",
+        "user.email=github-actions[bot]@users.noreply.github.com",
+        "merge",
+        "--no-ff",
+        "--no-edit",
+        merge_input,
+    ]
     log(f"Running merge with input: {merge_input}")
     merge_process = git(*merge_cmd, check=False)
     if merge_process.returncode != 0:

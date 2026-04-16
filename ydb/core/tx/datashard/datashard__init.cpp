@@ -1,6 +1,7 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
 #include "memory_state_migration.h"
+#include "build_index/build_index_scan_manager.h"
 #include "build_index/common_helper.h"
 
 #include <ydb/core/base/feature_flags.h>
@@ -67,6 +68,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->CdcStreamScanManager.Reset();
         Self->CdcStreamHeartbeatManager.Reset();
         Self->BuildIndexScanManager.Reset();
+        Self->PendingBuildIndexFinalResponses.clear();
 
         Self->KillChangeSender(ctx);
         Self->ChangesQueue.clear();
@@ -196,27 +198,36 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     // We send via a pipe to CurrentSchemeShardId because the original sender TActorId
     // is a runtime value that is no longer valid after reboot.
     if (!Self->BuildIndexScanManager.GetScans().empty()) {
-        using TFactory = std::function<THolder<IEventBase>(ui64 buildId, ui64 tabletId, TScanRecord::TSeqNo)>;
-        const THashMap<TString, TFactory> responseFactories = {
-            {"TEvBuildIndexProgressResponse", [](ui64 id, ui64 tabletId, TScanRecord::TSeqNo seqNo) {
-                auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-                FillScanResponseCommonFields(*response, id, tabletId, seqNo);
-                response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-                return THolder<IEventBase>(response.Release());
-            }},
-        };
-
         for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
-            const auto* factory = responseFactories.FindPtr(scanInfo.ResponseType);
-            Y_ENSURE(factory, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
-            TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
-            auto response = (*factory)(buildId, Self->TabletID(), seqNo);
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxInitRestored: notifying SchemeShard of aborted index build scan"
-                << ", buildId# " << buildId
-                << ", tabletId# " << Self->TabletID()
-                << ", schemeShardId# " << Self->CurrentSchemeShardId
-                << ", responseType# " << scanInfo.ResponseType);
+            THolder<TEvDataShard::TEvBuildIndexProgressResponse> response;
+
+            if (scanInfo.ResponseType == IndexBuildScanResponseTypeFinal) {
+                response.Reset(new TEvDataShard::TEvBuildIndexProgressResponse());
+                response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);
+                auto pendingCopy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+                pendingCopy->Record = response->Record;
+                Self->PendingBuildIndexFinalResponses[buildId] = std::move(pendingCopy);
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: resending persisted final build index progress to SchemeShard"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
+            } else if (scanInfo.ResponseType == TStringBuf("TEvBuildIndexProgressResponse")) {
+                TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
+                response.Reset(new TEvDataShard::TEvBuildIndexProgressResponse());
+                FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
+                response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: notifying SchemeShard of aborted index build scan"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
+            } else {
+                Y_ENSURE(false, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
+            }
+
             if (!Self->StateReportPipe) {
                 NTabletPipe::TClientConfig clientConfig;
                 clientConfig.RetryPolicy = Self->SchemeShardPipeRetryPolicy;

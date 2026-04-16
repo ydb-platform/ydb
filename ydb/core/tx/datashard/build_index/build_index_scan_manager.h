@@ -3,8 +3,13 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/strbuf.h>
 
 namespace NKikimr::NDataShard {
+
+    inline constexpr TStringBuf IndexBuildScanResponseTypeFinal =
+        TStringBuf("TEvBuildIndexProgressResponseFinal");
+
     class TBuildIndexScanManager {
     public:
         struct TScanInfo {
@@ -12,6 +17,7 @@ namespace NKikimr::NDataShard {
             ui64 SeqNoGeneration = 0;
             ui64 SeqNoRound = 0;
             TString ResponseType;
+            TString FinalProgressRecordSerialized;
         };
 
     public:
@@ -21,6 +27,9 @@ namespace NKikimr::NDataShard {
                         TStringBuf responseType);
 
         void PersistRemove(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound);
+
+        void PersistMarkFinalResponse(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound,
+                                      const TString& serializedRecord);
 
         const THashMap<ui64, TScanInfo>& GetScans() const {
             return Scans;

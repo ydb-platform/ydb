@@ -17,6 +17,7 @@ namespace NKikimr::NDataShard {
             info.SeqNoGeneration = rowset.GetValue<TDataShard::Schema::IndexBuildScans::SeqNoGeneration>();
             info.SeqNoRound = rowset.GetValue<TDataShard::Schema::IndexBuildScans::SeqNoRound>();
             info.ResponseType = rowset.GetValue<TDataShard::Schema::IndexBuildScans::ResponseType>();
+            info.FinalProgressRecordSerialized = rowset.GetValueOrDefault<TDataShard::Schema::IndexBuildScans::FinalProgressRecord>(TString());
 
             Scans[info.BuildId] = std::move(info);
 
@@ -34,13 +35,34 @@ namespace NKikimr::NDataShard {
     {
         db.Table<TDataShard::Schema::IndexBuildScans>()
             .Key(buildId, seqNoGeneration, seqNoRound)
-            .Update(NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(TString(responseType)));
+            .Update(
+                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(TString(responseType)),
+                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::FinalProgressRecord>(TString()));
 
         TScanInfo& info = Scans[buildId];
         info.BuildId = buildId;
         info.SeqNoGeneration = seqNoGeneration;
         info.SeqNoRound = seqNoRound;
         info.ResponseType = responseType;
+        info.FinalProgressRecordSerialized.clear();
+    }
+
+    void TBuildIndexScanManager::PersistMarkFinalResponse(NIceDb::TNiceDb& db, ui64 buildId,
+                                                        ui64 seqNoGeneration, ui64 seqNoRound,
+                                                        const TString& serializedRecord)
+    {
+        db.Table<TDataShard::Schema::IndexBuildScans>()
+            .Key(buildId, seqNoGeneration, seqNoRound)
+            .Update(
+                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(TString(IndexBuildScanResponseTypeFinal)),
+                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::FinalProgressRecord>(serializedRecord));
+
+        TScanInfo& info = Scans[buildId];
+        info.BuildId = buildId;
+        info.SeqNoGeneration = seqNoGeneration;
+        info.SeqNoRound = seqNoRound;
+        info.ResponseType = TString(IndexBuildScanResponseTypeFinal);
+        info.FinalProgressRecordSerialized = serializedRecord;
     }
 
     void TBuildIndexScanManager::PersistRemove(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound) {

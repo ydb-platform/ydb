@@ -1136,9 +1136,10 @@ class TDataShard
             struct SeqNoGeneration : Column<2, NScheme::NTypeIds::Uint64> {};
             struct SeqNoRound : Column<3, NScheme::NTypeIds::Uint64> {};
             struct ResponseType : Column<4, NScheme::NTypeIds::String> {};
+            struct FinalProgressRecord : Column<5, NScheme::NTypeIds::String> {};
 
             using TKey = TableKey<BuildId, SeqNoGeneration, SeqNoRound>;
-            using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, ResponseType>;
+            using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, ResponseType, FinalProgressRecord>;
         };
 
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,

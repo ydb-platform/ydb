@@ -571,7 +571,10 @@ public:
             if (info->SeqNoGeneration == seqNoGeneration && info->SeqNoRound == seqNoRound) {
                 ShouldForward = true;
                 NIceDb::TNiceDb db(txc.DB);
-                Self->BuildIndexScanManager.PersistRemove(db, BuildId, seqNoGeneration, seqNoRound);
+                TString serialized;
+                Y_ENSURE(record.SerializeToString(&serialized));
+                Self->BuildIndexScanManager.PersistMarkFinalResponse(db, BuildId, seqNoGeneration, seqNoRound,
+                    serialized);
             }
         }
 

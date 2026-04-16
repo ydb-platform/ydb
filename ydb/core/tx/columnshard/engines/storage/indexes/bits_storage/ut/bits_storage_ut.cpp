@@ -9,7 +9,36 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-void TestSerializeRestore(IBitsStorageConstructor& constructor) {
+void CheckInsertedValues(const std::unordered_set<ui64>& inserted, ui32 size, const IBitsStorageViewer& storage) {
+    for (ui64 i = 0; i < size; ++i) {
+        if (inserted.contains(i)) {
+            UNIT_ASSERT_C(storage.Get(i), TStringBuilder() << "value " << i << " must be set but is not");
+        } else {
+            UNIT_ASSERT_C(!storage.Get(i), TStringBuilder() << "value " << i << " must not be set but it is");
+        }
+    }
+}
+
+void TestSerializeRestoreArrayStorage(IBitsStorageConstructor& constructor) {
+    ui32 size = 16384;
+
+    TFastRng64 rng(100500);
+    std::unordered_set<ui64> inserted;
+    TArrayPower2BitsStorage storage(size);
+    for (ui32 i = 0; i < size / 2; ++i) {
+        auto item = rng.Uniform(size);
+        storage(item);
+        inserted.insert(item);
+    }
+    TString serialized = constructor.SerializeToString(storage);
+    auto restoredConclusion = constructor.Restore(serialized);
+    UNIT_ASSERT_C(restoredConclusion.IsSuccess(), restoredConclusion.GetErrorMessage());
+    auto restored = restoredConclusion.DetachResult();
+
+    CheckInsertedValues(inserted, size, *restored);
+}
+
+void TestSerializeRestoreDynBitMap(IBitsStorageConstructor& constructor) {
     ui32 size = 16384;
 
     TFastRng64 rng(100500);
@@ -26,62 +55,31 @@ void TestSerializeRestore(IBitsStorageConstructor& constructor) {
     UNIT_ASSERT_C(restoredConclusion.IsSuccess(), restoredConclusion.GetErrorMessage());
     auto restored = restoredConclusion.DetachResult();
 
-    for (ui64 i = 0; i < size; ++i) {
-        if (inserted.contains(i)) {
-            UNIT_ASSERT_C(restored->Get(i), TStringBuilder() << "value " << i << " must be set but is not");
-        } else {
-            UNIT_ASSERT_C(!restored->Get(i), TStringBuilder() << "value " << i << " must not be set but it is");
-        }
-    }
+    CheckInsertedValues(inserted, size, *restored);
 }
 
-void RunTest(const std::vector<ui64>& elements, ui32 size) {
-    std::unordered_set<ui64> inserted;
-    TArrayPower2BitsStorage array(size);
-
-    for (auto i : elements) {
-        array(i);
-        inserted.insert(i % size);
-    }
-
-    auto str = array.SerializeToString();
-    TFixStringBitsStorage stringStorage(str);
-
-    for (ui64 i = 0; i < size; ++i) {
-        if (inserted.contains(i)) {
-            UNIT_ASSERT_C(stringStorage.Get(i), TStringBuilder() << "value " << i << " is not set");
-        } else {
-            UNIT_ASSERT_C(!stringStorage.Get(i), TStringBuilder() << "value " << i << " is set while it must not");
-        }
-    }
-}
 
 
 Y_UNIT_TEST_SUITE(TBitsStorageTests) {
-    Y_UNIT_TEST(TestSerializeRestoreFixString) {
+    Y_UNIT_TEST(TestSerializeRestoreArrayStorageToFixString) {
         TFixStringBitsStorageConstructor constructor;
-        TestSerializeRestore(constructor);
+        TestSerializeRestoreArrayStorage(constructor);
     }
 
-    Y_UNIT_TEST(TestSerializeRestoreBitset) {
+    Y_UNIT_TEST(TestSerializeRestoreArrayStorageToBitset) {
         TBitSetStorageConstructor constructor;
-        TestSerializeRestore(constructor);
+        TestSerializeRestoreArrayStorage(constructor);
     }
 
-    Y_UNIT_TEST(TestCompatibility) {
-        ui32 size = 4096;
-        RunTest(std::vector<ui64>{0, 1, 100, size - 1, size + 10, size + 100}, size);
+
+    Y_UNIT_TEST(TestSerializeRestoreDynBitMapToFixString) {
+        TFixStringBitsStorageConstructor constructor;
+        TestSerializeRestoreDynBitMap(constructor);
     }
 
-    Y_UNIT_TEST(TestCompatibilityRandom) {
-        ui32 size = 16384;
-
-        TFastRng64 rng(100500);
-        std::vector<ui64> values;
-        for (ui32 i = 0; i < size / 2; ++i) {
-            values.push_back(rng.Uniform(size * 100));
-        }
-        RunTest(values, size);
+    Y_UNIT_TEST(TestSerializeRestoreDynBitMapToBitset) {
+        TBitSetStorageConstructor constructor;
+        TestSerializeRestoreDynBitMap(constructor);
     }
 }
 

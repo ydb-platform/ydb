@@ -226,11 +226,11 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         static constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
         static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
 
-        TArrayPower2BitsStorage maxInserter(MaxBitsSize);
-        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxInserter);
+        TArrayPower2BitsStorage maxStorage(MaxBitsSize);
+        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxStorage);
 
         // auto maxBits = maxInserter.ExtractBits();
-        const ui64 setBitsCount = maxInserter.Count();
+        const ui64 setBitsCount = maxStorage.CountSetBits();
 
         const double m = static_cast<double>(MaxBitsSize);
         const double k = static_cast<double>(HashesCount);
@@ -243,9 +243,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
         const ui32 targetSize = std::min<ui64>(MaxBitsSize, std::bit_ceil(requestedBitsSize));
 
-        auto foldedInserter = targetSize < MaxBitsSize ? maxInserter.Fold(MaxBitsSize / targetSize) : std::move(maxInserter);
+        auto foldedStorage = targetSize < MaxBitsSize ? maxStorage.Fold(MaxBitsSize / targetSize) : std::move(maxStorage);
 
-        TString indexData = foldedInserter.SerializeToString();
+        TString indexData = foldedStorage.SerializeToString();
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
     }
 
@@ -322,22 +322,6 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
     const TString valString((const char*)strVal->value->data(), strVal->value->size());
     builder.FillNGrammHashes(NGrammSize, opLike, valString, predSet);
     return result;
-}
-
-ui32 ComputeEffectiveFilterSizeBits(const ui32 filterSizeBytesBase, const ui32 recordsCountBase, const ui32 recordsCount) {
-    // ui64 to avoid overflow
-    ui64 recordsCountBase64 = recordsCountBase;
-    ui64 bitSize = filterSizeBytesBase * 8;
-    if ((bitSize & (bitSize - 1)) == 0) {
-        ui64 recordsCountCurrent = recordsCountBase64;
-        while (recordsCountCurrent < recordsCount && 2 * bitSize <= TConstants::MaxFilterSizeBits) {
-            bitSize <<= 1;
-            recordsCountCurrent *= 2;
-        }
-    } else {
-        bitSize = std::bit_ceil(bitSize * ((recordsCountBase64 + recordsCount - 1) / recordsCountBase64));
-    }
-    return std::clamp<ui64>(bitSize, TConstants::MinFilterSizeBits, TConstants::MaxFilterSizeBits);
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

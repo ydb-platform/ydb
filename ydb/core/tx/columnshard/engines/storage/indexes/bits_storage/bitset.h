@@ -29,7 +29,8 @@ public:
     }
 
 private:
-    virtual TString DoSerializeToString(TDynBitMap&& bm) const override;
+    virtual TString DoSerializeToString(TDynBitMap&& bitsVector) const override;
+    virtual TString DoSerializeToString(const TArrayPower2BitsStorage& storage) const override;
     virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const override;
 
     static inline const auto Registrator = TFactory::TRegistrator<TBitSetStorageConstructor>(GetClassNameStatic());

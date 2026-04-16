@@ -41,4 +41,8 @@ TString TFixStringBitsStorageConstructor::DoSerializeToString(TDynBitMap&& bitsV
     return result;
 }
 
+TString TFixStringBitsStorageConstructor::DoSerializeToString(const TArrayPower2BitsStorage& storage) const {
+    return storage.SerializeToString();
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

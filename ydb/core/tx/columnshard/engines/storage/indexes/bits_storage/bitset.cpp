@@ -14,6 +14,18 @@ TString TBitSetStorageConstructor::DoSerializeToString(TDynBitMap&& bm) const {
     return result;
 }
 
+
+TString TBitSetStorageConstructor::DoSerializeToString(const TArrayPower2BitsStorage& storage) const {
+    TDynBitMap bm;
+    bm.Reserve(storage.BitSize());
+    for (ui32 i = 0; i < storage.BitSize(); ++i) {
+        if (storage.Get(i)) {
+            bm.Set(i);
+        }
+    }
+    return DoSerializeToString(std::move(bm));
+}
+
 TConclusion<std::shared_ptr<IBitsStorageViewer>> TBitSetStorageConstructor::DoRestore(const TString& data) const {
     try {
         TStringInput input(data);

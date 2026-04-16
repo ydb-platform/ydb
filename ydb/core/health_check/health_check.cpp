@@ -3226,6 +3226,11 @@ public:
             it = similar.erase(it);
         }
 
+        auto* storageNodes = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_node();
+        std::ranges::sort(*storageNodes, {}, &Ydb::Monitoring::LocationNode::id);
+        auto toRemove = std::ranges::unique(*storageNodes, {}, &Ydb::Monitoring::LocationNode::id);
+        storageNodes->erase(toRemove.begin(), toRemove.end());
+
         similar.begin()->IssueLog.set_count(ids.size());
         similar.begin()->IssueLog.set_listed(ids.size());
     }

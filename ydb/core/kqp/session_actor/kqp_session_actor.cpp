@@ -581,9 +581,9 @@ public:
                 STLOG_D("PreCompile Classify was resolved", (pool_id, s.PoolId), (trace_id, TraceId()));
                 PassRequestToResourcePool(&TThis::PreCompileState);
             },
-            [this](const IWmQueryClassifier::TReject&) {
+            [this](const IWmQueryClassifier::TReject& r) {
                 STLOG_N("PreCompile Classify was rejected", (trace_id, TraceId()));
-                ythrow TRequestFail(Ydb::StatusIds::PRECONDITION_FAILED) << "Query rejected by resource pool classifier";
+                ythrow TRequestFail(r.Code) << r.Message;
             },
             [this](const auto&) {
                 STLOG_D("PreCompile Classify was bypass or pending compilation, compiling", (trace_id, TraceId()));

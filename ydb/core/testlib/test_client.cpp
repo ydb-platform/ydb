@@ -2487,15 +2487,12 @@ namespace Tests {
         return CreateTable(parent, table, TDuration::Seconds(5000));
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout, bool forBackup) {
+    NMsgBusProxy::EResponseStatus TClient::ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout) {
         NKikimrSchemeOp::TConsistentTableCopyingConfig coping;
         for (auto& task: desc) {
             auto* item = coping.AddCopyTableDescriptions();
             item->SetSrcPath(std::move(task.first));
             item->SetDstPath(std::move(task.second));
-            if (forBackup) {
-                item->SetIsBackup(true);
-            }
         }
 
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());

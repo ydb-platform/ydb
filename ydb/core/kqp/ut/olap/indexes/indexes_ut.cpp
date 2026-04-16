@@ -49,19 +49,6 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
     }
 }
 
-static void AssertColumnTableHasLocalBloomPairIndexes(NKikimr::Tests::TClient& client, const TString& path) {
-    auto desc = client.Ls(path);
-    UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
-    const auto& indexes = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
-    THashSet<TString> found;
-    for (auto&& idx : indexes) {
-        found.insert(idx.GetName());
-    }
-
-    const THashSet<TString> expected{"idx_bloom", "idx_ngram"};
-    UNIT_ASSERT_VALUES_EQUAL(found, expected);
-}
-
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateMinMaxIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);

@@ -633,7 +633,7 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CopyTable(const TString& parent, const TString& name, const TString& src);
         NMsgBusProxy::EResponseStatus CreateKesus(const TString& parent, const TString& name);
         NMsgBusProxy::EResponseStatus DeleteKesus(const TString& parent, const TString& name);
-        NMsgBusProxy::EResponseStatus ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout = TDuration::Seconds(5000), bool forBackup = false);
+        NMsgBusProxy::EResponseStatus ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus DeleteTable(const TString& parent, const TString& name);
         NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update);
         NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const TString& alter);

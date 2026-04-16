@@ -165,11 +165,6 @@ public:
             return true;
         }
 
-        // Admin access
-        if (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty()) {
-            return true;
-        }
-
          // Acts in case of !EnforceUserTokenRequirement: If user specify token,
          // it is checked and required to be valid for futher usage of YDB.
          // If user doesn't specify token, no checks are made.

@@ -2579,51 +2579,17 @@ public:
                         return SyncError();
                     }
                     auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                    TString alterIndexName;
+                    TMaybeNode<TExprBase> alterIndexTableSettingsExpr;
+                    TMaybeNode<TExprBase> alterIndexIndexSettingsExpr;
                     for (const auto& indexSetting : listNode) {
-                        auto settingName = indexSetting.Name().Value();
+                        const auto settingName = indexSetting.Name().Value();
                         if (settingName == "indexName") {
-                            const auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
-                            const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&indexName] (const auto& index) {
-                                return index.Name == indexName;
-                            });
-                            if (indexIter == table.Metadata->Indexes.end()) {
-                                ctx.AddError(
-                                    YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
-                                        TIssuesIds::KIKIMR_SCHEME_ERROR,
-                                        TStringBuilder() << "Unknown index name: " << indexName));
-                                return SyncError();
-                            }
-                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, *indexIter);
-                            if (indexTablePaths.size() != 1) {
-                                ctx.AddError(
-                                    TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
-                                        TStringBuilder() << "Only index with one impl table is supported"));
-                                return SyncError();
-                            }
-                            alterTableRequest.set_path(std::move(indexTablePaths[0]));
+                            alterIndexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
                         } else if (settingName == "tableSettings") {
-                            auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
-                            for (const auto& tableSetting : tableSettings) {
-                                const auto name = tableSetting.Name().Value();
-                                if (IsPartitioningSetting(name)) {
-                                    if (!ParsePartitioningSettings(
-                                        *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
-                                    )) {
-                                        return SyncError();
-                                    }
-                                } else if (name == "readReplicasSettings") {
-                                    if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), tableSetting, ctx)) {
-                                        return SyncError();
-                                    }
-                                } else {
-                                    ctx.AddError(
-                                        TIssue(ctx.GetPosition(tableSetting.Name().Pos()),
-                                               TStringBuilder() << "Unknown index table setting: " << name
-                                        )
-                                    );
-                                    return SyncError();
-                                }
-                            }
+                            alterIndexTableSettingsExpr = indexSetting.Value();
+                        } else if (settingName == "indexSettings") {
+                            alterIndexIndexSettingsExpr = indexSetting.Value();
                         } else {
                             ctx.AddError(
                                 TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
@@ -2631,6 +2597,199 @@ public:
                                 )
                             );
                             return SyncError();
+                        }
+                    }
+                    if (alterIndexName.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()), "Index name is not set for ALTER INDEX"));
+                        return SyncError();
+                    }
+
+                    if (table.Metadata->StoreType == EStoreType::Column) {
+                        if (alterIndexTableSettingsExpr && alterIndexTableSettingsExpr.Cast<TCoNameValueTupleList>().Size() > 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                "ALTER INDEX with index table settings is not supported for column tables"));
+                            return SyncError();
+                        }
+                        if (!alterIndexIndexSettingsExpr) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                "ALTER INDEX for column tables requires index settings"));
+                            return SyncError();
+                        }
+                        const NKikimrSchemeOp::TOlapIndexDescription* olapIndex = nullptr;
+                        for (const auto& candidate : table.Metadata->OlapIndexes) {
+                            if (candidate.GetName() == alterIndexName) {
+                                olapIndex = &candidate;
+                                break;
+                            }
+                        }
+                        if (!olapIndex) {
+                            ctx.AddError(
+                                YqlIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TIssuesIds::KIKIMR_SCHEME_ERROR,
+                                    TStringBuilder() << "Unknown index name: " << alterIndexName));
+                            return SyncError();
+                        }
+
+                        auto resolveColumnName = [&](ui32 columnId, TPositionHandle errPos) -> std::optional<TString> {
+                            for (const auto& [colName, colMeta] : table.Metadata->Columns) {
+                                if (colMeta.Id == columnId) {
+                                    return colName;
+                                }
+                            }
+                            ctx.AddError(TIssue(ctx.GetPosition(errPos),
+                                TStringBuilder() << "Unknown column id " << columnId << " for OLAP index " << alterIndexName));
+                            return std::nullopt;
+                        };
+
+                        auto add_index = alterTableRequest.add_add_indexes();
+                        add_index->set_name(alterIndexName);
+
+                        if (olapIndex->HasBloomNGrammFilter()) {
+                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    "Local bloom ngram filter index support is disabled"));
+                                return SyncError();
+                            }
+                            add_index->mutable_local_bloom_ngram_filter_index();
+                            const auto& bf = olapIndex->GetBloomNGrammFilter();
+                            if (!bf.HasColumnId()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TStringBuilder() << "OLAP index " << alterIndexName << " has no column id"));
+                                return SyncError();
+                            }
+                            const auto colName = resolveColumnName(bf.GetColumnId(), action.Name().Pos());
+                            if (!colName) {
+                                return SyncError();
+                            }
+                            add_index->add_index_columns(*colName);
+
+                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
+                            if (bf.HasNGrammSize()) {
+                                localBloomNgramFilterDesc.NgramSize = bf.GetNGrammSize();
+                            }
+                            if (bf.HasFalsePositiveProbability()) {
+                                localBloomNgramFilterDesc.FalsePositiveProbability = bf.GetFalsePositiveProbability();
+                            }
+                            if (bf.HasCaseSensitive()) {
+                                localBloomNgramFilterDesc.CaseSensitive = bf.GetCaseSensitive();
+                            }
+                            const auto alterIndexIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
+                            for (const auto& is : alterIndexIndexSettings) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+                                TString err;
+                                FillLocalBloomNgramFilterSetting(
+                                    localBloomNgramFilterDesc,
+                                    nameAtom.StringValue(),
+                                    valueAtom.StringValue(),
+                                    err);
+                                if (err) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), err));
+                                    return SyncError();
+                                }
+                            }
+                            auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
+                            proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
+                            proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
+                            const double fpp = localBloomNgramFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                            proto->set_hashes_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                            proto->set_filter_size_bytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                            proto->set_records_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                            proto->set_false_positive_probability(fpp);
+                        } else if (olapIndex->HasBloomFilter()) {
+                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    "Local bloom filter index support is disabled"));
+                                return SyncError();
+                            }
+                            add_index->mutable_local_bloom_filter_index();
+                            const auto& bloom = olapIndex->GetBloomFilter();
+                            if (bloom.GetColumnIds().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TStringBuilder() << "OLAP index " << alterIndexName << " has no columns"));
+                                return SyncError();
+                            }
+                            const auto colName = resolveColumnName(bloom.GetColumnIds(0), action.Name().Pos());
+                            if (!colName) {
+                                return SyncError();
+                            }
+                            add_index->add_index_columns(*colName);
+
+                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                            if (bloom.HasFalsePositiveProbability()) {
+                                localBloomFilterDesc.FalsePositiveProbability = bloom.GetFalsePositiveProbability();
+                            }
+                            const auto alterIndexIndexSettingsBloom = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
+                            for (const auto& is : alterIndexIndexSettingsBloom) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+                                TString err;
+                                FillLocalBloomFilterSetting(
+                                    localBloomFilterDesc,
+                                    nameAtom.StringValue(),
+                                    valueAtom.StringValue(),
+                                    err);
+                                if (err) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), err));
+                                    return SyncError();
+                                }
+                            }
+                            auto* proto = add_index->mutable_local_bloom_filter_index();
+                            const double fpp = localBloomFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                            proto->set_false_positive_probability(fpp);
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                "ALTER INDEX is supported for local bloom and bloom ngram indexes on column tables"));
+                            return SyncError();
+                        }
+                    } else {
+                        const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {
+                            return index.Name == alterIndexName;
+                        });
+                        if (indexIter == table.Metadata->Indexes.end()) {
+                            ctx.AddError(
+                                YqlIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TIssuesIds::KIKIMR_SCHEME_ERROR,
+                                    TStringBuilder() << "Unknown index name: " << alterIndexName));
+                            return SyncError();
+                        }
+                        auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, *indexIter);
+                        if (indexTablePaths.size() != 1) {
+                            ctx.AddError(
+                                TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TStringBuilder() << "Only index with one impl table is supported"));
+                            return SyncError();
+                        }
+                        alterTableRequest.set_path(std::move(indexTablePaths[0]));
+                        if (alterIndexIndexSettingsExpr && alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>().Size() > 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                "ALTER INDEX with index settings is not supported for row tables"));
+                            return SyncError();
+                        }
+                        if (alterIndexTableSettingsExpr) {
+                            for (const auto& tableSetting : alterIndexTableSettingsExpr.Cast<TCoNameValueTupleList>()) {
+                                const auto tsName = tableSetting.Name().Value();
+                                if (IsPartitioningSetting(tsName)) {
+                                    if (!ParsePartitioningSettings(
+                                        *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
+                                    )) {
+                                        return SyncError();
+                                    }
+                                } else if (tsName == "readReplicasSettings") {
+                                    if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), tableSetting, ctx)) {
+                                        return SyncError();
+                                    }
+                                } else {
+                                    ctx.AddError(
+                                        TIssue(ctx.GetPosition(tableSetting.Name().Pos()),
+                                               TStringBuilder() << "Unknown index table setting: " << tsName
+                                        )
+                                    );
+                                    return SyncError();
+                                }
+                            }
                         }
                     }
                 } else if (name == "dropIndex") {

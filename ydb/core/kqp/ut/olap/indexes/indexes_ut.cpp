@@ -586,6 +586,109 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         assertMixRejected(alterMixHashesCount);
     }
 
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramAlterIndexBasic, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapAlterIdx`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx` ALTER INDEX idx_ngram SET (false_positive_probability = 0.05);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx` ALTER INDEX idx_ngram SET (ngram_size = 4);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx` ALTER INDEX idx_ngram SET (case_sensitive = false);
+        )");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramAlterIndexResetIndexSettingRejected, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapAlterIdxReset`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdxReset`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+        )");
+
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdxReset` ALTER INDEX idx_ngram RESET (case_sensitive);
+        )", "RESET is not supported for index settings");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RowTableAlterIndexTableSettingStillWorks, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/rowAlterIdx`
+            (
+                key Uint64,
+                value Utf8,
+                PRIMARY KEY (key)
+            );
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/rowAlterIdx`
+            ADD INDEX idx_value GLOBAL SYNC ON (value);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/rowAlterIdx`
+            ALTER INDEX idx_value SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
+        )");
+    }
+
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);

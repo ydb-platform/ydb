@@ -254,6 +254,13 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         for (const auto& column: entry.ColumnTableInfo->Description.GetSharding().GetHashSharding().GetColumns()) {
             tableMeta->PartitionedByColumns.push_back(column);
         }
+        if (entry.ColumnTableInfo->Description.HasSchema()) {
+            const auto& schema = entry.ColumnTableInfo->Description.GetSchema();
+            tableMeta->OlapIndexes.reserve(schema.GetIndexes().size());
+            for (const auto& olapIndex : schema.GetIndexes()) {
+                tableMeta->OlapIndexes.push_back(olapIndex);
+            }
+        }
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);

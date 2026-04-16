@@ -1653,6 +1653,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
+        cls.assert_force_retry_possible(result['restart_pdisk_root'], True, 'restart_pdisk_root')
         result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
         }, headers={
@@ -1697,7 +1698,20 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
-        cls.assert_force_retry_possible(result['restart_pdisk_root'], True, 'restart_pdisk_root')
+
+        result['status_pdisk_monitoring_force'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        cls.assert_access_denied(result['status_pdisk_monitoring_force'], 'status_pdisk_monitoring_force')
+        result['evict_vdisk_monitoring_force'] = cls.post_viewer("/vdisk/evict", body={
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        cls.assert_access_denied(result['evict_vdisk_monitoring_force'], 'evict_vdisk_monitoring_force')
         return result
 
     @classmethod

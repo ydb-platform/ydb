@@ -697,6 +697,10 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
+        "evict_vdisk_monitoring_force": {
+            "status_code": 403,
+            "text": "Access denied"
+        },
         "restart_pdisk_database": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
@@ -729,6 +733,10 @@
             "text": "Access denied"
         },
         "restart_pdisk_viewer_force": {
+            "status_code": 403,
+            "text": "Access denied"
+        },
+        "status_pdisk_monitoring_force": {
             "status_code": 403,
             "text": "Access denied"
         },

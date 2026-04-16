@@ -618,9 +618,9 @@ void TDqPqRdReadActor::Init() {
 }
 
 void TDqPqRdReadActor::InitChild() {
-    for (auto& [partitionKey, offset]: Parent->PartitionToOffset) {
-        if (Cluster == partitionKey.Cluster) {
-            NextOffsetFromRD[partitionKey.PartitionId] = offset;
+    for (auto& [partitionKey, info]: Parent->Partitions) {
+        if (Cluster == partitionKey.Cluster && info.Offset) {
+            NextOffsetFromRD[partitionKey.PartitionId] = *info.Offset;
         }
     }
     StartingMessageTimestamp = Parent->StartingMessageTimestamp;
@@ -824,7 +824,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         watermark = readyBatch.Watermark;
         usedSpace += readyBatch.UsedSpace;
         freeSpace -= readyBatch.UsedSpace;
-        PartitionToOffset[readyBatch.PartitionKey] = readyBatch.NextOffset;
+        Partitions[readyBatch.PartitionKey].Offset = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
     } while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty());
 
@@ -941,7 +941,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         SRC_LOG_T("NextOffsetFromRD [" << partitionId << "]= " << itNextOffset->second);
         if (Parent->ReadyBuffer.empty()) {
             auto partitionKey = TPartitionKey { Cluster, partitionId };
-            Parent->PartitionToOffset[partitionKey] = itNextOffset->second;
+            Parent->Partitions[partitionKey].Offset = itNextOffset->second;
         }
     }
 }

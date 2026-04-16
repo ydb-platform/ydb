@@ -86,6 +86,8 @@ std::optional<ui64> TryExtractLimitHint(const TS3SourceSettingsBase& settings) {
 using namespace NYql::NS3Details;
 
 class TS3DqIntegration : public TDqIntegrationBase {
+    static constexpr ui64 DefaultMaxPartitions = 1000;
+
 public:
     explicit TS3DqIntegration(TS3State::TPtr state)
         : State_(state)
@@ -121,7 +123,7 @@ public:
         }
 
         constexpr ui64 maxTaskRatio = 20;
-        auto maxPartitions = settings.MaxPartitions;
+        size_t maxPartitions = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
         if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
             maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
@@ -562,7 +564,7 @@ public:
                             << "Unknown 'pathpatternvariant': " << pathPatternVariantValue->second;
                     }
                 }
-                auto consumersCount = hasDirectories ? maxPartitions : paths.size();
+                auto consumersCount = hasDirectories ? (maxPartitions ? maxPartitions : DefaultMaxPartitions) : paths.size();
 
                 auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get()
                     .GetOrElse(consumersCount * srcDesc.GetParallelDownloadCount() * 3);

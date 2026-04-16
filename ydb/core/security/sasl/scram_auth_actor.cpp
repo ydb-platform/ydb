@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/security/login_shared_func.h>
 #include <ydb/core/security/sasl/base_auth_actors.h>
 #include <ydb/core/security/sasl/events.h>
@@ -287,9 +288,16 @@ private:
     }
 
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
-        NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
+        EScramServerError scramErrorCode = EScramServerError::OtherError,
         [[maybe_unused]] const std::string& reason = "") const override final
     {
+        const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
+        if (securityConfig.GetHideAuthenticationFailureReasons()
+            && (scramErrorCode == EScramServerError::UnknownUser || scramErrorCode == EScramServerError::InvalidProof))
+        {
+            scramErrorCode = EScramServerError::OtherError;
+        }
+
         auto response = std::make_unique<TEvSasl::TEvSaslScramFinalServerResponse>();
         response->Msg = BuildErrorMsg(scramErrorCode);
         response->Issue = MakeIssue(issueCode, TString(message));

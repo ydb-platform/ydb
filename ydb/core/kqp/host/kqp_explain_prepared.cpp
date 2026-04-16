@@ -76,7 +76,12 @@ public:
             NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) {
 
         PhyQuerySetTxPlans(queryProto, query, peepHoleOptimizedQuery, pureTxResults, ctx, database, cluster, tablesData, config, typeCtx, optCtx);
-        queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+        // ExplainTransformerInput is captured after physical build (before peephole/compile); `input` here is post-compile.
+        if (TransformCtx->ExplainTransformerInput) {
+            queryProto.SetQueryAst(KqpExprToPrettyString(*TransformCtx->ExplainTransformerInput, ctx));
+        } else {
+            queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+        }
         TransformCtx->ExplainTransformerInput = nullptr;
     }
 

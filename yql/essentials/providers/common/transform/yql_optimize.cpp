@@ -62,15 +62,18 @@ TOptimizeTransformerBase::TOptimizeTransformerBase(TTypeAnnotationContext* types
 
 IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     TOptimizeExprSettings settings(Types);
+    AmendOptimizeExprSettings(settings);
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
 
     output = input;
     for (auto& step : Steps_) {
         TParentsMap parentsMap;
         bool parentsMapInit = false;
-        TGetParents getParents = [&input, &parentsMap, &parentsMapInit]() {
+        // Parents must be gathered from the current graph root (`output`). `input` is only the
+        // initial root passed to DoTransform and is not updated when `output` is rewritten.
+        TGetParents getParents = [&output, &parentsMap, &parentsMapInit]() {
             if (!parentsMapInit) {
-                GatherParents(*input, parentsMap);
+                GatherParents(*output, parentsMap);
                 parentsMapInit = true;
             }
             return &parentsMap;

@@ -440,6 +440,10 @@ TConclusionStatus TProgramBuilder::ReadGroupBy(const NKikimrSSA::TProgram::TGrou
     return TConclusionStatus::Success();
 }
 
+TConclusionStatus TProgramBuilder::ReadDistinct(const NKikimrSSA::TProgram::TDistinct& /*distinct*/) {
+    return TConclusionStatus::Fail("Distinct: not implemented");
+}
+
 TColumnInfo TProgramBuilder::GetColumnInfo(const NKikimrSSA::TProgram::TColumn& column) const {
     AFL_VERIFY(column.HasId() && column.GetId());
     if (column.HasId() && column.GetId()) {

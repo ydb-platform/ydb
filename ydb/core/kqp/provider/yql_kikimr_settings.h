@@ -81,6 +81,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownDistinct;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
@@ -210,6 +211,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
+    bool GetEnableOlapPushdownDistinct() const;
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;

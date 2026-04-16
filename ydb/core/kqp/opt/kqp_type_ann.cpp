@@ -1629,6 +1629,40 @@ TStatus AnnotateOlapAgg(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* input = node->Child(TKqpOlapDistinct::idx_Input);
+
+    const TTypeAnnotationNode* itemType;
+    if (!EnsureNewSeqType<false, false, true>(*input, ctx, &itemType)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto structType = itemType->Cast<TStructExprType>();
+
+    auto* key = node->Child(TKqpOlapDistinct::idx_Key);
+    if (!EnsureAtom(*key, ctx)) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(node->Pos()),
+            TStringBuilder() << "Expected column name atom in OLAP distinct, got: " << key->Content()
+        ));
+        return TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> outFields;
+    outFields.push_back(ctx.MakeType<TItemExprType>(key->Content(), structType->FindItemType(key->Content())));
+
+    node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TStructExprType>(outFields), ctx));
+    return TStatus::Ok;
+}
+
 
 TStatus AnnotateOlapExtractMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
@@ -2982,6 +3016,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapAgg::Match(input.Get())) {
                 return AnnotateOlapAgg(input, ctx);
+            }
+
+            if (TKqpOlapDistinct::Match(input.Get())) {
+                return AnnotateOlapDistinct(input, ctx);
             }
 
             if (TKqpOlapExtractMembers::Match(input.Get())) {

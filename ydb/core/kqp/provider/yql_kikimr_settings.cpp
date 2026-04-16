@@ -84,6 +84,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptEnableOlapPushdownAggregate);
+    REGISTER_SETTING(*this, OptEnableOlapPushdownDistinct);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
@@ -251,6 +252,11 @@ bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const
 bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) ||
         TTableServiceConfig::GetEnableOlapPushdownAggregate());
+}
+
+bool TKikimrConfiguration::GetEnableOlapPushdownDistinct() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownDistinct.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownDistinct());
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {

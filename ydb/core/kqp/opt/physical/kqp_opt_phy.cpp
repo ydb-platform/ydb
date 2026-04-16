@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/effects/kqp_opt_phy_effects_rules.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_aggregate_expander.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -12,6 +13,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 
@@ -27,6 +29,10 @@ auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoS
 
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
+    void AmendOptimizeExprSettings(TOptimizeExprSettings& settings) const override {
+        settings.VisitStarted = true;
+    }
+
     TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer)
         : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
@@ -53,6 +59,7 @@ public:
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
         AddHandler(0, &TCoTake::Match, HNDL(DisableOlapBlocks));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
+        AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapDistinct));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
         AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
@@ -332,6 +339,13 @@ protected:
     TMaybeNode<TExprBase> PushdownOlapGroupByKeys(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushDownOlapGroupByKeys(node, ctx, KqpCtx);
         DumpAppliedRule("PushdownOlapGroupByKeys", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> PushOlapDistinct(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        const NYql::TParentsMap* parents = getParents();
+        TExprBase output = KqpPushOlapDistinct(node, ctx, KqpCtx, parents);
+        DumpAppliedRule("PushOlapDistinct", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -768,6 +782,57 @@ TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpO
 {
     Y_UNUSED(config);
     return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx, std::move(typeAnnTransformer)));
+}
+
+namespace {
+
+class TKqpPushOlapDistinctPhysicalQueryTransformer : public TSyncTransformerBase {
+public:
+    explicit TKqpPushOlapDistinctPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+        : KqpCtx(kqpCtx)
+    {
+    }
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+        output = input;
+        // Root is often Let/Seq; DqPhyHashCombine lives under KqpPhysicalQuery nested below.
+        // Do not rely on OptimizeExpr here: it may skip callables after child rewrites in the same pass.
+        for (;;) {
+            TParentsMap parentsMap;
+            GatherParents(*output, parentsMap);
+            const auto combines = FindNodes(output, [](const TExprNode::TPtr& n) {
+                return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
+            });
+            bool changed = false;
+            for (const auto& combine : combines) {
+                const TExprBase pushed = KqpPushOlapDistinct(TExprBase(combine), ctx, *KqpCtx, &parentsMap);
+                if (pushed.Ptr() != combine) {
+                    // ReplaceNode handles CombineCore nested under DqPhyStage lambdas; RemapExpr may fail there.
+                    output = ctx.ReplaceNode(std::move(output), *combine.Get(), pushed.Ptr());
+                    changed = true;
+                    break;
+                }
+            }
+            if (!changed) {
+                break;
+            }
+        }
+        return TStatus::Ok;
+    }
+
+    void Rewind() final {
+    }
+
+private:
+    TIntrusivePtr<TKqpOptimizeContext> KqpCtx;
+};
+
+} // namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+{
+    return new TKqpPushOlapDistinctPhysicalQueryTransformer(kqpCtx);
 }
 
 } // namespace NKikimr::NKqp::NOpt

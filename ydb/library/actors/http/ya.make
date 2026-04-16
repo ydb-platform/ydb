@@ -30,6 +30,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/dns
+    library/cpp/ipv6_address
     library/cpp/monlib/metrics
     library/cpp/string_utils/quote
 )

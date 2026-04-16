@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -825,8 +826,7 @@ public:
 
             try {
                 NJson::TJsonValue json;
-                NJson::TJsonReaderConfig config;
-                config.DontValidateUtf8 = true;
+                auto config = NFormats::DefaultJsonReaderConfig();
                 NJson::ReadJsonTree(line, &config, &json, true);
                 UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc, Self->DryRun);
 
@@ -898,8 +898,7 @@ public:
 
             NJson::TJsonValue json;
             try {
-                NJson::TJsonReaderConfig config;
-                config.DontValidateUtf8 = true;
+                auto config = NFormats::DefaultJsonReaderConfig();
                 NJson::ReadJsonTree(line, &config, &json, true);
             } catch (const std::exception& e) {
                 Result.Error(TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line);
@@ -1385,8 +1384,7 @@ public:
     {
         NJson::TJsonValue json;
         try {
-            NJson::TJsonReaderConfig config;
-            config.DontValidateUtf8 = true;
+            auto config = NFormats::DefaultJsonReaderConfig();
             NJson::ReadJsonTree(line, &config, &json, true);
         } catch (const std::exception& e) {
             error = TStringBuilder()

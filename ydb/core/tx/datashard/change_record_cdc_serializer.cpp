@@ -265,7 +265,7 @@ protected:
 public:
     explicit TJsonSerializer(const TChangeRecordSerializerOpts& opts)
         : TBaseSerializer(opts)
-        , JsonConfig(NFormats::DefaultJsonConfig())
+        , JsonConfig(NFormats::DefaultJsonWriterConfig())
     {}
 
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {

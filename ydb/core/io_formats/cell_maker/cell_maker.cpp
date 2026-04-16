@@ -1,5 +1,7 @@
 #include "cell_maker.h"
 
+#include <ydb/core/io_formats/json/json.h>
+
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -269,16 +271,9 @@ namespace {
         }
     };
 
-    NJson::TJsonWriterConfig DefaultJsonConfig() {
-        NJson::TJsonWriterConfig jsonConfig;
-        jsonConfig.ValidateUtf8 = false;
-        jsonConfig.WriteNanAsString = true;
-        return jsonConfig;
-    }
-
     TString WriteJson(const NJson::TJsonValue& json) {
         TStringStream str;
-        NJson::WriteJson(&str, &json, DefaultJsonConfig());
+        NJson::WriteJson(&str, &json, DefaultJsonWriterConfig());
         return str.Str();
     }
 

@@ -198,7 +198,7 @@ ui64 NewBackupChangelogMinBytes() {
 }
 
 NJson::TJsonWriterConfig BackupJsonConfig() {
-    auto cfg = NFormats::DefaultJsonConfig();
+    auto cfg = NFormats::DefaultJsonWriterConfig();
     cfg.SetUnbuffered(true); // buffer is managed by the caller
     return cfg;
 }

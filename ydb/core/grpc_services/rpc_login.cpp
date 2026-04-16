@@ -131,15 +131,17 @@ public:
         operation.set_ready(true);
         operation.set_status(status);
         if (error) {
-            const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
-            if (status != Ydb::StatusIds::UNAUTHORIZED || !securityConfig.GetHideAuthenticationFailureReasons()) {
-                Ydb::Issue::IssueMessage* issue = operation.add_issues();
-                issue->set_issue_code(status);
-                issue->set_message(error);
-            }
+            Ydb::Issue::IssueMessage* issue = operation.add_issues();
+            issue->set_issue_code(status);
+            issue->set_message(error);
         }
 
         AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason, {});
+
+        const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
+        if (operation.status() == Ydb::StatusIds::UNAUTHORIZED && securityConfig.GetHideAuthenticationFailureReasons()) {
+            operation.clear_issues();
+        }
 
         return Reply(response);
     }

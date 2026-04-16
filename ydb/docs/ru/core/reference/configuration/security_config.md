@@ -26,6 +26,9 @@ security_config:
   disable_builtin_security: false
   disable_builtin_groups: false
   disable_builtin_access: false
+
+  # настройки обфускации ошибок доступа
+  hide_authentication_failure_reasons: true
 ```
 
 ## Настройки режима аутентификации {#security-auth}
@@ -275,5 +278,18 @@ default_access:
 || `disable_builtin_access` | Отказаться от добавления прав на корне кластера для [встроенных групп](../../security/builtin-security.md), даже если явные права по умолчанию ([`security_config.default_access`](security_config.md)) заданы.
 
 Значение по умолчанию: `false`
+    ||
+|#
+
+## Настройки обфускации ошибок доступа
+
+#|
+|| Параметр | Описание ||
+|| `hide_authentication_failure_reasons` | Скрытие от пользователя причин ошибок аутентификации.
+
+Не дает возможность злоумышленнику узнать внутреннее устройство и содержимое систем аутентификации YDB, например,
+методом перебора узнать имена существующих пользователей.
+
+Значение по умолчанию: `true`.
     ||
 |#

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "build_info.h"
 #include "common.h"
 #include "client_command_options.h"
 
@@ -18,7 +17,6 @@
 #include <util/system/info.h>
 #include <string>
 #include <functional>
-#include <optional>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -186,14 +184,6 @@ public:
         std::vector<TAiPresetConfig> AiPredefinedProfiles;
         std::function<TAiTokenConfig()> AiTokenGetter;
 
-        // Filled by ValidateAndRun to point at the leaf command being executed
-        const TClientCommand* ActiveLeafCommand = nullptr;
-        // If non-empty, overrides the computed ydb-cli-... build info tag
-        TString BuildInfoCommandTag;
-
-        std::function<TYdbCliBuildInfo()> BuildInfoProvider;
-        const TYdbCliBuildInfo& GetBuildInfo();
-
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
@@ -295,9 +285,34 @@ public:
             throw TNeedToExitWithCode(EXIT_FAILURE);
         }
 
-        TDriverConfig CreateDriverConfig();
+        TDriverConfig CreateDriverConfig() {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(Address)
+                .SetDatabase(Database)
+                .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
+                .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
 
-        TString GetBuildInfoCommandTag() const;
+            if (UseAllNodes) {
+                driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+            }
+
+            if (EnableSsl) {
+                driverConfig.UseSecureConnection(CaCerts);
+            }
+
+            if (IsNetworkIntensive) {
+                size_t networkThreadNum = GetNetworkThreadNum();
+                driverConfig.SetNetworkThreadsNum(networkThreadNum);
+            }
+
+            if (SkipDiscovery) {
+                driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+            }
+
+            driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
+
+            return driverConfig;
+        }
 
         size_t GetNetworkThreadNum() {
             if (IsNetworkIntensive) {
@@ -325,8 +340,6 @@ public:
         }
 
     private:
-        std::optional<TYdbCliBuildInfo> CachedBuildInfo_;
-
         size_t GetParamsCount() {
             size_t result = 0;
             bool optionArgument = false;

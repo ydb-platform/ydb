@@ -302,6 +302,7 @@ def on_jdk_version_macro_check(unit, *args):
         '23',
         '24',
         '25',
+        '26',
     )
     if jdk_version not in available_versions:
         ymake.report_configure_error(

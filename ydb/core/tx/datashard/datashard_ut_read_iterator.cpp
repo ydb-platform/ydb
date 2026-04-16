@@ -303,16 +303,16 @@ struct TTestHelper {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
-        init(serverSettings);
+        Init(serverSettings);
     }
 
     explicit TTestHelper(const TServerSettings& serverSettings, ui64 shardCount = 1, bool withFollower = false) {
         WithFollower = withFollower;
         ShardCount = shardCount;
-        init(serverSettings);
+        Init(serverSettings);
     }
 
-    void init(const TServerSettings& serverSettings) {
+    void Init(const TServerSettings& serverSettings) {
         Server = new TServer(serverSettings);
 
         auto &runtime = *Server->GetRuntime();

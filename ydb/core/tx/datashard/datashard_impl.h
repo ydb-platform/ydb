@@ -1479,7 +1479,7 @@ class TDataShard
 
     void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr&);
+    void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 

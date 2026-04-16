@@ -140,7 +140,7 @@ The `vector_kmeans_tree` index implements hierarchical data clustering. The stru
     * `clusters`: number of clusters in k-means, defining search width (recommended 64-512).
     * `overlap_clusters`: number of leaf-level clusters each vector is added to (recommended 3).
 
-Internally, a vector index consists of index tables named `indexImpl*Table`. In selection queries using the vector index, these tables appear in [query statistics](query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
+Internally, a vector index consists of index tables named `indexImpl*Table`. In selection queries using the vector index, these tables appear in [query statistics](query-execution-optimization/query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
 
 ### Overlapping Clusters {#overlap-clusters}
 

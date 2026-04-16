@@ -225,6 +225,7 @@ struct TEvWhiteboard{
                                      bool replicated,
                                      bool unreplicatedPhantoms,
                                      bool unreplicatedNonPhantoms,
+                                     NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E detailedReplicationStatus,
                                      ui64 unsyncedVDisks,
                                      NKikimrWhiteboard::EFlag frontQueuesLigth,
                                      bool hasUnreadableBlobs) {
@@ -233,6 +234,7 @@ struct TEvWhiteboard{
             Record.SetReplicated(replicated);
             Record.SetUnreplicatedPhantoms(unreplicatedPhantoms);
             Record.SetUnreplicatedNonPhantoms(unreplicatedNonPhantoms);
+            Record.SetDetailedReplicationStatus(detailedReplicationStatus);
             Record.SetUnsyncedVDisks(unsyncedVDisks);
             Record.SetFrontQueues(frontQueuesLigth);
             Record.SetHasUnreadableBlobs(hasUnreadableBlobs);

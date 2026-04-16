@@ -15,7 +15,7 @@ namespace NKikimr::NPQ::NMLP {
 
     struct TChildPartitionsOrderManager {
     public:
-        static constexpr bool EnableSendFullBlacklist = false;
+        static constexpr bool EnableSendFullBlacklist = true;
 
         enum class ESendReasons: ui8 {
             None = 0,

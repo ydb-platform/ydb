@@ -1,4 +1,4 @@
-* Supported gRPC compressing option on client side
+* Supported gRPC compression option on client side
 
 ## v3.17.0
 

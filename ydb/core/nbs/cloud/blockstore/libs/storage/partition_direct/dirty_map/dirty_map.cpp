@@ -520,8 +520,9 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             lsn,
             TBlockRange64::WithLength(0, range.Size()),
             range,
-            locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
-                                     : TRangeLock(this, lsn));
+            locationMask.OnlyDDiskAndNotEmpty()
+                ? TRangeLock(this, range, locationMask)
+                : TRangeLock(this, lsn));
     };
 
     if (!Inflight.HasOverlaps(range)) {
@@ -648,6 +649,10 @@ void TBlocksDirtyMap::WriteFinished(
 {
     Y_ABORT_UNLESS(requested.OnlyPBuffer());
     Y_ABORT_UNLESS(confirmed.OnlyPBuffer());
+
+    if (confirmed.Count() < QuorumDirectBlockGroupHostCount) {
+        return;
+    }
 
     const bool inserted = Inflight.AddRange(
         lsn,

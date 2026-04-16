@@ -139,6 +139,20 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
     return settings;
 }
 
+const TStructExprType* PrepareSchemeType(const TString& alias, const TStructExprType* schemeType, TExprContext& ctx) {
+    const auto itemTypes = schemeType->GetItems();
+    // If scheme type does not have aliases - add it.
+    if (!alias.empty() && std::any_of(itemTypes.begin(), itemTypes.end(), [](const TItemExprType* itemType) { return itemType->GetName().find(".") == TString::npos; })) {
+        TVector<const TItemExprType*> newItemTypes;
+        for (const auto itemType : itemTypes) {
+            const auto newName = alias + "." + itemType->GetName();
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, itemType->GetItemType()));
+        }
+        return ctx.MakeType<TStructExprType>(newItemTypes);
+    }
+    return schemeType;
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -177,7 +191,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     THashSet<TString> possibleKeys;
     auto settings = PrepareExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
-    const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *arg->GetTypeAnn(), possibleKeys, ctx, typeCtx);
+    auto schemeType = PrepareSchemeType(read->Alias, tableDesc->SchemeNode, ctx);
+    const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
     YQL_ENSURE(prepareSuccess);
 
     TVector<TString> keyColumns;

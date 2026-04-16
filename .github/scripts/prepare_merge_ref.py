@@ -262,26 +262,31 @@ def inspect_existing_merge_ref(ctx: MergeContext) -> tuple[str | None, bool]:
         return None, False
 
     git_fetch_with_retry("origin", ctx.target_ref)
-    parents = get_commit_parents(remote_sha)
+    fetched_sha = git("rev-parse", "FETCH_HEAD").stdout.strip()
+    if remote_sha != fetched_sha:
+        log(
+            f"Merge ref moved between ls-remote and fetch: {remote_sha} -> {fetched_sha}"
+        )
+    parents = get_commit_parents(fetched_sha)
     if len(parents) != 2:
         # Special case: PR head is already fully contained in base.
         # In this state we can legitimately reuse base tip SHA (single-parent commit)
         # as an effective merge ref for test runs.
-        if remote_sha == ctx.base_sha_local and is_ancestor(ctx.head_sha_local, ctx.base_sha_local):
+        if fetched_sha == ctx.base_sha_local and is_ancestor(ctx.head_sha_local, ctx.base_sha_local):
             log(
                 "Existing merge ref points to base tip and PR head is already contained in base; "
-                f"treating as current: {remote_sha}"
+                f"treating as current: {fetched_sha}"
             )
-            return remote_sha, True
-        log(f"Existing merge ref is not a merge commit: {remote_sha}")
-        return remote_sha, False
+            return fetched_sha, True
+        log(f"Existing merge ref is not a merge commit: {fetched_sha}")
+        return fetched_sha, False
 
     is_current = parents[0] == ctx.base_sha_local and parents[1] == ctx.head_sha_local
     log(
-        f"Existing merge ref sha={remote_sha}, parent1={parents[0]}, parent2={parents[1]}, "
+        f"Existing merge ref sha={fetched_sha}, parent1={parents[0]}, parent2={parents[1]}, "
         f"is_current={is_current}"
     )
-    return remote_sha, is_current
+    return fetched_sha, is_current
 
 
 def build_merge_commit(
@@ -447,127 +452,124 @@ def main() -> int:
     base_sha_local = git("rev-parse", f"origin/{base_ref}").stdout.strip()
     log(f"Base sha current={base_sha_local}, pr_snapshot={base_sha_api}")
 
-    temp_remote: str | None = None
-    try:
-        if head_repo == repo:
-            log("Head repository matches base repository, fetching by head SHA from origin")
-            git_fetch_with_retry("origin", head_sha_api)
-            merge_input = head_sha_api
-            head_sha_local = head_sha_api
+    if head_repo == repo:
+        log("Head repository matches base repository, fetching by head SHA from origin")
+        git_fetch_with_retry("origin", head_sha_api)
+        merge_input = head_sha_api
+        head_sha_local = head_sha_api
+    else:
+        pr_head_ref = f"refs/pull/{args.pr_number}/head"
+        log(f"Head from fork {head_repo}, fetching {pr_head_ref} from origin")
+        git_fetch_with_retry("origin", pr_head_ref)
+        head_sha_local = git("rev-parse", "FETCH_HEAD").stdout.strip()
+        if head_sha_local != head_sha_api:
+            raise ScriptError(
+                "PR head changed while preparing merge ref: "
+                f"fetched {head_sha_local}, expected {head_sha_api}"
+            )
+        merge_input = head_sha_local
+    log(f"Head sha current={head_sha_local}, pr_snapshot={head_sha_api}")
+
+    ctx = MergeContext(
+        repo=repo,
+        pr_number=args.pr_number,
+        base_ref=base_ref,
+        base_repo=base_repo,
+        base_sha_api=base_sha_api,
+        base_sha_local=base_sha_local,
+        head_ref=head_ref,
+        head_repo=head_repo,
+        head_sha_api=head_sha_api,
+        head_sha_local=head_sha_local,
+        target_ref=target_ref,
+    )
+
+    existing_ref_sha, existing_is_current = inspect_existing_merge_ref(ctx)
+    merge_commit_update_required = not existing_is_current
+    log(f"merge_commit_update_required={merge_commit_update_required}")
+
+    merge_commit_sha: str | None = None
+    mergeable = False
+    mergeable_state = "unknown"
+    error_message: str | None = None
+
+    if existing_is_current and not args.no_reuse_if_unchanged:
+        merge_commit_sha = existing_ref_sha
+        mergeable = True
+        mergeable_state = "clean"
+        log(f"Reusing existing merge commit: {merge_commit_sha}")
+    else:
+        if not args.get_info:
+            merge_commit_sha, mergeable_state, error_message = build_merge_commit(
+                ctx=ctx,
+                merge_input=merge_input,
+                keep_branch=args.keep_branch,
+                origin_ref=origin_ref,
+            )
+            mergeable = merge_commit_sha is not None
+            log(
+                f"Create-merge result: mergeable={mergeable}, "
+                f"merge_state={mergeable_state}, merge_commit_sha={merge_commit_sha}"
+            )
         else:
-            temp_remote = f"prepare-merge-head-{args.pr_number}"
-            remote_url = f"https://github.com/{head_repo}.git"
-            log(f"Head from fork {head_repo}, using temporary remote {temp_remote}")
-            git("remote", "remove", temp_remote, check=False)
-            git("remote", "add", temp_remote, remote_url)
-            git_fetch_with_retry(temp_remote, head_ref)
-            head_sha_local = git("rev-parse", "FETCH_HEAD").stdout.strip()
-            merge_input = head_sha_local
-        log(f"Head sha current={head_sha_local}, pr_snapshot={head_sha_api}")
+            mergeable = False
+            mergeable_state = "unknown"
+            log("Info-only mode and existing merge ref is stale/missing")
 
-        ctx = MergeContext(
-            repo=repo,
-            pr_number=args.pr_number,
-            base_ref=base_ref,
-            base_repo=base_repo,
-            base_sha_api=base_sha_api,
-            base_sha_local=base_sha_local,
-            head_ref=head_ref,
-            head_repo=head_repo,
-            head_sha_api=head_sha_api,
-            head_sha_local=head_sha_local,
-            target_ref=target_ref,
-        )
+    if args.push and not args.get_info and mergeable and merge_commit_sha is not None:
+        log(f"Pushing merge ref to origin:{ctx.target_ref}")
+        git_push_with_retry("origin", f"{merge_commit_sha}:{ctx.target_ref}", "--force")
+    elif args.push and not args.get_info and mergeable and merge_commit_sha is None:
+        log("Push requested but merge_commit_sha is empty, skipping push")
+    elif args.get_info:
+        log("Info-only mode: push skipped")
+    else:
+        log("Only-local mode: push skipped")
 
-        existing_ref_sha, existing_is_current = inspect_existing_merge_ref(ctx)
-        merge_commit_update_required = not existing_is_current
-        log(f"merge_commit_update_required={merge_commit_update_required}")
+    payload: dict[str, Any] = {
+        "pr_number": args.pr_number,
+        "pr_url": f"https://github.com/{repo}/pull/{args.pr_number}",
+        "repository": repo,
+        "pr_base_ref": base_ref,
+        "pr_base_sha": base_sha_api,
+        "pr_head_ref": head_ref,
+        "pr_head_sha": head_sha_api,
+        "merge_base_sha": base_sha_local,
+        "merge_base_created_at": get_commit_created_at_utc(base_sha_local),
+        "merge_base_created_at_epoch": get_commit_created_at_epoch(base_sha_local),
+        "merge_head_sha": head_sha_local,
+        "merge_head_created_at": get_commit_created_at_utc(head_sha_local),
+        "merge_head_created_at_epoch": get_commit_created_at_epoch(head_sha_local),
+        "mergeable": mergeable,
+        "mergeable_state": mergeable_state,
+        "merge_commit_sha": merge_commit_sha,
+        "merge_commit_url": (
+            f"https://github.com/{repo}/commit/{merge_commit_sha}" if merge_commit_sha is not None else None
+        ),
+        "merge_commit_created_at": (
+            get_commit_created_at_utc(merge_commit_sha) if merge_commit_sha is not None else None
+        ),
+        "merge_commit_created_at_epoch": (
+            get_commit_created_at_epoch(merge_commit_sha) if merge_commit_sha is not None else None
+        ),
+        "merge_ref": ctx.target_ref,
+        "merge_ref_url": f"https://github.com/{repo}/tree/{ctx.target_ref}",
+        "merge_commit_update_required": merge_commit_update_required,
+        "error": error_message,
+    }
 
-        merge_commit_sha: str | None = None
-        mergeable = False
-        mergeable_state = "unknown"
-        error_message: str | None = None
-
-        if existing_is_current and not args.no_reuse_if_unchanged:
-            merge_commit_sha = existing_ref_sha
-            mergeable = True
-            mergeable_state = "clean"
-            log(f"Reusing existing merge commit: {merge_commit_sha}")
-        else:
-            if not args.get_info:
-                merge_commit_sha, mergeable_state, error_message = build_merge_commit(
-                    ctx=ctx,
-                    merge_input=merge_input,
-                    keep_branch=args.keep_branch,
-                    origin_ref=origin_ref,
-                )
-                mergeable = merge_commit_sha is not None
-                log(
-                    f"Create-merge result: mergeable={mergeable}, "
-                    f"merge_state={mergeable_state}, merge_commit_sha={merge_commit_sha}"
-                )
-            else:
-                mergeable = False
-                mergeable_state = "unknown"
-                log("Info-only mode and existing merge ref is stale/missing")
-
-        if args.push and not args.get_info and mergeable and merge_commit_sha is not None:
-            log(f"Pushing merge ref to origin:{ctx.target_ref}")
-            git_push_with_retry("origin", f"{merge_commit_sha}:{ctx.target_ref}", "--force")
-        elif args.push and not args.get_info and mergeable and merge_commit_sha is None:
-            log("Push requested but merge_commit_sha is empty, skipping push")
-        elif args.get_info:
-            log("Info-only mode: push skipped")
-        else:
-            log("Only-local mode: push skipped")
-
-        payload: dict[str, Any] = {
-            "pr_number": args.pr_number,
-            "pr_url": f"https://github.com/{repo}/pull/{args.pr_number}",
-            "repository": repo,
-            "pr_base_ref": base_ref,
-            "pr_base_sha": base_sha_api,
-            "pr_head_ref": head_ref,
-            "pr_head_sha": head_sha_api,
-            "merge_base_sha": base_sha_local,
-            "merge_base_created_at": get_commit_created_at_utc(base_sha_local),
-            "merge_base_created_at_epoch": get_commit_created_at_epoch(base_sha_local),
-            "merge_head_sha": head_sha_local,
-            "merge_head_created_at": get_commit_created_at_utc(head_sha_local),
-            "merge_head_created_at_epoch": get_commit_created_at_epoch(head_sha_local),
-            "mergeable": mergeable,
-            "mergeable_state": mergeable_state,
-            "merge_commit_sha": merge_commit_sha,
-            "merge_commit_url": (
-                f"https://github.com/{repo}/commit/{merge_commit_sha}" if merge_commit_sha is not None else None
-            ),
-            "merge_commit_created_at": (
-                get_commit_created_at_utc(merge_commit_sha) if merge_commit_sha is not None else None
-            ),
-            "merge_commit_created_at_epoch": (
-                get_commit_created_at_epoch(merge_commit_sha) if merge_commit_sha is not None else None
-            ),
-            "merge_ref": ctx.target_ref,
-            "merge_ref_url": f"https://github.com/{repo}/tree/{ctx.target_ref}",
-            "merge_commit_update_required": merge_commit_update_required,
-            "error": error_message,
-        }
-
-        write_json_output(args.json_out, payload)
-        log(
-            "Completed successfully: "
-            f"mergeable={payload['mergeable']}, merge_commit_sha={payload['merge_commit_sha']}, "
-            f"merge_commit_url={payload['merge_commit_url']} ,"
-            f"merge_ref_url={payload['merge_ref_url']}"
-        )
-        if args.get_info:
-            # "get-info" is successful if we could produce structured output,
-            # even when merge_commit_sha is null (for stale/missing ref cases).
-            return 0
-        return 0 if mergeable else 2
-    finally:
-        if temp_remote:
-            git("remote", "remove", temp_remote, check=False)
+    write_json_output(args.json_out, payload)
+    log(
+        "Completed successfully: "
+        f"mergeable={payload['mergeable']}, merge_commit_sha={payload['merge_commit_sha']}, "
+        f"merge_commit_url={payload['merge_commit_url']} ,"
+        f"merge_ref_url={payload['merge_ref_url']}"
+    )
+    if args.get_info:
+        # "get-info" is successful if we could produce structured output,
+        # even when merge_commit_sha is null (for stale/missing ref cases).
+        return 0
+    return 0 if mergeable else 2
 
 
 if __name__ == "__main__":

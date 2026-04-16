@@ -2025,6 +2025,8 @@ bool TPipeline::CheckInflightLimit() const {
         Self->ProposeQueue.Size() +
         Self->TxWaiting());
 
+    Self->CollectMaxTotalInFlight(totalInFly);
+
     if (totalInFly > Self->GetMaxTxInFly()) {
         return false; // let tx to be rejected
     }

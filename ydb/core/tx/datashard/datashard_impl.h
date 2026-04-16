@@ -47,6 +47,7 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/core/util/max_tracker.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -1616,6 +1617,8 @@ public:
         TabletCounters->Percentile()[counter].IncrementFor(latency.MilliSeconds());
     }
 
+    void CollectMaxTotalInFlight(size_t value);
+
     static NDataShard::ECumulativeCounters NotEnoughMemoryCounter(ui64 count) {
         if (count == 1)
             return COUNTER_TX_NOT_ENOUGH_MEMORY_1;
@@ -2612,6 +2615,7 @@ private:
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+    TMaxTracker MaxTotalInFlightTracker;
     TAlignedPagePoolCounters AllocCounters;
 
     TTxProgressIdempotentScalarQueue<TEvPrivate::TEvProgressTransaction> PlanQueue;

@@ -24,6 +24,7 @@ ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.CrossTables
+ydb/core/kqp/ut/tli KqpTli.InvisibleRowSkips
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitDataQuery
 ydb/core/kqp/ut/tli KqpTli.SnapshotThenReadWrite

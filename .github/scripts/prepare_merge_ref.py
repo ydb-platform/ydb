@@ -289,6 +289,35 @@ def inspect_existing_merge_ref(ctx: MergeContext) -> tuple[str | None, bool]:
     return fetched_sha, is_current
 
 
+def _short_git_sha(sha: str, length: int = 7) -> str:
+    if len(sha) <= length:
+        return sha
+    return sha[:length]
+
+
+def merge_commit_message_subject(ctx: MergeContext) -> str:
+    """Single-line subject: branches + SHAs (GitHub-style, more context than default merge)."""
+    head_s = _short_git_sha(ctx.head_sha_local)
+    base_s = _short_git_sha(ctx.base_sha_local)
+    if ctx.head_repo == ctx.repo:
+        return (
+            f"Merge PR #{ctx.pr_number}: '{ctx.head_ref}' ({head_s}) into "
+            f"'{ctx.base_ref}' ({base_s})"
+        )
+    return (
+        f"Merge PR #{ctx.pr_number}: {ctx.head_repo} '{ctx.head_ref}' ({head_s}) into "
+        f"'{ctx.base_ref}' ({base_s})"
+    )
+
+
+def merge_commit_message_body(ctx: MergeContext) -> str:
+    return (
+        f"CI merge ref for https://github.com/{ctx.repo}/pull/{ctx.pr_number}\n"
+        f"head {ctx.head_sha_local}\n"
+        f"base {ctx.base_sha_local}"
+    )
+
+
 def build_merge_commit(
     *,
     ctx: MergeContext,
@@ -300,6 +329,8 @@ def build_merge_commit(
     log(f"Creating local merge branch: {merge_branch} from origin/{ctx.base_ref}")
     git("checkout", "-B", merge_branch, f"origin/{ctx.base_ref}")
 
+    merge_subject = merge_commit_message_subject(ctx)
+    merge_body = merge_commit_message_body(ctx)
     merge_cmd = [
         "-c",
         "user.name=github-actions[bot]",
@@ -307,7 +338,10 @@ def build_merge_commit(
         "user.email=github-actions[bot]@users.noreply.github.com",
         "merge",
         "--no-ff",
-        "--no-edit",
+        "-m",
+        merge_subject,
+        "-m",
+        merge_body,
         merge_input,
     ]
     log(f"Running merge with input: {merge_input}")

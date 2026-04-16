@@ -1192,12 +1192,7 @@ NNodes::TExprBase DqPeepholeOptimizeBlockHashJoinInputs(const NNodes::TExprBase&
 }
 
 NNodes::TExprBase DqPeepholeDropUnusedBlockHashJoinColumns(const NNodes::TExprBase& node, TExprContext& ctx) {
-    if (!node.Maybe<TCoWideMap>()) {
-        return node;
-    }
-
-    const auto& input = node.Ref().Head();
-    if (!input.IsCallable("BlockHashJoinCore")) {
+    if (!node.Ref().IsCallable({"WideMap", "NarrowMap"})) {
         return node;
     }
 
@@ -1214,11 +1209,27 @@ NNodes::TExprBase DqPeepholeDropUnusedBlockHashJoinColumns(const NNodes::TExprBa
         return node;
     }
 
-    YQL_CLOG(DEBUG, ProviderDq) << node.Ref().Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+    const TExprNode* blockHashJoin = nullptr;
+    const auto& directInput = node.Ref().Head();
 
-    auto children = input.ChildrenList();
-    DropUnusedRenames(children[TDqBlockHashJoinCore::idx_LeftRenames], unused, ctx);
-    DropUnusedRenames(children[TDqBlockHashJoinCore::idx_RightRenames], unused, ctx);
+    if (directInput.IsCallable("BlockHashJoinCore")) {
+        blockHashJoin = &directInput;
+    } else if (directInput.IsCallable("ToFlow") &&
+               directInput.Head().IsCallable("WideFromBlocks") &&
+               directInput.Head().Head().IsCallable("BlockHashJoinCore")) {
+        blockHashJoin = &directInput.Head().Head();
+    }
+
+    if (!blockHashJoin) {
+        return node;
+    }
+
+    YQL_CLOG(DEBUG, ProviderDq) << node.Ref().Content() << " over BlockHashJoinCore with " << unused.size() << " unused fields.";
+
+    auto joinChildren = blockHashJoin->ChildrenList();
+    DropUnusedRenames(joinChildren[TDqBlockHashJoinCore::idx_LeftRenames], unused, ctx);
+    DropUnusedRenames(joinChildren[TDqBlockHashJoinCore::idx_RightRenames], unused, ctx);
+    auto newJoin = ctx.ChangeChildren(*blockHashJoin, std::move(joinChildren));
 
     auto lambdaCopy = ctx.DeepCopyLambda(lambda);
     auto newArgs = lambdaCopy->Head().ChildrenList();
@@ -1228,9 +1239,17 @@ NNodes::TExprBase DqPeepholeDropUnusedBlockHashJoinColumns(const NNodes::TExprBa
     auto newLambda = ctx.ChangeChild(*lambdaCopy, 0U,
         ctx.NewArguments(lambdaCopy->Head().Pos(), std::move(newArgs)));
 
+    TExprNode::TPtr newInput;
+    if (directInput.IsCallable("BlockHashJoinCore")) {
+        newInput = std::move(newJoin);
+    } else {
+        auto newWideFromBlocks = ctx.ChangeChild(directInput.Head(), 0U, std::move(newJoin));
+        newInput = ctx.ChangeChild(directInput, 0U, std::move(newWideFromBlocks));
+    }
+
     return TExprBase(ctx.Builder(node.Pos())
-        .Callable("WideMap")
-            .Add(0, ctx.ChangeChildren(input, std::move(children)))
+        .Callable(node.Ref().Content())
+            .Add(0, std::move(newInput))
             .Add(1, std::move(newLambda))
         .Seal().Build());
 }

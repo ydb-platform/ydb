@@ -105,6 +105,7 @@ public:
         AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, &TDqBlockHashJoinCore::Match, HNDL(OptimizeBlockHashJoinInputs));
         AddHandler(0, &TCoWideMap::Match, HNDL(DropUnusedBlockHashJoinColumns));
+        AddHandler(0, &TCoNarrowMap::Match, HNDL(DropUnusedBlockHashJoinColumns));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));

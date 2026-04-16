@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                         Bytes(R # 10e12)
                     ';
             )";
-	    TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"" + TString(UseBlockHashJoin ? "true" : "false") + "\";";
+            TString blocks = UseBlockHashJoin ? "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n" : "";
             TString select = R"(
                 SELECT L.*
                 FROM `left_table` AS L
@@ -965,7 +965,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
             TString select = R"(
-                SELECT L.name, R.value
+                SELECT L.name AS name, R.value AS value
                 FROM `left_wide` AS L
                 INNER JOIN `right_wide` AS R
                 ON L.id = R.id
@@ -1067,7 +1067,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
             TString select = R"(
-                SELECT L.col_a
+                SELECT L.col_a AS col_a
                 FROM `left_multi` AS L
                 LEFT JOIN `right_multi` AS R
                 ON L.id = R.id
@@ -1170,12 +1170,12 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
             TString select = R"(
-                SELECT C.name, SUM(O.amount) AS total
+                SELECT C.name AS name, SUM(O.amount) AS total
                 FROM `orders` AS O
                 INNER JOIN `customers` AS C
                 ON O.customer_id = C.customer_id
                 GROUP BY C.name
-                ORDER BY C.name;
+                ORDER BY name;
             )";
 
             TString joinQuery = TStringBuilder() << hints << blocks << select;
@@ -1276,7 +1276,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
             TString select = R"(
-                SELECT L.name
+                SELECT L.name AS name
                 FROM `left_extra` AS L
                 LEFT SEMI JOIN `right_extra` AS R
                 ON L.id = R.id

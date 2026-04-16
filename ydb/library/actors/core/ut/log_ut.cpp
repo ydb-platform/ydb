@@ -110,7 +110,7 @@ namespace {
         {}
 
         // Emulate log context
-        const NLog::TSettings* LoggerSettings() {
+        NLog::TSettings* LoggerSettings() {
             return Settings.Get();
         }
 
@@ -151,18 +151,30 @@ namespace {
         }
 
         void StartAccumulteMessages() {
+            Settings->Append(1000, 1002,
+            [](EComponent comp) ->TString {
+                static std::vector<TString> names{"A","B","C"};
+                return names[comp - 1000];
+            });
+
             auto acceptWrites = [&] (const TLogRecord& r) {
                 TReceivedMessage received;
                 received.Text = TString(r.Data, r.Len);
                 received.StructMessage = r.StructMessage;
                 ReceivedMessages.push_back(received);
 
-                Cerr << "Received: " << received.Text << " defined=" << r.StructMessage.Defined() << Endl;
+                Cerr << received.Text << Endl;
             };
             LogBackend->SetWriteImpl(acceptWrites);
 
             Wakeup();
             Runtime.AdvanceCurrentTime(TDuration::Days(1));
+        }
+
+        void FetchMessage(const TString& text, const TStructuredMessage& structMessage = {}) {
+            UNIT_ASSERT(!ReceivedMessages.empty());
+            ReceivedMessages[0].Check(text, structMessage);
+            ReceivedMessages.erase(begin(ReceivedMessages), begin(ReceivedMessages) + 1);
         }
 
         TIntrusivePtr<TDynamicCounters> Counters{MakeIntrusive<TDynamicCounters>()};
@@ -369,8 +381,134 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 3);
 
-        env.ReceivedMessages[0].Check("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message");
-        env.ReceivedMessages[1].Check("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
-        env.ReceivedMessages[2].Check("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
+    }
+
+    Y_UNIT_TEST(SimpleWrite) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulteMessages();
+
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:393: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:394: Test message with data", YDBLOG_CREATE_MESSAGE({"value", 1}));
+    }
+
+    Y_UNIT_TEST(SimpleWritePriority) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulteMessages();
+
+        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
+        YDBLOG_CTX_COMP_ALERT(env, 1, "Test message");
+        YDBLOG_CTX_COMP_CRIT(env, 1, "Test message");
+        YDBLOG_CTX_COMP_ERROR(env, 1, "Test message");
+        YDBLOG_CTX_COMP_WARN(env, 1, "Test message");
+        YDBLOG_CTX_COMP_NOTICE(env, 1, "Test message");
+        YDBLOG_CTX_COMP_INFO(env, 1, "Test message");
+        YDBLOG_CTX_COMP_DEBUG(env, 1, "Test message");
+        YDBLOG_CTX_COMP_TRACE(env, 1, "Test message");
+
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:403: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE ALERT: log_ut.cpp:404: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE CRIT: log_ut.cpp:405: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE ERROR: log_ut.cpp:406: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE WARN: log_ut.cpp:407: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE NOTICE: log_ut.cpp:408: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE INFO: log_ut.cpp:409: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:410: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE TRACE: log_ut.cpp:411: Test message");
+    }
+
+    Y_UNIT_TEST(SimpleWriteComponent) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulteMessages();
+
+        YDBLOG_CTX_COMP_EMERG(env, 1000, "Test message");
+        YDBLOG_CTX_COMP_EMERG(env, 1001, "Test message");
+        YDBLOG_CTX_COMP_EMERG(env, 1002, "Test message");
+
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :A EMERG: log_ut.cpp:428: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :B EMERG: log_ut.cpp:429: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:430: Test message");
+    }
+
+    Y_UNIT_TEST(SimpleWriteWithoutComponent) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulteMessages();
+
+#define YDBLOG_THIS_FILE_COMPONTENT 1000
+        YDBLOG_CTX_EMERG(env, "Test message");
+#undef YDBLOG_THIS_FILE_COMPONTENT
+
+#define YDBLOG_THIS_FILE_COMPONTENT 1001
+        YDBLOG_CTX_EMERG(env, "Test message");
+#undef YDBLOG_THIS_FILE_COMPONTENT
+
+#define YDBLOG_THIS_FILE_COMPONTENT 1002
+        YDBLOG_CTX_EMERG(env, "Test message");
+#undef YDBLOG_THIS_FILE_COMPONTENT
+
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :A EMERG: log_ut.cpp:442: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :B EMERG: log_ut.cpp:446: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:450: Test message");
+    }
+
+    Y_UNIT_TEST(SimpleWriteWithContext) {
+        using namespace NKikimr::NStructLog;
+
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulteMessages();
+
+        {
+            TLogStack::TLogGuard g;
+            YDBLOG_UPDATE_CONTEXT({"context", 1});
+            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:467: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 1}));
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:468: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 1}, {"value", 100}));
+        }
+
+        {
+            TLogStack::TLogGuard g;
+            YDBLOG_UPDATE_CONTEXT({"context", 2});
+            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:479: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 2}));
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:480: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 2}, {"value", 100}));
+
+            {
+                TLogStack::TLogGuard g2;
+                YDBLOG_UPDATE_CONTEXT({"context", 3}, {"subcontext", 4});
+                YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
+                YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+
+                env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:490: Test message",
+                    YDBLOG_CREATE_MESSAGE({"context", 3}, {"subcontext", 4}));
+                env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:491: Test message",
+                    YDBLOG_CREATE_MESSAGE({"context", 3}, {"subcontext", 4}, {"value", 100}));
+            }
+
+            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
+            YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:499: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 2}));
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:500: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 2}, {"value", 100}));
+        }
+
+        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
+        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:508: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:509: Test message", YDBLOG_CREATE_MESSAGE({"value", 100}));
     }
 }

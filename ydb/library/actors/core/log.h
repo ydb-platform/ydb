@@ -20,6 +20,7 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
 
+#include <ydb/core/util/struct_log/log_stack.h>
 #include <ydb/core/util/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>
 #include <ydb/library/services/services.pb.h>
@@ -46,6 +47,69 @@
 #define IS_INFO_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_INFO, component)
 #define IS_DEBUG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, component)
 #define IS_TRACE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, component)
+
+#define YDBLOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
+    do { \
+        auto& ctx = (CTX); \
+        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ctx, priority, component, 0ull)) { \
+            TStructuredMessage message = NKikimr::NStructLog::TLogStack::GetTop(); \
+            YDBLOG_UPDATE_MESSAGE(message, __VA_ARGS__); \
+            MemStructLogAdapter(ctx, priority, component, __FILE_NAME__, __LINE__, T, std::move(message) ); \
+        } \
+    } while (false)
+
+#define YDBLOG_CTX_COMP_EMERG(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_EMERG, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_ALERT(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_ALERT, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_CRIT(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_CRIT, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_ERROR(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_ERROR, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_WARN(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_WARN, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_NOTICE(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_NOTICE, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_INFO(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_INFO, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_DEBUG(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDBLOG_CTX_COMP_TRACE(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_TRACE, COMP, T, __VA_ARGS__)
+
+#define YDBLOG_CTX(CTX, PRIO, T, ...) YDBLOG_CTX_COMP(CTX, PRIO, YDBLOG_THIS_FILE_COMPONTENT, __VA_ARGS__)
+#define YDBLOG_CTX_EMERG(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_EMERG, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_ALERT(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_ALERT, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_CRIT(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_CRIT, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_ERROR(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_ERROR, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_WARN(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_WARN, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_NOTICE(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_NOTICE, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_INFO(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_INFO, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_DEBUG(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_DEBUG, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_TRACE(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_TRACE, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+
+#define YDBLOG_COMP(PRIO, COMP, T, ...) \
+    do { \
+        if (TActivationContext *ctxp = TlsActivationContext) { \
+            YDBLOG_CTX_COMP(*ctxp, PRIO, COMP, T, ...); \
+        } \
+    } while (false)
+
+#define YDBLOG_COMP_EMERG(COMP, T, ...) YDBLOG_COMP(PRI_EMERG, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_ALERT(COMP, T, ...) YDBLOG_COMP(PRI_ALERT, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_CRIT(COMP, T, ...) YDBLOG_COMP(PRI_CRIT, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_ERROR(COMP, T, ...) YDBLOG_COMP(PRI_ERROR, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_WARN(COMP, T, ...) YDBLOG_COMP(PRI_WARN, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_NOTICE(COMP, T, ...) YDBLOG_COMP(PRI_NOTICE, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_INFO(COMP, T, ...) YDBLOG_COMP(PRI_INFO, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_DEBUG(COMP, T, ...) YDBLOG_COMP(PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDBLOG_COMP_TRACE(COMP, T, ...) YDBLOG_COMP(PRI_TRACE, COMP, T, __VA_ARGS__)
+
+#define YDBLOG(PRIO, T, ...) YDBLOG_COMP(PRIO, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_EMERG(T, ...) YDBLOG(PRI_EMERG, T, __VA_ARGS__)
+#define YDBLOG_ALERT(T, ...) YDBLOG(PRI_ALERT, T, __VA_ARGS__)
+#define YDBLOG_CRIT(T, ...) YDBLOG(PRI_CRIT, T, __VA_ARGS__)
+#define YDBLOG_ERROR(T, ...) YDBLOG(PRI_ERROR, T, __VA_ARGS__)
+#define YDBLOG_WARN(T, ...) YDBLOG(PRI_WARN, T, __VA_ARGS__)
+#define YDBLOG_NOTICE(T, ...) YDBLOG(PRI_NOTICE, T, __VA_ARGS__)
+#define YDBLOG_INFO(T, ...) YDBLOG(PRI_INFO, T, __VA_ARGS__)
+#define YDBLOG_DEBUG(T, ...) YDBLOG(PRI_DEBUG, T, __VA_ARGS__)
+#define YDBLOG_TRACE(T, ...) YDBLOG(PRI_TRACE, T, __VA_ARGS__)
+
+// new logging tools finished here ....
 
 #define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
     do {                                                                                                                       \

@@ -25,7 +25,8 @@ TString TContext::GetState(const TString& key) const {
     TInstant expirationTime = TInstant::Now() + STATE_LIFE_TIME;
     TStringBuilder json;
     json << "{\"state\":\"" << State
-         << "\",\"expiration_time\":\"" << ToString(expirationTime.TimeT()) << "\"}";
+         << "\",\"expiration_time\":\"" << ToString(expirationTime.TimeT()) << "\""
+         << ",\"requested_address\":\"" << RequestedAddress << "\"}";
     TString digest = HmacSHA1(key, json);
     TStringBuilder signedState;
     signedState << "{\"container\":\"" << Base64Encode(json) << "\","
@@ -61,17 +62,21 @@ TString TContext::GenerateCookie(const TString& key) const {
 }
 
 bool TContext::DetectAjaxRequest(const NHttp::THttpIncomingRequestPtr& request) {
-    static const THashMap<TStringBuf, TStringBuf> expectedHeaders {
-        {"Accept", "application/json"}
-    };
     NHttp::THeaders headers(request->Headers);
-    for (const auto& el : expectedHeaders) {
-        TStringBuf headerValue = headers.Get(el.first);
-        if (!headerValue || headerValue.find(el.second) == TStringBuf::npos) {
-            return false;
-        }
+
+    TStringBuf accept = headers.Get("Accept");
+    if (accept && accept.find("application/json") != TStringBuf::npos) {
+        return true;
     }
-    return true;
+
+    // Fetch/XHR requests may arrive without an explicit JSON Accept header,
+    // but browsers still mark them as a non-navigation request.
+    TStringBuf secFetchDest = headers.Get("Sec-Fetch-Dest");
+    if (secFetchDest == "empty") {
+        return true;
+    }
+
+    return false;
 }
 
 TStringBuf TContext::GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isAjaxRequest) {

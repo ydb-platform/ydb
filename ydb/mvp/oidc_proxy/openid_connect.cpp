@@ -38,8 +38,9 @@ bool TRestoreOidcContextResult::IsSuccess() const {
     return Status.IsSuccess;
 }
 
-TCheckStateResult::TCheckStateResult(bool success, const TString& errorMessage)
+TCheckStateResult::TCheckStateResult(bool success, const TString& errorMessage, const TContext& context)
     : Success(success)
+    , Context(context)
     , ErrorMessage(errorMessage)
 {}
 
@@ -202,6 +203,7 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
     TString signedState = Base64DecodeUneven(state);
     TString stateContainer;
     TString expectedDigest;
+    TString requestedAddress;
     NJson::TJsonValue jsonValue;
     NJson::TJsonReaderConfig jsonConfig;
     if (NJson::ReadJsonTree(signedState, &jsonConfig, &jsonValue)) {
@@ -239,8 +241,13 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
         } else {
             return TCheckStateResult(false, errorMessage << "Expiration time not found in json");
         }
+
+        const NJson::TJsonValue* jsonRequestedAddress = nullptr;
+        if (jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress)) {
+            requestedAddress = jsonRequestedAddress->GetStringRobust();
+        }
     }
-    return TCheckStateResult();
+    return TCheckStateResult(true, "", TContext({.RequestedAddress = requestedAddress}));
 }
 
 TString DecodeToken(const TStringBuf& cookie) {

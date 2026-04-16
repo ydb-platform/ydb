@@ -152,6 +152,21 @@ def get_with_session_cookie(env, path, session_cookie, **kwargs):
     )
 
 
+def get_with_session_cookie_headers(env, path, session_cookie, headers=None, **kwargs):
+    request_headers = {
+        "Host": "oidcproxy.net",
+        "Cookie": session_cookie,
+    }
+    if headers:
+        request_headers.update(headers)
+    return env.get(
+        path,
+        allow_redirects=False,
+        headers=request_headers,
+        **kwargs,
+    )
+
+
 def get_with_bearer(env, path, token=TEST_IAM_TOKEN, **kwargs):
     return env.get(
         path,

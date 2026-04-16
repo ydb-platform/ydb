@@ -31,10 +31,19 @@ void THandlerSessionCreate::Bootstrap() {
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
     TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret);
-    Context = restoreContextResult.Context;
 
     if (checkStateResult.IsSuccess()) {
         if (restoreContextResult.IsSuccess()) {
+            Context = restoreContextResult.Context;
+            if (code.empty()) {
+                BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
+                RetryRequestToProtectedResourceAndDie();
+            } else {
+                RequestSessionToken(code);
+            }
+        } else if (!checkStateResult.Context.GetRequestedAddress().empty()) {
+            BLOG_D("Restore oidc context from state");
+            Context = checkStateResult.Context;
             if (code.empty()) {
                 BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
                 RetryRequestToProtectedResourceAndDie();
@@ -45,6 +54,7 @@ void THandlerSessionCreate::Bootstrap() {
             const auto& restoreSessionStatus = restoreContextResult.Status;
             BLOG_D(restoreSessionStatus.ErrorMessage);
             if (restoreSessionStatus.IsErrorRetryable) {
+                Context = restoreContextResult.Context;
                 RetryRequestToProtectedResourceAndDie();
             } else {
                 SendUnknownErrorResponseAndDie();
@@ -53,6 +63,7 @@ void THandlerSessionCreate::Bootstrap() {
     } else {
         BLOG_D(checkStateResult.ErrorMessage);
         if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
+            Context = restoreContextResult.Context;
             RetryRequestToProtectedResourceAndDie();
         } else {
             SendUnknownErrorResponseAndDie();

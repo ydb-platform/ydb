@@ -6,6 +6,7 @@ from oidc_proxy_testlib import (
     assert_whoami_response,
     get_with_bearer,
     get_with_session_cookie,
+    get_with_session_cookie_headers,
     impersonated_cookie_name,
     post_json_with_bearer,
     protected_host,
@@ -86,3 +87,32 @@ def test_cleanup_clears_session_cookie(oidc_proxy_full_flow_env):
     cleanup_response = get_with_session_cookie(env, "/auth/cleanup", session_cookie)
 
     assert_cookie_is_cleared(cleanup_response, expected_status, expected_cookie_marker)
+
+
+def test_expired_session_cookie_fetch_request_returns_json_401(oidc_proxy_full_flow_env):
+    env = oidc_proxy_full_flow_env
+    host = protected_host(env)
+    protected_path = f"/{host}/viewer/json/whoami"
+    referer_path = f"/{host}/tablets/app?TabletID=1&page=LandingData&nodes=1&moves=1"
+    session_cookie = session_cookie_header()
+    env.auth_service.exchange_errors_by_subject_token["session_token_value"] = 401
+
+    response = get_with_session_cookie_headers(
+        env,
+        protected_path,
+        session_cookie,
+        headers={
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": f"https://oidcproxy.net{referer_path}",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+        },
+    )
+
+    assert response.status_code == 401, response.text
+    response_json = response.json()
+    assert response_json["error"] == "Authorization Required", response_json
+    assert "authUrl" in response_json, response_json
+    assert "Location" not in response.headers, response.headers
+    assert len(env.auth_service.exchange_requests) == 1, env.auth_service.exchange_requests

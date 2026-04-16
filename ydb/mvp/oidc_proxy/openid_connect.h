@@ -47,9 +47,10 @@ struct TRestoreOidcContextResult {
 
 struct TCheckStateResult {
     bool Success = true;
+    TContext Context;
     TString ErrorMessage;
 
-    TCheckStateResult(bool success = true, const TString& errorMessage = "");
+    TCheckStateResult(bool success = true, const TString& errorMessage = "", const TContext& context = TContext());
 
     bool IsSuccess() const;
 };

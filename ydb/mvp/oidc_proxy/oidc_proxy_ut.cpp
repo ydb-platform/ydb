@@ -534,6 +534,18 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
     };
 
+    class TFetchRedirectStrategy : public TAjaxRedirectStrategy {
+    public:
+        TString CreateRequest(const TString& request) override {
+            TString newRequest = request;
+            newRequest += "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n";
+            newRequest += "Sec-Fetch-Dest: empty\r\n";
+            newRequest += "Sec-Fetch-Mode: cors\r\n";
+            newRequest += "Sec-Fetch-Site: same-origin\r\n\r\n";
+            return newRequest;
+        }
+    };
+
     void OidcFullAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
         TPortManager tp;
         TMvpTestRuntime runtime;
@@ -642,6 +654,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     Y_UNIT_TEST(OpenIdConnectFullAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
+        OidcFullAuthorizationFlow(redirectStrategy);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectFullAuthorizationFlowFetchWithoutJsonAccept) {
+        TFetchRedirectStrategy redirectStrategy;
         OidcFullAuthorizationFlow(redirectStrategy);
     }
 
@@ -808,6 +825,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAccessTokenInvalidAjax) {
         TAjaxRedirectStrategy redirectStrategy;
+        SessionServiceCreateAccessTokenInvalid(redirectStrategy);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAccessTokenInvalidFetchWithoutJsonAccept) {
+        TFetchRedirectStrategy redirectStrategy;
         SessionServiceCreateAccessTokenInvalid(redirectStrategy);
     }
 

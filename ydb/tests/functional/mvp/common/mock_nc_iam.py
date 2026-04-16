@@ -20,6 +20,7 @@ class MockNcIamServer(ThreadingHTTPServer):
         self.token_requests = []
         self.exchange_requests = []
         self.impersonation_requests = []
+        self.exchange_errors_by_subject_token = {}
 
 
 class MockNcIamHandler(BaseTestHandler):
@@ -39,6 +40,16 @@ class MockNcIamHandler(BaseTestHandler):
                 "headers": dict(self.headers.items()),
                 "body": parsed,
             })
+            subject_token = parsed.get("subject_token", [""])[0]
+            error_status = self.server.exchange_errors_by_subject_token.get(subject_token)
+            if error_status is not None:
+                payload = b'{"error":"bad_token"}'
+                self.send_response(error_status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
             payload = b'{"access_token":"protected_page_iam_token","token_type":"bearer","expires_in":3600}'
         elif self.path == "/oauth2/impersonation/impersonate":
             self.server.impersonation_requests.append({
@@ -80,6 +91,10 @@ class MockNcIamService:
     @property
     def impersonation_requests(self):
         return self._server.impersonation_requests
+
+    @property
+    def exchange_errors_by_subject_token(self):
+        return self._server.exchange_errors_by_subject_token
 
     def start(self):
         self._thread.start()

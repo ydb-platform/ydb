@@ -12,6 +12,7 @@
 #include "util_deref.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -28,8 +29,6 @@
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
 #include <util/system/hp_timer.h>
-
-#include <limits>
 
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
@@ -57,78 +56,76 @@ EScanStatus ToScanStatus(EStatus status) {
     return EScanStatus::InProgress;
 }
 
-void WriteJson(TStringBuf in, NJsonWriter::TBuf& out) {
+void WriteJson(TStringBuf in, NJson::TJsonWriter& out) {
     NJson::TJsonValue value;
     Y_ENSURE(NJson::ReadJsonTree(in, &value));
-    out.WriteJsonValue(&value);
+    out.Write(&value);
 }
 
 void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
-                       const TCell& columnData, NJsonWriter::TBuf& writer)
+                       const TCell& columnData, NJson::TJsonWriter& writer)
 {
     if (columnData.IsNull()) {
-        writer.WriteKey(columnName).WriteNull();
+        writer.WriteNull(columnName);
         return;
     }
 
     switch (columnType) {
     case NScheme::NTypeIds::Int32:
-        writer.WriteKey(columnName).WriteInt(columnData.AsValue<i32>());
+        writer.Write(columnName, columnData.AsValue<i32>());
         break;
     case NScheme::NTypeIds::Uint32:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui32>());
+        writer.Write(columnName, columnData.AsValue<ui32>());
         break;
     case NScheme::NTypeIds::Int64:
-        writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
+        writer.Write(columnName, columnData.AsValue<i64>());
         break;
     case NScheme::NTypeIds::Uint64:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui64>());
+        writer.Write(columnName, columnData.AsValue<ui64>());
         break;
     case NScheme::NTypeIds::Uint8:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui8>());
+        writer.Write(columnName, columnData.AsValue<ui8>());
         break;
     case NScheme::NTypeIds::Int8:
-        writer.WriteKey(columnName).WriteInt(columnData.AsValue<i8>());
+        writer.Write(columnName, columnData.AsValue<i8>());
         break;
     case NScheme::NTypeIds::Int16:
-        writer.WriteKey(columnName).WriteInt(columnData.AsValue<i16>());
+        writer.Write(columnName, columnData.AsValue<i16>());
         break;
     case NScheme::NTypeIds::Uint16:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui16>());
+        writer.Write(columnName, columnData.AsValue<ui16>());
         break;
     case NScheme::NTypeIds::Bool:
-        writer.WriteKey(columnName).WriteBool(columnData.AsValue<bool>());
+        writer.Write(columnName, columnData.AsValue<bool>());
         break;
     case NScheme::NTypeIds::Double:
-        writer.WriteKey(columnName).WriteDouble(columnData.AsValue<double>(),
-            EFloatToStringMode::PREC_NDIGITS, std::numeric_limits<double>::max_digits10);
+        writer.Write(columnName, columnData.AsValue<double>());
         break;
     case NScheme::NTypeIds::Float:
-        writer.WriteKey(columnName).WriteFloat(columnData.AsValue<float>(),
-            EFloatToStringMode::PREC_NDIGITS, std::numeric_limits<float>::max_digits10);
+        writer.Write(columnName, columnData.AsValue<float>());
         break;
     case NScheme::NTypeIds::Date:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui16>());
+        writer.Write(columnName, columnData.AsValue<ui16>());
         break;
     case NScheme::NTypeIds::Datetime:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui32>());
+        writer.Write(columnName, columnData.AsValue<ui32>());
         break;
     case NScheme::NTypeIds::Timestamp:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui64>());
+        writer.Write(columnName, columnData.AsValue<ui64>());
         break;
     case NScheme::NTypeIds::Interval:
-        writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
+        writer.Write(columnName, columnData.AsValue<i64>());
         break;
     case NScheme::NTypeIds::Date32:
-        writer.WriteKey(columnName).WriteInt(columnData.AsValue<i32>());
+        writer.Write(columnName, columnData.AsValue<i32>());
         break;
     case NScheme::NTypeIds::Datetime64:
     case NScheme::NTypeIds::Timestamp64:
     case NScheme::NTypeIds::Interval64:
-        writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
+        writer.Write(columnName, columnData.AsValue<i64>());
         break;
     case NScheme::NTypeIds::Utf8:
-        writer.WriteKey(columnName).WriteString(columnData.AsBuf());
+        writer.Write(columnName, columnData.AsBuf());
         break;
     case NScheme::NTypeIds::Json:
         writer.WriteKey(columnName);
@@ -140,16 +137,16 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         break;
     case NScheme::NTypeIds::PairUi64Ui64: {
         auto pair = columnData.AsValue<std::pair<ui64, ui64>>();
-        writer.WriteKey(columnName)
-            .BeginList()
-            .WriteULongLong(pair.first)
-            .WriteULongLong(pair.second)
-            .EndList();
+        writer.WriteKey(columnName);
+        writer.OpenArray();
+        writer.Write(pair.first);
+        writer.Write(pair.second);
+        writer.CloseArray();
         break;
     }
     case NScheme::NTypeIds::String:
     default:
-        writer.WriteKey(columnName).WriteString(Base64Encode(columnData.AsBuf()));
+        writer.Write(columnName, Base64Encode(columnData.AsBuf()));
         break;
     }
 }
@@ -198,6 +195,12 @@ std::optional<TGenStep> ParseBackupGenStep(const TString& name) {
 
 ui64 NewBackupChangelogMinBytes() {
     return AppData()->SystemTabletBackupConfig.GetNewBackupChangelogMinBytes();
+}
+
+NJson::TJsonWriterConfig BackupJsonConfig() {
+    auto cfg = NFormats::DefaultJsonConfig();
+    cfg.SetUnbuffered(true); // buffer is managed by the caller
+    return cfg;
 }
 
 } // anonymous namespace
@@ -543,9 +546,8 @@ public:
     EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
         TBufferOutput out(Buffer);
 
-        NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
-        b.SetWriteNanAsString(true);
-        b.BeginObject();
+        NJson::TJsonWriter writer(&out, BackupJsonConfig());
+        writer.OpenMap();
 
         for (const auto& info : Scheme->Cols) {
             const auto& column = Columns.at(info.Tag);
@@ -556,7 +558,7 @@ public:
             const auto& cell = row.Get(info.Pos);
 
             try {
-                WriteColumnToJson(column.Name, column.PType.GetTypeId(), cell, b);
+                WriteColumnToJson(column.Name, column.PType.GetTypeId(), cell, writer);
             } catch (const std::exception& e) {
                 TString value;
                 DbgPrintValue(value, cell, column.PType);
@@ -568,7 +570,7 @@ public:
             }
         }
 
-        b.EndObject();
+        writer.CloseMap();
         out << '\n';
 
         if (Buffer.Size() >= 1_MB) {
@@ -630,7 +632,7 @@ public:
     using TKeys = TArrayRef<const TRawTypeValue>;
     using TOps = TArrayRef<const TUpdateOp>;
 
-    TChangelogSerializer(NJsonWriter::TBuf& writer, const TScheme& schema,
+    TChangelogSerializer(NJson::TJsonWriter& writer, const TScheme& schema,
                          TIntrusiveConstPtr<TBackupExclusion> exclusion,
                          const std::function<void()>& beginCommit)
         : Writer(writer)
@@ -658,7 +660,7 @@ public:
         if (!HasChanges) {
             HasChanges = true;
             Writer.WriteKey("data_changes");
-            Writer.BeginList();
+            Writer.OpenArray();
         }
     }
 
@@ -683,11 +685,10 @@ public:
 
         BeginCommit();
         BeginChanges();
-        Writer.BeginObject();
+        Writer.OpenMap();
 
         const auto& table = Schema.Tables.at(tid);
-        Writer.WriteKey("table");
-        Writer.WriteString(table.Name);
+        Writer.Write("table", table.Name);
 
         Writer.WriteKey("op");
         switch (rop) {
@@ -695,13 +696,13 @@ public:
                 Y_TABLET_ERROR("Row op is absent");
                 break;
             case ERowOp::Upsert:
-                Writer.WriteString("upsert");
+                Writer.Write("upsert");
                 break;
             case ERowOp::Erase:
-                Writer.WriteString("erase");
+                Writer.Write("erase");
                 break;
             case ERowOp::Reset:
-                Writer.WriteString("replace");
+                Writer.Write("replace");
                 break;
         }
 
@@ -732,7 +733,7 @@ public:
             }
         }
 
-        Writer.EndObject();
+        Writer.CloseMap();
     }
 
     void DoUpdateTx(ui32, ERowOp, TKeys, TOps, ui64)
@@ -763,12 +764,12 @@ public:
     void Finalize()
     {
         if (HasChanges) {
-            Writer.EndList();
+            Writer.CloseArray();
         }
     }
 
 private:
-    NJsonWriter::TBuf& Writer;
+    NJson::TJsonWriter& Writer;
     const TScheme& Schema;
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
 
@@ -843,8 +844,7 @@ public:
     void Handle(TEvWriteChangelog::TPtr& ev) {
         size_t changesStart = Buffer.Size();
         TBufferOutput out(Buffer);
-        NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
-        b.SetWriteNanAsString(true);
+        NJson::TJsonWriter writer(&out, BackupJsonConfig());
 
         const auto* msg = ev->Get();
         const ui64 msgSize = msg->GetTotalSize();
@@ -892,9 +892,8 @@ public:
         auto beginCommit = [&](){
             if (!hasCommit) {
                 hasCommit = true;
-                b.BeginObject();
-                b.WriteKey("step");
-                b.WriteULongLong(msg->Step);
+                writer.OpenMap();
+                writer.Write("step", msg->Step);
             }
         };
 
@@ -910,8 +909,8 @@ public:
             TSchemeModifier modifier(Schema);
             modifier.Apply(changes);
 
-            b.WriteKey("schema_changes");
-            b.BeginList();
+            writer.WriteKey("schema_changes");
+            writer.OpenArray();
 
             for (const auto& rec : changes.GetDelta()) {
                 NJson::TJsonValue value;
@@ -920,15 +919,15 @@ public:
                     .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
                     .MapAsObject = true,
                 });
-                b.WriteJsonValue(&value);
+                writer.Write(value);
             }
-            b.EndList();
+            writer.CloseArray();
         }
 
         if (dataUpdate) {
             try {
                 dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
-                TChangelogSerializer serializer(b, Schema, Exclusion, beginCommit);
+                TChangelogSerializer serializer(writer, Schema, Exclusion, beginCommit);
                 NRedo::TPlayer<TChangelogSerializer> redoPlayer(serializer);
                 redoPlayer.Replay(dataUpdate);
                 serializer.Finalize();
@@ -938,14 +937,12 @@ public:
         }
 
         if (hasCommit) {
-            b.WriteKey("prev_sha256");
-            b.WriteString(Checksum.Intermediate());
-            b.EndObject();
+            writer.Write("prev_sha256", Checksum.Intermediate());
+            writer.CloseMap();
             out << '\n';
 
             size_t changesSize = Buffer.Size() - changesStart;
             Checksum.Update(Buffer.data() + changesStart, changesSize);
-
             if (!BufferCreatedAt) {
                 BufferCreatedAt = msg->CreatedAt;
             }

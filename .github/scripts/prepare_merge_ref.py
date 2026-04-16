@@ -232,6 +232,17 @@ def get_commit_parents(commit_sha: str) -> list[str]:
     return parents
 
 
+def is_ancestor(ancestor_sha: str, descendant_sha: str) -> bool:
+    check = git("merge-base", "--is-ancestor", ancestor_sha, descendant_sha, check=False)
+    if check.returncode == 0:
+        return True
+    if check.returncode == 1:
+        return False
+    raise ScriptError(
+        f"git merge-base --is-ancestor failed for {ancestor_sha} -> {descendant_sha} (exit={check.returncode})"
+    )
+
+
 def get_commit_created_at_utc(commit_sha: str) -> str:
     raw_iso = git("show", "-s", "--format=%cI", commit_sha).stdout.strip()
     dt = datetime.fromisoformat(raw_iso)
@@ -253,6 +264,15 @@ def inspect_existing_merge_ref(ctx: MergeContext) -> tuple[str | None, bool]:
     git_fetch_with_retry("origin", ctx.target_ref)
     parents = get_commit_parents(remote_sha)
     if len(parents) != 2:
+        # Special case: PR head is already fully contained in base.
+        # In this state we can legitimately reuse base tip SHA (single-parent commit)
+        # as an effective merge ref for test runs.
+        if remote_sha == ctx.base_sha_local and is_ancestor(ctx.head_sha_local, ctx.base_sha_local):
+            log(
+                "Existing merge ref points to base tip and PR head is already contained in base; "
+                f"treating as current: {remote_sha}"
+            )
+            return remote_sha, True
         log(f"Existing merge ref is not a merge commit: {remote_sha}")
         return remote_sha, False
 
@@ -300,10 +320,24 @@ def build_merge_commit(
             merge_process.stdout.strip() or merge_process.stderr.strip() or "merge failed",
         )
 
+    merge_output = f"{merge_process.stdout}\n{merge_process.stderr}".strip().lower()
     merge_sha = git("rev-parse", "HEAD").stdout.strip()
     log(f"Created merge commit: {merge_sha}")
     parents = get_commit_parents(merge_sha)
     if len(parents) != 2:
+        if (
+            merge_sha == ctx.base_sha_local
+            and ("already up to date" in merge_output or is_ancestor(ctx.head_sha_local, ctx.base_sha_local))
+        ):
+            log(
+                "Merge reported 'Already up to date': PR head is already contained in base tip. "
+                f"Using base tip SHA as effective merge commit: {merge_sha}"
+            )
+            if not keep_branch:
+                git("checkout", origin_ref)
+                git("branch", "-D", merge_branch)
+            log(f"Merge branch cleanup completed, back on: {origin_ref}")
+            return merge_sha, "clean", None
         raise ScriptError(f"created commit is not a merge commit: {merge_sha}")
     if parents[0] != ctx.base_sha_local:
         raise ScriptError(

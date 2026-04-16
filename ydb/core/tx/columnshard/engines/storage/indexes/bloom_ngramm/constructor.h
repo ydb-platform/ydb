@@ -1,4 +1,7 @@
 #pragma once
+
+#include <optional>
+
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
@@ -19,6 +22,10 @@ private:
     ui32 NGrammSize = NDefaults::NGrammSize;
     double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
     bool CaseSensitive = NDefaults::CaseSensitive;
+    bool UseDeprecatedSizing = false;
+    std::optional<ui32> DeprecatedHashesCount;
+    std::optional<ui32> DeprecatedFilterSizeBytes;
+    std::optional<ui32> DeprecatedRecordsCount;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 
 protected:

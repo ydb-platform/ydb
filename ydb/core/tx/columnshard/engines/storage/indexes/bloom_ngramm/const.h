@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 #include <ydb/library/conclusion/status.h>
 
@@ -53,6 +54,20 @@ public:
             std::ceil((-hashesCount * recordsCount) / std::log(1.0 - std::pow(probability, 1.0 / hashesCount)));
         return std::clamp<ui32>(
             static_cast<ui32>(std::ceil(bitsCount / 8.0)), MinFilterSizeBytes, MaxFilterSizeBytes);
+    }
+
+    /// Implicit FPP from deprecated sizing (hashes_count / filter_size_bytes / records_count), same formula as JSON FEATURES path.
+    static double FalsePositiveProbabilityFromDeprecatedSizing(
+        const std::optional<ui32> hashesCount,
+        const std::optional<ui32> filterSizeBytes,
+        const std::optional<ui32> recordsCount) {
+        constexpr ui32 DefaultHashes = 2;
+        constexpr double kDefaultFppForFilterDefault = 0.1;
+        const double k = static_cast<double>(hashesCount.value_or(DefaultHashes));
+        const double m = static_cast<double>(filterSizeBytes.value_or(CalcDeprecatedFilterSizeBytes(kDefaultFppForFilterDefault)) * 8);
+        const double n = static_cast<double>(recordsCount.value_or(DeprecatedRecordsCount));
+        const double oneMinus = 1.0 - std::exp(-(k * n) / m);
+        return std::pow(std::clamp(oneMinus, 0.0, 1.0), k);
     }
 
     static TString GetHashesCountIntervalString();

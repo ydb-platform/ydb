@@ -1429,7 +1429,14 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
 
         auto partitionStreamIt = PartitionStreams.find(response.partition_session_id());
         if (partitionStreamIt == PartitionStreams.end()) {
+            // Same race as in OnReadDoneImpl(ReadResponse): the subsession may deliver data after
+            // StopPartitionSession removed the partition stream. We still must release the read budget
+            // and clear WaitingReadResponse, otherwise ContinueReadingDataImpl never runs again.
             LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got DirectReadResponse for unknown partition session id: " << response.partition_session_id() << ".");
+            ReadSizeBudget += response.bytes_size();
+            ReadSizeServerDelta -= response.bytes_size();
+            WaitingReadResponse = false;
+            ContinueReadingDataImpl();
             return;
         }
 

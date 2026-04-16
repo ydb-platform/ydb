@@ -200,7 +200,9 @@ void TDirectReadSessionManager::Close() {
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
     auto nodeId = partitionSession.Location.GetNodeId();
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSession.PartitionSessionId << " nodeId=" << nodeId);
+    const TPartitionSessionId partitionSessionId = partitionSession.PartitionSessionId;
+    const TPartitionLocation location = partitionSession.Location;
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSessionId << " nodeId=" << nodeId);
     TDirectReadSessionContextPtr& session = NodeSessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
@@ -209,7 +211,7 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
         s->Start();
         s->AddPartitionSession(std::move(partitionSession));
     }
-    Locations.emplace(partitionSession.PartitionSessionId, partitionSession.Location);
+    Locations.emplace(partitionSessionId, location);
 }
 
 // Delete partition session from the node (TDirectReadSession), and if there are no more

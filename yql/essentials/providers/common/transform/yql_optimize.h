@@ -38,10 +38,6 @@ protected:
     void AddHandler(size_t step, TFilter filter, TStringBuf optName, THandler handler);
     void SetGlobal(size_t step);
 
-    /// Adjust OptimizeExpr settings for derived transformers (e.g. KQP physical opts need VisitStarted/VisitChanges).
-    virtual void AmendOptimizeExprSettings(TOptimizeExprSettings& /*settings*/) const {
-    }
-
     template <class TDerived>
     THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&, const TGetParents&)) {
         return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& parents) {

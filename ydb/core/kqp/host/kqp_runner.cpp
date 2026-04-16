@@ -171,7 +171,7 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, 
+        , Pctx(TKqpProviderContext(*OptimizeCtx,
             Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()),
             Config->UseBlockHashJoin.Get().GetOrElse(false)))
         , ActorSystem(actorSystem)
@@ -230,6 +230,24 @@ public:
 
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
+        if (IsOlapQuery(dataQueryBlocks)) {
+            if (TransformCtx->Config->DisableBlockExecution.Get().GetOrElse(false)) {
+                TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
+            } else {
+                switch (TransformCtx->Config->GetBlockChannelsMode()) {
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+                        break;
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
+                        break;
+                    default:
+                        YQL_ENSURE(false);
+                }
+            }
+        }
+
         return PrepareQueryInternal(cluster, dataQueryBlocks, ctx, settings);
     }
 
@@ -257,28 +275,6 @@ private:
         const IKikimrQueryExecutor::TExecuteSettings& settings)
     {
         CreateGraphTransformer(&TypesCtx, SessionCtx, FunctionRegistry);
-
-        {
-            auto* queryCtx = TransformCtx->QueryCtx.Get();
-            const bool disableBlocks = TransformCtx->Config->DisableBlockExecution.Get().GetOrElse(false);
-            if (disableBlocks) {
-                if (queryCtx->Type == EKikimrQueryType::Scan || IsOlapQuery(dataQueryBlocks)) {
-                    TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
-                }
-            } else if (IsOlapQuery(dataQueryBlocks)) {
-                switch (TransformCtx->Config->GetBlockChannelsMode()) {
-                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
-                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
-                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
-                        break;
-                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
-                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
-                        break;
-                    default:
-                        YQL_ENSURE(false);
-                }
-            }
-        }
 
         YQL_ENSURE(cluster == Cluster);
         YQL_ENSURE(!settings.CommitTx);
@@ -402,9 +398,8 @@ private:
                 "HashFuncPropagate"
             )
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
+            .Add(CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(OptimizeCtx), "PushOlapDistinct")
             .Build(false);
-
-        auto pushOlapDistinctBlock = NOpt::CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(OptimizeCtx);
 
         auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
@@ -435,7 +430,6 @@ private:
                 LogStage("PhysicalBuildTxs"),
                 TTransformStage{ physicalBuildQueryTransformer, "PhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildQuery"),
-                TTransformStage{pushOlapDistinctBlock, "KqpPushOlapDistinctBlock", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ CreateSaveExplainTransformerInput(*TransformCtx), "SaveExplainTransformerInput", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ physicalPeepholeTransformer, "PhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalPeephole"),

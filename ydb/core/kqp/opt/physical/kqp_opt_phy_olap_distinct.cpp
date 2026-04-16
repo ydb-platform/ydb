@@ -5,7 +5,10 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/hash_set.h>
@@ -65,75 +68,6 @@ std::optional<ui64> TryFindOuterLiteralTakeLimit(const TExprNode* start, const T
     }
 
     return std::nullopt;
-}
-
-bool TryGetSingleKeyColumnName(const TCoAggregateCombine& aggCombine, TString& outKey) {
-    if (aggCombine.Keys().Size() != 1) {
-        return false;
-    }
-    const auto key = aggCombine.Keys().Item(0);
-    if (!key.Maybe<TCoAtom>()) {
-        return false;
-    }
-    outKey = TString(key.Cast<TCoAtom>().StringValue());
-    return !outKey.empty();
-}
-
-bool ColumnNameEqualsKey(const TCoAggregateTuple& tuple, const TString& key) {
-    const auto col = tuple.ColumnName();
-    if (col.Maybe<TCoAtom>()) {
-        return col.Cast<TCoAtom>().StringValue() == key;
-    }
-    return false;
-}
-
-bool TraitIsSomeOnMember(const TCoAggregateTuple& tuple, const TString& key) {
-    if (!tuple.Trait().Maybe<TCoAggApply>()) {
-        return false;
-    }
-    const auto apply = tuple.Trait().Cast<TCoAggApply>();
-    if (apply.Name().StringValue() != "some") {
-        return false;
-    }
-    const auto extractor = apply.Extractor();
-    if (!extractor.Body().Maybe<TCoMember>()) {
-        return false;
-    }
-    const auto member = extractor.Body().Cast<TCoMember>();
-    return member.Name().StringValue() == key;
-}
-
-bool IsSimpleSingleColumnDistinctOverBareOlapRead(const TCoAggregateCombine& aggCombine, TString& outKey) {
-    if (!aggCombine.Input().Maybe<TKqpReadOlapTableRanges>()) {
-        return false;
-    }
-
-    TString keyColumn;
-    if (!TryGetSingleKeyColumnName(aggCombine, keyColumn)) {
-        return false;
-    }
-
-    if (aggCombine.Handlers().Size() != 1) {
-        return false;
-    }
-
-    const auto tuple = aggCombine.Handlers().Item(0).Cast<TCoAggregateTuple>();
-    if (tuple.DistinctName()) {
-        if (TString(tuple.DistinctName().Cast().Value()) != keyColumn) {
-            return false;
-        }
-    }
-
-    if (!ColumnNameEqualsKey(tuple, keyColumn)) {
-        return false;
-    }
-
-    if (!TraitIsSomeOnMember(tuple, keyColumn)) {
-        return false;
-    }
-
-    outKey = std::move(keyColumn);
-    return true;
 }
 
 bool ProcessBodyHasOlapDistinctOrAgg(const TCoLambda& process) {
@@ -279,12 +213,114 @@ bool IsIdentityProcessLambda(const TCoLambda& lam) {
     return lam.Body().Cast<TCoArgument>().Name() == arg0.Cast<TCoArgument>().Name();
 }
 
+void CollectKqpOlapSsaColumnNames(const TExprBase& root, THashSet<TString>& out) {
+    VisitExpr(root.Ptr(), [&](const TExprNode::TPtr& n) {
+        const TExprBase expr(n.Get());
+        if (expr.Maybe<TKqpOlapApplyColumnArg>()) {
+            out.insert(TString(expr.Cast<TKqpOlapApplyColumnArg>().ColumnName().StringValue()));
+        } else if (expr.Maybe<TKqpOlapFilterExists>()) {
+            out.insert(TString(expr.Cast<TKqpOlapFilterExists>().Column().StringValue()));
+        }
+        return true;
+    });
+}
+
+bool InputChainEndsWithRowArg(TExprBase cur, const TCoArgument& rowArg) {
+    if (cur.Raw() == rowArg.Raw()) {
+        return true;
+    }
+    if (cur.Maybe<TKqpOlapFilter>()) {
+        return InputChainEndsWithRowArg(cur.Cast<TKqpOlapFilter>().Input(), rowArg);
+    }
+    return false;
+}
+
+bool OlapFilterPredicatesUseOnlyFirstPkColumn(TStringBuf firstPkCol, const TCoLambda& process) {
+    THashSet<TString> cols;
+    CollectKqpOlapSsaColumnNames(TExprBase(process.Body().Ptr()), cols);
+    if (cols.empty()) {
+        return false;
+    }
+    for (const auto& c : cols) {
+        if (c != firstPkCol) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ReadColumnsListContains(const TKqpBlockReadOlapTableRanges& read, TStringBuf col) {
+    for (ui32 i = 0; i < read.Columns().Size(); ++i) {
+        if (read.Columns().Item(i).Maybe<TCoAtom>()) {
+            if (read.Columns().Item(i).Cast<TCoAtom>().StringValue() == col) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ProcessAllowsDistinctPushWithOptionalFirstPkFilter(
+    const TCoLambda& process,
+    TStringBuf firstPkCol,
+    const TKqpBlockReadOlapTableRanges& read,
+    const TString& distinctCol)
+{
+    if (!ReadColumnsListContains(read, distinctCol)) {
+        return false;
+    }
+    if (IsIdentityProcessLambda(process)) {
+        return true;
+    }
+    if (process.Args().Size() != 1 || !process.Args().Arg(0).Maybe<TCoArgument>()) {
+        return false;
+    }
+    const auto rowArg = process.Args().Arg(0).Cast<TCoArgument>();
+    if (!process.Body().Maybe<TKqpOlapFilter>()) {
+        return false;
+    }
+    const auto topFilter = process.Body().Cast<TKqpOlapFilter>();
+    if (!InputChainEndsWithRowArg(topFilter.Input(), rowArg)) {
+        return false;
+    }
+    if (!OlapFilterPredicatesUseOnlyFirstPkColumn(firstPkCol, process)) {
+        return false;
+    }
+    if (!ReadColumnsListContains(read, TString{firstPkCol})) {
+        return false;
+    }
+    return true;
+}
+
+TMaybe<TString> DistinctColFromKeyExtractor(const TCoLambda& keyExtractor) {
+    if (keyExtractor.Args().Size() != 1 || !keyExtractor.Body().Maybe<TCoMember>()) {
+        return Nothing();
+    }
+    const auto member = keyExtractor.Body().Cast<TCoMember>();
+    if (member.Struct().Raw() != keyExtractor.Args().Arg(0).Raw()) {
+        return Nothing();
+    }
+    return TString(member.Name().StringValue());
+}
+
+TMaybe<TString> TryGetDistinctColumnFromCombineKey(const TExprBase& combineNode) {
+    if (combineNode.Maybe<TDqPhyHashCombine>()) {
+        return DistinctColFromKeyExtractor(combineNode.Cast<TDqPhyHashCombine>().KeyExtractor());
+    }
+    if (combineNode.Maybe<TCoCombineCore>()) {
+        return DistinctColFromKeyExtractor(combineNode.Cast<TCoCombineCore>().KeyExtractor());
+    }
+    return Nothing();
+}
+
 std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
     TExprBase combineInput,
     const TExprNode* combineForParents,
     TExprContext& ctx,
     const TParentsMap* parentsMap,
-    TPositionHandle pos)
+    TPositionHandle pos,
+    const TKqpOptimizeContext& kqpCtx,
+    const TExprBase& combineNode)
 {
     const auto blockReads = FindNodes(combineInput.Ptr(), [](const TExprNode::TPtr& n) {
         return TKqpBlockReadOlapTableRanges::Match(n.Get());
@@ -297,19 +333,21 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
         return std::nullopt;
     }
 
-    if (read.Columns().Size() != 1) {
+    const auto maybeDistinctCol = TryGetDistinctColumnFromCombineKey(combineNode);
+    if (!maybeDistinctCol) {
         return std::nullopt;
     }
-    const auto keyAtom = read.Columns().Item(0).Maybe<TCoAtom>();
-    if (!keyAtom) {
-        return std::nullopt;
-    }
-    const TString keyColumn = TString(keyAtom.Cast().StringValue());
-    if (keyColumn.empty()) {
-        return std::nullopt;
-    }
+    const TString& keyColumn = *maybeDistinctCol;
 
-    if (!IsIdentityProcessLambda(read.Process())) {
+    const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    if (tableData.Metadata->KeyColumnNames.empty()) {
+        return std::nullopt;
+    }
+    const TStringBuf firstPkCol = tableData.Metadata->KeyColumnNames[0];
+
+    if (!ProcessAllowsDistinctPushWithOptionalFirstPkFilter(
+            read.Process(), firstPkCol, read, keyColumn))
+    {
         return std::nullopt;
     }
 
@@ -380,7 +418,7 @@ TExprBase KqpPushOlapDistinct(TExprBase node, TExprContext& ctx, const TKqpOptim
     if (node.Maybe<TDqPhyHashCombine>()) {
         const auto combine = node.Cast<TDqPhyHashCombine>();
         if (const auto newInput = TryReplaceBlockOlapReadInputWithDistinct(
-                combine.Input(), combine.Raw(), ctx, parentsMap, node.Pos()))
+                combine.Input(), combine.Raw(), ctx, parentsMap, node.Pos(), kqpCtx, node))
         {
             return Build<TDqPhyHashCombine>(ctx, node.Pos())
                 .Input(*newInput)
@@ -397,7 +435,7 @@ TExprBase KqpPushOlapDistinct(TExprBase node, TExprContext& ctx, const TKqpOptim
     if (node.Maybe<TCoCombineCore>()) {
         const auto combine = node.Cast<TCoCombineCore>();
         if (const auto newInput = TryReplaceBlockOlapReadInputWithDistinct(
-                combine.Input(), combine.Raw(), ctx, parentsMap, node.Pos()))
+                combine.Input(), combine.Raw(), ctx, parentsMap, node.Pos(), kqpCtx, node))
         {
             return Build<TCoCombineCore>(ctx, node.Pos())
                 .Input(*newInput)
@@ -411,64 +449,55 @@ TExprBase KqpPushOlapDistinct(TExprBase node, TExprContext& ctx, const TKqpOptim
         return node;
     }
 
-    if (!node.Maybe<TCoAggregateCombine>()) {
-        return node;
+    return node;
+}
+
+namespace {
+
+class TKqpPushOlapDistinctPhysicalQueryTransformer : public TSyncTransformerBase {
+public:
+    explicit TKqpPushOlapDistinctPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+        : KqpCtx(kqpCtx)
+    {
     }
 
-    const auto aggCombine = node.Cast<TCoAggregateCombine>();
-
-    TString keyColumn;
-    if (!IsSimpleSingleColumnDistinctOverBareOlapRead(aggCombine, keyColumn)) {
-        return node;
-    }
-
-    const auto read = aggCombine.Input().Cast<TKqpReadOlapTableRanges>();
-
-    if (NYql::HasSetting(read.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
-        return node;
-    }
-
-    if (ProcessBodyHasOlapDistinctOrAgg(read.Process())) {
-        return node;
-    }
-
-    auto olapDistinct = Build<TKqpOlapDistinct>(ctx, node.Pos())
-        .Input(read.Process().Args().Arg(0))
-        .Key().Build(keyColumn)
-        .Done();
-
-    auto olapDistinctLambda = Build<TCoLambda>(ctx, node.Pos())
-        .Args({"olap_dist_row"})
-        .Body<TExprApplier>()
-            .Apply(olapDistinct)
-            .With(read.Process().Args().Arg(0), "olap_dist_row")
-            .Build()
-        .Done();
-
-    const auto newProcessLambda = ctx.FuseLambdas(olapDistinctLambda.Ref(), read.Process().Ref());
-
-    auto settings = TKqpReadTableSettings::Parse(read);
-    if (const auto maybeLimit = TryFindOuterLiteralTakeLimit(aggCombine.Raw(), parentsMap)) {
-        if (!settings.ItemsLimit) {
-            const auto limitNode = Build<TCoUint64>(ctx, node.Pos())
-                .Literal<TCoAtom>()
-                .Value(ToString(*maybeLimit))
-                .Build()
-                .Done();
-            settings.SetItemsLimit(limitNode.Ptr());
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+        output = input;
+        for (;;) {
+            TParentsMap parentsMap;
+            GatherParents(*output, parentsMap);
+            const auto combines = FindNodes(output, [](const TExprNode::TPtr& n) {
+                return TDqPhyHashCombine::Match(n.Get()) || TCoCombineCore::Match(n.Get());
+            });
+            bool changed = false;
+            for (const auto& combine : combines) {
+                const TExprBase pushed = KqpPushOlapDistinct(TExprBase(combine), ctx, *KqpCtx, &parentsMap);
+                if (pushed.Ptr() != combine) {
+                    output = ctx.ReplaceNode(std::move(output), *combine.Get(), pushed.Ptr());
+                    changed = true;
+                    break;
+                }
+            }
+            if (!changed) {
+                break;
+            }
         }
+        return TStatus::Ok;
     }
 
-    const auto newSettings = settings.BuildNode(ctx, read.Pos());
+    void Rewind() final {
+    }
 
-    return Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
-        .Table(read.Table())
-        .Ranges(read.Ranges())
-        .Columns(read.Columns())
-        .Settings(newSettings)
-        .ExplainPrompt(read.ExplainPrompt())
-        .Process(newProcessLambda)
-        .Done();
+private:
+    TIntrusivePtr<TKqpOptimizeContext> KqpCtx;
+};
+
+} // namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+{
+    return new TKqpPushOlapDistinctPhysicalQueryTransformer(kqpCtx);
 }
 
 } // namespace NKikimr::NKqp::NOpt

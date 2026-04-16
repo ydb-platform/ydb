@@ -8,8 +8,40 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+
+void AssertAstItemsLimitBoundToLetUint64(const TString& ast, ui64 limit) {
+    // ItemsLimit is passed as a reference to a let-bound literal, e.g.
+    // (let $2 (Uint64 '10)) ... (KqpBlockReadOlapTableRanges ... '('('"ItemsLimit" $2)) ...)
+    constexpr TStringBuf itemsLimitKey = "\"ItemsLimit\"";
+    const size_t keyPos = TStringBuf(ast).find(itemsLimitKey);
+    UNIT_ASSERT_C(keyPos != TString::npos, ast);
+
+    size_t p = keyPos + itemsLimitKey.size();
+    while (p < ast.size() && (ast[p] == ' ' || ast[p] == '\t' || ast[p] == '\n')) {
+        ++p;
+    }
+    UNIT_ASSERT_C(p < ast.size() && ast[p] == '$', ast);
+    ++p;
+    UNIT_ASSERT_C(p < ast.size() && ast[p] >= '0' && ast[p] <= '9', ast);
+
+    TString var;
+    var.push_back('$');
+    while (p < ast.size() && ast[p] >= '0' && ast[p] <= '9') {
+        var.push_back(ast[p]);
+        ++p;
+    }
+
+    const TString letBinding = TStringBuilder() << "(let " << var << " (Uint64 '" << limit << "))";
+    UNIT_ASSERT_C(
+        ast.find(letBinding) != TString::npos,
+        TStringBuilder() << "Expected " << letBinding << " for ItemsLimit -> " << var);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
-    Y_UNIT_TEST(SimpleDistinctWithLimit_PushesDistinctAndReadLimit) {
+    Y_UNIT_TEST(SimpleDistinctWithLimit_PushesDistinctAndItemsLimit) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
@@ -31,14 +63,50 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+        AssertAstItemsLimitBoundToLetUint64(ast, 10);
 
         NJson::TJsonValue planJson;
         UNIT_ASSERT_C(NJson::ReadJsonTree(*planRes.PlanJson, &planJson, true), "Failed to parse plan json");
 
-        UNIT_ASSERT_C(FindPlanNodeByKv(planJson, "ReadLimit", "10").IsDefined(), planRes.PlanJson.GetOrElse(""));
+        const TString planStr = planRes.PlanJson.GetOrElse("");
+        UNIT_ASSERT_C(FindPlanNodeByKv(planJson, "ReadLimit", "10").IsDefined(), planStr);
 
         const auto distinctNodes = FindPlanNodes(planJson, "Distinct");
         UNIT_ASSERT_C(!distinctNodes.empty(), planRes.PlanJson.GetOrElse(""));
+    }
+
+    Y_UNIT_TEST(SimpleDistinctWithoutLimit_PushesDistinctNoItemsLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable`
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(*planRes.PlanJson, &planJson, true), "Failed to parse plan json");
+
+        const TString planStr = planRes.PlanJson.GetOrElse("");
+        UNIT_ASSERT_C(FindPlanNodes(planJson, "ReadLimit").empty(), planStr);
+
+        const auto distinctNodes = FindPlanNodes(planJson, "Distinct");
+        UNIT_ASSERT_C(!distinctNodes.empty(), planStr);
     }
 
     Y_UNIT_TEST(TwoColumnDistinct_DoesNotPush) {
@@ -87,6 +155,85 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
+
+    // PK is (timestamp, uid): filter only on the first key column — allowed for pushdown.
+    Y_UNIT_TEST(FilterOnFirstPkOnly_CompositeKey_PushesDistinct) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable`
+            WHERE `timestamp` >= DateTime::FromSeconds(100) AND `timestamp` < DateTime::FromSeconds(200)
+            LIMIT 100
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+    }
+
+    // PK is (timestamp, uid): predicate only on the second key column — no pushdown.
+    Y_UNIT_TEST(FilterOnSecondPkOnly_CompositeKey_DoesNotPush) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable`
+            WHERE `uid` = "x" LIMIT 10
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
+
+    Y_UNIT_TEST(FilterOnOnlyPkColumn_SingleColumnPk_PushesDistinct) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperSinglePkShard(kikimr).CreateTestOlapTableSinglePkColumn();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true";
+
+            SELECT DISTINCT `payload` FROM `/Root/olapStoreOnePk/onePkOlap`
+            WHERE `timestamp` >= DateTime::FromSeconds(1) AND `timestamp` < DateTime::FromSeconds(10)
+            LIMIT 50
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
     }
 };
 

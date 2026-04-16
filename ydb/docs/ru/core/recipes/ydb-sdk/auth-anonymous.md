@@ -150,6 +150,8 @@
   await using var connection = await dataSource.OpenConnectionAsync();
   ```
 
+  Для Entity Framework и linq2db используйте тот же connectionString.
+
 - Rust
 
   ```rust

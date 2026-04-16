@@ -194,6 +194,8 @@
   await using var dataSource = new YdbDataSource(builder);
   await using var connection = await dataSource.OpenConnectionAsync();
   ```
+  
+  Для Entity Framework и linq2db не поддерживается.
 
 - Rust
 

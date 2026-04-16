@@ -5,7 +5,7 @@
 {% if oss %}
 - [C++](../example-cpp.md)
 {% endif %}
-- [С# (.NET)](../example-dotnet.md)
+- [С#](../example-dotnet.md)
 - [Go](../go/index.md)
 - [Java](../java/index.md)
 - [JavaScript](../example-js.md)

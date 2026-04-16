@@ -161,6 +161,8 @@
   * `MinPoolSize` — минимальное число сессий, удерживаемых в пуле (по умолчанию 0)
   * `SessionIdleTimeout` — время простоя сессии в секундах до её закрытия (по умолчанию 300)
 
+  Для Entity Framework и linq2db используйте тот же connectionString.
+
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

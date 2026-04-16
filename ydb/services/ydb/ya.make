@@ -38,8 +38,20 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    ut_common
+)
+
 RECURSE_FOR_TESTS(
     backup_ut
     table_split_ut
     ut
+    ut_database_quotas
+    ut_grpc_connstr
+    ut_grpc_low
+    ut_grpc_sdk
+    ut_grpc_ydb
+    ut_locality
+    ut_table_profile
+    ut_yql_types
 )

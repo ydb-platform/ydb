@@ -46,6 +46,9 @@
 /ydb/tests/functional/scheme_shard @ydb-platform/system-infra
 /ydb/tests/functional/tenants @ydb-platform/system-infra
 /ydb/services/ydb/table_split_ut @ydb-platform/system-infra
+/ydb/services/ydb/ut_grpc_ydb @ydb-platform/system-infra
+/ydb/services/ydb/ut_table_profile @ydb-platform/system-infra
+/ydb/services/ydb/ut_locality @ydb-platform/system-infra
 
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
@@ -69,12 +72,17 @@
 /ydb/tests/functional/postgresql @ydb-platform/qp
 /ydb/tests/functional/kqp @ydb-platform/qp
 /ydb/tests/functional/query_cache @ydb-platform/qp
+/ydb/services/ydb/ut_yql_types @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
 /ydb/tests/functional/ydb_cli @ydb-platform/appteam
 /ydb/public/lib/ydb_cli @ydb-platform/appteam
 /ydb/apps/ydb @ydb-platform/appteam
+/ydb/services/ydb/ut @ydb-platform/appteam
+/ydb/services/ydb/ut_grpc_low @ydb-platform/appteam
+/ydb/services/ydb/ut_grpc_sdk @ydb-platform/appteam
+/ydb/services/ydb/ut_grpc_connstr @ydb-platform/appteam
 
 #YDB Postgres Compatibility @rekby TEAM:@ydb-platform/postgres-compatibility
 /ydb/tests/postgres_integrations @ydb-platform/postgres-compatibility
@@ -110,6 +118,7 @@
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
+/ydb/services/ydb/ut_database_quotas @ydb-platform/core
 /ydb/tests/functional/backup_collection @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/tests/functional/serverless @ydb-platform/core

@@ -265,9 +265,7 @@ void TTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleDescribe);
         hFunc(TEvPersQueue::TEvResponse, HandlePQResponse);
         cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-
-        default:
-            TBase::StateWork(ev);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, TBase::Handle);
     }
 }
 

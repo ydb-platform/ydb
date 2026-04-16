@@ -72,7 +72,7 @@ public:
             PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
             event.Confirm();
         } else {
-            UnconfirmedDestroys.emplace(partitionStreamId, std::move(event));
+            UnconfirmedDestroys.emplace(partitionStreamId, event);
         }
     }
 

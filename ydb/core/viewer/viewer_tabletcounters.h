@@ -77,6 +77,15 @@ public:
             if (PipeClients.empty()) {
                 ReplyAndDie(ctx);
             }
+        } else {
+            ctx.Send(
+                Event->Sender,
+                new NMon::TEvHttpInfoRes(
+                    Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'path' or 'tablet_id' is required"),
+                    0,
+                    NMon::IEvHttpInfoRes::EContentType::Custom));
+            Die(ctx);
+            return;
         }
     }
 

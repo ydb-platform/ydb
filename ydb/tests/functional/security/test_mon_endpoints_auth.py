@@ -280,7 +280,7 @@ def _test_endpoints(cluster, expected_results, method='GET', json_body=None):
             _test_endpoint(endpoint_url, endpoint_path, token, expected_status, method=method, json_body=json_body)
 
 
-def _test_endpoints_with_payloads(cluster, endpoint_cases, method='POST'):
+def _test_endpoints_with_payloads(cluster, endpoint_cases, method):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
     base_url = f'https://{host}:{mon_port}'
@@ -455,22 +455,21 @@ def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
 
 
 DATABASE_ENDPOINTS_LIST = [
+    '/viewer/bscontrollerinfo?database=%2FRoot',
+    '/viewer/cluster?database=%2FRoot',
+    '/viewer/compute?database=%2FRoot',
+    '/viewer/config?database=%2FRoot',
+    '/viewer/counters?database=%2FRoot',
+    '/viewer/hiveinfo?database=%2FRoot',
+    '/viewer/hivestats?database=%2FRoot',
+    '/viewer/labeledcounters?database=%2FRoot',
+    '/viewer/netinfo?database=%2FRoot',
     '/viewer/plan2svg',
-    # Endpoints below expose excessive information.
-    '/viewer/bscontrollerinfo',
-    '/viewer/cluster',
-    '/viewer/compute',
-    '/viewer/config',
-    '/viewer/counters',
-    '/viewer/hiveinfo',
-    '/viewer/hivestats',
-    '/viewer/labeledcounters',
-    '/viewer/netinfo',
-    '/viewer/pqconsumerinfo',
-    '/viewer/storage',
-    '/viewer/storage_usage',
-    '/viewer/tenants',
-    '/viewer/topicinfo',
+    '/viewer/pqconsumerinfo?database=%2FRoot',
+    '/viewer/storage?database=%2FRoot',
+    '/viewer/storage_usage?database=%2FRoot',
+    '/viewer/tenants?database=%2FRoot',
+    '/viewer/topicinfo?database=%2FRoot',
 ]
 
 
@@ -490,36 +489,33 @@ def test_database_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforc
 
 
 DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
+    '/operation/cancel',
+    '/operation/forget',
     '/operation/get',
     '/operation/list',
+    '/operation/list?database=%2FRoot',
+    '/query/script/execute',
     '/query/script/fetch',
-    '/viewer/browse',
+    '/scheme/directory',
+    '/viewer/browse?database=%2FRoot',
+    '/viewer/commit_offset',
+    '/viewer/content',
     '/viewer/describe_consumer',
     '/viewer/describe_replication',
     '/viewer/describe_topic',
     '/viewer/describe_transfer',
-    '/viewer/graph',
-    '/viewer/metainfo',
-    '/viewer/topic_data',
-    '/operation/list?database=%2FRoot',
-    '/operation/forget',
-    '/viewer/commit_offset',
-    '/operation/cancel',
-    '/query/script/execute',
-    '/scheme/directory',
-    '/viewer/put_record',
+    '/viewer/graph?database=%2FRoot',
+    '/viewer/metainfo?database=%2FRoot',
+    '/viewer/tabletcounters',
 ]
 
 DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_POST_METHOD_LIST = [
-    '/operation/forget',
-    '/viewer/commit_offset',
     '/operation/cancel',
+    '/operation/forget',
     '/query/script/execute',
-    '/viewer/put_record',
-]
-
-DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_GET_AND_POST_METHOD_LIST = [
     '/scheme/directory',
+    '/viewer/commit_offset',
+    '/viewer/put_record',
 ]
 
 
@@ -538,10 +534,7 @@ def test_database_endpoints_requiring_parameters_or_request_context_with_enforce
     expected_results_get = {
         endpoint_path: expected_statuses_for_invalid_request
         for endpoint_path in DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
-        if (
-            endpoint_path not in DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_POST_METHOD_LIST
-            or endpoint_path in DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_GET_AND_POST_METHOD_LIST
-        )
+        if endpoint_path not in DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_POST_METHOD_LIST
     }
     _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results_get)
 
@@ -576,30 +569,3 @@ def test_database_endpoints_requiring_parameters_or_request_context_with_enforce
         },
     }
     _test_endpoints_with_payloads(ydb_cluster_with_enforce_user_token, expected_results_post, method='POST')
-
-
-@pytest.mark.xfail(reason='Empty request handling is unstable for this endpoint in the current environment')
-def test_database_endpoints_with_unstable_empty_request_handling_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token,
-):
-    _test_endpoints(
-        ydb_cluster_with_enforce_user_token,
-        {
-            '/viewer/content': {
-                None: 401,
-                'user@builtin': 403,
-                'database@builtin': 504,
-                'viewer@builtin': 504,
-                'monitoring@builtin': 504,
-                'root@builtin': 504,
-            },
-            '/viewer/tabletcounters': {
-                None: 401,
-                'user@builtin': 403,
-                'database@builtin': None,
-                'viewer@builtin': None,
-                'monitoring@builtin': None,
-                'root@builtin': None,
-            },
-        },
-    )

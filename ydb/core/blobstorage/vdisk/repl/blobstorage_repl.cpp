@@ -229,7 +229,7 @@ namespace NKikimr {
                     NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::ReplJob, 0), "ReplicationDonor",
                     ReplCtx->VDiskCfg->ReplInterconnectChannel, vdiskActorId.NodeId() == SelfId().NodeId(),
                     TDuration::Minutes(1), flowRecord, NMonitoring::TCountableBase::EVisibility::Private));
-                
+
                 const TActorId fastReadQueueActorId = Register(CreateVDiskBackpressureClient(info, vdiskId,
                     NKikimrBlobStorage::EVDiskQueueId::GetFastRead, ReplCtx->MonGroup.GetGroup(), ReplCtx->VCtx,
                     NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::ReplJob, 0), "OnlineReadDonor",
@@ -290,6 +290,7 @@ namespace NKikimr {
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
             ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
+            ReplCtx->MonGroup.ReplIsHoldingToken() = false;
             Y_VERIFY_S(NextMinHugeBlobInBytes, ReplCtx->VCtx->VDiskLogPrefix);
             ReplCtx->MinHugeBlobInBytes = NextMinHugeBlobInBytes;
             UnrecoveredNonphantomBlobs = false;
@@ -336,6 +337,7 @@ namespace NKikimr {
             Y_VERIFY_S(RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
             RequestedReplicationToken = false;
             HoldingReplicationToken = true;
+            ReplCtx->MonGroup.ReplIsHoldingToken() = true;
 
             // switch to replication state
             Transition(AwaitToken, Replication);
@@ -479,6 +481,7 @@ namespace NKikimr {
                     Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken);
                     Y_DEBUG_ABORT_UNLESS(HoldingReplicationToken);
                     HoldingReplicationToken = false;
+                    ReplCtx->MonGroup.ReplIsHoldingToken() = false;
                 }
                 ResetReplProgressTimer(true);
 
@@ -502,6 +505,7 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
                     ReplCtx->MonGroup.ReplItemsRemaining() = 0;
                     ReplCtx->MonGroup.ReplItemsDone() = 0;
+                    ReplCtx->MonGroup.ReplIsHoldingToken() = false;
                     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
                         SelfId(), nullptr, 0));
                 }
@@ -519,7 +523,7 @@ namespace NKikimr {
             LastReplQuantumStart = TAppData::TimeProvider->Now();
             Y_VERIFY_S(!ReplJobActorId, ReplCtx->VCtx->VDiskLogPrefix);
 
-            // Iterate through the donor queue, moving "NotReady" donors to the end  
+            // Iterate through the donor queue, moving "NotReady" donors to the end
             // until a ready donor or an empty optional (indicating the use of the group's other disks instead of a donor) is found.
             auto donorIt = DonorQueue.begin();
             while (donorIt != DonorQueue.end() && (*donorIt && (*donorIt)->NotReady)) {

@@ -5,7 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
-
+#include <library/cpp/json/writer/json.h>
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 bool TSourceData::DoStartFetchingAccessor(
@@ -214,7 +214,12 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                 if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
                     const auto json = indexMeta->SerializeDataToJson(i, Schema->GetIndexInfo());
                     if (json.Has("data")) {
-                        data = json["data"].GetStringRobust();
+                        NJsonWriter::TBuf buf;
+                        buf.BeginObject();
+                        buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
+                        buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
+                        buf.EndObject();
+                        data = buf.Str();
                     }
                 }
             }

@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ONE_ACTUALIZATION
         ------
         READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
-        EXPECTED: [[["{\"max\":\"x\",\"min\":\"x\"}"]]]
+        EXPECTED: [[["{\"min\":\"x\",\"max\":\"x\"}"]]]
     )";
     Y_UNIT_TEST(ChunkDetailsMinMax) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));

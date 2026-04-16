@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib import error, request
 
 
 class ScriptError(RuntimeError):
@@ -108,8 +110,50 @@ def git_push_with_retry(*args: str) -> subprocess.CompletedProcess[str]:
     return run_with_retry(["git", "push", *args], f"git push {' '.join(args)}")
 
 
-def gh_api_with_retry(path: str) -> subprocess.CompletedProcess[str]:
-    return run_with_retry(["gh", "api", path], f"gh api {path}")
+def get_github_token() -> str | None:
+    return os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+
+
+def fetch_pr_json_with_retry(repo: str, pr_number: int) -> dict[str, Any]:
+    token = get_github_token()
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        log(f"GET {url}: attempt {attempt}/{RETRY_ATTEMPTS}")
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        req = request.Request(url, headers=headers, method="GET")
+        try:
+            with request.urlopen(req, timeout=30) as resp:
+                body = resp.read().decode("utf-8")
+            log(f"GET {url}: success")
+            return json.loads(body)
+        except error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            is_transient = exc.code in {429, 500, 502, 503, 504}
+            if attempt < RETRY_ATTEMPTS and is_transient:
+                delay = RETRY_BASE_DELAY_SEC * attempt
+                log(f"GET {url}: HTTP {exc.code}, retrying after {delay}s")
+                time.sleep(delay)
+                continue
+            raise ScriptError(f"GitHub API request failed (HTTP {exc.code}): {body}") from exc
+        except error.URLError as exc:
+            is_transient = True
+            if attempt < RETRY_ATTEMPTS and is_transient:
+                delay = RETRY_BASE_DELAY_SEC * attempt
+                log(f"GET {url}: network error ({exc.reason}), retrying after {delay}s")
+                time.sleep(delay)
+                continue
+            raise ScriptError(f"GitHub API network error: {exc.reason}") from exc
+        except json.JSONDecodeError as exc:
+            raise ScriptError(f"failed to decode GitHub API response: {exc}") from exc
+
+    raise ScriptError("unexpected error while fetching PR metadata")
 
 
 def require_tool(tool: str) -> None:
@@ -155,11 +199,7 @@ def current_ref() -> str:
 
 def load_pr(repo: str, pr_number: int) -> dict[str, Any]:
     log(f"Loading PR metadata for {repo}#{pr_number}")
-    response = gh_api_with_retry(f"repos/{repo}/pulls/{pr_number}")
-    try:
-        return json.loads(response.stdout)
-    except json.JSONDecodeError as exc:
-        raise ScriptError(f"failed to decode GitHub API response: {exc}") from exc
+    return fetch_pr_json_with_retry(repo, pr_number)
 
 
 @dataclass
@@ -350,7 +390,6 @@ def main() -> int:
     VERBOSE = args.verbose
 
     require_tool("git")
-    require_tool("gh")
 
     repo = args.repo or detect_repo_from_origin()
     log(f"Resolved repository: {repo}")

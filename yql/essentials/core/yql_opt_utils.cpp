@@ -2486,7 +2486,8 @@ template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& 
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
     if (!prefix.StartsWith("_yql")) {
         YQL_ENSURE(prefix.Contains('.'));
-        TStringBuf table, column;
+        TStringBuf table;
+        TStringBuf column;
         SplitTableName(prefix, table, column);
         YQL_ENSURE(column.StartsWith("_yql"));
     }

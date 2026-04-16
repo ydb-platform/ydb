@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
@@ -34,7 +35,7 @@ namespace {
 
 // Windows build workaround
 #ifndef LWTRACE_DISABLE
-using namespace NKikimr::NColumnShard::LWTRACE_GET_NAMESPACE(YDB_CS);
+using namespace NKikimr::NOlap::NReader::LWTRACE_GET_NAMESPACE(YDB_CS_SCAN);
 #endif
 
 class TPortionsSelector {
@@ -46,6 +47,10 @@ class TPortionsSelector {
     const bool WithConflicting;
     const std::optional<THashSet<TInsertWriteId>>& OwnPortions;
     const bool CalculateProbe;
+    std::shared_ptr<NLWTrace::TOrbit> Orbit;
+    const ui64 TabletId;
+    const ui64 TxId;
+    const ui64 ScanId;
 
     std::vector<TColumnEngineForLogs::TSelectedPortionInfo> Result;
     ui64 TotalPortionsCount = 0;
@@ -54,7 +59,8 @@ class TPortionsSelector {
 public:
     TPortionsSelector(std::shared_ptr<TGranuleMeta> granuleMeta, TInternalPathId pathId, TSnapshot snapshot,
                       const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
-                      const std::optional<THashSet<TInsertWriteId>>& ownPortions)
+                      const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit,
+                      ui64 tabletId, ui64 txId, ui64 scanId)
         : GranuleMeta(std::move(granuleMeta))
         , PathId(pathId)
         , Snapshot(snapshot)
@@ -62,7 +68,11 @@ public:
         , WithNonconflicting(withNonconflicting)
         , WithConflicting(withConflicting)
         , OwnPortions(ownPortions)
-        , CalculateProbe(LWPROBE_ENABLED(ColumnEngineForLogsSelect))
+        , CalculateProbe(LWPROBE_ENABLED(ColumnEngineForLogsSelect) || (orbit && orbit->HasShuttles()))
+        , Orbit(orbit)
+        , TabletId(tabletId)
+        , TxId(txId)
+        , ScanId(scanId)
         { }
 
 
@@ -84,7 +94,8 @@ public:
         TDuration timeOfCommitted = TAppData::TimeProvider->Now() - start;
 
         if (CalculateProbe) {
-            LWPROBE(ColumnEngineForLogsSelect, PathId.DebugString(), timeOfInserted.MilliSeconds(), timeOfCommitted.MilliSeconds(),
+            AFL_VERIFY(Orbit);
+            LWTRACK(ColumnEngineForLogsSelect, *Orbit, PathId.GetRawValue(), TabletId, TxId, ScanId, timeOfInserted.MilliSeconds(), timeOfCommitted.MilliSeconds(),
                     TotalPortionsCount, TotalFilteredPortionsCount, Result.size());
         }
 
@@ -652,7 +663,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
 
 std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId, TSnapshot snapshot,
     const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
-    const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
+    const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId, ui64 scanId) const {
     std::vector<TSelectedPortionInfo> out;
 
     auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);
@@ -660,7 +671,7 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
         return {};
     }
 
-    return TPortionsSelector(granuleMeta, pathId, snapshot, pkRangesFilter, withNonconflicting, withConflicting, ownPortions).Select();
+    return TPortionsSelector(granuleMeta, pathId, snapshot, pkRangesFilter, withNonconflicting, withConflicting, ownPortions, orbit, TabletId, txId, scanId).Select();
 }
 
 bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction) {

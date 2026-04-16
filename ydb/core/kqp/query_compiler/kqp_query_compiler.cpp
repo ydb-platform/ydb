@@ -1519,6 +1519,13 @@ private:
                 fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
             }
 
+            if (settingsObj.Tokens) {
+                for (const auto& tokenNode : TExprBase(settingsObj.Tokens).Cast<TExprList>()) {
+                    fullTextProto.MutableQuerySettings()->AddTokens(
+                        TString(tokenNode.Cast<TCoString>().Literal().Value()));
+                }
+            }
+
         } else if (auto settings = source.Settings().Maybe<TKqpReadSysViewSourceSettings>()) {
             NKqpProto::TKqpSysViewSource& sysViewProto = *protoSource->MutableSysViewSource();
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
@@ -1582,10 +1589,8 @@ private:
         // Partitioning
         TVector<TString> partitionParams;
         TString clusterName;
-        // In runtime, number of tasks with Sources is limited by 2x of node count
-        // We prepare a lot of partitions and distribute them between these tasks
-        // Constraint of 1 task per partition is NOT valid anymore
-        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(0);    // 0 - unlimited
+
         IDqIntegration::TPartitionSettings pSettings;
         pSettings.MaxPartitions = maxTasksPerStage;
         pSettings.CanFallback = false;

@@ -171,6 +171,7 @@ private:
             .ProcessingTimeout = GetVisibilityTimeout(),
             .MaxNumberOfMessage = static_cast<ui32>(MaxMessagesCount_),
             .UncompressMessages = true,
+            .SkipMessageGroups = std::move(LockedMessageGroups_),
         };
         Register(NPQ::NMLP::CreateReader(SelfId(), std::move(settings)));
     }
@@ -180,6 +181,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
             hFunc(NPQ::NMLP::TEvReadResponse, Handle);
+            hFunc(TSqsEvents::TEvGetMessageGroupsResponse, Handle);
             hFunc(TSqsEvents::TEvReceiveMessageBatchResponse, HandleReceiveMessageBatchResponse);
         }
     }
@@ -196,7 +198,12 @@ private:
         } else {
             if (ev->Get()->Messages.empty()) {
                 if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
-                    return DoActionTopicImplementation();
+                    if (FeatureFlags_.EnableSQSMigrationFinished_ || !IsFifo_) {
+                        return DoActionTopicImplementation();
+                    } else {
+                        Send(QueueLeader_, new TSqsEvents::TEvGetMessageGroups(RequestId_));
+                        return;
+                    }
                 }
                 if (MaybeScheduleWait()) {
                     return;
@@ -246,6 +253,20 @@ private:
             }
         }
         SendReplyAndDie();
+    }
+
+    void Handle(TSqsEvents::TEvGetMessageGroupsResponse::TPtr& ev) {
+        auto status = ev->Get()->StatusCode;
+        if (status == Ydb::StatusIds::SUCCESS) {
+            LockedMessageGroups_ = std::move(ev->Get()->MessageGroups);
+            DoActionTopicImplementation();
+        } else if (status == Ydb::StatusIds::OVERLOADED) {
+            // a lot of messages. do not fetch from topic
+            SendReplyAndDie();
+        } else {
+            MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE);
+            SendReplyAndDie();
+        }
     }
 
     void Handle(NPQ::NMLP::TEvReadResponse::TPtr& ev) {
@@ -348,6 +369,8 @@ private:
     bool ParamsAreInited_ = false;
     size_t MaxMessagesCount_ = 0;
     TDuration TotalWaitDuration_;
+
+    std::vector<TString> LockedMessageGroups_;
 };
 
 IActor* CreateReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

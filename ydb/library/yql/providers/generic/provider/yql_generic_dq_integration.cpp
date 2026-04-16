@@ -55,6 +55,8 @@ namespace NYql {
         }
 
         class TGenericDqIntegration: public TDqIntegrationBase {
+            static constexpr ui64 DefaultMaxPartitions = 1000;
+
         public:
             TGenericDqIntegration(TGenericState::TPtr state)
                 : State_(state)
@@ -153,6 +155,7 @@ namespace NYql {
                 auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw());
                 Y_ENSURE(maybeGenSourceSettings);
                 auto genSourceSettings = maybeGenSourceSettings.Cast();
+                auto maxPartitions = partitionSettings.MaxPartitions ? partitionSettings.MaxPartitions : DefaultMaxPartitions;
 
                 const TGenericState::TTableAddress tableAddress{
                     genSourceSettings.Cluster().StringValue(),
@@ -177,7 +180,7 @@ namespace NYql {
 
                 partitions.clear();
 
-                if (totalSplits <= partitionSettings.MaxPartitions) {
+                if (totalSplits <= maxPartitions) {
                     // If there are not too many splits, simply make a single-split partitions.
                     for (size_t i = 0; i < totalSplits; i++) {
                         Generic::TPartition partition;
@@ -189,7 +192,7 @@ namespace NYql {
                 } else {
                     // If the number of splits is greater than the partitions limit,
                     // we have to make split batches in each partition.
-                    size_t splitsPerPartition = (totalSplits / partitionSettings.MaxPartitions - 1) + 1;
+                    size_t splitsPerPartition = (totalSplits / maxPartitions - 1) + 1;
 
                     for (size_t i = 0; i < totalSplits; i += splitsPerPartition) {
                         Generic::TPartition partition;

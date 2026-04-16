@@ -2764,32 +2764,32 @@ ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui3
 }
 
 [[noreturn]] void ThrowOperatorNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for operator " << name << " with given argument type(s): "
+    throw TOperatorNotFoundException() << "Unable to find an overload for operator " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowOperatorAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for operator " << name << " with given argument type(s): "
+    throw TOperatorAmbiguityException() << "Ambiguity for operator " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types: "
+    throw TProcNotFoundException() << "Unable to find an overload for proc " << name << " with given argument types: "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for proc " << name << " with given argument type(s): "
+    throw TProcAmbiguityException() << "Ambiguity for proc " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
+    throw TAggregateNotFoundException() << "Unable to find an overload for aggregate " << name << " with given argument types: "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for aggregate " << name << " with given argument type(s): "
+    throw TAggregateAmbiguityException() << "Ambiguity for aggregate " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
@@ -3460,7 +3460,8 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
     TStringBuf realName = name;
     TMaybe<ui32> aggId;
-    TStringBuf left, right;
+    TStringBuf left;
+    TStringBuf right;
     if (realName.TrySplit('#', left, right)) {
         aggId = FromString<ui32>(right);
         realName = left;

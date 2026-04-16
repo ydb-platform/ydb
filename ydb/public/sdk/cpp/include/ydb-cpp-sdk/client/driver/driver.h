@@ -3,6 +3,8 @@
 #include "fwd.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/trace/trace.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
@@ -159,12 +161,26 @@ public:
     //! default: 0
     TDriverConfig& SetMaxMessageSize(uint64_t maxMessageSize);
 
+    //! Append a segment to the SDK build info header (x-ydb-sdk-build-info).
+    //! Do not call this method unless you know exactly what you are doing.
+    //! Segments are joined with ';'. Each segment must match: <name>/<X>.<Y>.<Z>
+    //!   name chars: lowercase latin letters, digits, '-'
+    //!   X, Y, Z chars: lowercase latin letters, digits
+    //! Throws on invalid format or if total extra length exceeds 512 bytes.
+    TDriverConfig& AppendBuildInfo(std::string_view segment);
+
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);
 
     //! Set executor for async responses.
     //! If not set, default executor will be used.
     TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
+
+    //! Set external metrics registry implementation.
+    TDriverConfig& SetMetricRegistry(std::shared_ptr<NMetrics::IMetricRegistry> registry);
+
+    //! Set external trace provider implementation.
+    TDriverConfig& SetTraceProvider(std::shared_ptr<NTrace::ITraceProvider> provider);
 
 private:
     class TImpl;

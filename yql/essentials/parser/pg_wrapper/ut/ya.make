@@ -5,13 +5,18 @@ SIZE(MEDIUM)
 
 INCLUDE(../cflags.inc)
 
+INCLUDE(../pg_include_dirs.inc)
+
 SRCS(
     arrow_ut.cpp
     codegen_ut.cpp
+    compare_ut.cpp
+    sign_ut.cpp
     error_ut.cpp
     memory_ut.cpp
     pack_ut.cpp
     parser_ut.cpp
+    pg_ops_ut.cpp
     proc_ut.cpp
     sort_ut.cpp
     type_cache_ut.cpp

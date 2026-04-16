@@ -12,6 +12,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    ydb/library/persqueue
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 )
 
@@ -22,6 +23,7 @@ SRCS(
     describe_topic_ut.cpp
     local_partition_ut.cpp
     topic_to_table_ut.cpp
+    topic_tx_skip_conflict_ut.cpp
 )
 
 RESOURCE(

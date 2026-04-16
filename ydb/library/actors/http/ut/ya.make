@@ -7,7 +7,7 @@ PEERDIR(
     contrib/libs/poco/Crypto
     contrib/libs/poco/Foundation
     contrib/libs/poco/Net
-    ydb/core/security/certificate_check
+    ydb/core/security/certificate_check/test_utils
     ydb/library/actors/testlib
 )
 

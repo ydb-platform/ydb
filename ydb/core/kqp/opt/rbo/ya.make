@@ -12,6 +12,7 @@ SRCS(
     kqp_rewrite_select.cpp
     kqp_rbo_compute_statistics.cpp
     kqp_rbo_statistics.cpp
+    kqp_plan_to_json.cpp
 )
 
 PEERDIR(
@@ -30,6 +31,7 @@ PEERDIR(
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
+    yql/essentials/core/extract_predicate
 )
 
 YQL_LAST_ABI_VERSION()

@@ -257,6 +257,10 @@ public:
             SRC_LOG_N("Failed to parse reconnect period: " << period);
         }
 
+        SRC_LOG_I("Start read actor, metadatafields: {" << JoinSeq(',', SourceParams.GetMetadataFields())
+            << "}, stop at current end offsets: " << SourceParams.GetStopAtCurrentEndOffsets()
+            << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName());
+
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
         TPqMetaExtractor fieldsExtractor;
         for (const auto& fieldName : SourceParams.GetMetadataFields()) {
@@ -346,7 +350,8 @@ public:
 
     NYdb::NTopic::IReadSession& GetReadSession(TClusterState& clusterState) {
         if (!clusterState.ReadSession) {
-            if (const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew())) {
+            const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew());
+            if (maxPartitionReadSkew && !SourceParams.GetStopAtCurrentEndOffsets()) {
                 YQL_ENSURE(InfoAggregator, "Missing DQ info aggregator for distributed read session");
 
                 ui64 amountPartitions = 0;
@@ -514,6 +519,12 @@ private:
                     TopicPartitionsCount
                 );
             }
+            for (const auto& cluster : Clusters) {
+                const auto& partitionsToRead = GetPartitionsToRead(cluster);
+                for (const auto partitionId : partitionsToRead) {
+                    Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
+                }
+            }
 
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
             return;
@@ -636,13 +647,14 @@ private:
         }
     }
 
-    i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+    i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool& finished, i64 freeSpace) override {
         // called with bound allocator
         if (CaNotified) {
             Metrics.InFlyAsyncInputData->Dec();
             CaNotified = false;
         }
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
+        finished = FinishedByOffsets;
 
         const auto now = TInstant::Now();
 
@@ -663,7 +675,7 @@ private:
         }
 
         bool recheckBatch = false;
-        if (freeSpace > 0) {
+        if (freeSpace > 0 && !FinishedByOffsets) {
             if (Clusters.empty()) {
                 StartClusterDiscovery();
             }
@@ -714,10 +726,32 @@ private:
 
         watermark = Nothing();
         buffer.clear();
+        finished = FinishedByOffsets;
         return 0;
     }
 
-    std::vector<ui64> GetPartitionsToRead(TClusterState& clusterState) const {
+    void CheckFinishedByOffsets() {
+        if (!SourceParams.GetStopAtCurrentEndOffsets()
+            || Clusters.empty()
+            || FinishedByOffsets) {
+            return;
+        }
+        if (Partitions.size() != FinishedPartitions.size()) {
+            return;
+        }
+        SRC_LOG_I("SessionId: " << GetSessionId() << ", Finish by offsets, close sessions");
+        FinishedByOffsets = true;
+
+        for (auto& clusterState : Clusters) {
+            if (clusterState.ReadSession) {
+                clusterState.ReadSession->Close(TDuration::Zero());
+                clusterState.ReadSession.reset();
+            }
+        }
+        Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
+    }
+
+    std::vector<ui64> GetPartitionsToRead(const TClusterState& clusterState) const {
         std::vector<ui64> res;
 
         for (const auto& readParams : ReadParams) {
@@ -751,7 +785,7 @@ private:
         topicReadSettings.Path(topicPath);
 
         const auto& partitionsToRead = GetPartitionsToRead(clusterState);
-        SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << " PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
+        SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << " PartitionsToRead: {" << JoinSeq(", ", partitionsToRead) << "} StartingMessageTimestamp " << StartingMessageTimestamp);
         for (const auto partitionId : partitionsToRead) {
             topicReadSettings.AppendPartitionIds(partitionId);
         }
@@ -775,7 +809,14 @@ private:
         return { cluster, partitionSession->GetPartitionId() };
     }
 
+    static TPartitionKey MakePartitionKey(const TString& cluster, ui64 partitionId) {
+        return { cluster, partitionId };
+    }
+
     void SubscribeOnNextEvent() {
+        if (FinishedByOffsets) {
+            return;
+        }
         for (auto& clusterState : Clusters) {
             SubscribeOnNextEvent(clusterState);
         }
@@ -810,6 +851,7 @@ private:
     // must be called with bound allocator
     bool MaybeReturnReadyBatch(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
         if (ReadyBuffer.empty()) {
+            CheckFinishedByOffsets();
             SubscribeOnNextEvent();
             return false;
         }
@@ -828,12 +870,18 @@ private:
                     CurrentDeferredCommit.Add(partitionSession, start, end);
                 }
             }
-            PartitionToOffset[MakePartitionKey(TString(cluster), partitionSession)] = ranges.back().second;
+            auto key = MakePartitionKey(TString(cluster), partitionSession);
+            auto& partitionInfo = Partitions[key];
+            partitionInfo.Offset = ranges.back().second;
+            if (SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
+                FinishedPartitions.insert(key);
+            }
         }
 
         ReadyBuffer.pop();
 
         if (ReadyBuffer.empty()) {
+            CheckFinishedByOffsets();
             SubscribeOnNextEvent();
         } else {
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
@@ -868,11 +916,18 @@ private:
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
+            auto& partitionInfo = Self.Partitions[partitionKey];
+
             for (const auto& message : event.GetMessages()) {
                 const std::string& data = message.GetData();
                 Self.IngressStats.Bytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
+                
+                if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.EndOffset && *partitionInfo.EndOffset <= message.GetOffset()) {
+                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data (message offset: " << message.GetOffset() << ", end offset: " << *partitionInfo.EndOffset << ")");
+                    continue;
+                }
 
                 if (ClusterState.ReadSessionControl) {
                     ClusterState.ReadSessionControl->AdvancePartitionTime(message.GetPartitionSession()->GetPartitionId(), message.GetWriteTime());
@@ -935,15 +990,17 @@ private:
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
-            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " StartPartitionSessionEvent received");
 
-            std::optional<ui64> readOffset;
-            const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
-            if (offsetIt != Self.PartitionToOffset.end()) {
-                readOffset = offsetIt->second;
+            auto& partitionInfo = Self.Partitions[partitionKey];
+            if (!partitionInfo.EndOffset) {
+                partitionInfo.EndOffset = event.GetEndOffset();
+                if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
+                    Self.FinishedPartitions.insert(partitionKey);
+                }
             }
-            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Confirm StartPartitionSession with offset " << readOffset);
-            event.Confirm(readOffset);
+
+            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << event.GetEndOffset() << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset);
+            event.Confirm(partitionInfo.Offset);
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
@@ -1020,6 +1077,8 @@ private:
     bool WakeupScheduled = false;
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
+    bool FinishedByOffsets = false;
+    THashSet<TPartitionKey> FinishedPartitions;
 };
 
 ui32 ExtractPartitionsFromParams(
@@ -1150,6 +1209,11 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 PQReadDefaultFreeSpace,
                 infoAggregator);
         }
+
+        const TStringBuf format(settings.GetFormat());
+        const TStringBuf normalizedFormat = format.empty() ? TStringBuf("raw") : format;
+        YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
+            "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
 
         return CreateDqPqRdReadActor(
             args.TypeEnv,

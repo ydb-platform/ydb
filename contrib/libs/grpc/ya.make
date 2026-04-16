@@ -957,7 +957,6 @@ RECURSE(
     src/proto/grpc/health/v1
     src/proto/grpc/reflection/v1
     src/proto/grpc/reflection/v1alpha
-    src/proto/grpc/status
     third_party/address_sorting
     third_party/upb
 )

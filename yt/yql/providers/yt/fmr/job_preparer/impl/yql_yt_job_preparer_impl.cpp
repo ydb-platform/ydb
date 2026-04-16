@@ -89,7 +89,7 @@ public:
 
         if (ytResourceType == "file") {
             TString remoteFileUrl = "yt://" + ytServerName + "?path=" + path.Path_;
-            YQL_CLOG(DEBUG, FastMapReduce) << "Downloading yt file with path " << path.Path_ ;
+            YQL_CLOG(DEBUG, FastMapReduce) << "Downloading yt file with path " << path.Path_;
             return FileStorage_->PutUrlAsync(remoteFileUrl, token);
         }
 

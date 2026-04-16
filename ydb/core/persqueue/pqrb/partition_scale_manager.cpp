@@ -1,6 +1,5 @@
 #include "partition_scale_manager.h"
 #include "read_balancer_log.h"
-#include "partition_scale_manager_graph_cmp.h"
 
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <fmt/format.h>

@@ -1,7 +1,7 @@
 title: YDB Documentation
 description:
   - >-
-    <i>YDB</i> is a fault-tolerant distributed SQL DBMS. YDB provides high availability, horizontal scalability, strict consistency, and ACID transaction support. Queries are made using an SQL dialect (<a href="yql/reference/">YQL</a>).
+    <b>YDB</b> (IPA: [waɪ diːbiː], pronounced <i>wai-di-bi</i>)  is a fault-tolerant distributed SQL DBMS. YDB provides high availability, horizontal scalability, strict consistency, and ACID transaction support. Queries are made using an SQL dialect (<a href="yql/reference/">YQL</a>).
 nav:
   title: YDB Documentation
 meta:
@@ -13,7 +13,7 @@ links:
   - title: Concepts
     description: How YDB works, its features and available usage modes
     href: concepts/
-  - title: For DevOps
+  - title: For Database Administrators
     description: How to run production YDB clusters
     href: devops/
   - title: For Application Developers
@@ -34,9 +34,6 @@ links:
   - title: Working with the SDK
     description: YDB SDK reference
     href: reference/ydb-sdk/
-  - title: PostgreSQL compatibility
-    description: Integrate with PostgreSQL ecosystem
-    href: postgresql/intro/
   - title: Troubleshooting
     description: Troubleshooting issues related to YDB databases and applications
     href: troubleshooting/

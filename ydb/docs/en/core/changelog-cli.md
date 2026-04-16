@@ -422,7 +422,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
 
-* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/import.md#pg-convert).
+* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](./postgresql/import.md#pg-convert).
 
 ## Version 2.7.0 {#2-7-0}
 
@@ -430,7 +430,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 ### Features
 
-* Added the [ydb tools pg-convert](postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+* Added the [ydb tools pg-convert](./postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 * Added the `{{ ydb-cli }} workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 * Added new `{{ ydb-cli }} scheme permissions list` command to list permissions.
 * In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.

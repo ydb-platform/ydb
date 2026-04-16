@@ -2376,7 +2376,8 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
 
 const TMultiConstraintNode* TMultiConstraintNode::FilterConstraints(TExprContext& ctx, const TConstraintSet::TPredicate& predicate) const {
     auto items = Items_;
-    bool hasContent = false, hasChanges = false;
+    bool hasContent = false;
+    bool hasChanges = false;
     for (auto& item : items) {
         hasChanges = hasChanges || item.second.FilterConstraints(predicate);
         hasContent = hasContent || item.second;

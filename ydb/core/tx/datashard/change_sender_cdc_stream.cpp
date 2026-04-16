@@ -279,6 +279,7 @@ public:
             .VirtualTimestamps = stream.VirtualTimestamps,
             .ShardId = DataShard.TabletId,
             .UserSIDs = stream.UserSIDs,
+            .TraceIds = stream.TraceIds,
         }))
     {
     }

@@ -31,11 +31,6 @@ struct TLocalResponseBase {
     NYql::TIssues Issues;
 };
 
-
-struct TAlterTopicResponse : public TLocalResponseBase {
-    NKikimrSchemeOp::TModifyScheme ModifyScheme;
-};
-
 struct TEvPQProxy {
     enum EEv {
         EvWriteInit = EventSpaceBegin(TKikimrEvents::ES_PQ_PROXY_NEW), // TODO: Replace 'NEW' with version or something
@@ -671,11 +666,6 @@ struct TEvPQProxy {
         std::vector<ui32> ChildPartitionIds;
 
         ui64 EndOffset;
-    };
-
-    struct TEvAlterTopicResponse : public TEventLocal<TEvAlterTopicResponse, EvAlterTopicResponse>
-                                 , public TLocalResponseBase {
-        TAlterTopicResponse Response;
     };
 };
 

@@ -249,7 +249,8 @@ PyObject* TPyPairIterator::Next(PyObject* self)
     {
         PY_TRY{
             const auto iter = Cast(self);
-NUdf::TUnboxedValue k, v;
+NUdf::TUnboxedValue k;
+NUdf::TUnboxedValue v;
 if (NUdf::TBoxedValueAccessor::NextPair(*iter->Iterator.Get(), k, v)) {
     const TPyObjectPtr key = iter->KeyType ? ToPyObject(iter->CastCtx, iter->KeyType, k) : PyCast<ui64>(k.Get<ui64>());
     const TPyObjectPtr value = ToPyObject(iter->CastCtx, iter->PayloadType, v);

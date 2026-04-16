@@ -29,6 +29,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/queue.h>
+#include <util/string/hex.h>
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
@@ -763,6 +764,10 @@ private:
         const auto& tablePath = sourceSettings.Table().Path();
         const auto& index = sourceSettings.Index();
         const auto& columns = sourceSettings.Columns();
+        const auto& settings = TKqpReadTableFullTextIndexSettings::Parse(sourceSettings.Settings());
+
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, TString(tablePath));
+        auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
 
         TOperator op;
 
@@ -795,25 +800,16 @@ private:
         for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
             if (query.Maybe<TCoDataCtor>()) {
                 auto literal = TString(query.Cast<TCoDataCtor>().Literal());
-                auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, TString(tablePath));
-                auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                    || indexDesc->Type == TIndexDescription::EType::GlobalJson);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
 
-                if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
-                    for (auto term: NJsonIndex::BuildSearchTerms(literal)) {
-                        searchTerms.emplace_back(std::move(term));
-                    }
-                } else {
-                    auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
-                    for(const auto& column: readColumns) {
-                        for(const auto& analyzer: desc.settings().columns()) {
-                            if (analyzer.column() == column) {
-                                for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
-                                    searchTerms.push_back(term);
-                                }
+                auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
+                for(const auto& column: readColumns) {
+                    for(const auto& analyzer: desc.settings().columns()) {
+                        if (analyzer.column() == column) {
+                            for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                                searchTerms.push_back(term);
                             }
                         }
                     }
@@ -829,8 +825,6 @@ private:
             queryColumns.push_back(TString(column.Value()));
         }
 
-        const auto& settings = TKqpReadTableFullTextIndexSettings::Parse(sourceSettings.Settings());
-
         if (settings.ItemsLimit) {
             op.Properties["ItemsLimit"] = GetExprStr(TExprBase(settings.ItemsLimit), true);
         }
@@ -845,6 +839,16 @@ private:
 
         if (settings.K1Factor) {
             op.Properties["K1Factor"] = GetExprStr(TExprBase(settings.K1Factor), true);
+        }
+
+        std::vector<TString> tokens;
+        if (settings.Tokens) {
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
+                tokens.push_back(HexEncode(token.Cast<TCoString>().Literal()));
+            }
+
+            op.Properties["Tokens"] = JoinSeq(", ", tokens);
         }
 
         NTableIndex::NFulltext::EDefaultOperator defaultOperator = NTableIndex::NFulltext::EDefaultOperator::Invalid;

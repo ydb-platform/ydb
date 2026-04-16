@@ -1,89 +1,95 @@
 # Prefer the nearest data center
 
-Below are examples of the code for setting the "prefer the nearest data center" balancing algorithm option in different {{ ydb-short-name }} SDKs.
+Below are examples of setting the "prefer the nearest data center" balancing algorithm in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-     "context"
-     "os"
+  - Native SDK
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithBalancer(
-         balancers.PreferLocalDC(
-           balancers.RandomChoice(),
-         ),
-       ),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     // ...
-   }
-   ```
+    import (
+      "context"
+      "os"
 
-- Go (database/sql)
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
+    )
 
-   Client load balancing in the {{ ydb-short-name }} `database/sql` driver is performed only when establishing a new connection (in `database/sql` terms), which is a {{ ydb-short-name }} session on a specific node. Once the session is created, all queries in this session are passed to the node where the session was created. Queries in the same {{ ydb-short-name }} session are not balanced between different {{ ydb-short-name }} nodes.
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithBalancer(
+          balancers.PreferLocalDC(
+            balancers.RandomChoice(),
+          ),
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      // ...
+    }
+    ```
 
-   Example of the code for setting the "prefer the nearest data center" balancing algorithm option:
+  - database/sql
 
-   ```go
-   package main
+    Client-side balancing in the {{ ydb-short-name }} `database/sql` driver happens only when opening a new connection (in `database/sql` terms), which corresponds to a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session go to that node. Queries on the same {{ ydb-short-name }} session are not balanced across nodes.
 
-   import (
-     "context"
-     "database/sql"
-     "os"
+    Example for "prefer the nearest data center" balancing:
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     nativeDriver, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithBalancer(
-         balancers.PreferLocalDC(
-           balancers.RandomChoice(),
-         ),
-       ),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer nativeDriver.Close(ctx)
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-     connector, err := ydb.Connector(nativeDriver)
-     if err != nil {
-       panic(err)
-     }
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
+    )
 
-     db := sql.OpenDB(connector)
-     defer db.Close()
-     // ...
-   }
-   ```
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithBalancer(
+          balancers.PreferLocalDC(
+            balancers.RandomChoice(),
+          ),
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
 
-- С++
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
 
-  The C++ SDK uses the `prefer_local_dc` (prefer the nearest data center) algorithm by default.
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      // ...
+    }
+    ```
+
+  {% endlist %}
+
+- C++
+
+  The {{ ydb-short-name }} C++ SDK uses the `prefer_local_dc` (prefer nearest data center) algorithm by default.
 
   ```cpp
   #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -159,6 +165,35 @@ Below are examples of the code for setting the "prefer the nearest data center" 
         },
     )
     ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.detectLocalDs())
+            .build()) {
+        // ...
+    }
+    ```
+
+  - JDBC
+
+    See [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md); configure balancing via the native transport if needed.
+
+    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and balancing settings as with the driver directly (for example `spring.datasource.url` or `DataSource` properties).
 
   {% endlist %}
 

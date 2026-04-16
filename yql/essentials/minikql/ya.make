@@ -11,6 +11,8 @@ SRCS(
     mkql_block_map_join_utils.h
     mkql_buffer.cpp
     mkql_buffer.h
+    mkql_date_scaler.cpp
+    mkql_date_scaler.h
     mkql_function_metadata.cpp
     mkql_function_metadata.h
     mkql_function_registry.cpp
@@ -46,6 +48,7 @@ SRCS(
     mkql_type_ops.cpp
     mkql_type_ops.h
     mkql_watermark.h
+    mkql_window_comparator_bounds.h
     mkql_unboxed_value_stream.cpp
     mkql_unboxed_value_stream.h
     pack_num.cpp
@@ -103,6 +106,7 @@ RECURSE(
     jsonpath
     perf
     protobuf_udf
+    runtime_settings
 )
 
 RECURSE_FOR_TESTS(

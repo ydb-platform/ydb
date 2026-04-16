@@ -102,11 +102,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         if constexpr (IsFsImport) {
             auto* fsSettings = createImport.MutableImportFromFsSettings();
             fsSettings->CopyFrom(request.settings());
-            TString basePath = fsSettings->base_path();
-            while (basePath.size() > 1 && basePath.back() == '/') {
-                basePath.pop_back();
-            }
-            fsSettings->set_base_path(basePath);
+            fsSettings->set_base_path(StripTrailingSlashes(fsSettings->base_path()));
         }
 
         return ev.Release();

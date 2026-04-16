@@ -169,9 +169,10 @@ namespace NKikimr::NDDisk {
 struct TPersistentBufferFormat {
     ui32 MaxChunks = 256;
     ui32 InitChunks = 4;
-    ui32 MaxInMemoryCache = 128_MB;
+    ui64 MaxInMemoryCache = 128_MB;
     ui32 MaxChunkRestoreInflight = 8;
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
+    ui64 PerTabletStorageLimit = 4096_MB;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -485,7 +486,7 @@ struct TPersistentBufferFormat {
             TInstant FirstLsnTimestamp;
             TInstant LastLsnTimestamp;
             ui32 LsnsCount;
-            ui32 Size;
+            ui64 Size;
         };
 
         TInstant StartedAt;
@@ -494,8 +495,10 @@ struct TPersistentBufferFormat {
         ui32 SectorSize;
         ui32 ChunkSize;
         ui32 FreeSectors;
-        ui32 InMemoryCacheSize;
-        ui32 InMemoryCacheLimit;
+        ui64 InMemoryCacheSize;
+        ui64 InMemoryCacheLimit;
+        ui32 DiskOperationsInflight;
+        ui32 PendingEvents;
         std::vector<TTabletInfo> TabletInfos;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
     };

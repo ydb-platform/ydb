@@ -40,6 +40,7 @@
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown @ydb-platform/fq
+/ydb/library/yql/providers/dq @ydb-platform/yql
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
@@ -92,6 +93,8 @@
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
+/ydb/core/tx/schemeshard/index @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index_build @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard

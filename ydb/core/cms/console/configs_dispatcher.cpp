@@ -924,6 +924,26 @@ class TConfigurationResult
     , public IStorageConfigResult
 {
 public:
+    bool IsSuccess() const override {
+        return true;
+    }
+
+    bool IsTransportError() const override {
+        return false;
+    }
+
+    const TString& GetEndpoint() const override {
+        return Endpoint;
+    }
+
+    const TString& GetPrimaryIssueMessage() const override {
+        return PrimaryIssueMessage;
+    }
+
+    const TString& GetIssuesText() const override {
+        return IssuesText;
+    }
+
     const NKikimrConfig::TAppConfig& GetConfig() const override {
         return Config;
     }
@@ -962,6 +982,9 @@ public:
     TString DatabaseYamlConfig;
     std::optional<TString> StorageYamlConfig;
     TString SourceAddress;
+    TString Endpoint;
+    TString PrimaryIssueMessage;
+    TString IssuesText;
 };
 
 void TConfigsDispatcher::UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)

@@ -3,6 +3,11 @@ name: Run and debug tests
 on:
   workflow_dispatch:
     inputs:
+      pull_number:
+        description: 'Pull request number, ex: 12345 (optional)'
+        required: false
+        type: string
+        default: ''
       test_targets:
         description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
         required: false
@@ -31,10 +36,44 @@ jobs:
       branches_json: ${{ steps.format-branches.outputs.branches_json }}
       build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
     steps:
+      - name: Checkout workflow script for PR merge resolution
+        if: ${{ inputs.pull_number != '' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            .github/scripts/prepare_merge_ref.py
+          sparse-checkout-cone-mode: false
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+
       - name: Format branches
         id: format-branches
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
+          if [ -n "${{ inputs.pull_number }}" ]; then
+            if ! [[ "${{ inputs.pull_number }}" =~ ^[0-9]+$ ]]; then
+              echo "pull_number must be numeric"
+              exit 1
+            fi
+
+            python3 .github/scripts/prepare_merge_ref.py "${{ inputs.pull_number }}" --verbose --json-out merge_info.json
+
+            if [[ ! -f merge_info.json ]]; then
+              echo "merge_info.json was not created"
+              exit 1
+            fi
+
+            MERGE_SHA=$(jq -r '.merge_commit_sha // empty' merge_info.json)
+            if [[ -z "$MERGE_SHA" ]]; then
+              echo "Unable to resolve merge commit SHA for PR #${{ inputs.pull_number }}"
+              jq -r '.error // "merge_commit_sha is null"' merge_info.json
+              exit 1
+            fi
+
+            echo "branches_json=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
+            echo "Resolved PR #${{ inputs.pull_number }} to merge commit: $MERGE_SHA"
+          elif [ -z "${{ inputs.branches }}" ]; then
             # Empty - will use branches_config_path or default
             echo "branches_json=" >> $GITHUB_OUTPUT
           elif [[ "${{ inputs.branches }}" == \[* ]]; then

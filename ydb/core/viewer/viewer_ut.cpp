@@ -1747,9 +1747,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
 
         TString consumerName = "consumer1";
-        NYdb::TDriver ydbDriver{driverCfg};
 
         driverCfg.SetAuthToken(ROOT_TOKEN);
+        NYdb::TDriver ydbDriver{driverCfg};
+
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 
         auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()

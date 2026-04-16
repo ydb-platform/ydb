@@ -841,7 +841,6 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     entry.Path = SplitPath(path);
     entry.RedirectRequired = false;
     entry.ShowPrivatePath = true;
-    entry.SyncVersion = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(entry);
     auto tokenObj = GetRequest().GetUserTokenObject();

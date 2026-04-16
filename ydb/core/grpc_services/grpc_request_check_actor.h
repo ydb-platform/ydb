@@ -683,6 +683,10 @@ private:
             return {false, std::nullopt};
         }
 
+
+        // An empty token at this point means that anonymous access is allowed by the system configuration,
+        // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
+        // validated earlier in the request processing pipeline.
         if (!TBase::GetParsedToken()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                         "Skip check permission connect db, anonymous requests allowed"

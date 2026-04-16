@@ -17,7 +17,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/datetime/base.h>
-#include <util/generic/hash_set.h>
 #include <util/generic/serialized_enum.h>
 
 namespace NKikimr::NKqp {

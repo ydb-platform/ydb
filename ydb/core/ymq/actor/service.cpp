@@ -16,6 +16,7 @@
 #include "cloud_events/cloud_events.h"
 #include "node_tracker.h"
 #include "cleanup_queue_data.h"
+#include "deferred_create_topic.h"
 
 #include <ydb/public/lib/value/value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -64,6 +65,8 @@ const TString LEADER_DESTROY_REASON_REMOVE_INFO = "RemoveQueueInfo";
 constexpr ui64 LIST_USERS_WAKEUP_TAG = 1;
 constexpr ui64 LIST_QUEUES_WAKEUP_TAG = 2;
 constexpr ui64 CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG = 3;
+
+constexpr TDuration PERIODIC_CREATE_TOPIC_INTERVAL = TDuration::Minutes(1);
 
 constexpr size_t EARLY_REQUEST_USERS_LIST_MAX_BUDGET = 10;
 constexpr i64 EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET = 5; // per user
@@ -452,6 +455,8 @@ void TSqsService::Bootstrap() {
 
         MakeAndRegisterCloudEventsProcessor();
     }
+
+    SchedulePeriodicCreateTopic();
 }
 
 STATEFN(TSqsService::StateFunc) {
@@ -465,6 +470,8 @@ STATEFN(TSqsService::StateFunc) {
 
         // Details
         hFunc(TEvWakeup, HandleWakeup);
+        hFunc(TSqsEvents::TEvPeriodicCreateTopic, HandlePeriodicCreateTopic);
+        hFunc(TSqsEvents::TEvDeferredTopicCreationResult, HandleDeferredTopicCreationResult);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
@@ -524,6 +531,10 @@ void TSqsService::RequestSqsQueuesList() {
         LOG_SQS_DEBUG("Request SQS queues list");
         Send(QueuesListReader_, new TSqsEvents::TEvReadQueuesList());
     }
+}
+
+void TSqsService::SchedulePeriodicCreateTopic() {
+    Schedule(PERIODIC_CREATE_TOPIC_INTERVAL, new TSqsEvents::TEvPeriodicCreateTopic());
 }
 
 Y_WARN_UNUSED_RESULT bool TSqsService::RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled) {
@@ -1436,6 +1447,68 @@ void TSqsService::ProcessConnectTimeoutToLeader() {
     if (nextRunAfter != TDuration::Max()) {
         Schedule(nextRunAfter, new TEvWakeup(CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG));
     }
+}
+
+void TSqsService::HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::TPtr&) {
+    if (!AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation()) {
+        SchedulePeriodicCreateTopic();
+        return;
+    }
+
+    for (const auto& user : Users_) {
+        for (const auto& queue : user.second->Queues_) {
+            const TQueueInfoPtr& q = queue.second;
+            if (q->TopicCreated_ || q->TablesFormat_ != 1) {
+                continue;
+            }
+            TString key;
+            key.reserve(user.first.size() + 1 + q->QueueName_.size());
+            key = user.first;
+            key.push_back('\0');
+            key.append(q->QueueName_);
+            if (PendingDeferredTopicCreations_.contains(key)) {
+                continue;
+            }
+            PendingDeferredTopicCreations_.insert(key);
+            Register(CreateDeferredCreateTopicActor(
+                SelfId(),
+                q->UserName_,
+                q->QueueName_,
+                q->FolderId_,
+                q->IsFifo_,
+                q->Version_,
+                q->TablesFormat_,
+                user.second->Counters_->GetTransactionCounters()
+            ));
+            SchedulePeriodicCreateTopic();
+            return;
+        }
+    }
+
+    SchedulePeriodicCreateTopic();
+}
+
+void TSqsService::HandleDeferredTopicCreationResult(TSqsEvents::TEvDeferredTopicCreationResult::TPtr& ev) {
+    TString key;
+    key.reserve(ev->Get()->UserName.size() + 1 + ev->Get()->QueueName.size());
+    key = ev->Get()->UserName;
+    key.push_back('\0');
+    key.append(ev->Get()->QueueName);
+    PendingDeferredTopicCreations_.erase(key);
+
+    if (!ev->Get()->Success) {
+        return;
+    }
+    const auto userIt = Users_.find(ev->Get()->UserName);
+    if (userIt == Users_.end()) {
+        return;
+    }
+    const auto queueIt = userIt->second->Queues_.find(ev->Get()->QueueName);
+    if (queueIt == userIt->second->Queues_.end()) {
+        return;
+    }
+    queueIt->second->TopicCreated_ = true;
+    queueIt->second->LocalLeaderWayMoved();
 }
 
 void TSqsService::HandleWakeup(TEvWakeup::TPtr& ev) {

@@ -36,6 +36,10 @@ private:
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TTableSettings& tableSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings,
+        TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings,
+        TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
     void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
     void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);

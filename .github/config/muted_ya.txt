@@ -37,6 +37,8 @@ ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithData
 ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/quoter/ut TQuoterServiceTest.KesusResourceSpeed
+ydb/core/tx/long_tx_service/ut LongTxService.SimpleSnapshotsManyNodes-HasTable
+ydb/core/tx/long_tx_service/ut unittest.sole chunk
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_extsubdomain_reboots unittest.[*/*] chunk
@@ -76,6 +78,7 @@ ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_auto_prev_flag
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write

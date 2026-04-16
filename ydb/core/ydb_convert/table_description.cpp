@@ -778,7 +778,7 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
         switch (olapIndex.GetImplementationCase()) {
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
                 const auto& bf = olapIndex.GetBloomFilter();
-                Y_ENSURE(bf.ColumnIdsSize(), TStringBuilder() << "Bloom index " << olapIndex.GetName() << " has no column ids");
+                Y_ENSURE(bf.ColumnIdsSize() == 1, TStringBuilder() << "Bloom index " << olapIndex.GetName() << " must have exactly one column id, got " << bf.ColumnIdsSize());
 
                 const ui32 colId = bf.GetColumnIds(0);
                 auto it = idToName.find(colId);

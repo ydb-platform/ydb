@@ -8,21 +8,44 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
+  {% list tabs %}
 
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+  - Native SDK
 
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
 
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                prefer_local_dc: false
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 

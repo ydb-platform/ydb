@@ -8,19 +8,32 @@
 
 - C++
 
-  Анонимная аутентификация является аутентификацией по умолчанию.
-  Явным образом анонимную аутентификацию можно включить так:
+  {% list tabs %}
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
+  - Native SDK
 
-  NYdb::TDriver CreateDriverAnonymous() {
-      auto config = NYdb::TDriverConfig("grpc://localhost:2136/?database=/local")
-          .SetCredentialsProviderFactory(NYdb::CreateInsecureCredentialsProviderFactory());
+    Анонимная аутентификация является аутентификацией по умолчанию.
+    Явным образом анонимную аутентификацию можно включить так:
 
-      return NYdb::TDriver(config);
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+    NYdb::TDriver CreateDriverAnonymous() {
+        auto config = NYdb::TDriverConfig("grpc://localhost:2136/local")
+            .SetCredentialsProviderFactory(NYdb::CreateInsecureCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    Если в статическом конфиге не задавать `credentials-provider`, не указывать `databases.*.credentials` и не класть в secdist для этой базы `token`, `iam_jwt_params` и пару `user`/`password`, драйвер будет использовать анонимный режим по умолчанию.
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 

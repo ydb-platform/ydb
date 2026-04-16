@@ -12,18 +12,28 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/query/client.h>
+  {% list tabs %}
 
-  void ExecuteQuery(NYdb::NQuery::TSession session) {
-    auto result = session.ExecuteQuery(
-        "SELECT 1",
-        NYdb::NQuery::TTxControl::NoTx()
-    ).GetValueSync();
+  - Native SDK
 
-    // ...
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void ImplicitTxExample(NYdb::NQuery::TSession session) {
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::NoTx()
+      ).GetValueSync();
+
+      // ...
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
 
 - Go
 
@@ -258,19 +268,39 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/query/client.h>
+  {% list tabs %}
 
-  void ExecuteQuery(NYdb::NQuery::TSession session) {
-      auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
-      auto result = session.ExecuteQuery(
-          "SELECT 1",
-          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-      ).GetValueSync();
+  - Native SDK
 
-      // ...
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SerializableExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SerializableExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSerializableRW},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -594,19 +624,39 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/query/client.h>
+  {% list tabs %}
 
-  void ExecuteQuery(NYdb::NQuery::TSession session) {
-      auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
-      auto result = session.ExecuteQuery(
-          "SELECT 1",
-          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-      ).GetValueSync();
+  - Native SDK
 
-      // ...
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void OnlineReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void OnlineReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::OnlineRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -870,19 +920,39 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/query/client.h>
+  {% list tabs %}
 
-  void ExecuteQuery(NYdb::NQuery::TSession session) {
-      auto settings = NYdb::NQuery::TTxSettings::StaleRO();
-      auto result = session.ExecuteQuery(
-          "SELECT 1",
-          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-      ).GetValueSync();
+  - Native SDK
 
-      // ...
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void StaleReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::StaleRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void StaleReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kStaleRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -1127,19 +1197,39 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/query/client.h>
+  {% list tabs %}
 
-  void ExecuteQuery(NYdb::NQuery::TSession session) {
-      auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
-      auto result = session.ExecuteQuery(
-          "SELECT 1",
-          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-      ).GetValueSync();
+  - Native SDK
 
-      // ...
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SnapshotReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SnapshotReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSnapshotRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -1383,19 +1473,39 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/query/client.h>
+  {% list tabs %}
 
-  void ExecuteQuery(NYdb::NQuery::TSession session) {
-      auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
-      auto result = session.ExecuteQuery(
-          "SELECT 1",
-          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-      ).GetValueSync();
+  - Native SDK
 
-      // ...
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SnapshotReadWriteExample((NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SnapshotReadWriteExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSnapshotRW},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 

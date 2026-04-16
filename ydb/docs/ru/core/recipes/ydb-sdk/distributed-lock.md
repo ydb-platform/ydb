@@ -22,7 +22,7 @@
       const std::string& nodePath,
       const std::string& semaphoreName)
   {
-      using NYdb::NStatusHelpers;
+      using namespace NYdb::NStatusHelpers;
 
       NYdb::NCoordination::TClient client(driver);
 
@@ -33,7 +33,7 @@
 
       auto session = sessionResult.ExtractResult();
 
-      auto acquireSettings = NYdb::NCoordination::TAcquireSemaphoreSettings();
+      auto acquireSettings = NYdb::NCoordination::TAcquireSemaphoreSettings()
           .Ephemeral(true)
           .Exclusive()
           .Timeout(TDuration::Minutes(5));

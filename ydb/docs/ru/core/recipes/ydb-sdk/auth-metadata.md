@@ -8,21 +8,112 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-  #include <ydb-cpp-sdk/client/iam/iam.h>
+  {% list tabs %}
 
-  NYdb::TDriver CreateDriverWithMetadataCredentials(
-      const std::string& connectionString,
-      const std::string& internalCA)
-  {
-      auto config = NYdb::TDriverConfig(connectionString)
-          .UseSecureConnection(internalCA)
-          .SetCredentialsProviderFactory(NYdb::CreateIamCredentialsProviderFactory());
+  - Native SDK
 
-      return NYdb::TDriver(config);
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    NYdb::TDriver CreateDriverWithMetadataCredentials(
+        const std::string& connectionString,
+        const std::string& internalCA)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .UseSecureConnection(internalCA)
+            .SetCredentialsProviderFactory(NYdb::CreateIamCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    Готовой настройки для сервиса метаданных в `ydb::YdbComponent` нет — нужен свой `ydb::CredentialsProviderComponent` с `NYdb::CreateIamCredentialsProviderFactory()`.
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        credentials-provider: ydb-metadata-credentials
+        databases:
+            db:
+                endpoint: grpcs://localhost:2135
+                database: /local
+                credentials: {}
+    ```
+
+    {% endcut %}
+
+    {% cut "secdist" %}
+
+    `<PEM>` - сертификаты Yandex Cloud.
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "secure_connection_cert": "<PEM>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    ```cpp
+    #include <userver/components/component_base.hpp>
+    #include <userver/components/minimal_server_component_list.hpp>
+    #include <userver/storages/secdist/component.hpp>
+    #include <userver/storages/secdist/provider_component.hpp>
+    #include <userver/utils/daemon_run.hpp>
+    #include <userver/ydb/component.hpp>
+    #include <userver/ydb/credentials.hpp>
+    #include <userver/ydb/table.hpp>
+
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    class YdbMetadataCredentials final : public ydb::CredentialsProviderComponent {
+    public:
+        static constexpr std::string_view kName = "ydb-metadata-credentials";
+
+        using ydb::CredentialsProviderComponent::CredentialsProviderComponent;
+
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactory(
+            const yaml_config::YamlConfig&) const override
+        {
+            return NYdb::CreateIamCredentialsProviderFactory();
+        }
+    };
+
+    class MyYdbWorker final : public components::ComponentBase {
+    public:
+        static constexpr std::string_view kName = "my-ydb-worker";
+
+        MyYdbWorker(const components::ComponentConfig& config, const components::ComponentContext& context)
+            : components::ComponentBase(config, context),
+              table_client_(context.FindComponent<ydb::YdbComponent>().GetTableClient("db"))
+        {
+            // ...
+        }
+
+    private:
+        std::shared_ptr<ydb::TableClient> table_client_;
+    };
+
+    int main(int argc, char* argv[]) {
+        auto component_list = components::MinimalServerComponentList()
+            .Append<components::DefaultSecdistProvider>()
+            .Append<components::Secdist>()
+            .Append<YdbMetadataCredentials>()
+            .Append<ydb::YdbComponent>()
+            .Append<MyYdbWorker>();
+        return utils::DaemonMain(argc, argv, component_list);
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 

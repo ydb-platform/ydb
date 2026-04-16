@@ -17,7 +17,7 @@
   Вызов метода `SelfCheck`:
 
   ```cpp
-  auto settings = TSelfCheckSettings();
+  auto settings =  NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```

@@ -8,26 +8,49 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-  #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+  {% list tabs %}
 
-  NYdb::TDriver CreateDriverWithStaticCredentials(
-      const std::string& connectionString,
-      const std::string& user,
-      const std::string& password)
-  {
-      auto config = NYdb::TDriverConfig(connectionString);
-          .SetEndpoint(endpoint)
-          .SetDatabase(database)
-          .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-              .User = user,
-              .Password = password,
-          }));
+  - Native SDK
 
-      return NYdb::TDriver(config);
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+    NYdb::TDriver CreateDriverWithStaticCredentials(
+        const std::string& connectionString,
+        const std::string& user,
+        const std::string& password)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                .User = user,
+                .Password = password,
+            }));
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    {% cut "secdist" %}
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "user": "user",
+          "password": "password"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 

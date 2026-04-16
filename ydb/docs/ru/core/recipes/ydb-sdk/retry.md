@@ -13,222 +13,286 @@
 
 - C++
 
-  В {{ ydb-short-name }} C++ SDK выполнение повторных попыток с корректной обработкой ошибок реализовано в нескольких программных интерфейсах:
+  {% list tabs %}
 
-  {% cut "Синхронное выполнение повторных попыток" %}
+  - Native SDK
 
-  Для выполнения запросов с автоматическими повторными попытками используется метод `RetryQuerySync`.
-  Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат запроса.
-  {{ ydb-short-name }} C++ SDK автоматически анализирует ошибки и выполняет повторные попытки в соответствии с их типом.
+    В {{ ydb-short-name }} C++ SDK выполнение повторных попыток с корректной обработкой ошибок реализовано в нескольких программных интерфейсах:
 
-  Пример кода, использующего `RetryQuerySync`:
+    {% cut "Синхронное выполнение повторных попыток" %}
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
+    Для выполнения запросов с автоматическими повторными попытками используется метод `RetryQuerySync`.
+    Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат запроса.
+    {{ ydb-short-name }} C++ SDK автоматически анализирует ошибки и выполняет повторные попытки в соответствии с их типом.
 
-  void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              SELECT series_id, title
-              FROM series
-              WHERE series_id = 1;
-          )";
+    Пример кода, использующего `RetryQuerySync`:
 
-          auto result = session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).GetValueSync();
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
 
-          if (!result.IsSuccess()) {
-              return result;
-          }
+    void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+        auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+            auto query = R"(
+                SELECT series_id, title
+                FROM series
+                WHERE series_id = 1;
+            )";
 
-          // Обработка результата запроса
-          auto resultSet = result.GetResultSet(0);
-          NYdb::TResultSetParser parser(resultSet);
-          while (parser.TryNextRow()) {
-              std::cout << "Series"
-                  << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                  << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                  << std::endl;
-          }
+            auto result = session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            ).GetValueSync();
 
-          return result;
-      });
+            if (!result.IsSuccess()) {
+                return result;
+            }
 
-      if (!result.IsSuccess()) {
-          // Обработка ошибки после всех попыток
-          std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
+            // Обработка результата запроса
+            auto resultSet = result.GetResultSet(0);
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                std::cout << "Series"
+                    << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                    << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                    << std::endl;
+            }
 
-  {% endcut %}
+            return result;
+        });
 
-  {% cut "Асинхронное выполнение повторных попыток" %}
+        if (!result.IsSuccess()) {
+            // Обработка ошибки после всех попыток
+            std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
 
-  Для асинхронного выполнения запросов с автоматическими повторными попытками используется метод `RetryQuery`.
-  Метод возвращает `NThreading::TFuture`, что позволяет выполнять операции асинхронно.
+    {% endcut %}
 
-  Пример кода, использующего `RetryQuery`:
+    {% cut "Асинхронное выполнение повторных попыток" %}
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
+    Для асинхронного выполнения запросов с автоматическими повторными попытками используется метод `RetryQuery`.
+    Метод возвращает `NThreading::TFuture`, что позволяет выполнять операции асинхронно.
 
-  void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
-      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
-          auto query = R"(
-              SELECT series_id, title, release_date
-              FROM series
-              WHERE series_id = 1;
-          )";
+    Пример кода, использующего `RetryQuery`:
 
-          return session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
-              auto result = asyncResult.GetValue();
-              if (!result.IsSuccess()) {
-                  return result;
-              }
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
 
-              // Обработка результата запроса
-              auto resultSet = result.GetResultSet(0);
-              NYdb::TResultSetParser parser(resultSet);
-              while (parser.TryNextRow()) {
-                  std::cout << "Series"
-                      << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                      << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                      << std::endl;
-              }
+    void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
+        auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
+            auto query = R"(
+                SELECT series_id, title, release_date
+                FROM series
+                WHERE series_id = 1;
+            )";
 
-              return result;
-          });
-      });
+            return session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
+                auto result = asyncResult.GetValue();
+                if (!result.IsSuccess()) {
+                    return result;
+                }
 
-      // Ожидание завершения
-      auto status = future.GetValueSync();
-      if (!status.IsSuccess()) {
-          std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
+                // Обработка результата запроса
+                auto resultSet = result.GetResultSet(0);
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    std::cout << "Series"
+                        << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                        << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                        << std::endl;
+                }
 
-  {% endcut %}
+                return result;
+            });
+        });
 
-  {% cut "Выполнение повторных попыток при работе со стриминговыми запросами" %}
+        // Ожидание завершения
+        auto status = future.GetValueSync();
+        if (!status.IsSuccess()) {
+            std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
 
-  Для выполнения стриминговых запросов с автоматическими повторными попытками используется метод `StreamExecuteQuery`.
-  Стриминговые запросы позволяют обрабатывать большие объемы данных, получая результаты частями.
+    {% endcut %}
 
-  Пример кода, использующего `RetryQuerySync` со `StreamExecuteQuery`:
+    {% cut "Выполнение повторных попыток при работе со стриминговыми запросами" %}
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
+    Для выполнения стриминговых запросов с автоматическими повторными попытками используется метод `StreamExecuteQuery`.
+    Стриминговые запросы позволяют обрабатывать большие объемы данных, получая результаты частями.
 
-  void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              SELECT series_id, title, release_date
-              FROM series
-              WHERE series_id > 0;
-          )";
+    Пример кода, использующего `RetryQuerySync` со `StreamExecuteQuery`:
 
-          auto resultStreamQuery = session.StreamExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::NoTx()
-          ).GetValueSync();
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
 
-          if (!resultStreamQuery.IsSuccess()) {
-              return resultStreamQuery;
-          }
+    void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+        auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+            auto query = R"(
+                SELECT series_id, title, release_date
+                FROM series
+                WHERE series_id > 0;
+            )";
 
-          // Обработка результатов по частям
-          bool eos = false;
-          while (!eos) {
-              auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
+            auto resultStreamQuery = session.StreamExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
 
-              if (!streamPart.IsSuccess()) {
-                  eos = true;
-                  if (!streamPart.EOS()) {
-                      return streamPart;
-                  }
-                  continue;
-              }
+            if (!resultStreamQuery.IsSuccess()) {
+                return resultStreamQuery;
+            }
 
-              if (streamPart.HasResultSet()) {
-                  auto rs = streamPart.ExtractResultSet();
-                  NYdb::TResultSetParser parser(rs);
-                  while (parser.TryNextRow()) {
-                      std::cout << "Series"
-                          << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                          << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                          << std::endl;
-                  }
-              }
-          }
+            // Обработка результатов по частям
+            bool eos = false;
+            while (!eos) {
+                auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
 
-          return resultStreamQuery;
-      });
+                if (!streamPart.IsSuccess()) {
+                    eos = true;
+                    if (!streamPart.EOS()) {
+                        return streamPart;
+                    }
+                    continue;
+                }
 
-      if (!result.IsSuccess()) {
-          std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
+                if (streamPart.HasResultSet()) {
+                    auto rs = streamPart.ExtractResultSet();
+                    NYdb::TResultSetParser parser(rs);
+                    while (parser.TryNextRow()) {
+                        std::cout << "Series"
+                            << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                            << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                            << std::endl;
+                    }
+                }
+            }
 
-  {% endcut %}
+            return resultStreamQuery;
+        });
 
-  {% cut "Настройка параметров повторных попыток" %}
+        if (!result.IsSuccess()) {
+            std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
 
-  Пользователь может настраивать поведение механизма повторных попыток с помощью класса `TRetryOperationSettings`:
+    {% endcut %}
 
-  * `MaxRetries(uint32_t)` - максимальное количество повторных попыток (по умолчанию 10)
-  * `Idempotent(bool)` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок
-  * `RetryNotFound(bool)` - повторять ли операции, вернувшие статус `NOT_FOUND` (по умолчанию true)
-  * `MaxTimeout(TDuration)` - максимальное время выполнения всех попыток
-  * `FastBackoffSettings(TBackoffSettings)` - настройки быстрых повторов
-  * `SlowBackoffSettings(TBackoffSettings)` - настройки медленных повторов
+    {% cut "Настройка параметров повторных попыток" %}
 
-  Пример использования настроек повторных попыток:
+    Пользователь может настраивать поведение механизма повторных попыток с помощью класса `TRetryOperationSettings`:
 
-  ```c++
-  #include <ydb-cpp-sdk/client/query/client.h>
-  #include <ydb-cpp-sdk/client/retry/retry.h>
+    * `MaxRetries(uint32_t)` - максимальное количество повторных попыток (по умолчанию 10)
+    * `Idempotent(bool)` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок
+    * `RetryNotFound(bool)` - повторять ли операции, вернувшие статус `NOT_FOUND` (по умолчанию true)
+    * `MaxTimeout(TDuration)` - максимальное время выполнения всех попыток
+    * `FastBackoffSettings(TBackoffSettings)` - настройки быстрых повторов
+    * `SlowBackoffSettings(TBackoffSettings)` - настройки медленных повторов
 
-  void ExecuteWithCustomRetry(NYdb::NQuery::TQueryClient client) {
-      auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
-          .Idempotent(true)
-          .MaxRetries(20)
-          .MaxTimeout(TDuration::Seconds(30));
+    Пример использования настроек повторных попыток:
 
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              UPSERT INTO series (series_id, title)
-              VALUES (10, "New Series");
-          )";
+    ```c++
+    #include <ydb-cpp-sdk/client/query/client.h>
+    #include <ydb-cpp-sdk/client/retry/retry.h>
 
-          auto result = session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).GetValueSync();
+    void ExecuteWithCustomRetry(NYdb::NQuery::TQueryClient client) {
+        auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
+            .Idempotent(true)
+            .MaxRetries(20)
+            .MaxTimeout(TDuration::Seconds(30));
 
-          if (!result.IsSuccess()) {
-              return result;
-          }
+        auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+            auto query = R"(
+                UPSERT INTO series (series_id, title)
+                VALUES (10, "New Series");
+            )";
 
-          // Обработка результата запроса
-          std::cout << "Query executed successfully" << std::endl;
-          return result;
-      }, retrySettings);
+            auto result = session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+            ).GetValueSync();
 
-      if (!result.IsSuccess()) {
-          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
+            if (!result.IsSuccess()) {
+                return result;
+            }
 
-  {% endcut %}
+            // Обработка результата запроса
+            std::cout << "Query executed successfully" << std::endl;
+            return result;
+        }, retrySettings);
+
+        if (!result.IsSuccess()) {
+            std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
+        }
+    }
+    ```
+
+    {% endcut %}
+
+  - userver
+
+    В `ydb::TableClient` выполнение повторных попыток с корректной обработкой ошибок реализовано во всех методах. userver автоматически анализирует ошибки и выполняет повторные попытки в соответствии с их типом.
+
+    Пользователь может настраивать поведение механизма повторных попыток с помощью `ydb::OperationSettings` и `ydb::RetryTxSettings`:
+
+    * `retries` - максимальное количество повторных попыток
+    * `is_idempotent` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок
+    * `client_timeout_ms` или `timeout_ms` соответственно - максимальное время выполнения всех попыток
+    * `get_session_timeout` (актуально только для `ydb::OperationSettings`) - таймаут на получение сессии
+    * `get_session_settings`, `commit_settings` и `rollback_settings` (актуально только для `ydb::RetryTxSettings`) - настройки для запросов получения сессии, коммита или отката транзакции
+
+    `ydb::RetryTxSettings` используeтся только для метода `ydb::TableClient::RetryTx`, который выполняет интерактивную транзакцию с выполненем повторных попыток при ошибках для всей транзакции.
+
+    Секция [`ydb.operation-settings`](https://github.com/userver-framework/userver/blob/develop/ydb/src/ydb/component.yaml) в static config задаёт значения по умолчанию: если при вызове в коде поле не задано (`std::nullopt` или ноль там, где это означает "не задано"), используется значение из конфига, иначе из кода.
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        operation-settings:
+            retries: 5
+            client-timeout: 2s
+            get-session-timeout: 10s
+    ```
+
+    {% endcut %}
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void RetryExamples(ydb::TableClient& client) {
+        client.ExecuteQuery(
+            ydb::OperationSettings{
+                .retries = 7,
+                .is_idempotent = true,
+            },
+            ydb::Query{R"(
+                UPSERT INTO series (series_id, title)
+                VALUES (10, "New Series");
+            )"}
+        );
+
+        client.RetryTx(
+            ydb::RetryTxSettings{
+                .retries = 3,
+                .is_idempotent = true,
+            },
+            [](ydb::TxActor& tx) {
+                tx.Execute(ydb::Query{R"(
+                    UPSERT INTO series (series_id, title)
+                    VALUES (11, "Other Series");
+                )"});
+            }
+        );
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 

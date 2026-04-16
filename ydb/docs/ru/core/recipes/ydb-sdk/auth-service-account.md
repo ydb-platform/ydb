@@ -8,24 +8,55 @@
 
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-  #include <ydb-cpp-sdk/client/iam/iam.h>
+  {% list tabs %}
 
-  NYdb::TDriver CreateDriverWithServiceAccountKeyFile(
-      const std::string& connectionString,
-      const std::string& saKeyFilePath,
-      const std::string& internalCA)
-  {
-      auto config = NYdb::TDriverConfig(connectionString)
-          .UseSecureConnection(internalCA);
-          .SetCredentialsProviderFactory(NYdb::CreateIamJwtFileCredentialsProviderFactory({
-              .JwtFilename = saKeyFilePath
-          });
+  - Native SDK
 
-      return NYdb::TDriver(config);
-  }
-  ```
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    NYdb::TDriver CreateDriverWithServiceAccountKeyFile(
+        const std::string& connectionString,
+        const std::string& saKeyFilePath,
+        const std::string& internalCA)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .UseSecureConnection(internalCA)
+            .SetCredentialsProviderFactory(NYdb::CreateIamJwtFileCredentialsProviderFactory({
+                .JwtFilename = saKeyFilePath,
+            }));
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    {% cut "secdist" %}
+
+    `<PEM>` - сертификаты Yandex Cloud.
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "iam_jwt_params": {
+            "id": "...",
+            "service_account_id": "...",
+            "private_key": "..."
+          },
+          "secure_connection_cert": "<PEM>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 

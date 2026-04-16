@@ -427,7 +427,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 10, "BlockHashJoinCore should have 10 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -535,17 +535,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("FulltextAnalyze",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 3, "FulltextAnalyze should have 3 arguments: text, settings and mode");
+            YQL_ENSURE(node.ChildrenSize() == 2, "FulltextAnalyze should have 2 arguments: text and settings");
 
             auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
 
-            auto modeNode = node.Child(2);
-            YQL_ENSURE(modeNode->IsAtom(), "FulltextAnalyze mode should be an atom");
-            ui32 modeValue = FromString<ui32>(modeNode->Content());
-            auto modeArg = ctx.PgmBuilder().NewDataLiteral<ui32>(modeValue);
-
-            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
+            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg);
         });
 
     return compiler;

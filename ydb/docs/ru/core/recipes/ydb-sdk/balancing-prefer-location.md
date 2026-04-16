@@ -115,7 +115,7 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-- C# (.NET)
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 

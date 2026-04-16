@@ -103,7 +103,7 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
-- C# (.NET)
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -250,7 +250,7 @@
     }
     ```
 
-- C# (.NET)
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -536,7 +536,7 @@
 
     {% endnote %}
 
-- C# (.NET)
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -1157,7 +1157,7 @@
     }
     ```
 
-- C# (.NET)
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -1479,7 +1479,7 @@
     }
     ```
 
-- C# (.NET)
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -2125,7 +2125,7 @@
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
-- C# (.NET)
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 

@@ -403,7 +403,7 @@
       .client()?;
   ```
 
-- C# (.NET)
+- C#
 
   В {{ ydb-short-name }} C# SDK логирование подключается через стандартный интерфейс `ILoggerFactory` из `Microsoft.Extensions.Logging`. Можно передать любую реализацию — консольный логгер, Serilog, NLog и другие:
 

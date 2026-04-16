@@ -169,7 +169,7 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
   using Ydb.Sdk.Ado;

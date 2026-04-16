@@ -171,7 +171,7 @@
   ).GetValueSync();
   ```
 
-- C# (.NET)
+- C#
 
   {% list tabs %}
 
@@ -433,7 +433,7 @@
   ).GetValueSync();
   ```
 
-- C# (.NET)
+- C#
 
   {% list tabs %}
 
@@ -762,7 +762,7 @@
   ).GetValueSync();
   ```
 
-- C# (.NET)
+- C#
 
   {% list tabs %}
 
@@ -1030,7 +1030,7 @@
   ).GetValueSync();
   ```
 
-- C# (.NET)
+- C#
 
   {% list tabs %}
 
@@ -1279,7 +1279,7 @@
   ).GetValueSync();
   ```
 
-- C# (.NET)
+- C#
 
   {% list tabs %}
 
@@ -1530,7 +1530,7 @@
   ).GetValueSync();
   ```
 
-- C# (.NET)
+- C#
 
   {% list tabs %}
 

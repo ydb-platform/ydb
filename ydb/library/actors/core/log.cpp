@@ -144,7 +144,8 @@ namespace NActors {
                 __FILE_NAME__,
                 __LINE__,
                 formatted,
-                false);
+                false,
+                {});
             Y_UNUSED(ok);
             va_end(params);
         }
@@ -181,7 +182,8 @@ namespace NActors {
                     __FILE_NAME__,
                     __LINE__,
                     message,
-                    false))
+                    false,
+                    {}))
             {
                 BecomeDefunct();
             }
@@ -521,7 +523,8 @@ namespace NActors {
             evLog->FileName,
             evLog->LineNumber,
             evLog->Line,
-            evLog->Json);
+            evLog->Json,
+            evLog->StructMessage);
     }
 
     bool TLoggerActor::OutputRecord(
@@ -531,8 +534,10 @@ namespace NActors {
         const char* fileName,
         ui64 lineNumber,
         const TString& formatted,
-        bool json) noexcept
+        bool json,
+        const TMaybe<NKikimr::NStructLog::TStructuredMessage>& structMessage) noexcept
     try {
+
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         char buf[TimeBufSize];
@@ -554,7 +559,7 @@ namespace NActors {
                 }
                 logRecord << ": " << formatted;
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), structMessage));
             } break;
 
             case NActors::NLog::TSettings::PLAIN_SHORT_FORMAT: {
@@ -563,7 +568,7 @@ namespace NActors {
                     << Settings->ComponentName(component)
                     << ": " << formatted;
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), structMessage));
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
@@ -616,7 +621,7 @@ namespace NActors {
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), structMessage));
             } break;
         }
 

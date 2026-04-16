@@ -2,12 +2,16 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/util/struct_log/create_message.h>
+#include <ydb/core/util/struct_log/structured_message.h>
+
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 using namespace NMonitoring;
 using namespace NActors;
 using namespace NActors::NLog;
+using namespace NKikimr::NStructLog;
 
 namespace {
     const TString& ServiceToString(int) {
@@ -114,7 +118,20 @@ namespace {
             auto logEvent = ev->StaticCastAsLocal<TEvLog>();
 
             auto ts  = Runtime.GetCurrentTime() - TDuration::Seconds(10);
-            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(ts, logEvent->Level, 0, logEvent->Line)}, senderNodeIndex, viaActorSystem);
+            TStructuredMessage structMessage;
+            if (logEvent->StructMessage.Defined()) {
+                structMessage = logEvent->StructMessage.GetRef();
+            }
+            Runtime.Send(new IEventHandle{LoggerActor, {},
+                new TEvLog(
+                    static_cast<EPriority>(logEvent->Level.ToPrio()),
+                    logEvent->Component,
+                    logEvent->FileName,
+                    logEvent->LineNumber,
+                    logEvent->Line,
+                    std::move(structMessage),
+                    ts)},
+                senderNodeIndex, viaActorSystem);
         }
 
         void WriteLog() {
@@ -137,9 +154,10 @@ namespace {
             auto acceptWrites = [&] (const TLogRecord& r) {
                 TReceivedMessage received;
                 received.Text = TString(r.Data, r.Len);
+                received.StructMessage = r.StructMessage;
                 ReceivedMessages.push_back(received);
 
-                Cerr << "Received: " << received.Text << Endl;
+                Cerr << "Received: " << received.Text << " defined=" << r.StructMessage.Defined() << Endl;
             };
             LogBackend->SetWriteImpl(acceptWrites);
 
@@ -155,6 +173,60 @@ namespace {
 
         struct TReceivedMessage {
             TString Text;
+            TMaybe<TStructuredMessage> StructMessage;
+
+            static bool CheckInclude(const TStructuredMessage& message, const TStructuredMessage& subMessage) {
+                struct TMessageInfo {
+                    TNativeTypeCode TypeCode;
+                    const void* Data;
+                    std::size_t Length;
+                };
+
+                auto GetNameWithDots = [](const std::vector<TKeyName>& name) {
+                    std::string result;
+                    for(auto& item: name) {
+                        if (!result.empty()) {
+                            result += ".";
+                        }
+                        result += item.ToString();
+                    }
+                    return result;
+                };
+
+                std::map<std::string, TMessageInfo> messageInfo;
+                message.ForEachSerialized(
+                    [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length){
+                        auto nameWithDots = GetNameWithDots(name);
+                        auto& newItem = messageInfo[nameWithDots];
+                        newItem.TypeCode = typeCode;
+                        newItem.Data = data;
+                        newItem.Length = length;
+                        return true;
+                    });
+
+                auto result = subMessage.ForEachSerialized(
+                    [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length){
+                        auto nameWithDots = GetNameWithDots(name);
+                        auto it = messageInfo.find(nameWithDots);
+                        if (it == end(messageInfo)) {
+                            return false;
+                        }
+                        return it->second.TypeCode == typeCode &&
+                            it->second.Length == length &&
+                            memcmp(it->second.Data, data, length) == 0;
+                    });
+
+                return result;
+            }
+
+            void Check(const TString& text, const TStructuredMessage& structMessage = {}) const {
+                UNIT_ASSERT_VALUES_EQUAL(Text, text);
+
+                if (structMessage.GetValuesCount() != 0) {
+                    UNIT_ASSERT(StructMessage.Defined());
+                    UNIT_ASSERT(CheckInclude(StructMessage.GetRef(), structMessage));
+                }
+            }
         };
         std::vector<TReceivedMessage> ReceivedMessages;
     };
@@ -285,22 +357,20 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
 
 Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
-    TString GetDataAsString(const TLogRecord& record) {
-        return TString(record.Data, record.Len);
-    }
-
-    Y_UNIT_TEST(ViaMemLogAdapter) {
+    Y_UNIT_TEST(MemLogAdapter) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulteMessages();
 
-        MemLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, "fileName", 0, "My log message");
-        MemLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, "fileName", 0, "My log message1");
-        MemLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, "fileName", 0, "My log message2");
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
 
         env.FlushLogBuffer();
 
         UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 3);
 
-        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages[0].Text, "1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message");
+        env.ReceivedMessages[0].Check("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message");
+        env.ReceivedMessages[1].Check("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
+        env.ReceivedMessages[2].Check("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
     }
 }

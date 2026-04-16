@@ -191,12 +191,15 @@ public:
     }
 
     template<typename C>
-    void ForEachSerialized(const C& c) const {
+    bool ForEachSerialized(const C& c) const {
         CheckSorted();
 
         for(auto& item:AttachedValues) {
-            c(item.Name, item.TypeCode, Data.data() + item.Offset, item.Length);
+            if (!c(item.Name, item.TypeCode, Data.data() + item.Offset, item.Length)) {
+                return false;
+            }
         }
+        return true;
     }
 
     template<typename C>

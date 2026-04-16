@@ -20,6 +20,7 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
 
+#include <ydb/core/util/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -272,7 +273,8 @@ namespace NActors {
             const char* fileName,
             ui64 lineNumber,
             const TString& formatted,
-            bool json) noexcept;
+            bool json,
+            const TMaybe<NKikimr::NStructLog::TStructuredMessage>&) noexcept;
         void RenderComponentPriorities(IOutputStream& str);
         void FlushLogBufferMessage();
         void WriteMessageStat(const NLog::TEvLog& ev);
@@ -372,6 +374,30 @@ namespace NActors {
                 json)));
     }
 
+    template <typename TCtx>
+    inline void DeliverLogMessage(
+        TCtx& ctx,
+        NLog::EPriority mPriority,
+        NLog::EComponent mComponent,
+        const char* fileName,
+        ui64 lineNumber,
+        TString&& str,
+        NKikimr::NStructLog::TStructuredMessage&& structMessage)
+    {
+        const NLog::TSettings *mSettings = ctx.LoggerSettings();
+        TLoggerActor::Throttle(*mSettings);
+        ctx.Send(new IEventHandle(
+            mSettings->LoggerActorId,
+            TActorId(),
+            new NLog::TEvLog(
+                mPriority,
+                mComponent,
+                fileName,
+                lineNumber,
+                std::move(str),
+                std::move(structMessage))));
+    }
+
     template <typename TCtx, typename... TArgs>
     inline void MemLogAdapter(
         TCtx& actorCtxOrSystem,
@@ -441,6 +467,27 @@ namespace NActors {
             lineNumber,
             std::move(str),
             json);
+    }
+
+    template <typename TCtx>
+    Y_WRAPPER inline void MemStructLogAdapter(
+        TCtx& actorCtxOrSystem,
+        NLog::EPriority mPriority,
+        NLog::EComponent mComponent,
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& str,
+        NKikimr::NStructLog::TStructuredMessage&& structMessage = {}) {
+
+        MemLogWrite(str.data(), str.size(), true);
+        DeliverLogMessage(
+            actorCtxOrSystem,
+            mPriority,
+            mComponent,
+            fileName,
+            lineNumber,
+            TString(str),
+            std::move(structMessage));
     }
 
     class TRecordWriter: public TStringBuilder {

@@ -21,7 +21,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/persqueue/public
     yql/essentials/public/issue
     yql/essentials/public/issue/protos
     ydb/library/backup

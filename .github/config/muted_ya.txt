@@ -15,6 +15,7 @@ ydb/core/external_sources/s3/ut unittest.[*/*] chunk
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq
 ydb/core/kafka_proxy/ut TMetadataActorTests.TopicMetadataGoodAndBad
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
+ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/kqp/ut/service KqpQueryServiceScripts.CancelScriptExecution
 ydb/core/kqp/ut/tli KqpTli.Basic

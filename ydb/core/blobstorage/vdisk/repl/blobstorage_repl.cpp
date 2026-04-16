@@ -280,6 +280,7 @@ namespace NKikimr {
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
             ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
+            ReplCtx->MonGroup.ReplIsHoldingToken() = false;
             Y_ABORT_UNLESS(NextMinHugeBlobInBytes);
             ReplCtx->MinHugeBlobInBytes = NextMinHugeBlobInBytes;
             UnrecoveredNonphantomBlobs = false;
@@ -325,6 +326,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(RequestedReplicationToken);
             RequestedReplicationToken = false;
             HoldingReplicationToken = true;
+            ReplCtx->MonGroup.ReplIsHoldingToken() = true;
 
             // switch to replication state
             Transition(AwaitToken, Replication);
@@ -437,6 +439,7 @@ namespace NKikimr {
                     Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken);
                     Y_DEBUG_ABORT_UNLESS(HoldingReplicationToken);
                     HoldingReplicationToken = false;
+                    ReplCtx->MonGroup.ReplIsHoldingToken() = false;
                 }
                 ResetReplProgressTimer(true);
 
@@ -460,6 +463,7 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
                     ReplCtx->MonGroup.ReplItemsRemaining() = 0;
                     ReplCtx->MonGroup.ReplItemsDone() = 0;
+                    ReplCtx->MonGroup.ReplIsHoldingToken() = false;
                     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
                         SelfId(), nullptr, 0));
                 }

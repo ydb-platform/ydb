@@ -109,6 +109,7 @@ public:
         }
 
         clientConfig.LoadBalancingPolicy = GRpcLoadBalancingPolicy_;
+        clientConfig.CompressionAlgorithm = GRpcCompressionAlgorithm_;
 
         if (dbState->DiscoveryMode != EDiscoveryMode::Off) {
             if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
@@ -710,6 +711,7 @@ private:
     const TDeadline::Duration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
     const std::string GRpcLoadBalancingPolicy_;
+    const grpc_compression_algorithm GRpcCompressionAlgorithm_;
     const std::uint64_t MemoryQuota_;
     const std::uint64_t MaxInboundMessageSize_;
     const std::uint64_t MaxOutboundMessageSize_;

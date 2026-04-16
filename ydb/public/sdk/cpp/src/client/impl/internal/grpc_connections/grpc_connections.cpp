@@ -158,6 +158,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , GRpcKeepAliveTimeout_(TDeadline::SafeDurationCast(params->GetGRpcKeepAliveTimeout()))
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
     , GRpcLoadBalancingPolicy_(params->GetGRpcLoadBalancingPolicy())
+    , GRpcCompressionAlgorithm_(params->GetGRpcCompressionAlgorithm())
     , MemoryQuota_(params->GetMemoryQuota())
     , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
     , MaxOutboundMessageSize_(params->GetMaxOutboundMessageSize())

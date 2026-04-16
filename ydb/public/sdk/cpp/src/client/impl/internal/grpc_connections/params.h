@@ -39,6 +39,7 @@ public:
     virtual TDuration GetGRpcKeepAliveTimeout() const = 0;
     virtual bool GetGRpcKeepAlivePermitWithoutCalls() const = 0;
     virtual std::string GetGRpcLoadBalancingPolicy() const = 0;
+    virtual grpc_compression_algorithm GetGRpcCompressionAlgorithm() const = 0;
     virtual TDuration GetSocketIdleTimeout() const = 0;
     virtual const TLog& GetLog() const = 0;
     virtual uint64_t GetMemoryQuota() const = 0;

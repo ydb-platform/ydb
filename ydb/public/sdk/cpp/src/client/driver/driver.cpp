@@ -46,6 +46,7 @@ public:
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     std::string GetGRpcLoadBalancingPolicy() const override { return GRpcLoadBalancingPolicy; }
+    grpc_compression_algorithm GetGRpcCompressionAlgorithm() const override { return GRpcCompressionAlgorithm; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     uint64_t GetMemoryQuota() const override { return MemoryQuota; }
     uint64_t GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
@@ -79,6 +80,7 @@ public:
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
     std::string GRpcLoadBalancingPolicy = "round_robin";
+    grpc_compression_algorithm GRpcCompressionAlgorithm = GRPC_COMPRESS_NONE;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
     uint64_t MaxInboundMessageSize = 0;
@@ -217,6 +219,11 @@ TDriverConfig& TDriverConfig::SetGRpcLoadBalancingPolicy(const std::string& poli
     return *this;
 }
 
+TDriverConfig& TDriverConfig::SetGRpcCompressionAlgorithm(grpc_compression_algorithm algorithm) {
+    Impl_->GRpcCompressionAlgorithm = algorithm;
+    return *this;
+}
+
 TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     Impl_->SocketIdleTimeout = timeout;
     return *this;
@@ -305,6 +312,7 @@ TDriverConfig TDriver::GetConfig() const {
     config.SetGRpcKeepAliveTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->GRpcKeepAliveTimeout_));
     config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
     config.SetGRpcLoadBalancingPolicy(Impl_->GRpcLoadBalancingPolicy_);
+    config.SetGRpcCompressionAlgorithm(Impl_->GRpcCompressionAlgorithm_);
     config.SetSocketIdleTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->SocketIdleTimeout_));
     config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
     config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);

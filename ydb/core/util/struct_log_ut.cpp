@@ -18,12 +18,12 @@ void TestType(const std::vector<T>& values) {
 
         TBinaryData data;
         TTypesMapping::Serialize<T>(value, data);
-    
+
         T readValue;
         auto hasRead = TTypesMapping::Deserialize<T>(readValue, typeCode, data.data(), data.size());
         UNIT_ASSERT(hasRead);
 
-        std::string recoveredStr;
+        TString recoveredStr;
         if (hasRead) {
             recoveredStr = TTypesMapping::ToString(readValue);
         }
@@ -55,31 +55,31 @@ Y_UNIT_TEST_SUITE(StructLog) {
         UNIT_ASSERT(TKeyName("bbb") > TKeyName("aaa"));
 
         // compile vs string
-        UNIT_ASSERT(TKeyName("aaa") < TKeyName(std::string("bbb")));
-        UNIT_ASSERT(TKeyName("aa") < TKeyName(std::string("aaa")));
-        UNIT_ASSERT(TKeyName("aaa") == TKeyName(std::string("aaa")));
-        UNIT_ASSERT(TKeyName("aaa") > TKeyName(std::string("aa")));
-        UNIT_ASSERT(TKeyName("bbb") > TKeyName(std::string("aaa")));
+        UNIT_ASSERT(TKeyName("aaa") < TKeyName(TString("bbb")));
+        UNIT_ASSERT(TKeyName("aa") < TKeyName(TString("aaa")));
+        UNIT_ASSERT(TKeyName("aaa") == TKeyName(TString("aaa")));
+        UNIT_ASSERT(TKeyName("aaa") > TKeyName(TString("aa")));
+        UNIT_ASSERT(TKeyName("bbb") > TKeyName(TString("aaa")));
 
         // string vs compile
-        UNIT_ASSERT(TKeyName(std::string("aaa")) < TKeyName("bbb"));
-        UNIT_ASSERT(TKeyName(std::string("aa")) < TKeyName("aaa"));
-        UNIT_ASSERT(TKeyName(std::string("aaa")) == TKeyName("aaa"));
-        UNIT_ASSERT(TKeyName(std::string("aaa")) > TKeyName("aa"));
-        UNIT_ASSERT(TKeyName(std::string("bbb")) > TKeyName("aaa"));
+        UNIT_ASSERT(TKeyName(TString("aaa")) < TKeyName("bbb"));
+        UNIT_ASSERT(TKeyName(TString("aa")) < TKeyName("aaa"));
+        UNIT_ASSERT(TKeyName(TString("aaa")) == TKeyName("aaa"));
+        UNIT_ASSERT(TKeyName(TString("aaa")) > TKeyName("aa"));
+        UNIT_ASSERT(TKeyName(TString("bbb")) > TKeyName("aaa"));
 
         // string vs string
-        UNIT_ASSERT(TKeyName(std::string("aaa")) < TKeyName(std::string("bbb")));
-        UNIT_ASSERT(TKeyName(std::string("aa")) < TKeyName(std::string("aaa")));
-        UNIT_ASSERT(TKeyName(std::string("aaa")) == TKeyName(std::string("aaa")));
-        UNIT_ASSERT(TKeyName(std::string("aaa")) > TKeyName(std::string("aa")));
-        UNIT_ASSERT(TKeyName(std::string("bbb")) > TKeyName(std::string("aaa")));
+        UNIT_ASSERT(TKeyName(TString("aaa")) < TKeyName(TString("bbb")));
+        UNIT_ASSERT(TKeyName(TString("aa")) < TKeyName(TString("aaa")));
+        UNIT_ASSERT(TKeyName(TString("aaa")) == TKeyName(TString("aaa")));
+        UNIT_ASSERT(TKeyName(TString("aaa")) > TKeyName(TString("aa")));
+        UNIT_ASSERT(TKeyName(TString("bbb")) > TKeyName(TString("aaa")));
     }
 
     template <typename T>
     void TestCreateMessageTypedValueRead(const std::vector<T>& values) {
         for(auto value: values) {
-            auto message = CREATE_MESSAGE({"value", value});
+            auto message = YDBLOG_CREATE_MESSAGE({"value", value});
 
             auto index = message.GetValueIndex("value");
             UNIT_ASSERT(index.has_value());
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(SortValues) {
         {
-            auto message = CREATE_MESSAGE({"v1", 2});
+            auto message = YDBLOG_CREATE_MESSAGE({"v1", 2});
             UNIT_ASSERT(message.GetValuesCount() == 1);
             UNIT_ASSERT(message.GetValueIndex("v1") == 0);
             UNIT_ASSERT(!message.GetValueIndex("v2").has_value());
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<int>("v1") == 2);
         }
         {
-            auto message = CREATE_MESSAGE({"v3", 3}, {"v2", 1}, {"v1", 2});
+            auto message = YDBLOG_CREATE_MESSAGE({"v3", 3}, {"v2", 1}, {"v1", 2});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v1") == 0);
             UNIT_ASSERT(message.GetValueIndex("v2") == 1);
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<int>("v3") == 3);
         }
         {
-            auto message = CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 1}, {"v1", 2}, {"v1", 3});
+            auto message = YDBLOG_CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 1}, {"v1", 2}, {"v1", 3});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v0") == 0);
             UNIT_ASSERT(message.GetValueIndex("v1") == 1);
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<int>("v2") == 1);
         }
         {
-            auto message = CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 3}, {"v1", 2}, {"v1", 1});
+            auto message = YDBLOG_CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 3}, {"v1", 2}, {"v1", 1});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v0") == 0);
             UNIT_ASSERT(message.GetValueIndex("v1") == 1);
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(RemoveValues) {
-        auto message = CREATE_MESSAGE({"v0", 1}, {"v1", 1}, {"v2", 3});
+        auto message = YDBLOG_CREATE_MESSAGE({"v0", 1}, {"v1", 1}, {"v2", 3});
 
         UNIT_ASSERT(message.HasValue("v1"));
         message.RemoveValue(1);
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(ScanValues) {
-            auto message = CREATE_MESSAGE(
+            auto message = YDBLOG_CREATE_MESSAGE(
             {"uint8", static_cast<ui8>(1)},
             {"int8", static_cast<i8>(2)},
             {"uint16", static_cast<ui16>(3)},
@@ -176,43 +176,53 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         message.ForEach(
             MakeOverloaded(
-                [](const TKeyName& name, const ui8& value) { UNIT_ASSERT(name.ToString() == "uint8" && value == 1); },
-                [](const TKeyName& name, const i8& value) { UNIT_ASSERT(name.ToString() == "int8" && value == 2); },
-                [](const TKeyName& name, const ui16& value) { UNIT_ASSERT(name.ToString() == "uint16" && value == 3); },
-                [](const TKeyName& name, const i16& value) { UNIT_ASSERT(name.ToString() == "int16" && value == 4); },
-                [](const TKeyName& name, const ui32& value) { UNIT_ASSERT(name.ToString() == "uint32" && value == 5); },
-                [](const TKeyName& name, const i32& value) { UNIT_ASSERT(name.ToString() == "int32" && value == 6); },
-                [](const TKeyName& name, const ui64& value) { UNIT_ASSERT(name.ToString() == "uint64" && value == 7); },
-                [](const TKeyName& name, const i64& value) { UNIT_ASSERT(name.ToString() == "int64" && value == 8); },
-                [](const TKeyName& name, const bool& value) { UNIT_ASSERT(name.ToString() == "bool" && value == true); },
-                [](const TKeyName& name, const TString& value) { UNIT_ASSERT(name.ToString() == "string" && value == "abc"); }
+                [](const std::vector<TKeyName>& name, const std::uint8_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="uint8" && value==1); },
+                [](const std::vector<TKeyName>& name, const std::int8_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="int8" && value==2); },
+                [](const std::vector<TKeyName>& name, const std::uint16_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="uint16" && value==3); },
+                [](const std::vector<TKeyName>& name, const std::int16_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="int16" && value==4); },
+                [](const std::vector<TKeyName>& name, const std::uint32_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="uint32" && value==5); },
+                [](const std::vector<TKeyName>& name, const std::int32_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="int32" && value==6); },
+                [](const std::vector<TKeyName>& name, const std::uint64_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="uint64" && value==7); },
+                [](const std::vector<TKeyName>& name, const std::int64_t& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="int64" && value==8); },
+                [](const std::vector<TKeyName>& name, const bool& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="bool" && value==true); },
+                [](const std::vector<TKeyName>& name, const TString& value) { UNIT_ASSERT(name.size()==1 && name[0].ToString()=="string" && value=="abc"); }
             ));
     }
 
     TString GetMessageString(const TStructuredMessage& message) {
         TString result;
-        auto append = [&result](const TString& name, const auto& value)
+        auto append = [&result](const std::vector<TKeyName>& name, const TString& typeName, const auto& value)
         {
-            if (!result.empty()) {
-                result +=", ";
+            if (!result.empty()) result +=", ";
+
+            bool addDot = false;
+            for(auto& nameItem: name) {
+                if (addDot) {
+                    result += ".";
+                } else {
+                    addDot = true;
+                }
+
+                result += nameItem.ToString();
             }
-            result += name;
+            result += ":";
+            result += typeName;
             result += "=";
             result += TTypesMapping::ToString(value);
         };
 
         message.ForEach(
             MakeOverloaded(
-                [&](const TKeyName& name, const ui8& value) { append(name.ToString() + ":uint8", value); },
-                [&](const TKeyName& name, const i8& value) { append(name.ToString() + ":int8", value); },
-                [&](const TKeyName& name, const ui16& value) { append(name.ToString() + ":uint16", value); },
-                [&](const TKeyName& name, const i16& value) { append(name.ToString() + ":int16", value); },
-                [&](const TKeyName& name, const ui32& value) { append(name.ToString() + ":uint32", value); },
-                [&](const TKeyName& name, const i32& value) { append(name.ToString() + ":int32", value); },
-                [&](const TKeyName& name, const ui64& value) { append(name.ToString() + ":uint64", value); },
-                [&](const TKeyName& name, const i64& value) { append(name.ToString() + ":int64", value); },
-                [&](const TKeyName& name, const bool& value) { append(name.ToString() + ":bool", value); },
-                [&](const TKeyName& name, const TString& value) { append(name.ToString() + ":string", value); }
+                [&](const std::vector<TKeyName>& name, const std::uint8_t& value) { append(name, "uint8", value); },
+                [&](const std::vector<TKeyName>& name, const std::int8_t& value) { append(name, "int8", value); },
+                [&](const std::vector<TKeyName>& name, const std::uint16_t& value) { append(name, "uint16", value); },
+                [&](const std::vector<TKeyName>& name, const std::int16_t& value) { append(name, "int16", value); },
+                [&](const std::vector<TKeyName>& name, const std::uint32_t& value) { append(name, "uint32", value); },
+                [&](const std::vector<TKeyName>& name, const std::int32_t& value) { append(name, "int32", value); },
+                [&](const std::vector<TKeyName>& name, const std::uint64_t& value) { append(name, "uint64", value); },
+                [&](const std::vector<TKeyName>& name, const std::int64_t& value) { append(name, "int64", value); },
+                [&](const std::vector<TKeyName>& name, const bool& value) { append(name, "bool", value); },
+                [&](const std::vector<TKeyName>& name, const TString& value) { append(name, "string", value); }
             )
         );
         return result;
@@ -223,76 +233,76 @@ Y_UNIT_TEST_SUITE(StructLog) {
         UNIT_ASSERT(ok); }
 
     Y_UNIT_TEST(CreateMessageVaryValuesCount) {
-        TEST_MESSAGE(CREATE_MESSAGE(), "");
-        TEST_MESSAGE(CREATE_MESSAGE({"v1", 1}), "v1:int32=1");
-        TEST_MESSAGE(CREATE_MESSAGE({"v1", 1}, {"v2", 2}), "v1:int32=1, v2:int32=2");
-        TEST_MESSAGE(CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), "v1:int32=1, v2:int32=2, v3:int32=3");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}), "v1:int32=1");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), "v1:int32=1, v2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), "v1:int32=1, v2:int32=2, v3:int32=3");
     }
 
     Y_UNIT_TEST(CreateMessageVaryTypes) {
         // Empty pairs
-        TEST_MESSAGE(CREATE_MESSAGE({"v1", 1}, {}), "v1:int32=1");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}, {}), "v1:int32=1");
 
         // Support types
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::uint8_t>(1)}), "value:uint8=1");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::int8_t>(2)}), "value:int8=2");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::uint16_t>(3)}), "value:uint16=3");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::int16_t>(4)}), "value:int16=4");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::uint32_t>(5)}), "value:uint32=5");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::int32_t>(6)}), "value:int32=6");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::uint64_t>(7)}), "value:uint64=7");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", static_cast<std::int64_t>(8)}), "value:int64=8");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", true}), "value:bool=true");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", TString("abc")}), "value:string=abc");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", "abc"}), "value:string=abc");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::uint8_t>(1)}), "value:uint8=1");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::int8_t>(2)}), "value:int8=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::uint16_t>(3)}), "value:uint16=3");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::int16_t>(4)}), "value:int16=4");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::uint32_t>(5)}), "value:uint32=5");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::int32_t>(6)}), "value:int32=6");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::uint64_t>(7)}), "value:uint64=7");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<std::int64_t>(8)}), "value:int64=8");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", true}), "value:bool=true");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TString("abc")}), "value:string=abc");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", "abc"}), "value:string=abc");
 
         // optional values
-        TEST_MESSAGE(CREATE_MESSAGE({"value", std::optional<ui8>{}}), "");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", std::optional<ui8>{1}}), "value:uint8=1");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<ui8>{}}), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<ui8>{1}}), "value:uint8=1");
     }
 
     Y_UNIT_TEST(CreateMessageWithReusage) {
         // reuse message and sub message
-        auto subMessage = CREATE_MESSAGE({"subValue1", 1}, {"subValue2", 2});
-        TEST_MESSAGE(CREATE_MESSAGE(subMessage), "subValue1:int32=1, subValue2:int32=2");
-        TEST_MESSAGE(CREATE_MESSAGE(subMessage, subMessage), "subValue1:int32=1, subValue2:int32=2");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", subMessage}), "value.subValue1:int32=1, value.subValue2:int32=2");
-        TEST_MESSAGE(CREATE_MESSAGE(subMessage, {"value", subMessage}), "subValue1:int32=1, subValue2:int32=2, value.subValue1:int32=1, value.subValue2:int32=2");
+        auto subMessage = YDBLOG_CREATE_MESSAGE({"subValue1", 1}, {"subValue2", 2});
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage), "subValue1:int32=1, subValue2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, subMessage), "subValue1:int32=1, subValue2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", subMessage}), "value.subValue1:int32=1, value.subValue2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, {"value", subMessage}), "subValue1:int32=1, subValue2:int32=2, value.subValue1:int32=1, value.subValue2:int32=2");
 
         // optional subMessages
-        TEST_MESSAGE(CREATE_MESSAGE({"value", std::optional<TStructuredMessage>{}}), "");
-        TEST_MESSAGE(CREATE_MESSAGE({"value", std::optional<TStructuredMessage>{subMessage}}), "value.subValue1:int32=1, value.subValue2:int32=2");
-        TEST_MESSAGE(CREATE_MESSAGE(std::optional<TStructuredMessage>{}), "");
-        TEST_MESSAGE(CREATE_MESSAGE(std::optional<TStructuredMessage>{subMessage}), "subValue1:int32=1, subValue2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<TStructuredMessage>{}}), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<TStructuredMessage>{subMessage}}), "value.subValue1:int32=1, value.subValue2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(std::optional<TStructuredMessage>{}), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(std::optional<TStructuredMessage>{subMessage}), "subValue1:int32=1, subValue2:int32=2");
     }
 
     Y_UNIT_TEST(UpdateMessage) {
         {
-            auto message = CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3});
+            auto message = YDBLOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3});
             TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
 
-            UPDATE_MESSAGE(message, TStructuredMessage{});
+            YDBLOG_UPDATE_MESSAGE(message, TStructuredMessage{});
             TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
         }
         {
-            auto message = CREATE_MESSAGE({"v1", 1}, {"v2", 2});
+            auto message = YDBLOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2});
             TEST_MESSAGE(message, "v1:int32=1, v2:int32=2");
 
-            UPDATE_MESSAGE(message, {"v3", 3});
+            YDBLOG_UPDATE_MESSAGE(message, {"v3", 3});
             TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
         }
         {
-            auto message = CREATE_MESSAGE({"v1", 1});
+            auto message = YDBLOG_CREATE_MESSAGE({"v1", 1});
             TEST_MESSAGE(message, "v1:int32=1");
 
-            UPDATE_MESSAGE(message, {"v2", 2}, {"v3", 3});
+            YDBLOG_UPDATE_MESSAGE(message, {"v2", 2}, {"v3", 3});
             TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
         }
         {
-            auto message = CREATE_MESSAGE();
+            auto message = YDBLOG_CREATE_MESSAGE();
             TEST_MESSAGE(message, "");
 
-            UPDATE_MESSAGE(message, {"v1", 1}, {"v2", 2}, {"v3", 3});
+            YDBLOG_UPDATE_MESSAGE(message, {"v1", 1}, {"v2", 2}, {"v3", 3});
             TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
         }
     }

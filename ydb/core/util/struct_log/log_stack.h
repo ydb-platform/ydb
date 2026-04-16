@@ -30,5 +30,5 @@ public:
     };
 };
 
-#define UPDATE_STACK_TOP(...) UPDATE_MESSAGE(TLogStack::GetTop(), __VA_ARGS__)
+#define UPDATE_STACK_TOP(...) YDBLOG_UPDATE_MESSAGE(TLogStack::GetTop(), __VA_ARGS__)
 }

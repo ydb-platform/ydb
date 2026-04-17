@@ -36,9 +36,11 @@ The build process using the source code is described in the source code reposito
 
   {% include [install/cmd_php.md](install/cmd_php.md) %}
 
-- Node.JS
+- JavaScript
 
-  {% include [install/cmd_nodejs.md](install/cmd_nodejs.md) %}
+  {% include [install/cmd_npm.md](install/cmd_npm.md) %}
+
+  The minimum supported [Node.js®](https://nodejs.org/en/download) version is 20.19.
 
 - Rust
 

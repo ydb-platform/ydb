@@ -98,6 +98,15 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
+
 {% endlist %}
 
 ## Working with sessions {#session}
@@ -183,6 +192,15 @@ To start working with coordination nodes, a client must establish a session with
     ```
 
   {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
 
 {% endlist %}
 

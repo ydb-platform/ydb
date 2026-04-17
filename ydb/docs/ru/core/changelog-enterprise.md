@@ -18,7 +18,7 @@
 * [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) для потоков изменений (changefeed).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/19507) возможность создавать потоки изменений к индексным таблицам.
 * Добавлена возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md?version=v25.1) для вторичного индекса. Включается установкой флага `enable_access_to_index_impl_tables` в конфигурации кластера.
-* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/issues/7054) потоки изменений. Чтобы воспользоваться функциональностью, необходимо установить флаги `enable_changefeeds_export` и `enable_changefeeds_export` в секции `feature_flags` конфигурации [базы данных](./maintenance/manual/dynamic-config) или [кластера](./maintenance/manual/static-config).
+* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/issues/7054) потоки изменений. Чтобы воспользоваться функциональностью, необходимо установить флаги `enable_changefeeds_export` и `enable_changefeeds_export` в секции `feature_flags` конфигурации [базы данных](./devops/configuration-management/configuration-v1/dynamic-config.md) или [кластера](./devops/configuration-management/configuration-v1/static-config.md).
 * Добавлено автоудаление временных директорий и таблиц при экспорте в S3. Включается установкой флага `enable_export_auto_dropping` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, предотвращающая восстановление из повреждённых резервных копий и защищающая от потери данных.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md?version=v25.1#udf) в запросах.
@@ -127,7 +127,7 @@
 
 #### Функциональность
 
-* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/pull/25675) представления (VIEW). Чтобы воспользоваться функциональностью, необходимо установить флаг `enable_view_export` в секции `feature_flags` конфигурации [базы данных](./maintenance/manual/dynamic-config) или [кластера](./maintenance/manual/static-config).
+* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/pull/25675) представления (VIEW). Чтобы воспользоваться функциональностью, необходимо установить флаг `enable_view_export` в секции `feature_flags` конфигурации [базы данных](./devops/configuration-management/configuration-v1/dynamic-config.md) или [кластера](./devops/configuration-management/configuration-v1/static-config.md).
 * В текст ошибок [Transaction locks invalidated](./troubleshooting/performance/queries/transaction-lock-invalidation) в случае невозможности идентифицировать таблицу (Unknown table) добавляются дополнительные идентификаторы: идентификатор пути к объекту (`PathId`) и идентификатор таблетки (`TabletId`).
 
 ### Версия 24.4.4.15 {#24-4-4-15}

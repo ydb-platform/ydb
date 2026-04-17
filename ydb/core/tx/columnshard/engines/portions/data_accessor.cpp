@@ -248,7 +248,8 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPorti
             AFL_VERIFY(itBlobs != blobsData.end())("size", blobsData.size())("address", itCol->GetAddress().DebugString())
                 ("chunk_start", chunkStart)("chunk_end", chunkEnd)
                 ("page_start", pageRange.Start)("page_end", pageRange.End);
-            columns.back().AddBlobInfo(chunkIdx, chunkRows, std::move(itBlobs->second));
+            TPortionDataAccessor::TAssembleBlobInfo blobInfo = MakeAssembleBlobInfoWithMeta(blobsData, itBlobs, *itCol);
+            columns.back().AddBlobInfo(chunkIdx, chunkRows, std::move(blobInfo));
             blobsData.erase(itBlobs);
             ++chunkIdx;
             absoluteRow = chunkEnd;

@@ -182,16 +182,15 @@ auth_config:
     bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
     bind_password: "serviceAccauntPassword"
     search_filter: "uid=$username"
+    scheme: "ldap"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+      enable_nested_groups_search: true
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
   ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
   refresh_time: "1h"
   ...
 ```
@@ -324,7 +323,6 @@ auth_config:
 В процессе аутентификации пользовательская сессия получает аутентификационной токен, который передается вместе с каждым запросом к кластеру {{ ydb-short-name }}. Так как {{ ydb-short-name }} — это распределенная система, то пользовательские запросы будут в конечном итоге обрабатываться на одном или нескольких узлах {{ ydb-short-name }}. Каждый узел {{ ydb-short-name }}, получив запрос от пользователя, проводит верификацию аутентификационного токена, и в случае успешной проверки, генерирует **токен пользователя**, который действует только внутри текущего узла {{ ydb-short-name }} и используется для авторизации запрошенных пользователем действий. В рамках последующих запросов с тем же самым аутентификационным токеном на этот же узел {{ ydb-short-name }} уже не требуют верификации аутентификационного токена, а выполняют под токеном пользователя.
 
 Время жизни и другие важные аспекты работы токена пользователя настраиваются в конфигурации {{ ydb-short-name }} с помощью следующих параметров:
-
 
 #|
 || refresh_period

@@ -87,6 +87,9 @@ namespace NYql {
         bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth);
         bool SerializeCompare(const TCoCompare& compare, TPredicate* predicateProto, TSerializationContext& ctx, ui64 depth);
         bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeExists(const TCoExists& exists, TPredicate* proto, TSerializationContext& ctx, bool withNot, ui64 depth);
+        bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
+        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, TSerializationContext& ctx, bool invert, ui64 depth);
 
 
 #define MATCH_TYPE(DataType, PROTO_TYPE)                                                  \
@@ -332,6 +335,18 @@ namespace NYql {
             }
             if (auto apply = expression.Maybe<TCoApply>()) {
                 return SerializeApply(apply.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (auto exists = expression.Maybe<TCoExists>()) {
+                return SerializeExists(exists.Cast(), proto->mutable_predicate(), ctx, false, depth);
+            }
+            if (auto in = expression.Maybe<TCoSqlIn>()) {
+                return SerializeSqlIn(in.Cast(), proto->mutable_predicate(), ctx, depth);
+            }
+            if (expression.Ref().IsCallable("IsNotDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(expression, proto->mutable_predicate(), ctx, false, depth);
+            }
+            if (expression.Ref().IsCallable("IsDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(expression, proto->mutable_predicate(), ctx, true, depth);
             }
 
             // data

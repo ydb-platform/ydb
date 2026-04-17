@@ -449,6 +449,8 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
         filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` IN (\\"hello2\\", \\"hello3\\")) IS NOT DISTINCT FROM TRUE)')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

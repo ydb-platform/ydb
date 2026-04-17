@@ -382,9 +382,7 @@ public:
                 && CheckExpressionNodeForPushdown(sqlIf.ThenValue())
                 && CheckExpressionNodeForPushdown(sqlIf.ElseValue());
         }
-        if (auto apply = node.Maybe<TCoApply>(); apply && Settings.IsEnabled(EFlag::PredicateAsExpression)) {
-            return ApplyCanBePushed(apply.Cast());
-        }
+
         if (auto flatMap = node.Maybe<TCoFlatMap>()) {
             return IsSupportedFlatMap(flatMap.Cast());
         }
@@ -400,8 +398,22 @@ public:
         if (auto maybeMax = node.Maybe<TCoMax>()) {
             return MaxCanBePushed(maybeMax.Cast());
         }
-        if (auto maybeCompare = node.Maybe<TCoCompare>(); maybeCompare && Settings.IsEnabled(EFlag::PredicateAsExpression)) {
-            return CompareCanBePushed(maybeCompare.Cast());
+        if (Settings.IsEnabled(EFlag::PredicateAsExpression)) {
+            if (auto apply = node.Maybe<TCoApply>()) {
+                return ApplyCanBePushed(apply.Cast());
+            }
+            if (auto maybeCompare = node.Maybe<TCoCompare>()) {
+                return CompareCanBePushed(maybeCompare.Cast());
+            }
+            if (auto maybeIn = node.Maybe<TCoSqlIn>()) {
+                return SqlInCanBePushed(maybeIn.Cast());
+            }
+            if (auto exists = node.Maybe<TCoExists>()) {
+                return ExistsCanBePushed(exists.Cast());
+            }
+            if (node.Ref().IsCallable({"IsNotDistinctFrom", "IsDistinctFrom"})) {
+                return IsDistinctCanBePushed(node);
+            }
         }
         if (auto maybeNonDeterministic = node.Maybe<TCoNonDeterministicBase>()) {
             return NonDeterministicCanBePushed(maybeNonDeterministic.Cast());

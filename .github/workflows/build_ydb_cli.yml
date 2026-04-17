@@ -115,10 +115,13 @@ jobs:
     needs: [prepare-release, gather-and-push-to-s3]
     runs-on: ubuntu-latest
     if: success()
+    outputs:
+      pr-url: ${{ steps.do-finalize.outputs.pr-url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Finalize release
+        id: do-finalize
         uses: ./.github/actions/finalize_release
         with:
           version: ${{ needs.prepare-release.outputs.new-version }}
@@ -132,7 +135,14 @@ jobs:
     name: Cleanup release branch on failure
     needs: [prepare-release, gather-and-push-to-s3, finalize-release]
     runs-on: ubuntu-latest
-    if: failure() && needs.prepare-release.result == 'success'
+    if: >-
+      always() &&
+      needs.prepare-release.result == 'success' &&
+      (
+        needs.gather-and-push-to-s3.result == 'failure' ||
+        needs.gather-and-push-to-s3.result == 'skipped' ||
+        (needs.finalize-release.result == 'failure' && needs.finalize-release.outputs.pr-url == '')
+      )
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -25,6 +25,8 @@
 
 #include <library/cpp/protobuf/json/util.h>
 
+#include <optional>
+
 #include <util/generic/hash.h>
 
 namespace NKikimr {
@@ -1217,24 +1219,84 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 break;
             }
             case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                using TDefaults = NKikimr::NOlap::NIndexes::NDefaults;
+                using TConstants = NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants;
+
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     status = Ydb::StatusIds::UNSUPPORTED;
                     error = "Local bloom ngram filter index support is disabled";
                     return false;
                 }
 
+                auto failBadRequest = [&](TStringBuf field) {
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder()
+                        << field
+                        << " is out of allowed interval for local bloom ngram index on column: "
+                        << name;
+                    return false;
+                };
+
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
+
                 auto* ngram = upsert->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
-                const double fpp = ngramSettings.has_false_positive_probability()
-                    ? ngramSettings.false_positive_probability()
-                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
-                ngram->SetNGrammSize(ngramSettings.ngram_size() ? ngramSettings.ngram_size() : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize);
-                ngram->SetCaseSensitive(ngramSettings.has_case_sensitive() ? ngramSettings.case_sensitive() : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
-                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
-                ngram->SetFalsePositiveProbability(fpp);
+
+                ngram->SetNGrammSize(
+                    ngramSettings.ngram_size()
+                        ? ngramSettings.ngram_size()
+                        : TDefaults::NGrammSize);
+
+                ngram->SetCaseSensitive(
+                    ngramSettings.has_case_sensitive()
+                        ? ngramSettings.case_sensitive()
+                        : TDefaults::CaseSensitive);
+
+                const bool hasExplicitFpp = ngramSettings.has_false_positive_probability();
+                const ui32 rawHashesCount = ngramSettings.hashes_count();
+                const ui32 rawFilterSizeBytes = ngramSettings.filter_size_bytes();
+                const ui32 recordsCount = ngramSettings.records_count();
+
+                if (hasExplicitFpp || recordsCount == 0) {
+                    const double fpp = hasExplicitFpp
+                        ? ngramSettings.false_positive_probability()
+                        : TDefaults::FalsePositiveProbability;
+
+                    ngram->SetFilterSizeBytes(TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                    ngram->SetHashesCount(TConstants::CalcHashesCount(fpp));
+                    ngram->SetFalsePositiveProbability(fpp);
+                    ngram->ClearRecordsCount();
+                } else {
+                    const ui32 hashesCount = rawHashesCount
+                        ? rawHashesCount
+                        : TDefaults::HashesCount;
+
+                    const ui32 filterSizeBytes = rawFilterSizeBytes
+                        ? rawFilterSizeBytes
+                        : TConstants::CalcDeprecatedFilterSizeBytes(TDefaults::FalsePositiveProbability);
+
+                    if (!TConstants::CheckHashesCount(hashesCount)) {
+                        return failBadRequest("hashes_count");
+                    }
+
+                    if (!TConstants::CheckFilterSizeBytes(filterSizeBytes)) {
+                        return failBadRequest("filter_size_bytes");
+                    }
+
+                    if (!TConstants::CheckRecordsCount(recordsCount)) {
+                        return failBadRequest("records_count");
+                    }
+
+                    ngram->SetHashesCount(hashesCount);
+                    ngram->SetFilterSizeBytes(filterSizeBytes);
+                    ngram->SetRecordsCount(recordsCount);
+                    ngram->SetFalsePositiveProbability(
+                        TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
+                            rawHashesCount ? std::optional<ui32>(rawHashesCount) : std::nullopt,
+                            rawFilterSizeBytes ? std::optional<ui32>(rawFilterSizeBytes) : std::nullopt,
+                            std::optional<ui32>(recordsCount)));
+                }
+
                 ngram->SetColumnName(index.index_columns(0));
                 break;
             }

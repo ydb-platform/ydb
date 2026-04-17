@@ -36,7 +36,8 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
         GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), FalsePositiveProbability, NGrammSize,
-        TBase::GetBitsStorageConstructor(), CaseSensitive);
+        TBase::GetBitsStorageConstructor(), CaseSensitive, UseDeprecatedSizing, DeprecatedFilterSizeBytes, DeprecatedRecordsCount,
+        DeprecatedHashesCount);
 }
 
 TConclusionStatus TIndexConstructor::ValidateValues() const {
@@ -152,9 +153,84 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     if (bFilter.HasCaseSensitive()) {
         CaseSensitive = bFilter.GetCaseSensitive();
     }
+
     NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
-    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
-                                                                     : NDefaults::FalsePositiveProbability;
+    DeprecatedHashesCount.reset();
+    DeprecatedFilterSizeBytes.reset();
+    DeprecatedRecordsCount.reset();
+    UseDeprecatedSizing = false;
+
+    auto validateAndAssign = [&]<class TCheck, class TInterval>(
+        bool hasValue,
+        ui32 value,
+        decltype(DeprecatedHashesCount)& target,
+        TCheck check,
+        TInterval getInterval,
+        const TString& field) -> decltype(auto) {
+        if (!hasValue) {
+            return TConclusionStatus::Success();
+        }
+
+        if (!check(value)) {
+            return TConclusionStatus::Fail(field + " have to be in bloom ngramm filter in interval " + getInterval());
+        }
+
+        target = value;
+        return TConclusionStatus::Success();
+    };
+
+    if (auto status = validateAndAssign(
+            bFilter.HasHashesCount(),
+            bFilter.HasHashesCount() ? bFilter.GetHashesCount() : 0,
+            DeprecatedHashesCount,
+            TConstants::CheckHashesCount,
+            TConstants::GetHashesCountIntervalString,
+            "hashes_count");
+        !status.Ok()) {
+        return status;
+    }
+
+    if (auto status = validateAndAssign(
+            bFilter.HasFilterSizeBytes(),
+            bFilter.HasFilterSizeBytes() ? bFilter.GetFilterSizeBytes() : 0,
+            DeprecatedFilterSizeBytes,
+            TConstants::CheckFilterSizeBytes,
+            TConstants::GetFilterSizeBytesIntervalString,
+            "filter_size_bytes");
+        !status.Ok()) {
+        return status;
+    }
+
+    const bool hasRecordsCount = bFilter.HasRecordsCount();
+    const ui32 recordsCount = hasRecordsCount ? bFilter.GetRecordsCount() : 0;
+
+    if (recordsCount != 0) {
+        if (auto status = validateAndAssign(
+                true,
+                recordsCount,
+                DeprecatedRecordsCount,
+                TConstants::CheckRecordsCount,
+                TConstants::GetRecordsCountIntervalString,
+                "records_count");
+            !status.Ok()) {
+            return status;
+        }
+    }
+
+    const bool hasFpp = bFilter.HasFalsePositiveProbability();
+    UseDeprecatedSizing = hasRecordsCount && recordsCount != 0;
+
+    FalsePositiveProbability = UseDeprecatedSizing
+        ? (hasFpp
+            ? bFilter.GetFalsePositiveProbability()
+            : TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
+                DeprecatedHashesCount,
+                DeprecatedFilterSizeBytes,
+                DeprecatedRecordsCount))
+        : (hasFpp
+            ? bFilter.GetFalsePositiveProbability()
+            : NDefaults::FalsePositiveProbability);
+
     ColumnName = bFilter.GetColumnName();
 
     if (!DataExtractor.DeserializeFromProto(bFilter.GetDataExtractor())) {
@@ -170,10 +246,19 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     filterProto->SetColumnName(GetColumnName());
     filterProto->SetCaseSensitive(CaseSensitive);
     filterProto->SetNGrammSize(NGrammSize);
-    filterProto->SetHashesCount(TConstants::CalcHashesCount(FalsePositiveProbability));
-    filterProto->SetFilterSizeBytes(TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability));
-    filterProto->SetRecordsCount(TConstants::CalcDeprecatedRecordsCount(FalsePositiveProbability));
     filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+
+    if (UseDeprecatedSizing) {
+        filterProto->SetHashesCount(DeprecatedHashesCount.value_or(NDefaults::HashesCount));
+        filterProto->SetFilterSizeBytes(
+            DeprecatedFilterSizeBytes.value_or(TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability)));
+        filterProto->SetRecordsCount(DeprecatedRecordsCount.value_or(TConstants::DeprecatedRecordsCount));
+    } else {
+        filterProto->SetHashesCount(TConstants::CalcHashesCount(FalsePositiveProbability));
+        filterProto->SetFilterSizeBytes(TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability));
+        filterProto->ClearRecordsCount();
+    }
+
     *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }
 

@@ -202,12 +202,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            TString t = R"(CREATE TABLE `/Root/t1` (
+            TString t = R"(
+                CREATE TABLE `/Root/t1` (
                     a Int64	NOT NULL,
                     b Int64,
                     c Int64,
                     primary key(a)
-                ))";
+                );
+
+                CREATE TABLE `/Root/t2` (
+                    a Int64	NOT NULL,
+                    b Int64,
+                    c Int64,
+                    primary key(a)
+                );
+            )";
 
             Y_ENSURE(session.ExecuteSchemeQuery(t).GetValueSync().IsSuccess());
         }
@@ -222,7 +231,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 session.ExecuteQuery(
                     R"(
                         PRAGMA YqlSelect = 'force';
-                        select count(*) from `/Root/t1` as t1;
+                        select count(*)
+                        from `/Root/t1` as t1
+                        inner join `/Root/t2` as t2 on t1.a = t2.b;
                     )",
                     NYdb::NQuery::TTxControl::NoTx(),
                     NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)

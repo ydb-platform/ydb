@@ -116,12 +116,12 @@ jobs:
     runs-on: ubuntu-latest
     if: success()
     outputs:
-      pr-url: ${{ steps.do-finalize.outputs.pr-url }}
+      pr_url: ${{ steps.do_finalize.outputs['pr-url'] }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Finalize release
-        id: do-finalize
+        id: do_finalize
         uses: ./.github/actions/finalize_release
         with:
           version: ${{ needs.prepare-release.outputs.new-version }}
@@ -141,7 +141,7 @@ jobs:
       (
         needs.gather-and-push-to-s3.result == 'failure' ||
         needs.gather-and-push-to-s3.result == 'skipped' ||
-        (needs.finalize-release.result == 'failure' && needs.finalize-release.outputs.pr-url == '')
+        (needs['finalize-release'].result == 'failure' && needs['finalize-release'].outputs.pr_url == '')
       )
     steps:
       - name: Checkout

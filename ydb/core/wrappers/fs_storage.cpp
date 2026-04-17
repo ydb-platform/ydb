@@ -434,7 +434,7 @@ public:
         try {
             TFsPath dirPath(prefix);
 
-            if (!dirPath.GetPath().StartsWith(BasePath)) {
+            if (!dirPath.IsNonStrictSubpathOf(BasePath)) {
                 ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is outside of base path");
                 return;
             }

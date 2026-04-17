@@ -35,7 +35,7 @@ struct TPushdownSettings: public NPushdown::TSettings {
         Enable(
             // Operator features
             EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
-            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
+            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes |
             EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
             EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals |
 
@@ -326,21 +326,110 @@ public:
             return node;
         }
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
+        const auto& topic = dqPqTopicSource.Topic();
 
-        // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
-        if (!UseSharedReadingForTopic(dqPqTopicSource)) {
+        size_t topicPartitionsCount = 0;
+        for (auto kv : topic.Props()) {
+            auto key = kv.Name().Value();
+            if (key == PartitionsCountProp) {
+                topicPartitionsCount = FromString(kv.Value().Ref().Content());
+            }
+        }
+
+        YQL_CLOG(INFO, ProviderPq) << "topicPartitionsCount " << topicPartitionsCount;
+
+
+        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+        if (predicate.IsEmpty()) {
             return node;
         }
+    
+        // TExprNode::TPtr filteredPathList = ctx.Builder(node.Pos())
+        //     .Callable("EvaluateExpr")
+        //         .Callable(0, "+")
+        //             .Callable(0, "Int32")
+        //                 .Atom(0, "2")
+        //             .Seal()
+        //             .Callable(1, "Int32")
+        //                 .Atom(0, "2")
+        //             .Seal()
+        //         .Seal()
+        //     .Seal()
+        //     .Build();
+
+        // TExprNode::TPtr filteredPathList = ctx.Builder(node.Pos())
+        //     .Callable("EvaluateExpr")
+        //         .Callable(0, "Map")
+        //             .Callable(0, "Enumerate")
+        //                 .Callable(0, "Replicate")
+        //                     .Callable(0, "Int32")
+        //                         .Atom(0, "1")
+        //                     .Seal()
+        //                     .Callable(1, "Int32")
+        //                         .Atom(0, ToString(topicPartitionsCount))
+        //                     .Seal()
+        //                 .Seal()
+        //             .Seal()
+        //             .Lambda(1)
+        //                 .Param("item")
+        //                 .Callable("Nth")
+        //                     .Arg(0, "item")
+        //                     .Atom(1, "0", TNodeFlags::Default)
+        //                 .Seal()
+        //             .Seal()
+        //         .Seal()
+        //     .Seal()
+        //     .Build();
+
+   TExprNode::TPtr filteredPathList = ctx.Builder(node.Pos())
+            .Callable("EvaluateExpr")
+                .Callable(0, "Map")
+                    .Callable(0, "Enumerate")
+                        .Callable(0, "Replicate")
+                            .Callable(0, "Int32")
+                                .Atom(0, "1")
+                            .Seal()
+                            .Callable(1, "Int32")
+                                .Atom(0, ToString(topicPartitionsCount))
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Lambda(1)
+                        .Param("item")
+
+                        .Callable("AsStruct")
+                            .List(0)
+                                // .Callable("Nth")
+                                //     .Arg(0, "item")
+                                //     .Atom(1, "0", TNodeFlags::Default)
+                                // .Seal()
+                           
+                                .Atom(0, "ass")
+                                .Arg(1, "item")
+                            .Seal()
+                            
+                        .Seal()
+                    
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+
+        // // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
+        // if (!UseSharedReadingForTopic(dqPqTopicSource)) {
+        //     return node;
+        // }
 
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
 
-        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        if (predicate.IsEmpty()) {
-            return node;
-        }
+        // NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+        // if (predicate.IsEmpty()) {
+        //     return node;
+        // }
 
         TStringBuilder err;
         NYql::NConnector::NApi::TPredicate predicateProto;
@@ -363,6 +452,7 @@ public:
                         .Input<TDqPqTopicSource>()
                             .InitFrom(dqPqTopicSource)
                             .FilterPredicate().Value(serializedProto).Build()
+                            .RowType(filteredPathList)
                             .Build()
                         .Build()
                     .Build()
@@ -375,6 +465,7 @@ public:
                 .Input<TDqPqTopicSource>()
                     .InitFrom(dqPqTopicSource)
                     .FilterPredicate().Value(serializedProto).Build()
+                    .RowType(filteredPathList)
                     .Build()
                 .Build()
             .Done();

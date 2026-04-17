@@ -25,6 +25,8 @@ struct TPredicateNode {
     bool IsValid() const;
     bool IsEmpty() const;
     void SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos, EBoolOp op);
+    TString ToString() const;
+    TString ToString(TStringBuilder& builder, ui32 tabs) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> ExprNode;
     std::vector<TPredicateNode> Children;

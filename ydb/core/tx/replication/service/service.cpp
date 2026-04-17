@@ -216,7 +216,8 @@ public:
     {
         auto res = Workers.emplace(id, TWorkerInfo{ops->Register(actor, TMailboxType::HTSwap, poolId),
                                                    replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters});
-        if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !res.first->second.Location.GetPath().empty()) {
+        const auto& worker = res.first->second;
+        if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !worker.Location.GetPath().empty()) {
             PendingStatsValues[id];
         }
 

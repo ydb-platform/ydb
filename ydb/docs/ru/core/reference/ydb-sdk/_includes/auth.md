@@ -62,7 +62,6 @@
   Service Account Key | [new Ydb.Sdk.Auth.ServiceAccountProvider(saKeyFile);](https://github.com/ydb-platform/ydb-dotnet-yc/blob/main/src/Ydb.Sdk.Yc.Auth/src/ServiceAccountProvider.cs) |
   OAuth 2.0 token exchange | Не поддерживается                                                                                                                                  |
   Определяется по переменным окружения | Не поддерживается                                                                                                              |
-  Определяется по переменным окружения |                                                                                                                                                                 |
 
 
 - JavaScript

@@ -279,6 +279,15 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
 }
 
 template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>:: UpdateReadSizeBudgetCounter(i64 value) {
+    if constexpr (!UseMigrationProtocol) {
+        if (Settings.Counters_) {
+            *Settings.Counters_->ReadSizeBudget = value;
+        }
+    }
+}
+
+template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlainStatus& status) {
     TDuration delay = TDuration::Zero();
 
@@ -326,7 +335,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
                  GetLogPrefix() << "In Reconnect, ReadSizeBudget = " << ReadSizeBudget
                                 << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
 
-        ReadSizeBudget += ReadSizeServerDelta;
+        UpdateReadSizeBudgetCounter(ReadSizeBudget += ReadSizeServerDelta);
         ReadSizeServerDelta = 0;
 
         LOG_LAZY(Log, TLOG_DEBUG,
@@ -601,7 +610,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
             }
             req.mutable_read_request()->set_bytes_size(ReadSizeBudget);
             ReadSizeServerDelta += ReadSizeBudget;
-            ReadSizeBudget = 0;
+            UpdateReadSizeBudgetCounter(ReadSizeBudget = 0);
         }
 
         WriteToProcessorImpl(std::move(req));
@@ -1449,7 +1458,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
         if (!response.has_partition_data() || response.partition_data().batches_size() == 0) {
             // Sometimes the server might send an empty DirectReadResponse with a non-zero bytes_size, that we should take into account.
             stopIfGotLastResponse();
-            ReadSizeBudget += response.bytes_size();
+            UpdateReadSizeBudgetCounter(ReadSizeBudget += response.bytes_size());
             ReadSizeServerDelta -= response.bytes_size();
             WaitingReadResponse = false;
             ContinueReadingDataImpl();
@@ -1819,7 +1828,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDes
 
     if constexpr (!UseMigrationProtocol) {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
-        ReadSizeBudget += serverBytesSize;
+        UpdateReadSizeBudgetCounter(ReadSizeBudget += serverBytesSize);
     }
 
     ContinueReadingDataImpl();
@@ -1855,7 +1864,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
     }
     if constexpr (!UseMigrationProtocol) {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
-        ReadSizeBudget += serverBytesSize;
+        UpdateReadSizeBudgetCounter(ReadSizeBudget += serverBytesSize);
     }
     ContinueReadingDataImpl();
     StartDecompressionTasksImpl(deferred);
@@ -1882,7 +1891,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionTaskCan
     }
     if constexpr (!UseMigrationProtocol) {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
-        ReadSizeBudget += serverBytesSize;
+        UpdateReadSizeBudgetCounter(ReadSizeBudget += serverBytesSize);
     }
 
     ContinueReadingDataImpl();

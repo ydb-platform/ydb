@@ -286,15 +286,15 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         auto* poolSnapshot1 = queries[0].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot1);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->Demand, kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->CpuDemand, kCpuLimit);
 
         auto* poolSnapshot2 = queries[1].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot2);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->Demand, kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->CpuDemand, kCpuLimit);
 
         auto* databaseSnapshot = poolSnapshot1->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->Demand, kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->CpuDemand, kCpuLimit);
     }
 
     Y_UNIT_TEST_TWIN(LeftFairShareIsDistributed, DefaultFairShareMode) {
@@ -703,10 +703,10 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
-        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = kInternalLimit});
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuLimit = kInternalLimit});
 
         const TString poolId = "pool1";
-        scheduler.AddOrUpdatePool(databaseId, poolId, {.Limit = kInternalLimit});
+        scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kInternalLimit});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
-        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = kInternalLimit});
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuLimit = kInternalLimit});
 
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});

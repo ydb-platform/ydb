@@ -114,7 +114,7 @@ public:
         };
 
         if (ev->Get()->Params.TotalCpuLimitPercentPerNode >= 0) {
-            attrs.Limit = ev->Get()->Params.TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100;
+            attrs.CpuLimit = ev->Get()->Params.TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100;
         }
 
         Y_ASSERT(!poolId.empty());
@@ -153,7 +153,7 @@ public:
             // Update limit
             if (ev->Get()->Config->TotalCpuLimitPercentPerNode >= 0) {
                 Scheduler->AddOrUpdatePool(databaseId, poolId, {
-                    .Limit = ev->Get()->Config->TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100,
+                    .CpuLimit = ev->Get()->Config->TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100,
                 });
             }
         } else if (poolIt != PoolSubscribtions.end()) {
@@ -216,12 +216,12 @@ private:
     void UpdatePoolsGuarantee() {
         if (PoolExternalWeightSum <= Epsilon) {
             for (const auto& [key, _] : PoolSubscribtions) {
-                Scheduler->AddOrUpdatePool(key.first, key.second, {.Guarantee = 0});
+                Scheduler->AddOrUpdatePool(key.first, key.second, {.CpuGuarantee = 0});
             }
         } else {
             for (const auto& [key, params] : PoolSubscribtions) {
                 Scheduler->AddOrUpdatePool(key.first, key.second,
-                    {.Guarantee = params.ExternalWeight / PoolExternalWeightSum * Scheduler->GetTotalCpuLimit()});
+                    {.CpuGuarantee = params.ExternalWeight / PoolExternalWeightSum * Scheduler->GetTotalCpuLimit()});
             }
         }
     }
@@ -306,7 +306,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {
         query->Update(attrs);
     } else {
-        bool allowMinFairShare = (!pool->Limit || *pool->Limit > 0)
+        bool allowMinFairShare = (!pool->CpuLimit || *pool->CpuLimit > 0)
             && (FairShareMode >= NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
         query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
         pool->AddQuery(query);

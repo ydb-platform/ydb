@@ -253,7 +253,7 @@ It is recommended to add user groups and separate service accounts to the `*_all
     For all administrative checks.
 
 - **`bootstrap_allowed_sids`**
-    Only for cluster bootstrap operation
+    Only for cluster bootstrap operation.
 
 - **`register_dynamic_node_allowed_sids`**
     For registering nodes in a cluster (discovery service and cms subsystem).

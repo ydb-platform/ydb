@@ -12,7 +12,7 @@ namespace {
     using namespace NKikimr::NKqp;
 
     THashSet<TString> PgComparisonSigns = {
-        "<", "<=", ">", ">=", "="};
+        "<", "<=", ">", ">=", "=", "<>", "!="};
 
     const double TWO_COLUMNS_DEFAULT_SELECTIVITY = 0.3;
 

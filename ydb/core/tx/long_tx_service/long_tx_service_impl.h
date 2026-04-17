@@ -265,6 +265,7 @@ namespace NLongTxService {
             TWaitEdgeId Id;
             TLockStateHandle Awaiter;
             TLockStateHandle Blocker;
+            bool Broken = false; // True if the deadlock detection algo sent a request to break it.
 
             TWaitEdge(const TWaitEdgeId& id, TLockStateHandle awaiter, TLockStateHandle blocker)
                 : Id(id)
@@ -531,7 +532,6 @@ namespace NLongTxService {
         TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
 
         THashMap<TWaitEdgeId, TWaitEdge> WaitEdges;
-        THashSet<TWaitEdgeId> Broken;
     };
 
 } // namespace NLongTxService

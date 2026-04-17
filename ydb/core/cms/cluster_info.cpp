@@ -999,6 +999,40 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     }
 }
 
+static bool IsTenantSystemTabletType(TTabletTypes::EType type) {
+    switch (type) {
+        case TTabletTypes::SchemeShard:
+        case TTabletTypes::Hive:
+        case TTabletTypes::Coordinator:
+        case TTabletTypes::Mediator:
+        case TTabletTypes::SysViewProcessor:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void TClusterInfo::PopulateNodesWithSysTablets() {
+    NodesWithSysTablets.clear();
+
+    for (const auto &[nodeId, _] : NodeToTabletTypes) {
+        NodesWithSysTablets.insert(nodeId);
+    }
+
+    for (const auto &[nodeId, nodeInfo] : Nodes) {
+        if (NodesWithSysTablets.contains(nodeId)) {
+            continue;
+        }
+        for (ui64 tabletId : nodeInfo->Tablets) {
+            auto it = Tablets.find(tabletId);
+            if (it != Tablets.end() && it->second.Leader && IsTenantSystemTabletType(it->second.Type)) {
+                NodesWithSysTablets.insert(nodeId);
+                break;
+            }
+        }
+    }
+}
+
 void TClusterInfo::GenerateClusterNodesCheckers() {
     for (auto &[nodeId, nodeInfo] : Nodes) {
         const ui32 pileId = nodeInfo->PileId.GetOrElse(0);

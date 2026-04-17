@@ -34,6 +34,8 @@
 #include <util/string/join.h>
 #include <util/system/hostname.h>
 
+#include <algorithm>
+
 namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
@@ -769,7 +771,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
                                                                  << "; State: " << TStateStorageRingInfo::RingStateToString(state));
-        
+
         if (state == TStateStorageRingInfo::RestartByThisRequest) {
             hasRestartRingsByThisRequest = true;
             state = TStateStorageRingInfo::Restart;
@@ -850,7 +852,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
             if (maxAvailabilityOk) {
                 break;
             }
-            
+
             if (!hasRestartRingsByThisRequest) {
                 limit = keepAvailableLimit;
                 if (keepAvailableOk) {
@@ -891,7 +893,12 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
         return true;
     }
 
-    for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
+    auto it = ClusterInfo->NodeToTabletTypes.find(node.NodeId);
+    if (it == ClusterInfo->NodeToTabletTypes.end()) {
+        return true;
+    }
+
+    for (const auto &tabletType : it->second) {
         TNodeLockContext lockCtx(opts.Priority, opts.RequestId, opts.AvailabilityMode);
         if (!ClusterInfo->SysNodesCheckers[node.PileId.GetOrElse(0)][tabletType]->TryToLockNode(node.NodeId, lockCtx, error.Reason)) {
             error.Code = TStatus::DISALLOW_TEMP;
@@ -901,6 +908,20 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     }
 
     return true;
+}
+
+void TCms::SortActionsBySysTabletPriority(
+    TPermissionRequest &request) const
+{
+    if (ClusterInfo->NodesWithSysTablets.empty()) {
+        return;
+    }
+
+    auto *actions = request.MutableActions();
+    std::partition(actions->begin(), actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->HostHasSysTablet(action.GetHost());
+        });
 }
 
 bool TCms::TryToLockNode(const TAction& action,
@@ -1965,6 +1986,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
         info->GenerateSysTabletsNodesCheckers();
 
     info->GenerateClusterNodesCheckers();
+    info->PopulateNodesWithSysTablets();
 
     AdjustInfo(info, ctx);
 
@@ -2135,6 +2157,8 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
+    SortActionsBySysTabletPriority(rec);
+
     if (rec.GetEvictVDisks()) {
         for (const auto &action : rec.GetActions()) {
             if (State->HostMarkers.contains(action.GetHost())) {
@@ -2231,6 +2255,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     TRequestInfo scheduled;
 
     auto requestStartTime = TInstant::Now();
+
+    SortActionsBySysTabletPriority(request.Request);
 
     ClusterInfo->LogManager.PushRollbackPoint();
     for (const auto &scheduled_request : State->ScheduledRequests) {

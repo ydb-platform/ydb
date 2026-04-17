@@ -268,7 +268,7 @@ public:
             const NKikimrCms::TAction &action)
     {
         AddLockByRequest(notification.NotificationId);
-    
+
         TExternalLock lock(notification, action);
         auto pos = LowerBound(ExternalLocks.begin(), ExternalLocks.end(), lock, [](auto &l, auto &r) {
                 return l.LockStart < r.LockStart;
@@ -721,6 +721,7 @@ public:
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
+    void PopulateNodesWithSysTablets();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) {
         return StateStorageReplicas.contains(nodeId);
@@ -796,6 +797,21 @@ public:
 
     size_t NodesCount() const {
         return Nodes.size();
+    }
+
+    bool HostHasSysTablet(const TString &hostName) const {
+        ui32 nodeId;
+        if (TryFromString(hostName, nodeId)) {
+            return HasNode(nodeId) && NodesWithSysTablets.contains(nodeId);
+        }
+
+        auto pr = HostNameToNodeId.equal_range(hostName);
+        for (auto it = pr.first; it != pr.second; ++it) {
+            if (NodesWithSysTablets.contains(it->second)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     size_t NodesCount(const TString &hostName) const {
@@ -941,7 +957,7 @@ public:
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
-    
+
     TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);
@@ -1082,6 +1098,7 @@ public:
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
+    THashSet<ui32> NodesWithSysTablets;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

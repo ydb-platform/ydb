@@ -2,6 +2,8 @@
 
 This document describes security requirements for C++ developers writing monitoring pages (Developer UI) in YDB. These pages are generated at runtime using `HTML(str) { ... }` macros and served by the built-in HTTP monitoring server.
 
+Example of the pull request with CSRF protection and nonce handling in HTTP responses: [#36981](https://github.com/ydb-platform/ydb/pull/36981).
+
 ---
 
 ## 1. Content Security Policy (CSP) and `nonce`

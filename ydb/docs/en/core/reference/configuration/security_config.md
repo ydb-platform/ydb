@@ -192,29 +192,7 @@ Errors in access right entries are logged but do not affect {{ ydb-short-name }}
 
 ## Configuring Administrative and Other Privileges {#security-access-levels}
 
-Access control in {{ ydb-short-name }} is divided into two segments:
-
-- [Access control lists](../../concepts/glossary.md#access-control-list) for [scheme objects](../../concepts/glossary.md#scheme-object)
-- [Access level lists](../../concepts/glossary.md#access-level-list) to define additional privileges or restrictions
-
-Both segments are used in combination: a [subject](../../concepts/glossary.md#access-subject) is granted the privilege to perform an action only if both segments allow it. The action is not allowed if either segment denies it.
-
-Access levels are defined by SID lists.
-
-The lists form a hierarchy (used by the [Embedded UI](../embedded-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions):
-
-- `administration_allowed_sids`
-- `monitoring_allowed_sids`
-- `viewer_allowed_sids`
-- `database_allowed_sids`
-
-Higher levels imply lower, so a subject only needs to appear in one list.
-
-The lists `bootstrap_allowed_sids` and `register_dynamic_node_allowed_sids` are separate, applying only to bootstrap and node registration respectively.
-
-For any list, access is granted if the list is **empty** or if the subject's token contains at least one SID from the list.
-
-[//]: # (TODO: add a link to the viewer api reference and the required privileges, when available)
+Access level lists are configured in the `security_config` section. For detailed information about access level lists, their hierarchy, and how they work, see [Access level lists](../../security/authorization.md#access-level-lists) in the Authorization documentation.
 
 #|
 || Parameter | Description ||
@@ -228,11 +206,11 @@ Intended for applications or users restricted to a single database.
 
 This level allows viewing the cluster state, which is not publicly accessible (including most pages in the [Embedded UI](../embedded-ui/ydb-monitoring.md)). No changes are allowed.
     ||
-|| `monitoring_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the operator access level.
+|| `monitoring_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the monitoring access level.
 
 This level grants additional privileges to monitor and modify the cluster state. For example, it allows performing a backup, restoring a database, or executing YQL statements in the Embedded UI.
     ||
-|| `administration_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the administrator access level.
+|| `administration_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the administration access level.
 
 This level grants privileges to administer the {{ ydb-short-name }} cluster and its databases.
 
@@ -270,13 +248,13 @@ It is recommended to add user groups and separate service accounts to the `*_all
 
 - **`database_allowed_sids`**, **`viewer_allowed_sids`**, **`monitoring_allowed_sids`**, **`administration_allowed_sids`**
     To access Embedded UI and viewer HTTP endpoints.
-    
+
 - **`administration_allowed_sids`**
     For all administrative checks.
-    
+
 - **`bootstrap_allowed_sids`**
     Only for cluster bootstrap operation
-    
+
 - **`register_dynamic_node_allowed_sids`**
     For registering nodes in a cluster (discovery service and cms subsystem).
 
@@ -292,7 +270,7 @@ For example:
 
 - A user of a database (e.g. an application that must stay database-scoped) should be added only to `database_allowed_sids`.
 - A viewer should be added only to `viewer_allowed_sids`.
-- An operator should be added only to `monitoring_allowed_sids` (they automatically get viewer privileges).
+- A monitoring user should be added only to `monitoring_allowed_sids` (they automatically get viewer privileges).
 - An administrator should be added only to `administration_allowed_sids` (they automatically get monitoring and viewer privileges).
 
 {% endnote %}

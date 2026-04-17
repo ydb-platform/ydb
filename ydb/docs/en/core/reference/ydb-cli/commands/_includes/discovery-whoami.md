@@ -14,7 +14,9 @@ The response includes the account name (User SID). Additional information can be
 - `-l`, `--access-list` — Show the access levels granted to the account (administration, monitoring, viewer, database, register node, bootstrap)
 - `-a`, `--all` — Show all additional information (equivalent to specifying both `-g` and `-l`)
 
-The access levels displayed with the `-l` or `-a` option reflect the [hierarchical access control configuration](../../../configuration/security_config.md#security-access-levels). Only access levels that are granted to the user are listed:
+The access levels displayed with the `-l` or `-a` option reflect the [hierarchical access control configuration](../../../configuration/security_config.md#security-access-levels). For detailed information about access level lists and their hierarchy, see [Access level lists](../../../../security/authorization.md#access-level-lists) in the Authorization documentation.
+
+Only access levels that are granted to the user are listed:
 
 - **Database** (presence in `database_allowed_sids`) — Grants the right to access the Embedded UI only as "database users": they can open the UI and see database-scoped data, but not cluster-wide data or cluster-level operations.
 - **Viewer** (presence in `viewer_allowed_sids`) — Grants the right to access the Embedded UI, without the ability to make changes.

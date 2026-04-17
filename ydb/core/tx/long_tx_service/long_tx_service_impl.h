@@ -49,12 +49,16 @@ namespace NLongTxService {
             TActorId CommitActor;
         };
 
+        struct TLockIsland;
         struct TWaitEdge;
 
         struct TTagAwaiter {};
         struct TTagBlocker {};
+        struct TTagIsland {};
 
-        struct TWaitNode {
+        struct TWaitNode : public TIntrusiveListItem<TWaitNode, TTagIsland> {
+            // Current island of connected locks (lock subgraph).
+            TLockIsland* Island = nullptr;
             // Incoming edges waiting for this lock (this == Blocker)
             TIntrusiveList<TWaitEdge, TTagAwaiter> Awaiters;
             // Outgoing edges blocking this lock (this == Awaiter)
@@ -258,6 +262,11 @@ namespace NLongTxService {
             }
         };
 
+        struct TLockIsland : public TIntrusiveListItem<TLockIsland> {
+            TIntrusiveList<TWaitNode, TTagIsland> Locks;
+            // Current number of locks in this island (we merge smaller island into the bigger island)
+            size_t LocksCount = 0;
+        };
 
         struct TWaitEdge
                 : public TIntrusiveListItem<TWaitEdge, TTagAwaiter>
@@ -386,14 +395,16 @@ namespace NLongTxService {
     public:
         TLongTxServiceActor(const TLongTxServiceSettings& settings)
             : Settings(settings)
-        {
-            Y_UNUSED(Settings); // TODO
-        }
+        {}
 
         ~TLongTxServiceActor() {
             if (SessionSubscribeActor) {
                 SessionSubscribeActor->Self = nullptr;
                 SessionSubscribeActor = nullptr;
+            }
+
+            while (!LockIslands.Empty()) {
+                delete LockIslands.PopBack();
             }
         }
 
@@ -510,7 +521,7 @@ namespace NLongTxService {
             const TProtoList& newEdges,
             TFilter edgeFilter);
 
-        void RemoveWaitNodeEdges(TWaitNode& waitNode);
+        void UnlinkWaitNode(TWaitNode& waitNode);
 
         void RunDeadlockDetection();
 
@@ -531,6 +542,7 @@ namespace NLongTxService {
         TLocalSnapshotsStoragePtr LocalSnapshotsStorage = MakeIntrusive<TLocalSnapshotsStorage>();
         TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
 
+        TIntrusiveList<TLockIsland> LockIslands;
         THashMap<TWaitEdgeId, TWaitEdge> WaitEdges;
     };
 

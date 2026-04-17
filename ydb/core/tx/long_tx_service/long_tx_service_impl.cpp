@@ -552,7 +552,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
             }
         }
 
-        RemoveWaitNodeEdges(lock.WaitNode);
+        UnlinkWaitNode(lock.WaitNode);
 
         Locks.erase(it);
     }
@@ -763,7 +763,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
             0, pr.second);
     }
 
-    RemoveWaitNodeEdges(lock.WaitNode);
+    UnlinkWaitNode(lock.WaitNode);
 
     node->CookieToLock.erase(lock.Cookie);
     node->Locks.erase(itLock);
@@ -1162,7 +1162,7 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
         lock.Cookie = 0;
     }
 
-    RemoveWaitNodeEdges(lock.WaitNode);
+    UnlinkWaitNode(lock.WaitNode);
 
     const bool erased = node.Locks.erase(lockId);
     if (Settings.Counters && erased) {
@@ -1200,6 +1200,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
 
     // 1. Update the local graph.
 
+    bool deadlockPossible = false;
     TVector<TWaitEdgeInfo> actuallyAdded;
     for (const auto& addedEdge : added) {
         auto existingIt = WaitEdges.find(addedEdge.Id);
@@ -1237,6 +1238,40 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         Y_ABORT_UNLESS(insertHappened);
         actuallyAdded.push_back(addedEdge);
 
+        if (!awaiter.WaitNode().Island && !blocker.WaitNode().Island) {
+            // Create an island of two
+            auto* island = new TLockIsland;
+            LockIslands.PushBack(island);
+            island->Locks.PushBack(&awaiter.WaitNode());
+            island->Locks.PushBack(&blocker.WaitNode());
+            island->LocksCount = 2;
+            awaiter.WaitNode().Island = island;
+            blocker.WaitNode().Island = island;
+        } else if (!awaiter.WaitNode().Island && blocker.WaitNode().Island) {
+            blocker.WaitNode().Island->Locks.PushBack(&awaiter.WaitNode());
+            ++blocker.WaitNode().Island->LocksCount;
+            awaiter.WaitNode().Island = blocker.WaitNode().Island;
+        } else if (awaiter.WaitNode().Island && !blocker.WaitNode().Island) {
+            awaiter.WaitNode().Island->Locks.PushBack(&blocker.WaitNode());
+            ++awaiter.WaitNode().Island->LocksCount;
+            blocker.WaitNode().Island = awaiter.WaitNode().Island;
+        } else if (awaiter.WaitNode().Island != blocker.WaitNode().Island) {
+            // Merge smaller island into the bigger one.
+            auto [bigger, smaller] = std::pair(awaiter.WaitNode().Island, blocker.WaitNode().Island);
+            if (bigger->LocksCount < smaller->LocksCount) {
+                std::swap(bigger, smaller);
+            }
+            for (auto& lock : smaller->Locks) {
+                lock.Island = bigger;
+            }
+            bigger->Locks.Append(smaller->Locks);
+            bigger->LocksCount += smaller->LocksCount;
+            delete smaller;
+        } else {
+            // Awaiter and blocker belong to the same island, deadlock is possible.
+            deadlockPossible = true;
+        }
+
         if (Settings.Counters) {
             Settings.Counters->WaitGraphEdges->Inc();
             if (addedEdge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
@@ -1265,7 +1300,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             continue;
         }
 
-        auto blockerInfo = it->second.Blocker.LockInfo(SelfId());
+        auto blocker = it->second.Blocker;
         WaitEdges.erase(it);
         actuallyRemoved.push_back(id);
 
@@ -1278,7 +1313,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
 
         TXLOG_DEBUG("Removed wait edge id: " << id
             << ", awaiter: " << awaiterInfo
-            << ", blocker: " << blockerInfo);
+            << ", blocker: " << blocker.LockInfo(SelfId()));
     }
 
     // 2. Send notifications
@@ -1344,7 +1379,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
     }
 
     // 3. Run deadlock detection
-    if (!actuallyAdded.empty()) {
+    if (deadlockPossible) {
         RunDeadlockDetection();
     }
 }
@@ -1380,7 +1415,7 @@ void TLongTxServiceActor::SyncLockWaitEdgesSubset(
     UpdateLockWaitEdges(awaiter, addedEdges, removedEdges);
 }
 
-void TLongTxServiceActor::RemoveWaitNodeEdges(TWaitNode& waitNode) {
+void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
     auto remove = [&](const TWaitEdgeId& id) {
         const bool local = id.OwnerId.NodeId() == SelfId().NodeId();
         const bool erased = WaitEdges.erase(id); // Unlinks the edge from the list.
@@ -1396,6 +1431,12 @@ void TLongTxServiceActor::RemoveWaitNodeEdges(TWaitNode& waitNode) {
     }
     while (!waitNode.Blockers.Empty()) {
         remove(waitNode.Blockers.Back()->Id);
+    }
+    if (waitNode.Island) {
+        --waitNode.Island->LocksCount;
+        if (!waitNode.Island->LocksCount) {
+            delete waitNode.Island;
+        }
     }
 }
 

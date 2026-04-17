@@ -2870,7 +2870,7 @@ bool TSqlQuery::AlterTableSetTableSetting(
         node.GetRule_table_setting_value3(),
         tableSettings,
         tableType,
-        /* kAlterTableSettings = */ true);
+        /* alter = */ true);
 }
 
 bool TSqlQuery::AlterTableSetTableSetting(
@@ -2881,7 +2881,7 @@ bool TSqlQuery::AlterTableSetTableSetting(
             entry.GetRule_table_setting_value3(),
             tableSettings,
             tableType,
-            /* kAlterTableSettings = */ true);
+            /* alter = */ true);
     };
 
     const auto& firstEntry = node.GetRule_alter_table_setting_entry3();
@@ -2900,9 +2900,7 @@ bool TSqlQuery::AlterTableSetTableSetting(
 namespace {
 
 bool IsIndexSpecificSettingName(TStringBuf name) {
-    return AsciiEqualsIgnoreCase(name, "false_positive_probability")
-        || AsciiEqualsIgnoreCase(name, "ngram_size")
-        || AsciiEqualsIgnoreCase(name, "case_sensitive");
+    return AsciiEqualsIgnoreCase(name, "false_positive_probability") || AsciiEqualsIgnoreCase(name, "ngram_size") || AsciiEqualsIgnoreCase(name, "case_sensitive");
 }
 
 bool ParseAlterIndexSettingValue(
@@ -2980,7 +2978,7 @@ bool TSqlQuery::AlterTableSetIndexSetting(const TRule_alter_table_set_table_sett
         return StoreAlterIndexSettingValue(*this, Ctx_, id, node.GetRule_table_setting_value3(), indexSettings);
     }
 
-    return StoreTableSettingsEntry(id, node.GetRule_table_setting_value3(), tableSettings, tableType, /* kAlterTableSettings = */true);
+    return StoreTableSettingsEntry(id, node.GetRule_table_setting_value3(), tableSettings, tableType, /* alter = */ true);
 }
 
 bool TSqlQuery::AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType) {
@@ -2990,7 +2988,7 @@ bool TSqlQuery::AlterTableSetIndexSetting(const TRule_alter_table_set_table_sett
             return StoreAlterIndexSettingValue(*this, Ctx_, id, entry.GetRule_table_setting_value3(), indexSettings);
         }
 
-        return StoreTableSettingsEntry(id, entry.GetRule_table_setting_value3(), tableSettings, tableType, /* KAlterTableSettings = */ true);
+        return StoreTableSettingsEntry(id, entry.GetRule_table_setting_value3(), tableSettings, tableType, /* alter = */ true);
     };
 
     const auto& firstEntry = node.GetRule_alter_table_setting_entry3();

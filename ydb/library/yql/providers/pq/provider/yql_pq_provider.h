@@ -49,15 +49,9 @@ public:
         return Configuration->PqReadByRtmrCluster_.Get() != "dq";
     }
 
-    /// Cluster-level EnablePqUserMessageMetaInSystemMetadata and PRAGMA pq.EnableUserMessageMetaInSystemMetadata must both be set.
-    bool EffectiveUserMessageMetaInSystemMetadata() const {
-        if (!EnablePqUserMessageMetaInSystemMetadata) {
-            return false;
-        }
-        if (const auto v = Configuration->EnableUserMessageMetaInSystemMetadata.Get()) {
-            return *v;
-        }
-        return false;
+    /// KQP: StreamingQueries.PqUserAttributesInSystemMetadata (EnablePqUserAttributesInSystemMetadata).
+    bool EffectiveUserAttributesInSystemMetadata() const {
+        return EnablePqUserAttributesInSystemMetadata;
     }
 
 public:
@@ -65,9 +59,9 @@ public:
     bool UseActorSystemThreadsInTopicClient = true;
     /// When true, transparent PQ metadata (e.g. write_time) uses _yql_sys_tsp_<key> instead of _yql_sys_<key>.
     bool AddTransparentPrefixToTransparentSystemColumns = true;
-    /// Cluster-level gate for SystemMetadata("message_meta"); must also set PRAGMA pq.EnableUserMessageMetaInSystemMetadata.
-    /// KQP sets this from QueryServiceConfig.StreamingQueries; standalone YQL defaults to true.
-    bool EnablePqUserMessageMetaInSystemMetadata = true;
+    /// Cluster gate for SystemMetadata("message_meta") from streaming_queries config.
+    /// KQP sets this from StreamingQueries.PqUserAttributesInSystemMetadata; standalone YQL defaults to true.
+    bool EnablePqUserAttributesInSystemMetadata = true;
     bool StreamingTopicsReadByDefault = true;
     bool UseYtflowEngine = false;
     const TString SessionId;

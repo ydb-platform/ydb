@@ -232,7 +232,7 @@ public:
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
             [this](TStringBuf fieldName) {
-                return GetPqMetaFieldDescriptorBySysColumn(TString(fieldName), State_->EffectiveUserMessageMetaInSystemMetadata()).has_value();
+                return GetPqMetaFieldDescriptorBySysColumn(TString(fieldName), State_->EffectiveUserAttributesInSystemMetadata()).has_value();
             },
             ctx)) {
             return TStatus::Error;
@@ -454,7 +454,7 @@ public:
             const TString metadataSysColumnName(metadataSysColumn->Content());
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
-                State_->EffectiveUserMessageMetaInSystemMetadata());
+                State_->EffectiveUserAttributesInSystemMetadata());
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -495,7 +495,7 @@ public:
             const TString metadataSysColumnName(metadataSysColumn->Content());
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
-                State_->EffectiveUserMessageMetaInSystemMetadata());
+                State_->EffectiveUserAttributesInSystemMetadata());
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -518,7 +518,7 @@ public:
         const auto descriptor = GetPqMetaFieldDescriptorByKey(
             metadataKey,
             State_->AddTransparentPrefixToTransparentSystemColumns,
-            State_->EffectiveUserMessageMetaInSystemMetadata());
+            State_->EffectiveUserAttributesInSystemMetadata());
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));

@@ -24,12 +24,12 @@ std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTran
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
     const TString& key,
     bool addTransparentPrefix,
-    bool includeUserMessageMeta = true);
+    bool includeUserAttributes = true);
 
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
     const TString& sysColumn,
-    bool includeUserMessageMeta = true);
+    bool includeUserAttributes = true);
 
-std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool includeUserMessageMeta = true);
+std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool includeUserAttributes = true);
 
 } // namespace NYql

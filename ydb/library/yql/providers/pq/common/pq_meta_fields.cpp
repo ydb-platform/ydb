@@ -72,9 +72,9 @@ std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTran
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
     const TString& key,
     bool addTransparentPrefix,
-    bool includeUserMessageMeta)
+    bool includeUserAttributes)
 {
-    if (!includeUserMessageMeta && key == "message_meta") {
+    if (!includeUserAttributes && key == "message_meta") {
         return std::nullopt;
     }
     const auto it = PqMetaFields.find(key);
@@ -87,7 +87,7 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
 
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
     const TString& sysColumn,
-    bool includeUserMessageMeta)
+    bool includeUserAttributes)
 {
     bool transparent = false;
     const auto key = SkipPqSystemPrefix(sysColumn, &transparent);
@@ -95,7 +95,7 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
         return std::nullopt;
     }
 
-    if (!includeUserMessageMeta && *key == "message_meta") {
+    if (!includeUserAttributes && *key == "message_meta") {
         return std::nullopt;
     }
 
@@ -112,12 +112,12 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
     return metadata.GetDescriptor(*key, transparent);
 }
 
-std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool includeUserMessageMeta) {
+std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool includeUserAttributes) {
     std::vector<TString> res;
     res.reserve(PqMetaFields.size());
 
     for (const auto& [key, field] : PqMetaFields) {
-        if (!includeUserMessageMeta && key == "message_meta") {
+        if (!includeUserAttributes && key == "message_meta") {
             continue;
         }
         res.emplace_back(field.GetSysColumnName(key, addTransparentPrefix));

@@ -453,30 +453,24 @@ class TestStreamingInYdb(StreamingTestBase):
     @pytest.mark.parametrize(
         "kikimr",
         [
-            {"enable_pq_user_message_meta_in_system_metadata": True},
-            {"enable_pq_user_message_meta_in_system_metadata": False},
+            {"pq_user_attributes_in_system_metadata": True},
+            {"pq_user_attributes_in_system_metadata": False},
         ],
-        ids=["enable_pq_user_message_meta_in_system_metadata_true", "enable_pq_user_message_meta_in_system_metadata_false"],
+        ids=["pq_user_attributes_in_system_metadata_true", "pq_user_attributes_in_system_metadata_false"],
         indirect=["kikimr"],
     )
-    @pytest.mark.parametrize(
-        "pragma_message_meta",
-        [None, False, True],
-        ids=["no_pragma", "pragma_false", "pragma_true"],
-    )
-    def test_read_message_meta_streaming(self, kikimr, entity_name, pragma_message_meta, request):
-        """Cluster flag and PRAGMA gate SystemMetadata("message_meta") in SQL; success checks metadata via Topic API.
+    def test_read_message_meta_streaming(self, kikimr, entity_name, request):
+        """Cluster StreamingQueries.pq_user_attributes_in_system_metadata gates SystemMetadata("message_meta") in SQL.
 
         Negative cases: streaming SELECT must be rejected at analysis (no output topic).
         Success: read messages directly from the input topic (no sink topic), same as test_read_topic.
         """
         cfg = request.node.callspec.params["kikimr"]
-        enable_message_meta_flag = cfg["enable_pq_user_message_meta_in_system_metadata"]
+        enable_message_meta_flag = cfg["pq_user_attributes_in_system_metadata"]
 
         # Short topic prefix: long pytest node ids + read_stream temp paths hit OS filename limits.
         def short_topic_prefix():
-            p = "n" if pragma_message_meta is None else ("f" if pragma_message_meta is False else "t")
-            return f"mm_{enable_message_meta_flag!s:.1}_{p}"
+            return f"mm_{enable_message_meta_flag!s:.1}"
 
         inp, endpoint = self.get_input_name(
             kikimr,
@@ -486,17 +480,8 @@ class TestStreamingInYdb(StreamingTestBase):
             partitions_count=1,
         )
 
-        if pragma_message_meta is None:
-            pragma_pq_message_meta = ""
-        else:
-            pragma_pq_message_meta = 'PRAGMA pq.EnableUserMessageMetaInSystemMetadata="{}";\n'.format(
-                str(pragma_message_meta).lower()
-            )
-
         # Used only for compile-time checks (must reference SystemMetadata like the old streaming query).
-        sql_compile_check = (
-            pragma_pq_message_meta
-            + f"""SELECT field1, field2, SystemMetadata("message_meta") AS meta
+        sql_compile_check = f"""SELECT field1, field2, SystemMetadata("message_meta") AS meta
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -504,9 +489,8 @@ WITH (
     SCHEMA = (field1 String NOT NULL, field2 Int32 NOT NULL)
 )
 LIMIT 1"""
-        )
 
-        expect_success = enable_message_meta_flag and pragma_message_meta is True
+        expect_success = enable_message_meta_flag
         if not expect_success:
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql_compile_check)
@@ -538,12 +522,12 @@ LIMIT 1"""
 
     @pytest.mark.parametrize(
         "kikimr",
-        [{"enable_pq_user_message_meta_in_system_metadata": True}],
+        [{"pq_user_attributes_in_system_metadata": True}],
         indirect=["kikimr"],
     )
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_message_meta_streaming_requires_pragma(self, kikimr, entity_name, local_topics):
-        """Cluster allows message_meta only together with PRAGMA pq.EnableUserMessageMetaInSystemMetadata."""
+    def test_read_message_meta_streaming_query_without_pragma(self, kikimr, entity_name, local_topics):
+        """With cluster pq_user_attributes_in_system_metadata, CREATE STREAMING QUERY may use SystemMetadata(message_meta) without PRAGMA."""
         inp, out, _ = self.get_io_names(
             kikimr,
             f"read_message_meta_no_pragma_{local_topics!s:.1}",
@@ -565,10 +549,10 @@ LIMIT 1"""
                     )
                 );
             END DO;'''
-        with pytest.raises(ydb.issues.GenericError) as excinfo:
-            kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
-        err = str(excinfo.value)
-        assert "Metadata key message_meta" in err and "found" in err
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])

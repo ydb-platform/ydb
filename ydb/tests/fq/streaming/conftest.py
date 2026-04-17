@@ -18,6 +18,7 @@ def kikimr(request):
     enable_pq_user_message_meta_in_system_metadata = param.get(
         "enable_pq_user_message_meta_in_system_metadata", True
     )
+    pq_user_attributes_in_system_metadata = param.get("pq_user_attributes_in_system_metadata", True)
 
     def get_ydb_config():
         extra_feature_flags = {
@@ -39,7 +40,7 @@ def kikimr(request):
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
                 "enable_match_recognize": True,
                 "streaming_queries": {
-                    "enable_pq_user_message_meta_in_system_metadata": enable_pq_user_message_meta_in_system_metadata,
+                    "pq_user_attributes_in_system_metadata": pq_user_attributes_in_system_metadata,
                 },
             },
             table_service_config={

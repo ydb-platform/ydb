@@ -122,9 +122,6 @@ public:
     NCommon::TConfSetting<double, Static> OptCBOConstsShuffleRightSideMult;
     NCommon::TConfSetting<double, Static> OptCBOConstsShuffleRightSidePow;
 
-    NCommon::TConfSetting<double, Static> OptCBOConstsLeftSideByteSizeFactor;
-    NCommon::TConfSetting<double, Static> OptCBOConstsRightSideByteSizeFactor;
-
     NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsMult;
     NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsPow;
 

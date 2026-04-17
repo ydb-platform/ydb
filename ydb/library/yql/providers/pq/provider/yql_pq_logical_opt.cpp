@@ -70,12 +70,12 @@ void GetUsedWatermarkColumnNames(const TExprBase& expr, std::unordered_set<TStri
 TVector<TCoNameValueTuple> DropUnusedMetadata(
     const TPqTopic& pqTopic,
     const std::unordered_set<TString>& usedColumnNames,
-    bool includeUserMessageMeta)
+    bool includeUserAttributes)
 {
     TVector<TCoNameValueTuple> newSourceMetadata;
     for (auto metadataItem : pqTopic.Metadata()) {
         auto metadataName = metadataItem.Cast<TCoNameValueTuple>().Value().Maybe<TCoAtom>().Cast().StringValue();
-        if (GetPqMetaFieldDescriptorBySysColumn(metadataName, includeUserMessageMeta) && usedColumnNames.contains(metadataName)) {
+        if (GetPqMetaFieldDescriptorBySysColumn(metadataName, includeUserAttributes) && usedColumnNames.contains(metadataName)) {
             newSourceMetadata.push_back(metadataItem);
         }
     }
@@ -261,7 +261,7 @@ public:
             return node;
         }
 
-        const auto& newSourceMetadata = DropUnusedMetadata(pqTopic, usedColumnNames, State_->EffectiveUserMessageMetaInSystemMetadata());
+        const auto& newSourceMetadata = DropUnusedMetadata(pqTopic, usedColumnNames, State_->EffectiveUserAttributesInSystemMetadata());
 
         const TExprNode::TPtr newPqTopicSource = Build<TDqPqTopicSource>(ctx, dqPqTopicSource.Pos())
             .InitFrom(dqPqTopicSource)

@@ -2032,8 +2032,8 @@ private:
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
         state->AddTransparentPrefixToTransparentSystemColumns = false;
-        state->EnablePqUserMessageMetaInSystemMetadata =
-            QueryServiceConfig.GetStreamingQueries().GetEnablePqUserMessageMetaInSystemMetadata();
+        state->EnablePqUserAttributesInSystemMetadata =
+            QueryServiceConfig.GetStreamingQueries().GetPqUserAttributesInSystemMetadata();
         state->StreamingTopicsReadByDefault = false;
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;

@@ -1251,7 +1251,7 @@ message TStreamingQueriesConfig {
     reserved 2;
     optional TExternalStorageConfig ExternalStorage = 3;
     optional TExternalTopicsSettings TopicSdkSettings = 4;
-    optional bool EnablePqUserMessageMetaInSystemMetadata = 5 [default = false];
+    optional bool PqUserAttributesInSystemMetadata = 5 [default = false];
 }
 
 message TQueryServiceConfig {

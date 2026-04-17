@@ -17,7 +17,7 @@ class TJsonAppender
 {
 public:
 
-    TJsonAppender() {
+    TJsonAppender(NJsonWriter::TBuf& jsonWriter) : JsonWriter(jsonWriter) {
     }
 
     template <typename T>
@@ -26,21 +26,21 @@ public:
         static_assert(false, "Unsupported type");
     }
 
-    template <> void AppendValue(const i8& value) { Json.WriteLongLong(value); }
-    template <> void AppendValue(const ui8& value) { Json.WriteULongLong(value); }
-    template <> void AppendValue(const i16& value) { Json.WriteLongLong(value); }
-    template <> void AppendValue(const ui16& value) { Json.WriteULongLong(value); }
-    template <> void AppendValue(const i32& value) { Json.WriteLongLong(value); }
-    template <> void AppendValue(const ui32& value) { Json.WriteULongLong(value); }
-    template <> void AppendValue(const i64& value) { Json.WriteLongLong(value); }
-    template <> void AppendValue(const ui64& value) { Json.WriteULongLong(value); }
-    template <> void AppendValue(const bool& value) { Json.WriteBool(value); }
-    template <> void AppendValue(const TString& value) { Json.WriteString(value); }
+    template <> void AppendValue(const i8& value) { JsonWriter.WriteLongLong(value); }
+    template <> void AppendValue(const ui8& value) { JsonWriter.WriteULongLong(value); }
+    template <> void AppendValue(const i16& value) { JsonWriter.WriteLongLong(value); }
+    template <> void AppendValue(const ui16& value) { JsonWriter.WriteULongLong(value); }
+    template <> void AppendValue(const i32& value) { JsonWriter.WriteLongLong(value); }
+    template <> void AppendValue(const ui32& value) { JsonWriter.WriteULongLong(value); }
+    template <> void AppendValue(const i64& value) { JsonWriter.WriteLongLong(value); }
+    template <> void AppendValue(const ui64& value) { JsonWriter.WriteULongLong(value); }
+    template <> void AppendValue(const bool& value) { JsonWriter.WriteBool(value); }
+    template <> void AppendValue(const TString& value) { JsonWriter.WriteString(value); }
 
     template <typename T>
     bool Append(const std::vector<TKeyName>& key, const T& value) {
         if (!Started) {
-            Json.BeginObject();
+            JsonWriter.BeginObject();
             Started = true;
         }
 
@@ -65,20 +65,20 @@ public:
         if (index < currentContext.size() || index < requiredContext.size()) {
             // Close current nested values
             while (currentContext.size() > index) {
-                Json.EndObject();
+                JsonWriter.EndObject();
                 currentContext.pop_back();
             }
 
             // Open nested values
             while (index < requiredContext.size()) {
-                Json.WriteKey(requiredContext[index].ToString());
-                Json.BeginObject();
+                JsonWriter.WriteKey(requiredContext[index].ToString());
+                JsonWriter.BeginObject();
                 index ++;
             }
         }
 
         // Add key-value
-        Json.WriteKey(key.back().ToString());
+        JsonWriter.WriteKey(key.back().ToString());
         AppendValue(value);
 
         LastAppendedKey = key;
@@ -87,23 +87,18 @@ public:
 
     void Done() {
         if (!Started) {
-            Json.BeginObject();
-            Json.EndObject();
+            JsonWriter.BeginObject();
+            JsonWriter.EndObject();
         }
         else
         {
             for(std::size_t i = 0; i < LastAppendedKey.size(); i++) {
-                Json.EndObject();
+                JsonWriter.EndObject();
             }
         }
     }
 
-    const TString& GetJson() const{
-        return Json.Str();
-    }
-
-protected:
-    NJsonWriter::TBuf Json;
+    NJsonWriter::TBuf& JsonWriter;
     std::vector<TKeyName> LastAppendedKey;
     bool Started{false};
 
@@ -122,6 +117,8 @@ public:
     TJsonAppender Appender;
     bool Valid{true};
 
+    TJsonWriter(NJsonWriter::TBuf& jsonWriter) : Appender(jsonWriter) {}
+
     class TJsonValueWriter {
         public:
             TJsonWriter& Writer;
@@ -137,8 +134,11 @@ public:
     TJsonValueWriter ValueWriter{*this};
     TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
 
-    bool Write(const TStructuredMessage& message)
+    bool Write(const TStructuredMessage& message, bool started = false)
     {
+        if (started) {
+            Appender.Started = true;
+        }
         Valid = true;
 
         message.ForEachSerialized([&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length){
@@ -151,14 +151,10 @@ public:
             }
             return Valid;
         });
-        if (Valid) {
+        if (Valid && !started) {
             Appender.Done();
         }
         return Valid;
-    }
-
-    const TString& GetJson() const{
-        return Appender.GetJson();
     }
 };
 

@@ -1,4 +1,5 @@
 #include "log.h"
+#include <ydb/core/util/struct_log/json_writer.h>
 
 static_assert(int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG), "expect int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG)");
 static_assert(int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT), "expect int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT)");
@@ -617,6 +618,13 @@ namespace NActors {
                     }
                 } else {
                     j.WriteKey("message").WriteString(formatted);
+                }
+
+                if (structMessage.Defined()) {
+                    j.WriteKey("structured");
+                    j.BeginObject();
+                    NKikimr::NStructLog::TJsonWriter(j).Write(structMessage.GetRef(), true);
+                    j.EndObject();
                 }
                 j.EndObject();
                 auto logRecord = j.Str();

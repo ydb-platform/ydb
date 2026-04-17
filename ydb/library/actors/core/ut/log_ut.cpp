@@ -195,7 +195,8 @@ namespace {
             Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvents::TEvWakeup});
         }
 
-        void StartAccumulteMessages() {
+        void StartAccumulteMessages(TSettings::ELogFormat format = TSettings::ELogFormat::PLAIN_FULL_FORMAT) {
+            Settings->Format = format;
             Settings->Append(1000, 1002,
             [](EComponent comp) ->TString {
                 static std::vector<TString> names{"A","B","C"};
@@ -363,7 +364,6 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
         TFixture test{NoBufferSettings()};
         const auto LOG_COUNT = 100;
         auto outputLogSize = BufferTest(test, LOG_COUNT);
-
         UNIT_ASSERT(outputLogSize < LOG_COUNT);
     }
 }
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
     }
 
-    Y_UNIT_TEST(SimpleWrite) {
+    Y_UNIT_TEST(WriteSimple) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulteMessages();
 
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:395: Test message with data", YDBLOG_CREATE_MESSAGE({"value", 1}));
     }
 
-    Y_UNIT_TEST(SimpleWritePriority) {
+    Y_UNIT_TEST(WritePriority) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulteMessages();
 
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE TRACE: log_ut.cpp:412: Test message");
     }
 
-    Y_UNIT_TEST(SimpleWriteComponent) {
+    Y_UNIT_TEST(WriteComponent) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulteMessages();
 
@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:431: Test message");
     }
 
-    Y_UNIT_TEST(SimpleWriteWithoutComponent) {
+    Y_UNIT_TEST(WriteWithoutComponent) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulteMessages();
 
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:451: Test message");
     }
 
-    Y_UNIT_TEST(SimpleWriteWithContext) {
+    Y_UNIT_TEST(WriteWithContext) {
         using namespace NKikimr::NStructLog;
 
         TFixture env{NoBufferSettings()};
@@ -514,10 +514,9 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
     }
 
     TString GetMessageJsonString(const TStructuredMessage& message) {
-        TString jsonString;
-        TJsonWriter writer;
-        writer.Write(message);
-        return writer.GetJson();
+        NJsonWriter::TBuf jsonWriter;
+        TJsonWriter(jsonWriter).Write(message);
+        return jsonWriter.Str();
     }
 
 #define TEST_JSON_MESSAGE(M, S) { auto m = M; auto str = GetMessageJsonString(m); \
@@ -525,8 +524,6 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
     UNIT_ASSERT(ok); }
 
     Y_UNIT_TEST(GenerateJson) {
-        TJsonWriter writer;
-
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(), R"({})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}), R"({"v1":1})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), R"({"v1":1,"v2":2})");
@@ -566,5 +563,35 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}), R"({"value":{"subValue1":1,"subValue2":2}})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), R"({})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":1,"subValue2":2})");
+    }
+
+    Y_UNIT_TEST(WriteJson) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulteMessages(TSettings::ELogFormat::JSON_FORMAT);
+
+        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json");
+        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", YDBLOG_CREATE_MESSAGE({"value1", 1}));
+        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", YDBLOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}));
+        YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", YDBLOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}, {"value3", 3}));
+
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+            R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
+            R"("location":"log_ut.cpp:572","message":"Test message with json",)"
+            R"("structured":{}})");
+
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+            R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
+            R"("location":"log_ut.cpp:573","message":"Test message with json",)"
+            R"("structured":{"value1":1}})");
+
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+            R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
+            R"("location":"log_ut.cpp:574","message":"Test message with json",)"
+            R"("structured":{"value1":1,"value2":2}})");
+
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+            R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
+            R"("location":"log_ut.cpp:575","message":"Test message with json",)"
+            R"("structured":{"value1":1,"value2":2,"value3":3}})");
     }
 }

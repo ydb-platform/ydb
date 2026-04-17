@@ -2399,7 +2399,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             "Bloom ngram filter should skip at least some portions for a nonexistent value");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramAlterObjectNgramAndFilterBytesThenSqlAlterFpp, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramAlterObjectNgramAndFilterBytesThenSqlAlterFpp, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -2467,7 +2467,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         }
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramFppIndexRejectsDeprecatedSizingUpsert, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramFppIndexRejectsDeprecatedSizingUpsert, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);

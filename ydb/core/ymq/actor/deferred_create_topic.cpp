@@ -1,19 +1,18 @@
 #include "deferred_create_topic.h"
 
+#include "create_topic_tx.h"
 #include "executor.h"
 #include "log.h"
 
-#include "action.h"
 #include <ydb/core/ymq/actor/cfg/cfg.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/queue_path.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
-#include <ydb/core/protos/schemeshard/operations.pb.h>
-
 #include <ydb/public/lib/value/value.h>
 
 #include <util/generic/guid.h>
+#include <util/generic/utility.h>
 
 namespace NKikimr::NSQS {
 
@@ -63,79 +62,6 @@ static TString MakeMarkTopicCreatedProgram(const TString& root, bool isFifo) {
         (UpdateRow attrsTable attrsRow attrsUpdate)))
 )
 )__";
-}
-
-static THolder<TEvTxUserProxy::TEvProposeTransaction> BuildCreatePersQueueGroupTx(
-    const TString& queuePath,
-    const TString& versionName,
-    const TString& accountName,
-    const TString& folderId,
-    bool isFifo,
-    const TLoadedAttrs& attrs
-) {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
-
-    const TString topicDir = TString::Join(queuePath, '/', versionName);
-
-    trans->SetWorkingDir(topicDir);
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
-
-    auto* pqgroup = trans->MutableCreatePersQueueGroup();
-    pqgroup->SetName("streamImpl");
-    pqgroup->SetTotalGroupCount(1);
-
-    auto* config = pqgroup->MutablePQTabletConfig();
-    config->SetTopicName("streamImpl");
-    config->SetTopicPath(TString::Join(topicDir, '/', "streamImpl"));
-
-    ui64 retentionMs = attrs.MessageRetentionMs;
-    if (!retentionMs) {
-        retentionMs = TDuration::Days(4).MilliSeconds();
-    }
-    const ui64 minRetentionMs = Cfg().GetMinMessageRetentionPeriodMs();
-    if (retentionMs < minRetentionMs) {
-        retentionMs = minRetentionMs;
-    }
-    config->MutablePartitionConfig()->SetLifetimeSeconds(Max<ui64>(1, retentionMs / 1000));
-
-    if (attrs.HasContentBasedDeduplication) {
-        config->SetContentBasedDeduplication(attrs.ContentBasedDeduplication);
-    }
-
-    auto* partitionStrategy = pqgroup->MutablePQTabletConfig()->MutablePartitionStrategy();
-    partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig::CAN_SPLIT_AND_MERGE);
-    partitionStrategy->SetMinPartitionCount(1);
-    partitionStrategy->SetMaxPartitionCount(100);
-    partitionStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(80);
-    partitionStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(20);
-    partitionStrategy->SetScaleThresholdSeconds(30);
-
-    auto* consumer = config->AddConsumers();
-    consumer->SetName(ConsumerName);
-    consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
-    consumer->SetKeepMessageOrder(isFifo);
-    if (attrs.DelayMs) {
-        consumer->SetDefaultDelayMessageTimeMs(attrs.DelayMs);
-    }
-    if (attrs.VisibilityMs) {
-        consumer->SetDefaultProcessingTimeoutSeconds(Max<ui64>(1, attrs.VisibilityMs / 1000));
-    }
-    if (attrs.ReceiveWaitMs) {
-        consumer->SetDefaultReceiveMessageWaitTimeMs(attrs.ReceiveWaitMs);
-    }
-    if (attrs.MaxReceiveCount) {
-        consumer->SetDeadLetterPolicyEnabled(true);
-        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
-        consumer->SetMaxProcessingAttempts(attrs.MaxReceiveCount);
-    }
-    if (attrs.DlqName && attrs.MaxReceiveCount) {
-        consumer->SetDeadLetterPolicyEnabled(true);
-        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-        consumer->SetDeadLetterQueue(TStringBuilder() << "sqs://" << accountName << "/" << folderId << "/" << attrs.DlqName);
-    }
-
-    return ev;
 }
 
 class TDeferredCreateTopicActor : public NActors::TActorBootstrapped<TDeferredCreateTopicActor> {
@@ -254,7 +180,32 @@ private:
         Phase_ = EPhase::CreatingScheme;
         const TQueuePath path(Cfg().GetRoot(), UserName_, QueueName_);
         const TString versionName = TStringBuilder() << "v" << Version_;
-        auto tx = BuildCreatePersQueueGroupTx(path.GetQueuePath(), versionName, UserName_, FolderId_, IsFifo_, LoadedAttrs_);
+
+        TPersQueueGroupTopicParams params;
+        ui64 retentionMs = LoadedAttrs_.MessageRetentionMs;
+        if (!retentionMs) {
+            retentionMs = TDuration::Days(4).MilliSeconds();
+        }
+        const ui64 minRetentionMs = Cfg().GetMinMessageRetentionPeriodMs();
+        if (retentionMs < minRetentionMs) {
+            retentionMs = minRetentionMs;
+        }
+        params.PartitionLifetimeSeconds = Max<ui64>(1, retentionMs / 1000);
+        params.HasContentBasedDeduplication = LoadedAttrs_.HasContentBasedDeduplication;
+        params.ContentBasedDeduplication = LoadedAttrs_.ContentBasedDeduplication;
+        params.DefaultDelayMessageTimeMs = LoadedAttrs_.DelayMs;
+        if (LoadedAttrs_.VisibilityMs) {
+            params.DefaultProcessingTimeoutSeconds = Max<ui64>(1, LoadedAttrs_.VisibilityMs / 1000);
+        }
+        params.DefaultReceiveMessageWaitTimeMs = LoadedAttrs_.ReceiveWaitMs;
+        params.MaxReceiveCount = LoadedAttrs_.MaxReceiveCount;
+        if (LoadedAttrs_.DlqName && LoadedAttrs_.MaxReceiveCount) {
+            params.RedriveTargetQueueName = LoadedAttrs_.DlqName;
+        }
+        params.AccountName = UserName_;
+        params.FolderId = FolderId_;
+
+        auto tx = BuildCreateTopicTx(path.GetQueuePath(), versionName, IsFifo_, params);
 
         const TString reqId = CreateGuidAsString();
         const TQueuePath qpath(Cfg().GetRoot(), UserName_, QueueName_, Version_);

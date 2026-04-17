@@ -1475,6 +1475,11 @@ void TSqsService::HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::
             if (PendingDeferredTopicCreations_.contains(key)) {
                 continue;
             }
+            if (!q->LeaderMustBeOnCurrentNode()) {
+                LOG_SQS_DEBUG("HandlePeriodicCreateTopic: skip queue [" << q->UserName_ << "/" << q->QueueName_
+                    << "]: leader is not on current node");
+                continue;
+            }
 
             LOG_SQS_DEBUG("HandlePeriodicCreateTopic: Inserting deferred topic creation key: " << key);
             PendingDeferredTopicCreations_.insert(key);

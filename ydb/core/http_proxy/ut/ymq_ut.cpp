@@ -37,7 +37,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         return NYdb::TDriver(driverConfig);
     }
 
-    /// Каталог очереди в БД (без /vN/streamImpl): Join(GetRoot(), путь из QueueUrl без имени очереди).
     TString QueueResourceDirFromQueueUrl(const TString& queueUrl, const TString& queueName, const TString& sqsDatabaseRoot) {
         size_t pathBegin = TString::npos;
         const size_t scheme = queueUrl.find("://");
@@ -67,7 +66,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         return queueDir;
     }
 
-    /// PersQueue-топик: .../resourceId/v{Version}/streamImpl. Version — из счётчика при CreateQueue (не константа 2).
     std::optional<TString> TryMigrationTopicPathFromScheme(
         NYdb::NScheme::TSchemeClient& schemeClient,
         const TString& queueResourceDir

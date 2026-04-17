@@ -17,6 +17,7 @@ resources:
         - "https://vk.com"
         - "https://login.vk.com"
         - "https://runtime.strm.yandex.ru"
+        - "https://runtime.video.cloud.yandex.net"
         - "https://www.youtube.com"
         - "https://rutube.ru"
 

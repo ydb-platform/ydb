@@ -1649,6 +1649,21 @@ void TLongTxServiceActor::RunDeadlockDetection() {
             sb << "(" << al << "," << an << ") -> (" << bl << "," << bn << ") (en:" << en << ")\n";
         }
         TXLOG_DEBUG("FFF WG\n" << sb);
+
+        for (const auto& island : LockIslands) {
+            TStringBuilder sb;
+            sb << " lc:" << island.LocksCount << " ll:" << island.Locks.Size();
+            for (const auto& lock : island.Locks) {
+                TLockStateHandle handle;
+                if (!lock.Blockers.Empty()) {
+                    handle = lock.Blockers.Front()->Awaiter;
+                } else if (!lock.Awaiters.Empty()) {
+                    handle = lock.Awaiters.Front()->Blocker;
+                }
+                Y_ABORT_UNLESS(handle);
+            }
+            TXLOG_DEBUG("FFF ISLAND " << sb);
+        }
     }
 }
 

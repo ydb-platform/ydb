@@ -443,7 +443,7 @@ void TConsumerActor::UpdateChildPartitionsOnCommit() {
     }
     if (!update) {
         if (PartitionEndOffset <= Storage->GetLastOffset()) {
-           update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetMetrics().InflightMessageCount);
+            update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetMetrics().InflightMessageCount);
         }
     }
     if (update) {

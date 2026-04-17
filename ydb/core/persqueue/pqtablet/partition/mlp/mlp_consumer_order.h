@@ -30,7 +30,7 @@ namespace NKikimr::NPQ::NMLP {
             ui32 Cookie = 0;
             struct TFullState {
                 ESendReasons Reasons = ESendReasons::None;
-                ui64 InflightMessagesCount = -1;
+                ui64 InflightMessagesCount = Max<ui64>();
             };
 
             TFullState SendReasons;

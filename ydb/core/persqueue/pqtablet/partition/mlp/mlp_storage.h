@@ -94,7 +94,7 @@ public:
     public:
         explicit TMessage(const TMessageData& data)
             : TMessageData(data)
-            , NextMessageGroupIdOffset_(LastMessageGroupIdOffset)
+            , NextMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
         {
         }
 
@@ -102,23 +102,21 @@ public:
             if (!HasMessageGroupId) {
                 return Nothing();
             }
-            if (NextMessageGroupIdOffset_ == LastMessageGroupIdOffset) {
+            if (NextMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel) {
                 return Nothing();
             }
             return NextMessageGroupIdOffset_;
         }
 
         void SetNextMessageGroupIdOffset(ui64 offset) {
-            Y_ASSERT(NextMessageGroupIdOffset_ == LastMessageGroupIdOffset && "attempt to overwrite next link");
+            Y_ASSERT(NextMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel && "attempt to overwrite next link");
             NextMessageGroupIdOffset_ = offset;
         }
 
     private:
-        ui64 NextMessageGroupIdOffset_;
-        static constexpr ui64 LastMessageGroupIdOffset = -1;
+        ui64 NextMessageGroupIdOffset_; // not serialized
+        static constexpr ui64 LastMessageGroupIdOffsetSentinel = Max<ui64>();
     };
-//    static_assert(sizeof(TMessage) == sizeof(ui32) * 4 + sizeof(TIntrusiveListItem<TMessage, TIntrusiveListGroupIdTag>));
-
 
     struct TMessageWrapper {
         bool SlowZone;
@@ -307,7 +305,7 @@ private:
     void UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message);
     void UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus);
     void UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& message);
-    void UpdadeMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged);
+    void UpdateMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged);
     void BuildAndLinkMessageGroups();
 
     template <class Fn>
@@ -334,9 +332,6 @@ private:
     std::deque<TMessage> Messages;
     TSlowMessagesMap SlowMessages;
 
-
-    // TODO: в counter message-group отгружать только сигнал от родителя
-
     struct TLockedGroup {
         bool LockedSelf : 1 = false;
         bool LockedParent : 1 = false;
@@ -344,10 +339,10 @@ private:
         bool WaitDLQ : 1 = false;
 
         bool IsAccessible() const {
-            return !IsOnlyLocked() && !Delayed && !WaitDLQ;
+            return !IsLocked() && !Delayed && !WaitDLQ;
         }
 
-        bool IsOnlyLocked() const {
+        bool IsLocked() const {
             return LockedSelf || LockedParent;
         }
 

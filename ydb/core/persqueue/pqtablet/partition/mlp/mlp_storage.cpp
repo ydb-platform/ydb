@@ -354,9 +354,9 @@ TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::DoUpdateExternalLoc
         const auto& list = record.GetFullBlacklist().GetParentLockedMessageGroupsIdHash();
         absl::flat_hash_set<ui32> lockedMessageGroupsIdSet(list.begin(), list.end());
         info->LockedMessageGroupsIdSet.swap(lockedMessageGroupsIdSet);
-        UpdadeMessageGroupsParentLocks(info->LockedMessageGroupsIdSet, lockedMessageGroupsIdSet, result.ModeChanged);
+        UpdateMessageGroupsParentLocks(info->LockedMessageGroupsIdSet, lockedMessageGroupsIdSet, result.ModeChanged);
     } else if (result.ModeChanged) {
-        UpdadeMessageGroupsParentLocks(info->LockedMessageGroupsIdSet, info->LockedMessageGroupsIdSet, result.ModeChanged);
+        UpdateMessageGroupsParentLocks(info->LockedMessageGroupsIdSet, info->LockedMessageGroupsIdSet, result.ModeChanged);
     }
     if (!loadState) {
         Batch.SetUpdateExternalLockedMessageGroupsId(parentPartitionId);
@@ -508,7 +508,7 @@ static void UpdateLockedMaps(auto& messageGroups, const auto& locked, ui32 messa
     }
 }
 
-void TStorage::UpdadeMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged) {
+void TStorage::UpdateMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged) {
     auto update = [this](ui32 messageGroupIdHash, TSingleMessageGroupIdInfo& group) {
         bool newLockedParent = !CanReadMessageGroupIdHashFromParentPartition(messageGroupIdHash);
         if (group.Locked.LockedParent == newLockedParent) {

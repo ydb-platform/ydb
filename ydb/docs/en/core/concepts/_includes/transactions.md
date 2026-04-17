@@ -33,7 +33,13 @@ For transactions that read column-oriented tables, use:
 
 ### Implicit Transactions {#implicit}
 
-If no [transaction mode](../transactions.md#modes) is specified for a query, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.
+The rules below describe **server** behavior when **one** YQL script is executed and the client **does not explicitly** select one of the [transaction modes](#modes) in the query settings and does not use a scenario with explicit transaction control (see [setting the mode in the {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/tx-control.md)). Typical entry points where the query is sent to the server as a single script:
+
+* [Embedded UI](../../reference/embedded-ui/index.md) — the **Query** tab on the database page ([query form](../../reference/embedded-ui/ydb-monitoring.md#tenant_scheme)); you can choose a transaction mode in the execution settings; for a normal run without a separate explicit transaction, implicit-transaction logic applies.
+* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — a one-off script via [`ydb sql`](../../reference/ydb-cli/sql.md). For [`table query execute`](../../reference/ydb-cli/table-query-execute.md), `data` queries use the [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) parameter: the default is `serializable-rw`, which corresponds to *Serializable* in the [transaction modes](#modes) terminology. That is explicit CLI configuration and should not be confused with the server-side DDL/DML classification for implicit transactions below.
+* Applications using the [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — [ImplicitTx](../../recipes/ydb-sdk/tx-control.md#implicittx) mode.
+
+If no [transaction mode](../transactions.md#modes) is specified for the query on the client side in such a scenario, {{ ydb-short-name }} automatically manages its behavior. This mode is called an **implicit transaction**.
 
 In this mode, based on the query, {{ ydb-short-name }} decides whether to execute it outside a transaction or wrap it in a transaction with *Serializable* mode. Implicit transactions are a universal way to execute queries, as they support statements of any kind with a certain behavior described below.
 

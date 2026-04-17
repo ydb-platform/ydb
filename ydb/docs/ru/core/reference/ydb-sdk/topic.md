@@ -154,37 +154,23 @@
 
 - C#
 
-  Для работы с топиками нужно создать экземпляр драйвера {{ ydb-short-name }}.
-
-  Драйвер {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
-
-  Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
-
-  ```c#
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
-
-  await using var driver = await Driver.CreateInitialized(
-      config: config,
-      loggerFactory: loggerFactory
-  );
-  ```
+  Для работы с топиками достаточно передать строку подключения напрямую в конструктор нужного клиента.
 
   В этом примере используется анонимная аутентификация. Подробнее про [соединение с базой данных](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания различных клиентов к топикам:
 
   ```c#
-  var topicClient = new TopicClient(driver);
+  const string connectionString = "Host=localhost;Port=2136;Database=/local";
 
-  await using var writer = new WriterBuilder<string>(driver, topicName)
+  await using var topicClient = new TopicClient(connectionString);
+
+  await using var writer = new WriterBuilder<string>(connectionString, topicName)
   {
       ProducerId = "ProducerId_Example"
   }.Build();
 
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
@@ -484,6 +470,10 @@
   );
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -571,6 +561,10 @@
           .join();
   TopicDescription description = topicDescriptionResult.getValue();
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -791,7 +785,7 @@
 - C#
 
   ```c#
-  await using var writer = new WriterBuilder<string>(driver, topicName)
+  await using var writer = new WriterBuilder<string>(connectionString, topicName)
   {
       ProducerId = "ProducerId_Example"
   }.Build();
@@ -1129,7 +1123,7 @@
         });
   ```
 
-- С#
+- C#
 
   Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
 
@@ -1237,6 +1231,10 @@
           .build();
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -1296,6 +1294,10 @@
   В **ydb-go-sdk** при создании писателя, если не передавать `topicoptions.WithWriterProducerID`, SDK всё равно подставляет идентификатор производителя (генерирует его автоматически). Режим записи без дедупликации, эквивалентный отсутствию `ProducerId` в примере для C++ выше, в текущей версии SDK недоступен.
 
 - Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -1681,6 +1683,10 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1858,10 +1864,10 @@
 
   {% endlist %}
 
-- С#
+- C#
 
   ```c#
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
@@ -1948,7 +1954,7 @@
 - C#
 
   ```c#
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings =
@@ -2517,7 +2523,7 @@
 
   {% endlist %}
 
-- С#
+- C#
 
   ```c#
   try
@@ -2672,6 +2678,10 @@
   });
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2755,6 +2765,10 @@
       event_handler=CustomEventHandler(),
   )
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -2963,6 +2977,10 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3077,6 +3095,10 @@
 
   {% endlist %}
 
+- C#
+
+  Специальной обработки не требуется.
+
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3187,6 +3209,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -3425,6 +3451,10 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3532,6 +3562,10 @@
           .build()
   ).join().expectSuccess("Error commit!");
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 

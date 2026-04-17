@@ -134,7 +134,7 @@ TCollectResult MergeComparisonPathResults(TCollectResult left, TCollectResult ri
     if (leftTokens.size() > 1) {
         left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
     }
-    left.Finish();
+    left.StopCollecting();
     return left;
 }
 
@@ -310,26 +310,18 @@ TCollectResult TQueryCollector::ContextObject(EMode mode) {
 
 TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
-    if (result.IsError() || result.IsFinished()) {
+    if (!result.CanCollect()) {
         return result;
     }
 
-    auto& tokens = result.GetTokens();
-    Y_ENSURE(tokens.size() <= 1, "Expected at most one result, but got " << tokens.size());
-
-    // There is no context or filter object, so we can't collect any more
-    if (tokens.empty()) {
-        return {};
-    }
-
-    auto& token = tokens.front();
+    auto& token = result.GetTokens().front();
     AppendKey(token, item.GetString());
     return result;
 }
 
 TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
-    result.Finish();
+    result.StopCollecting();
     if (!result.IsError() && result.GetTokens().size() > 1) {
         return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
     }
@@ -358,7 +350,7 @@ TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMo
     }
 
     auto result = Collect(Reader.ReadInput(item), mode);
-    result.Finish();
+    result.StopCollecting();
     return result;
 }
 
@@ -392,7 +384,7 @@ TCollectResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EM
     if (leftTokens.size() > 1) {
         leftCollectResult.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
     }
-    leftCollectResult.Finish();
+    leftCollectResult.StopCollecting();
     return leftCollectResult;
 }
 
@@ -465,18 +457,18 @@ TCollectResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mo
 }
 
 TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode mode) {
-    auto inpuTCollectResult = Collect(Reader.ReadInput(item), mode);
-    if (inpuTCollectResult.IsError()) {
-        return inpuTCollectResult;
+    auto inputCollectResult = Collect(Reader.ReadInput(item), mode);
+    if (inputCollectResult.IsError()) {
+        return inputCollectResult;
     }
 
-    const auto& tokens = inpuTCollectResult.GetTokens();
+    const auto& tokens = inputCollectResult.GetTokens();
 
-    // If input path is already finished (e.g. $.a.*) or has multiple tokens,
+    // If input path is already stopped (e.g. $.a.*) or has multiple tokens,
     // we can't apply the filter to narrow down
-    if (inpuTCollectResult.IsFinished() || tokens.size() != 1) {
-        inpuTCollectResult.Finish();
-        return inpuTCollectResult;
+    if (!inputCollectResult.CanCollect()) {
+        inputCollectResult.StopCollecting();
+        return inputCollectResult;
     }
 
     FilterObjectPrefixes.push_back(tokens.front());
@@ -488,13 +480,13 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
         return predicateResult;
     }
 
-    predicateResult.Finish();
+    predicateResult.StopCollecting();
     return predicateResult;
 }
 
 TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
-    result.Finish();
+    result.StopCollecting();
     if (!result.IsError() && result.GetTokens().size() > 1) {
         return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
     }
@@ -507,7 +499,7 @@ TCollectResult TQueryCollector::Predicates(const TJsonPathItem& item, EMode mode
     }
 
     auto result = Collect(Reader.ReadInput(item), EMode::Predicate);
-    result.Finish();
+    result.StopCollecting();
     return result;
 }
 
@@ -524,11 +516,11 @@ TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftIt
 
     auto& pathTokens = pathResult.GetTokens();
     auto& literalTokens = literalResult.GetTokens();
-    if (!pathResult.IsFinished() && pathTokens.size() == 1 && literalTokens.size() == 1) {
+    if (pathResult.CanCollect() && literalTokens.size() == 1) {
         pathTokens.front() += literalTokens.front();
     }
 
-    pathResult.Finish();
+    pathResult.StopCollecting();
     return pathResult;
 }
 
@@ -658,11 +650,6 @@ void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringB
     }
 }
 
-TCollectResult::TCollectResult()
-    : Result(TTokens{})
-{
-}
-
 TCollectResult::TCollectResult(TTokens&& tokens)
     : Result(std::move(tokens))
 {
@@ -697,12 +684,12 @@ bool TCollectResult::IsError() const {
     return std::holds_alternative<TCollectResult::TError>(Result);
 }
 
-bool TCollectResult::IsFinished() const {
-    return Finished;
+void TCollectResult::StopCollecting() {
+    Stopped = true;
 }
 
-void TCollectResult::Finish() {
-    Finished = true;
+bool TCollectResult::CanCollect() const {
+    return !IsError() && !Stopped && GetTokens().size() == 1;
 }
 
 TCollectResult::ETokensMode TCollectResult::GetTokensMode() const {

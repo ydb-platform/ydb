@@ -24,34 +24,47 @@ public:
     };
 
 public:
-    TCollectResult();
-
+    // Constructs a collect result with the given tokens
     TCollectResult(TTokens&& tokens);
 
+    // Constructs a collect result with the given token
     TCollectResult(TString&& token);
 
+    // Constructs a collect result with the given error
     TCollectResult(TError&& issue);
 
+    // Returns the collected tokens for the JSON index
     const TTokens& GetTokens() const;
 
+    // Returns the collected tokens for the JSON index for modification
     TTokens& GetTokens();
 
+    // Returns the error if the collection process failed
     const TError& GetError() const;
 
+    // Returns true if the collection process failed
     bool IsError() const;
 
-    bool IsFinished() const;
+    // Returns true if the collection process can be continued
+    // If it is true, the result token can be extended with the next token (e.g. literal)
+    // It does not affect collecting multiple tokens (AND, OR, etc.)
+    bool CanCollect() const;
 
-    void Finish();
+    // Stops the collection process
+    // It means that the result token is completed and cannot be extended
+    // It does not affect collecting multiple tokens (AND, OR, etc.)
+    void StopCollecting();
 
+    // Returns the tokens mode
     ETokensMode GetTokensMode() const;
 
+    // Sets the tokens mode
     void SetTokensMode(ETokensMode mode);
 
 private:
     std::variant<TTokens, TError> Result;
     ETokensMode TokensMode = ETokensMode::NotSet;
-    bool Finished = false;
+    bool Stopped = false;
 };
 
 // Type of the callable function that is used for the JSON index collection

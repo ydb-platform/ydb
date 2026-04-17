@@ -57,27 +57,21 @@
 
 #### Создание серверного и клиентского сертификатов
 
-1. Создаем Certificate Authority (CA)
+Для каждого шага ниже представлены примеры команд. Замените \*\*\* на ваши значения.
 
-{% cut "Пример" %}
+1. Создаем Certificate Authority (CA)
 
 `openssl genrsa -out ca-key.pem 4096`
 
 `openssl req -new -x509 -days 3650 -key ca-key.pem -out ca-cert.pem -subj "/C=***/ST=***/L=***/O=***/CN=MyKafkaRootCA"`
 
-Замените \*\*\* на ваши значения.
-
-{% endcut %}
-
 2. Создаем сертификат для сервера
-
-{% cut "Пример" %}
 
 ```
 openssl genrsa -out server-key.pem 4096
 ```
 
-В следующей команде замените \*\*\* на свои значения. Вместо `serverhost.com` укажите название вашего хоста.
+В следующей команде вместо `serverhost.com` также укажите название вашего хоста.
 
 ```
 openssl req -new -key server-key.pem -out server-cert.csr -subj "/C=***/ST=***/L=***/O=***/CN=serverhost.com"
@@ -96,15 +90,11 @@ EOF
 openssl x509 -req -in server-cert.csr -CA ca-cert.pem -CAkey ca-key.pem -CAcreateserial -out server-cert.pem -days 365 -extfile server-ext.cnf
 ```
 
-{% endcut %}
-
 3. Создание клиентского сертификата
-
-{% cut "Пример" %}
 
 `openssl genrsa -out client-key.pem 4096`
 
-Замените в следующей команде \*\*\* на ваши значения и `clienthost.com` на hostname вашего клиента.
+Замените `clienthost.com` на hostname вашего клиента.
 
 `openssl req -new -key client-key.pem -out client-cert.csr -subj "/C=***/ST=***/L=***/O=***/CN=clienthost.com"`
 
@@ -119,11 +109,8 @@ EOF
 
 `openssl x509 -req -in client-cert.csr -CA ca-cert.pem -CAkey ca-key.pem -CAcreateserial -out client-cert.pem -days 365 -extfile client-ext.cnf`
 
-{% endcut %}
 
 4. Добавляем их в keystore и truststore
-
-{% cut "Пример" %}
 
 Для сервера:
 
@@ -144,8 +131,6 @@ keytool -importkeystore -deststorepass changeit -destkeystore client.keystore.jk
 
 keytool -import -trustcacerts -alias ca -file ca-cert.pem -keystore client.truststore.jks -storepass changeit -noprompt  
 ```
-
-{% endcut %}
 
 После этих пунктов у вас должны появиться нужные keystore и truststore, а также файлы с сертификатами и ключами.
 
@@ -194,7 +179,7 @@ kafka_proxy_config:
 ```
 client_certificate_authorization:
   client_certificate_definitions:
-    - require_same_issuer: false
+    - require_same_issuer: true
       subject_terms:
         - short_name: CN
           suffixes:
@@ -203,9 +188,10 @@ client_certificate_authorization:
         - user@cert # заменить на нужную member группу
   request_client_certificate: true
 ```
+Подробнее про client_certificate_authorization конфигурацию: [{#T}](../configuration/client_certificate_authorization.md)
+
 Еще для корректной работы нужно указать путь до этого же серверного сертификата конфигурации grpc:
 ```
 grpc_config:
   cert: "/path/to/server-cert.pem"
 ```
-Подробнее про client_certificate_authorization конфигурацию: [{#T}](../configuration/client_certificate_authorization.md)

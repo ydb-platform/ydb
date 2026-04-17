@@ -3,7 +3,6 @@
 #include "schema.h"
 
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
 #include <expected>

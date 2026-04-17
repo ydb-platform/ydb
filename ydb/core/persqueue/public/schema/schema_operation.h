@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ::NSchema {
 

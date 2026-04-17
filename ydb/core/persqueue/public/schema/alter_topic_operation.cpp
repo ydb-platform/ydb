@@ -1,6 +1,7 @@
 #include "alter_topic_operation.h"
 #include "schema_operation.h"
 
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>

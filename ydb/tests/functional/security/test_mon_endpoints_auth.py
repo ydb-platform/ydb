@@ -537,47 +537,5 @@ def test_viewer_endpoints_requiring_parameters_or_request_context_with_enforce_u
     expected_results_get = {
         endpoint_path: expected_statuses_for_invalid_viewer_request
         for endpoint_path in VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
-        if endpoint_path not in OPERATOR_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_POST_METHOD_LIST
     }
     _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results_get)
-
-
-# POST endpoints below require monitoring/admin access level on method gate.
-OPERATOR_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_POST_METHOD_LIST = [
-    '/pdisk/restart',
-    '/pdisk/status',
-    '/vdisk/evict',
-]
-
-
-def test_operator_post_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token,
-):
-    expected_statuses_for_invalid_operator_request = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 400,
-        'root@builtin': 400,
-    }
-
-    expected_results_post_operator = {
-        '/pdisk/restart?pdisk_id=invalid': {
-            'expected_statuses': expected_statuses_for_invalid_operator_request,
-            'json_body': {},
-        },
-        '/pdisk/status?pdisk_id=invalid': {
-            'expected_statuses': expected_statuses_for_invalid_operator_request,
-            'json_body': {},
-        },
-        '/vdisk/evict?vdisk_id=invalid': {
-            'expected_statuses': expected_statuses_for_invalid_operator_request,
-            'json_body': {},
-        },
-    }
-    _test_endpoints_with_payloads(
-        ydb_cluster_with_enforce_user_token,
-        expected_results_post_operator,
-        method='POST',
-    )

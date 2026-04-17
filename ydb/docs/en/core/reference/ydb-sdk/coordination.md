@@ -41,6 +41,42 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
      - A smaller value also increases the likelihood of false positives, where a living leader might terminate itself as a precaution, uncertain if this period has concluded on a potential new leader.
      - This value must be strictly greater than `SelfCheckPeriod`.
 
+<<<<<<< HEAD
+=======
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    client.create_node("/path/to/mynode")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    await client.create_node("/path/to/mynode")
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 ## Working with sessions {#session}
@@ -81,6 +117,46 @@ To start working with coordination nodes, a client must establish a session with
    - `OnStopped` - called when the session stops attempting to restore the connection with the service, which can be useful for establishing a new connection.
    - `Timeout` - the maximum timeout during which the session can be restored after losing connection with the service.
 
+<<<<<<< HEAD
+=======
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # work with the session
+        pass
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # work with the session
+        pass
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 ### Session control {#session-control}
@@ -97,6 +173,19 @@ It's important for the client application to monitor the session state, as it ca
 
   In the C++ SDK, an active session continuously maintains and automatically re-establishes the connection with the {{ ydb-short-name }} cluster in the background.
 
+<<<<<<< HEAD
+=======
+- Python
+
+  In the Python SDK, the session automatically restores the connection to the {{ ydb-short-name }} cluster after failures. Use a context manager (`with` or `async with`) to ensure the session is closed when leaving the block. When working with semaphores through a context manager (`with session.semaphore(name)` or `async with session.semaphore(name)`), the semaphore is released automatically when leaving the block, and the session is closed when the context exits.
+
+- JavaScript
+
+  In the JavaScript SDK, you can use `session.signal` to monitor session lifetime: it is aborted when the session is closed or expires. The SDK handles transport-level errors and reconnects to the service, attempting to restore the session when possible. This means the client only needs to watch the session signal and avoid any operations once the session is closed or expired.
+
+  For long-running applications, the JavaScript SDK provides a recommended pattern to automatically obtain a new session when the previous one is lost: `for await (session of client.openSession()) { session.signal }`
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 ## Working with semaphores {#semaphore}
@@ -141,6 +230,49 @@ When creating a semaphore, you can specify its limit. The limit determines the m
         .ExtractResult();
     ```
 
+<<<<<<< HEAD
+=======
+- Python
+
+  In the Python SDK, a semaphore is created implicitly on the first `acquire()` call in `session.semaphore(name, limit)`. The limit is set when the semaphore object is created.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # semaphore is created on first acquire() with limit 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # semaphore is created on first acquire() with limit 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.create({
+    limit: 10,
+    data: new Uint8Array(),
+  });
+  ```
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 ### Acquiring a semaphore {#acquire-semaphore}
@@ -192,6 +324,60 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
     - `Shared()` - alias for setting `Count = 1`, acquiring semaphore in shared mode.
     - `Exclusive()` - alias for setting `Count = max`, acquiring semaphore in exclusive mode. (For semaphores created with limit `Max<ui64>()`.)
 
+<<<<<<< HEAD
+=======
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        with semaphore:
+            # semaphore acquired for 1 unit (default)
+            pass
+        # or manually:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # work with the resource
+        semaphore.release()
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        async with semaphore:
+            # semaphore acquired for 1 unit (default)
+            pass
+        # or manually:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # work with the resource
+        await semaphore.release()
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 The taken value of an acquired semaphore can be decreased (but not increased) by calling the `AcquireSemaphore` method again with a smaller value.
@@ -223,6 +409,47 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
         .ExtractResult();
     ```
 
+<<<<<<< HEAD
+=======
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.update(b"updated-data")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.update(b"updated-data")
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.update({
+    limit: 5,
+    data: new Uint8Array(),
+  });
+  ```
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 This call doesn't require acquiring the semaphore and doesn't lead to it. If you need only one specific client to update the data, this must be explicitly ensured, for example, by acquiring the semaphore, updating the data, and releasing the semaphore back.
@@ -278,6 +505,49 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
     - `Count` - value requested in `AcquireSemaphore`.
     - `Data` - data specified in `AcquireSemaphore`.
 
+<<<<<<< HEAD
+=======
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = semaphore.describe()
+        # description contains: name, data, count, limit, owners, waiters, ephemeral
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = await semaphore.describe()
+        # description contains: name, data, count, limit, owners, waiters, ephemeral
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.describe({
+    owners: true,
+    waiters: true,
+  });
+  ```
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 ### Releasing a semaphore {#release-semaphore}
@@ -303,6 +573,51 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
         .ExtractResult();
     ```
 
+<<<<<<< HEAD
+=======
+- Python
+
+  In the Python SDK, a semaphore is released with the `release()` method on the semaphore object. When using a context manager (`with` or `async with`), release happens automatically when leaving the block.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # work with the resource
+        semaphore.release()
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # work with the resource
+        await semaphore.release()
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  To release a semaphore acquired within a session, call `release()` on the `Lease` object. If you use `await using`, the lease is released automatically when leaving the scope.
+
+  ```javascript
+  await lease.release();
+  ```
+
+>>>>>>> 11da1c9f53f (DOCSUP-127768: [YDBDOCS-1975] Update javascript code snippets, перевод (#38186))
 {% endlist %}
 
 ## Important implementation details

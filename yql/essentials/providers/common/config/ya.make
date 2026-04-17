@@ -10,6 +10,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/expr_nodes
     yql/essentials/core/qplayer/storage/interface
+    yql/essentials/core/sql_types
     yql/essentials/ast
     yql/essentials/utils/log
     library/cpp/containers/sorted_vector

@@ -7,6 +7,8 @@
 
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/utils/log/log.h>
+#include <library/cpp/json/writer/json.h>
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -27,6 +29,7 @@ struct TKqlTransformContext : TThrRefBase {
     std::shared_ptr<const NKqpProto::TKqpPhyQuery> PhysicalQuery;
 
     NYql::TExprNode::TPtr ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
+    std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
 
     void Reset() {

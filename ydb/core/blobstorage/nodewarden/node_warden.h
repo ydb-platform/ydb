@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
@@ -51,6 +52,9 @@ namespace NKikimr {
         std::optional<ui32> ReplMaxQuantumBytes = std::nullopt;
         std::optional<ui32> ReplMaxDonorNotReadyCount = std::nullopt;
         bool TinySyncLog = false;
+
+        std::optional<NYdb::NBS::NProto::TDDiskConfig> DDiskConfig;
+        std::optional<NYdb::NBS::NProto::TPBufferConfig> PBufferConfig;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

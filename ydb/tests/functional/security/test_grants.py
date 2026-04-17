@@ -242,7 +242,7 @@ def test_cdc_grants(ydb_cluster):
         add_consumer_query,
         TABLE_PATH,
         ALTER_TOPIC_ADD_CONSUMER_GRANTS,
-        "you do not have access rights",
+        "You do not have access permissions",
     )
 
     # READ CHANGEFEED

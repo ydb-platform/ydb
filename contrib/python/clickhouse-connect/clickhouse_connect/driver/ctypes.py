@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 RespBuffCls = ResponseBuffer
 data_conv = pydc
-numpy_conv = pync
+# numpy_conv is resolved lazily via __getattr__ to avoid eagerly importing numpy
 
 
 # pylint: disable=import-outside-toplevel,global-statement
@@ -28,22 +28,31 @@ def connect_c_modules():
         data_conv = cdc
         RespBuffCls = CResponseBuffer
         logger.debug('Successfully imported ClickHouse Connect C data optimizations')
-        connect_numpy()
     except ImportError as ex:
         logger.warning('Unable to connect optimized C data functions [%s], falling back to pure Python',
                        str(ex))
 
 
-def connect_numpy():
-    global numpy_conv
-    try:
-        import clickhouse_connect.driverc.npconv as cnc
+def _resolve_numpy_conv():
+    if "numpy_conv" in globals():
+        return
+    if coerce_bool(os.environ.get('CLICKHOUSE_CONNECT_USE_C', True)):
+        try:
+            import clickhouse_connect.driverc.npconv as cnc
+            globals()["numpy_conv"] = cnc
+            logger.debug('Successfully import ClickHouse Connect C/Numpy optimizations')
+            return
+        except ImportError as ex:
+            logger.debug('Unable to connect ClickHouse Connect C to Numpy API [%s], falling back to pure Python',
+                         str(ex))
+    globals()["numpy_conv"] = pync
 
-        numpy_conv = cnc
-        logger.debug('Successfully import ClickHouse Connect C/Numpy optimizations')
-    except ImportError as ex:
-        logger.debug('Unable to connect ClickHouse Connect C to Numpy API [%s], falling back to pure Python',
-             str(ex))
+
+def __getattr__(name):
+    if name == "numpy_conv":
+        _resolve_numpy_conv()
+        return globals()["numpy_conv"]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 connect_c_modules()

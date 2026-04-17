@@ -24,7 +24,8 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
     TMaybe<TDuration> watermarksPeriod = Nothing(),
     TDuration lateArrivalDelay = TDuration::Seconds(2),
-    bool idlePartitionsEnabled = false);
+    bool idlePartitionsEnabled = false,
+    bool streamingMode = true);
 
 NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic);
 

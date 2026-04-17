@@ -7,14 +7,11 @@ from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.options import np
+from clickhouse_connect.driver import options
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
 
 logger = logging.getLogger(__name__)
-
-if np is None:
-    logger.info("NumPy not detected. Install NumPy to see an order of magnitude performance gain with QBit columns.")
 
 
 class QBit(ClickHouseType):
@@ -43,9 +40,13 @@ class QBit(ClickHouseType):
     python_type = list
     _BIT_SHIFTS = [1 << i for i in range(8)]
     _ELEMENT_BITS = {"BFloat16": 16, "Float32": 32, "Float64": 64}
+    _numpy_warned = False
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
+        if not QBit._numpy_warned and options.np is None:
+            QBit._numpy_warned = True
+            logger.info("NumPy not detected. Install NumPy to see an order of magnitude performance gain with QBit columns.")
 
         self.element_type = type_def.values[0]
         if self.element_type not in self._ELEMENT_BITS:
@@ -140,7 +141,7 @@ class QBit(ClickHouseType):
 
     def _untranspose_row(self, bit_planes: tuple):
         """Convert bit-transposed tuple to flat float vector."""
-        if np is not None:
+        if options.np is not None:
             return self._untranspose_row_numpy(bit_planes)
 
         words = [0] * self.dimension
@@ -173,11 +174,11 @@ class QBit(ClickHouseType):
         """Vectorized numpy operations version of _untranspose_row"""
         # 1. Convert tuple of bytes to a single uint8 array
         total_bytes = b"".join(bit_planes)
-        planes_uint8 = np.frombuffer(total_bytes, dtype=np.uint8)
+        planes_uint8 = options.np.frombuffer(total_bytes, dtype=options.np.uint8)
         planes_uint8 = planes_uint8.reshape(self._bits_per_element, -1)
 
         # 2. Unpack bits to get the boolean/integer matrix
-        bits_matrix: "np.ndarray" = np.unpackbits(planes_uint8, axis=1, bitorder="little")
+        bits_matrix: "np.ndarray" = options.np.unpackbits(planes_uint8, axis=1, bitorder="little")
 
         # 3. Trim padding if necessary
         if bits_matrix.shape[1] != self.dimension:  # pylint: disable=no-member
@@ -185,15 +186,15 @@ class QBit(ClickHouseType):
 
         # 4. Reconstruct the integer words
         if self.element_type == "Float64":
-            int_dtype = np.uint64
-            final_dtype = np.float64
+            int_dtype = options.np.uint64
+            final_dtype = options.np.float64
         else:
             # Float32 and BFloat16 use 32-bit containers
-            int_dtype = np.uint32
-            final_dtype = np.float32
+            int_dtype = options.np.uint32
+            final_dtype = options.np.float32
 
         # Accumulate bits into integers
-        words = np.zeros(self.dimension, dtype=int_dtype)
+        words = options.np.zeros(self.dimension, dtype=int_dtype)
 
         for i in range(self._bits_per_element):
             # MSB is at index 0
@@ -207,8 +208,8 @@ class QBit(ClickHouseType):
         if self.element_type == "BFloat16":
             # Shift back up to the top 16 bits of a Float32
             # Cast to uint32 first to ensure safe shifting
-            words = words.astype(np.uint32) << 16
-            return words.view(np.float32).tolist()
+            words = words.astype(options.np.uint32) << 16
+            return words.view(options.np.float32).tolist()
 
         return words.view(final_dtype).tolist()
 
@@ -218,14 +219,14 @@ class QBit(ClickHouseType):
             raise ValueError(f"Vector dimension mismatch: expected {self.dimension}, got {len(values)}")
 
         # If numpy is available, use the fast path
-        if np is not None:
-            if isinstance(values, np.ndarray):
+        if options.np is not None:
+            if isinstance(values, options.np.ndarray):
                 return self._transpose_row_numpy(values)
 
             # If numpy is available but user supplied python list, convert to np array anyway for
             #  huge performance gains.
-            dtype = np.float64 if self.element_type == "Float64" else np.float32
-            return self._transpose_row_numpy(np.array(values, dtype=dtype))
+            dtype = options.np.float64 if self.element_type == "Float64" else options.np.float32
+            return self._transpose_row_numpy(options.np.array(values, dtype=dtype))
 
         words = self._values_to_words(values)
         bit_planes = []
@@ -251,26 +252,26 @@ class QBit(ClickHouseType):
         if self.element_type == "BFloat16":
             # Numpy doesn't have bfloat16. Input is Float32 so just
             #  discard the bottom 16 bits.
-            v_float = vector.astype(np.float32, copy=False)
+            v_float = vector.astype(options.np.float32, copy=False)
             # View as uint32, shift right 16, cast to uint16
-            v_int = (v_float.view(np.uint32) >> 16).astype(np.uint16)
+            v_int = (v_float.view(options.np.uint32) >> 16).astype(options.np.uint16)
 
         elif self.element_type == "Float32":
             # Ensure it is 32-bit float first (handles float64->32 downcast safely)
-            v_float = vector.astype(np.float32, copy=False)
-            v_int = v_float.view(np.uint32)
+            v_float = vector.astype(options.np.float32, copy=False)
+            v_int = v_float.view(options.np.uint32)
 
         else:  # Float64
-            v_float = vector.astype(np.float64, copy=False)
-            v_int = v_float.view(np.uint64)
+            v_float = vector.astype(options.np.float64, copy=False)
+            v_int = v_float.view(options.np.uint64)
 
         bits = self._bits_per_element
-        masks = (1 << np.arange(bits - 1, -1, -1, dtype=v_int.dtype)).reshape(-1, 1)
+        masks = (1 << options.np.arange(bits - 1, -1, -1, dtype=v_int.dtype)).reshape(-1, 1)
 
         # Extract bits: (Bits, Dim)
         # v_int broadcasted to (1, Dim)
         bits_extracted = (v_int & masks) != 0
 
-        packed = np.packbits(bits_extracted.view(np.uint8), axis=1, bitorder="little")
+        packed = options.np.packbits(bits_extracted.view(options.np.uint8), axis=1, bitorder="little")
 
         return tuple(row.tobytes() for row in packed)

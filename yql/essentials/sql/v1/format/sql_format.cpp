@@ -3387,7 +3387,8 @@ public:
             }
 
             TVector<NSQLTranslation::TParsedToken> comments;
-            TParsedTokenList parsedTokens, stmtTokens;
+            TParsedTokenList parsedTokens;
+            TParsedTokenList stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
@@ -3470,6 +3471,10 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
         throw yexception() << issues.ToString();
+    }
+
+    if (parsedSettings.PgParser) {
+        return query;
     }
 
     auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);

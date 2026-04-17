@@ -35,6 +35,7 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName)
 {}
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
+    config.BuildInfoCommandTag = "interactive";
     const TDriver driver(config.CreateDriverConfig());
     const auto versionInfo = ResolveVersionInfo(driver);
     const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile);

@@ -46,11 +46,16 @@ public:
 
         YQL_CLOG(INFO, FastMapReduce) << "Starting Merge operation";
 
+        TGenerateTasksResult result;
         std::vector<TGeneratedTaskInfo> generatedTasks;
         for (auto& task: context.PartitionResult.TaskInputs) {
             TMergeTaskParams mergeTaskParams;
             mergeTaskParams.Input = task;
             mergeTaskParams.Output = TFmrTableOutputRef(mergeOperationParams.Output);
+
+            TString newPartId = GenerateId();
+            mergeTaskParams.Output.PartId = newPartId;
+            result.PartIdsToUpdate[mergeTaskParams.Output.TableId].emplace_back(newPartId);
 
             generatedTasks.push_back(TGeneratedTaskInfo{
                 .TaskType = ETaskType::Merge,
@@ -58,17 +63,47 @@ public:
             });
         }
 
-        return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
+        result.Tasks = std::move(generatedTasks);
+        return result;
     }
 
     TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) override {
         TGetNewPartIdsForTaskResult result;
         TMergeTaskParams& mergeTaskParams = std::get<TMergeTaskParams>(context.Task->TaskParams);
-        TString tableId = mergeTaskParams.Output.TableId;
-        TString newPartId = GenerateId();
 
-        mergeTaskParams.Output.PartId = newPartId;
-        result.NewPartIdsForTables[tableId].emplace_back(newPartId);
+        if (mergeTaskParams.Output.PartId.empty()) {
+            return {.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "Merge task has empty output PartId",
+                .TaskId = context.TaskId,
+                .OperationId = context.OperationId
+            }};
+        }
+        TString tableId = mergeTaskParams.Output.TableId;
+        TString partId = mergeTaskParams.Output.PartId;
+
+        const auto& partIdsIter = context.PartIdsForTables.find(tableId);
+        if (partIdsIter == context.PartIdsForTables.end()) {
+            return {.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "Merge task output PartId is missing in coordinator part list",
+                .TaskId = context.TaskId,
+                .OperationId = context.OperationId
+            }};
+        }
+
+        const auto& partIds = partIdsIter->second;
+        if (std::find(partIds.begin(), partIds.end(), partId) == partIds.end()) {
+            return {.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "Merge task output PartId is missing in coordinator part list",
+                .TaskId = context.TaskId,
+                .OperationId = context.OperationId
+            }};
+        }
         return result;
     }
 

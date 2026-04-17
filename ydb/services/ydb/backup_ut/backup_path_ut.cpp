@@ -45,6 +45,18 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
     TString FilePrefix() {
         return "/test_bucket/Prefix/";
     }
+
+    static TImportSettings::TItem MakeImportItem(const TString& dst, const TString& srcPath) {
+        return TImportSettings::TItem{.Dst = dst, .SrcPath = srcPath};
+    }
+
+    static TImportSettings::TItem MakeImportItemSrcPathOnly(const TString& srcPath) {
+        return TImportSettings::TItem{.SrcPath = srcPath};
+    }
+
+    static TImportSettings::TItem MakeImportItemWithSrcDstAndSrcPath(const TString& src, const TString& dst, const TString& srcPath) {
+        return TImportSettings::TItem{.Src = src, .Dst = dst, .SrcPath = srcPath};
+    }
 };
 
 template <>
@@ -75,12 +87,23 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
     TString FilePrefix() {
         return "";
     }
+
+    static TImportSettings::TItem MakeImportItem(const TString& dst, const TString& srcPath) {
+        return TImportSettings::TItem{.Dst = dst, .SrcPathDb = srcPath};
+    }
+
+    static TImportSettings::TItem MakeImportItemSrcPathOnly(const TString& srcPath) {
+        return TImportSettings::TItem{.SrcPathDb = srcPath};
+    }
+
+    static TImportSettings::TItem MakeImportItemWithSrcDstAndSrcPath(const TString& src, const TString& dst, const TString& srcPath) {
+        return TImportSettings::TItem{.Src = src, .Dst = dst, .SrcPathDb = srcPath};
+    }
 };
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
-    using TImportSettings = typename TBackupTraits<TExportSettings>::TImportSettings;
     const TString prefix = traits.FilePrefix();
 
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
@@ -132,8 +155,8 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     {
         auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
         importSettings
-                .AppendItem(typename TImportSettings::TItem{.Dst = "/Root/RestorePrefix/Table123", .SrcPath = "dir1/dir2//Table2"})
-                .AppendItem(typename TImportSettings::TItem{.Dst = "/Root/RestorePrefix/Table321", .SrcPath = "Table0"});
+                .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table123", "dir1/dir2//Table2"))
+                .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table321", "Table0"));
         auto res = traits.Import(f, importSettings);
         f.WaitOpSuccess(res);
 
@@ -151,7 +174,7 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     // Recursive filter by directory
     {
         auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix2");
-        importSettings.AppendItem(typename TImportSettings::TItem{.SrcPath = "dir1"});
+        importSettings.AppendItem(traits.MakeImportItemSrcPathOnly("dir1"));
         auto res = traits.Import(f, importSettings);
         f.WaitOpSuccess(res);
 
@@ -166,7 +189,7 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
 
     {
         auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
-        importSettings.AppendItem(typename TImportSettings::TItem{.Src = "/Root/RestorePrefix/dir1/dir2/Table2", .Dst = "/Root/RestorePrefix/Table0", .SrcPath = "dir1/dir2/Table2"});
+        importSettings.AppendItem(traits.MakeImportItemWithSrcDstAndSrcPath("/Root/RestorePrefix/dir1/dir2/Table2", "/Root/RestorePrefix/Table0", "dir1/dir2/Table2"));
         UNIT_ASSERT_EXCEPTION(traits.Import(f, importSettings), TContractViolation);
     }
 }

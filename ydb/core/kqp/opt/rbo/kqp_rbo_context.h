@@ -6,6 +6,9 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
 
+#include <library/cpp/json/writer/json.h>
+
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -25,7 +28,9 @@ public:
               TKqpProviderContext(kqpCtx, 
                 kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()), 
                 kqpCtx.Config->UseBlockHashJoin.Get().GetOrElse(false)))
-        {}
+        , ExecutionJson(std::nullopt)
+        , ExplainJson(std::nullopt) {
+    }
 
     TKqpOptimizeContext& KqpCtx;
     NYql::TExprContext& ExprCtx;
@@ -34,6 +39,8 @@ public:
     NYql::IGraphTransformer& PeepholeTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TKqpProviderContext CBOCtx;
+    std::optional<NJson::TJsonValue> ExecutionJson;
+    std::optional<NJson::TJsonValue> ExplainJson;
 };
 
 } // namespace NKqp

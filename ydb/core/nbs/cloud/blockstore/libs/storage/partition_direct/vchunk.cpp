@@ -8,6 +8,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_direct_replication_request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_pb_replication_request.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -351,23 +353,44 @@ void TVChunk::DoWriteBlocksLocal(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
-        ActorSystem,
-        VChunkConfig,
-        DirectBlockGroup,
-        vchunkRange,
-        std::move(callContext),
-        std::move(request),
-        lsn,
-        span->GetTraceId(),
-        WriteHandoffDelay);
+    std::shared_ptr<TBaseWriteRequestExecutor> writeExecutor;
+    switch (writeMode) {
+        case EWriteMode::PBufferReplication:
+            writeExecutor =
+                std::make_shared<TWriteWithPbReplicationRequestExecutor>(
+                    ActorSystem,
+                    VChunkConfig,
+                    DirectBlockGroup,
+                    vchunkRange,
+                    std::move(callContext),
+                    std::move(request),
+                    lsn,
+                    span->GetTraceId(),
+                    WriteHandoffDelay,
+                    pbufferReplyTimeout);
+            break;
+        case EWriteMode::DirectPBuffersFilling:
+            writeExecutor =
+                std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
+                    ActorSystem,
+                    VChunkConfig,
+                    DirectBlockGroup,
+                    vchunkRange,
+                    std::move(callContext),
+                    std::move(request),
+                    lsn,
+                    span->GetTraceId(),
+                    WriteHandoffDelay);
+            break;
+    }
+
     auto future = writeExecutor->GetFuture();
     future.Subscribe(
         [weakSelf = weak_from_this(),
          vchunkRange,
          promise = std::move(promise),
          span]   //
-        (const TFuture<TWriteRequestExecutor::TResponse>& f) mutable
+        (const TFuture<TBaseWriteRequestExecutor::TResponse>& f) mutable
         {
             auto self = weakSelf.lock();
             if (!self) {
@@ -383,13 +406,13 @@ void TVChunk::DoWriteBlocksLocal(
         });
 
     span->Event("Run");
-    writeExecutor->Run(writeMode, pbufferReplyTimeout);
+    writeExecutor->Run();
 }
 
 void TVChunk::OnWriteBlocksResponse(
     TTracedPromise<TWriteBlocksLocalResponse> promise,
     TBlockRange64 range,
-    const TWriteRequestExecutor::TResponse& response,
+    const TBaseWriteRequestExecutor::TResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());

@@ -1040,7 +1040,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", {clonedArg});
         }
 
-        TString key, yson;
+        TString key;
+        TString yson;
         NYT::TNode ysonNode;
         if (types.QContext) {
             key = MakeCacheKey(*clonedArg);

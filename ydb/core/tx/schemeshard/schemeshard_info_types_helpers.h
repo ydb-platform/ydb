@@ -28,22 +28,22 @@ inline TString GetItemSource(const TSettings& settings, size_t i) {
 }
 
 template <typename TItem>
-TString GetItemSourcePath(const TItem& item);
+TString GetItemSourcePathDb(const TItem& item);
 
 template <>
-inline TString GetItemSourcePath(const Ydb::Import::ImportFromS3Settings::Item& item) {
+inline TString GetItemSourcePathDb(const Ydb::Import::ImportFromS3Settings::Item& item) {
     return item.source_path();
 }
 
 template <>
-inline TString GetItemSourcePath(const Ydb::Import::ImportFromFsSettings::Item& item) {
+inline TString GetItemSourcePathDb(const Ydb::Import::ImportFromFsSettings::Item& item) {
     return item.source_path_db();
 }
 
 template <typename TSettings>
-inline TString GetItemSourcePath(const TSettings& settings, size_t i) {
+inline TString GetItemSourcePathDb(const TSettings& settings, size_t i) {
     if (i < ui32(settings.items_size())) {
-        return GetItemSourcePath(settings.items(i));
+        return GetItemSourcePathDb(settings.items(i));
     }
     return {};
 }

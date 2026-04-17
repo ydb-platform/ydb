@@ -184,7 +184,8 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                     CreateSinglePassFunctorTransformer(
                         [typeCtx = TypeAnnotationContext_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                             output = input;
-                            TString calculatedLineage, loadedLineage;
+                            TString calculatedLineage;
+                            TString loadedLineage;
                             if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
                                 auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = LineageResultLabel}).GetValueSync();
                                 if (loaded.Defined()) {

@@ -1,3 +1,5 @@
+# Резервное копирование и восстановление через NFS
+
 ### Предварительные требования {#nfs-prerequisites}
 
 Операции `export nfs` / `import nfs` выполняются **серверными процессами** {{ ydb-short-name }}, а не CLI-клиентом. Это означает, что файловая система должна быть доступна со стороны каждого узла кластера:
@@ -24,7 +26,7 @@
 ### Что происходит при импорте {#nfs-import-workflow}
 
 1. Создаётся серверная асинхронная операция импорта.
-2. Сервер считывает метаданные объектов из файлов (`scheme.pb`, `metadata.json`) по указанному пути.
+2. Сервер считывает метаданные объектов из файлов (`scheme.pb`, `metadata.json` и т.д.) по указанному пути.
 3. Для каждого объекта создаётся новая таблица в базе данных. Целевые пути **не должны существовать** — импорт не может перезаписать существующие таблицы.
 4. Данные загружаются из файлов параллельно на всех узлах кластера.
 
@@ -98,7 +100,7 @@ NFSv4 использует расширенную модель прав вмес
     Опции экспорта:
     - `rw` — разрешить чтение и запись.
     - `sync` — синхронная запись (данные записываются на диск до подтверждения клиенту).
-    - `root_squash` — преобразовать `root` на клиенте в анонимного пользователя (безопасность).
+    - `root_squash` — преобразовать `root` на клиенте в анонимного пользователя.
 
 4. Примените изменения и запустите NFS-сервер:
 
@@ -129,7 +131,7 @@ NFSv4 использует расширенную модель прав вмес
 3. Смонтируйте NFS-директорию:
 
     ```bash
-    sudo mount -t nfs -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
+    sudo mount -t nfs4 -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
     ```
 
     Опции монтирования:
@@ -141,7 +143,7 @@ NFSv4 использует расширенную модель прав вмес
 4. Для автоматического монтирования при загрузке добавьте строку в `/etc/fstab`:
 
     ```text
-    nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup nfs rw,hard,timeo=600,retrans=2,_netdev 0 0
+    nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
     ```
 
     Опции `fstab`:
@@ -186,13 +188,13 @@ NFSv4 ACL позволяют задать более гранулярные пр
 2. Создайте директорию для экспорта:
 
     ```bash
-    sudo mkdir -p /mnt/ydb-backup
+    sudo mkdir -p /mnt/ydb-backup-server
     ```
 
 3. Добавьте директорию в `/etc/exports`:
 
     ```text
-    /mnt/ydb-backup ydb-node-*.example.com(rw,sync,no_subtree_check,root_squash)
+    /mnt/ydb-backup-server ydb-node-*.example.com(rw,sync,no_subtree_check,root_squash)
     ```
 
 4. Примените изменения:
@@ -202,53 +204,14 @@ NFSv4 ACL позволяют задать более гранулярные пр
     sudo systemctl enable --now nfs-server
     ```
 
-5. Определите UID пользователя `ydb`:
-
-    ```bash
-    id -u ydb
-    ```
-
-    Пример вывода: `1971`
-
-6. Настройте NFSv4 ACL на директории:
-
-    ```bash
-    sudo nfs4_setfacl -s "A::1971:rwatTnNcCoy,A:fdi:1971:rwatTnNcCoy,A:fd:OWNER@:rwatTnNcCoy" /mnt/ydb-backup
-    ```
-
-    Структура ACE (`A:flags:who:permissions`):
-    - `A` — тип ACE: Allow (разрешить).
-    - Флаги наследования:
-        - `f` (file-inherit) — наследовать на создаваемые файлы.
-        - `d` (directory-inherit) — наследовать на создаваемые поддиректории.
-        - `i` (inherit-only) — применять только к потомкам, не к самой директории.
-    - `who` — кому предоставляются права:
-        - `1971` — UID пользователя `ydb`.
-        - `OWNER@` — владелец объекта.
-    - Разрешения:
-        - `r` — read-data / list-directory.
-        - `w` — write-data / create-file.
-        - `a` — append-data / create-subdirectory.
-        - `t` — read-attributes.
-        - `T` — write-attributes.
-        - `n` — read-named-attributes.
-        - `N` — write-named-attributes.
-        - `c` — read-ACL.
-        - `C` — write-ACL.
-        - `o` — write-owner.
-        - `y` — synchronize.
-
-    Данная команда устанавливает:
-    - Права для пользователя `ydb` на саму директорию.
-    - Наследуемые права для файлов и поддиректорий (`fdi`), которые будут применяться только к потомкам.
-    - Права владельца (`OWNER@`) с наследованием на файлы и директории.
-
 ##### Настройка клиентов (узлов {{ ydb-short-name }})
 
-1. Установите утилиты для работы с NFSv4 ACL:
+В отличие от POSIX-прав, которые задаются на NFS-сервере, NFSv4 ACL настраиваются на каждом клиенте после монтирования директории. Если NFS-сервер одновременно является узлом кластера {{ ydb-short-name }}, на нём необходимо выполнить все описанные ниже шаги.
+
+1. Установите пакеты NFS-клиента и утилиты для работы с NFSv4 ACL:
 
     ```bash
-    sudo apt install nfs4-acl-tools
+    sudo apt install nfs-common nfs4-acl-tools
     ```
 
 2. Создайте точку монтирования:
@@ -270,10 +233,43 @@ NFSv4 ACL позволяют задать более гранулярные пр
 4. Для автоматического монтирования добавьте строку в `/etc/fstab`:
 
     ```text
-    nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
+    nfs-server.example.com:/mnt/ydb-backup-server /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
     ```
 
-    Обратите внимание на тип файловой системы `nfs4` вместо `nfs`.
+5. Определите UID пользователя `ydb`:
+
+    ```bash
+    id -u ydb
+    ```
+
+    Пример вывода: `1871`
+
+6. Настройте NFSv4 ACL на директории:
+
+    ```bash
+    sudo nfs4_setfacl -s A::<uid>:rwaxtD,A:fi:OWNER@:rwat,A:di:OWNER@rwaxtD /home/st-shchetinin/nfs_acl_dir
+    ```
+
+    Структура ACE (`A:flags:who:permissions`):
+    - `A` — тип ACE: Allow (разрешить).
+    - Флаги наследования:
+        - `f` (file-inherit) — наследовать на создаваемые файлы.
+        - `d` (directory-inherit) — наследовать на создаваемые поддиректории.
+        - `i` (inherit-only) — применять только к потомкам, не к самой директории.
+    - `who` — кому предоставляются права:
+        - `1871` — UID пользователя `ydb`.
+        - `OWNER@` — владелец объекта.
+    - Разрешения:
+        - `r` — read-data / list-directory.
+        - `w` — write-data / create-file.
+        - `a` — append-data / create-subdirectory.
+        - `t` — read-attributes.
+        - `D` - delete-child.
+
+    Данная команда устанавливает:
+    - Права для пользователя `ydb` на саму директорию.
+    - Наследуемые права для файлов и поддиректорий (`fi`, `di`), которые будут применяться только к потомкам.
+    - Права владельца (`OWNER@`) с наследованием на файлы и директории.
 
 ##### Проверка работоспособности
 

@@ -2220,7 +2220,7 @@ void TPersQueue::HandleReadRequest(
     } else if (cmd.HasCount() && cmd.GetCount() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid count in read request: " << ToString(req).data());
-    } else if (!cmd.HasOffset() || cmd.GetOffset() < 0) {
+    } else if (cmd.GetOffset() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid offset in read request: " << ToString(req).data());
     } else if (cmd.HasBytes() && cmd.GetBytes() <= 0) {

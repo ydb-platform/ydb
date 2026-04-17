@@ -175,10 +175,6 @@
   await using var connection = await dataSource.OpenConnectionAsync();
   ```
 
-<<<<<<< HEAD
-=======
-  Для Entity Framework и linq2db используйте тот же connectionString.
-
 - Rust
 
   ```rust
@@ -189,7 +185,6 @@
       .client()?;
   ```
 
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - PHP
 
   ```php

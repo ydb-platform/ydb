@@ -375,8 +375,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Python
 
   Python SDK использует стандартную библиотеку для логирования - `logging`. Для включения определенного режима логирования:
@@ -438,7 +436,6 @@
   var loggerFactory = LoggerFactory.Create(builder => builder.AddNLog());
   ```
 
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - PHP
 
   В YDB PHP SDK для логирования вам нужно использовать класс, который реализует `\Psr\Log\LoggerInterface`.
@@ -455,20 +452,5 @@
   ]
   $ydb = new \YdbPlatform\Ydb\Ydb($config);
   ```
-
-- Python
-
-  Python SDK использует стандартную библиотеку для логирования - `logging`. Для включения определенного режима логирования:
-
-  ```python
-  import logging
-
-  logging.getLogger('ydb').setLevel(logging.DEBUG)
-  ```
-
-- JavaScript
-
-  Для логирования событий внутри sdk используется библиотека [debug](https://www.npmjs.com/package/debug).
-  Для включения логов необходимо задать переменную окружения `DEBUG` со значением фильтра по событиям sdk - `DEBUG=ydbjs:*`.
 
 {% endlist %}

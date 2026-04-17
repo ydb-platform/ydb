@@ -168,8 +168,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -184,7 +182,6 @@
       .client()?;
   ```
 
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - PHP
 
   ```php

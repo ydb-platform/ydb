@@ -438,6 +438,10 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -733,9 +737,6 @@
 
     ```
 
-<<<<<<< HEAD
-  {% endlist %}
-=======
     {% endlist %}
 
 - C#
@@ -746,7 +747,6 @@
       ProducerId = "ProducerId_Example"
   }.Build();
   ```
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 - JavaScript
 
@@ -1212,9 +1212,7 @@
 
 - Java
 
-<<<<<<< HEAD
   Функциональность на данный момент не поддерживается.
-=======
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - C#
@@ -1228,7 +1226,6 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 {% endlist %}
 
@@ -1761,8 +1758,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - C#
 
   ```c#
@@ -1773,7 +1768,6 @@
   }.Build();
   ```
 
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - JavaScript
 
   ```javascript
@@ -2312,8 +2306,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - C#
 
   ```c#
@@ -2343,7 +2335,6 @@
   }
   ```
 
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - JavaScript
 
   ```javascript
@@ -2462,8 +2453,6 @@
   });
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2476,7 +2465,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 ### Чтение без указания Consumer'а {#no-consumer}
@@ -2747,10 +2735,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
-
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2763,7 +2747,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -3197,9 +3180,6 @@
 
 - Java
 
-<<<<<<< HEAD
-  Функциональность на данный момент не поддерживается.
-=======
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - C#
@@ -3213,7 +3193,6 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 {% endlist %}
 
@@ -3259,9 +3238,6 @@
 
 - Java
 
-<<<<<<< HEAD
-  Функциональность на данный момент не поддерживается.
-=======
   ```java
   TopicClient client = ...;
 
@@ -3290,6 +3266,5 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 {% endlist %}

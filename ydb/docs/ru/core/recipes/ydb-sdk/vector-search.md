@@ -61,6 +61,8 @@
       Для выполнения запросов необходимо создать `ydb.QuerySessionPool`.
 
       ```python
+      import ydb
+
       driver = ydb.Driver(
           endpoint=ydb_endpoint,
           database=ydb_database,
@@ -124,35 +126,24 @@
     import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
     import tech.ydb.query.tools.SessionRetryContext;
-    
+
     String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-    
+
     try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
        QueryClient queryClient = QueryClient.newClient(transport).build()) {
-    
+
       SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
       // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
     }
     ```
 
-- Java
+- Rust
 
-    Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-    ```java
-    import tech.ydb.core.grpc.GrpcTransport;
-    import tech.ydb.query.QueryClient;
-    import tech.ydb.query.tools.SessionRetryContext;
-    
-    String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-    
-    try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-       QueryClient queryClient = QueryClient.newClient(transport).build()) {
-    
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
-    }
-    ```
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -201,6 +192,8 @@
     - Native SDK
 
       ```python
+      import ydb
+
       def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
           query = f"""
           CREATE TABLE IF NOT EXISTS `{table_name}` (
@@ -257,36 +250,9 @@
     }
     ```
 
-<<<<<<< HEAD
-- Java
-
-  ```java
-  import tech.ydb.common.transaction.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.table.query.Params;
-  
-  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
-      String query = String.format("""
-              CREATE TABLE IF NOT EXISTS `%s` (
-                  id Utf8,
-                  document Utf8,
-                  embedding String,
-                  PRIMARY KEY (id)
-              );""", tableName);
-  
-      retryCtx.supplyResult(session -> QueryReader.readFrom(
-              session.createQuery(query, TxMode.NONE, Params.empty())
-      )).join().getValue();
-  
-      System.out.println("Vector table created: " + tableName);
-  }
-  ```
-=======
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 - JavaScript
 
@@ -306,7 +272,7 @@
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
   import tech.ydb.table.query.Params;
-  
+
   void createVectorTable(SessionRetryContext retryCtx, String tableName) {
       String query = String.format("""
               CREATE TABLE IF NOT EXISTS `%s` (
@@ -315,14 +281,22 @@
                   embedding String,
                   PRIMARY KEY (id)
               );""", tableName);
-  
+
       retryCtx.supplyResult(session -> QueryReader.readFrom(
               session.createQuery(query, TxMode.NONE, Params.empty())
       )).join().getValue();
-  
+
       System.out.println("Vector table created: " + tableName);
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -393,104 +367,109 @@
 
     Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
-    {% cut "asyncio" %}
+    {% list tabs %}
+    - Native SDK
 
-    ```python
-    import struct
-    import ydb
+      ```python
+      import struct
+      import ydb
 
-    def convert_vector_to_bytes(vector: list[float]) -> bytes:
-        b = struct.pack("f" * len(vector), *vector)
-        return b + b"\x01"
 
-    async def insert_items_vector_as_bytes(
-        pool: ydb.aio.QuerySessionPool,
-        table_name: str,
-        items: list[dict],
-    ) -> None:
-        query = f"""
-        DECLARE $items AS List<Struct<
-            id: Utf8,
-            document: Utf8,
-            embedding: String
-        >>;
+      def convert_vector_to_bytes(vector: list[float]) -> bytes:
+          b = struct.pack("f" * len(vector), *vector)
+          return b + b"\x01"
 
-        UPSERT INTO `{table_name}`
-        (
-            id,
-            document,
-            embedding
-        )
-        SELECT
-            id,
-            document,
-            embedding,
-        FROM AS_TABLE($items);
-        """
+      def insert_items_vector_as_bytes(
+          pool: ydb.QuerySessionPool,
+          table_name: str,
+          items: list[dict],
+      ) -> None:
+          query = f"""
+          DECLARE $items AS List<Struct<
+              id: Utf8,
+              document: Utf8,
+              embedding: String
+          >>;
 
-        items_struct_type = ydb.StructType()
-        items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
+          UPSERT INTO `{table_name}`
+          (
+              id,
+              document,
+              embedding
+          )
+          SELECT
+              id,
+              document,
+              embedding,
+          FROM AS_TABLE($items);
+          """
 
-        for item in items:
-            item["embedding"] = convert_vector_to_bytes(item["embedding"])
+          items_struct_type = ydb.StructType()
+          items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
-        await pool.execute_with_retries(
-            query, {"$items": (items, ydb.ListType(items_struct_type))}
-        )
+          for item in items:
+              item["embedding"] = convert_vector_to_bytes(item["embedding"])
 
-        print(f"{len(items)} items inserted")
-    ```
+          pool.execute_with_retries(
+              query, {"$items": (items, ydb.ListType(items_struct_type))}
+          )
 
-    {% endcut %}
+          print(f"{len(items)} items inserted")
+      ```
 
-    ```python
-    import struct
+    - Native SDK (Asyncio)
 
-    def convert_vector_to_bytes(vector: list[float]) -> bytes:
-        b = struct.pack("f" * len(vector), *vector)
-        return b + b"\x01"
+      ```python
+      import struct
+      import ydb
 
-    def insert_items_vector_as_bytes(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        items: list[dict],
-    ) -> None:
-        query = f"""
-        DECLARE $items AS List<Struct<
-            id: Utf8,
-            document: Utf8,
-            embedding: String
-        >>;
+      def convert_vector_to_bytes(vector: list[float]) -> bytes:
+          b = struct.pack("f" * len(vector), *vector)
+          return b + b"\x01"
 
-        UPSERT INTO `{table_name}`
-        (
-            id,
-            document,
-            embedding
-        )
-        SELECT
-            id,
-            document,
-            embedding,
-        FROM AS_TABLE($items);
-        """
+      async def insert_items_vector_as_bytes(
+          pool: ydb.aio.QuerySessionPool,
+          table_name: str,
+          items: list[dict],
+      ) -> None:
+          query = f"""
+          DECLARE $items AS List<Struct<
+              id: Utf8,
+              document: Utf8,
+              embedding: String
+          >>;
 
-        items_struct_type = ydb.StructType()
-        items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
+          UPSERT INTO `{table_name}`
+          (
+              id,
+              document,
+              embedding
+          )
+          SELECT
+              id,
+              document,
+              embedding,
+          FROM AS_TABLE($items);
+          """
 
-        for item in items:
-            item["embedding"] = convert_vector_to_bytes(item["embedding"])
+          items_struct_type = ydb.StructType()
+          items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
-        pool.execute_with_retries(
-            query, {"$items": (items, ydb.ListType(items_struct_type))}
-        )
+          for item in items:
+              item["embedding"] = convert_vector_to_bytes(item["embedding"])
 
-        print(f"{len(items)} items inserted")
-    ```
+          await pool.execute_with_retries(
+              query, {"$items": (items, ydb.ListType(items_struct_type))}
+          )
+
+          print(f"{len(items)} items inserted")
+      ```
+
+    {% endlist %}
 
 - C++
 
@@ -748,87 +727,92 @@
 
     Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
-    {% cut "asyncio" %}
+    {% list tabs %}
+    - Native SDK
 
-    ```python
-    import ydb
+      ```python
+      import ydb
 
-    async def insert_items_vector_as_float_list(
-        pool: ydb.aio.QuerySessionPool,
-        table_name: str,
-        items: list[dict],
-    ) -> None:
-        query = f"""
-        DECLARE $items AS List<Struct<
-            id: Utf8,
-            document: Utf8,
-            embedding: List<Float>
-        >>;
+      def insert_items_vector_as_float_list(
+          pool: ydb.QuerySessionPool,
+          table_name: str,
+          items: list[dict],
+      ) -> None:
+          query = f"""
+          DECLARE $items AS List<Struct<
+              id: Utf8,
+              document: Utf8,
+              embedding: List<Float>
+          >>;
 
-        UPSERT INTO `{table_name}`
-        (
-            id,
-            document,
-            embedding
-        )
-        SELECT
-            id,
-            document,
-            Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-        FROM AS_TABLE($items);
-        """
+          UPSERT INTO `{table_name}`
+          (
+              id,
+              document,
+              embedding
+          )
+          SELECT
+              id,
+              document,
+              Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+          FROM AS_TABLE($items);
+          """
 
-        items_struct_type = ydb.StructType()
-        items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
+          items_struct_type = ydb.StructType()
+          items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
 
-        await pool.execute_with_retries(
-            query, {"$items": (items, ydb.ListType(items_struct_type))}
-        )
+          pool.execute_with_retries(
+              query, {"$items": (items, ydb.ListType(items_struct_type))}
+          )
 
-        print(f"{len(items)} items inserted")
-    ```
+          print(f"{len(items)} items inserted")
+      ```
 
-    {% endcut %}
+    - Native SDK (Asyncio)
 
-    ```python
-    def insert_items_vector_as_float_list(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        items: list[dict],
-    ) -> None:
-        query = f"""
-        DECLARE $items AS List<Struct<
-            id: Utf8,
-            document: Utf8,
-            embedding: List<Float>
-        >>;
+      ```python
+      import ydb
 
-        UPSERT INTO `{table_name}`
-        (
-            id,
-            document,
-            embedding
-        )
-        SELECT
-            id,
-            document,
-            Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-        FROM AS_TABLE($items);
-        """
+      async def insert_items_vector_as_float_list(
+          pool: ydb.aio.QuerySessionPool,
+          table_name: str,
+          items: list[dict],
+      ) -> None:
+          query = f"""
+          DECLARE $items AS List<Struct<
+              id: Utf8,
+              document: Utf8,
+              embedding: List<Float>
+          >>;
 
-        items_struct_type = ydb.StructType()
-        items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
-        items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
+          UPSERT INTO `{table_name}`
+          (
+              id,
+              document,
+              embedding
+          )
+          SELECT
+              id,
+              document,
+              Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+          FROM AS_TABLE($items);
+          """
 
-        pool.execute_with_retries(
-            query, {"$items": (items, ydb.ListType(items_struct_type))}
-        )
+          items_struct_type = ydb.StructType()
+          items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+          items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
 
-        print(f"{len(items)} items inserted")
-    ```
+          await pool.execute_with_retries(
+              query, {"$items": (items, ydb.ListType(items_struct_type))}
+          )
+
+          print(f"{len(items)} items inserted")
+      ```
+
+    {% endlist %}
 
 - C++ (альтернативный)
 
@@ -900,6 +884,14 @@
     SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
     FROM AS_TABLE($items);`
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -994,7 +986,8 @@
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters}
+            clusters={clusters},
+            overlap_clusters=3
         );
         """
 
@@ -1010,8 +1003,8 @@
             ],
         )
 
-        print(f"Table index {index_name} created.")
-    ```
+      ```python
+      import ydb
 
     {% endcut %}
 
@@ -1037,7 +1030,8 @@
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters}
+            clusters={clusters},
+            overlap_clusters=3
         );
         """
 
@@ -1053,8 +1047,67 @@
             ],
         )
 
-        print(f"Table index {index_name} created.")
-    ```
+          pool.execute_with_retries(query)
+          driver.table_client.alter_table(
+              f"{driver._driver_config.database}/{table_name}",
+              rename_indexes=[
+                  ydb.RenameIndexItem(
+                      source_name=temp_index_name,
+                      destination_name=f"{index_name}",
+                      replace_destination=True,
+                  ),
+              ],
+          )
+
+          print(f"Table index {index_name} created.")
+      ```
+
+    - Native SDK (Asyncio)
+
+      ```python
+      import ydb
+
+      async def add_vector_index(
+          pool: ydb.aio.QuerySessionPool,
+          driver: ydb.aio.Driver,
+          table_name: str,
+          index_name: str,
+          strategy: str,
+          dimension: int,
+          levels: int = 2,
+          clusters: int = 128,
+      ):
+          temp_index_name = f"{index_name}__temp"
+          query = f"""
+          ALTER TABLE `{table_name}`
+          ADD INDEX {temp_index_name}
+          GLOBAL USING vector_kmeans_tree
+          ON (embedding)
+          WITH (
+              {strategy},
+              vector_type="Float",
+              vector_dimension={dimension},
+              levels={levels},
+              clusters={clusters}
+          );
+          """
+
+          await pool.execute_with_retries(query)
+          await driver.table_client.alter_table(
+              f"{driver._driver_config.database}/{table_name}",
+              rename_indexes=[
+                  ydb.RenameIndexItem(
+                      source_name=temp_index_name,
+                      destination_name=f"{index_name}",
+                      replace_destination=True,
+                  ),
+              ],
+          )
+
+          print(f"Table index {index_name} created.")
+      ```
+
+    {% endlist %}
 
 - C++
 
@@ -1080,7 +1133,8 @@
                 vector_type="Float",
                 vector_dimension={3},
                 levels={4},
-                clusters={5}
+                clusters={5},
+                overlap_clusters=3
             );
         )", tableName, indexName, strategy, dim, levels, clusters);
 
@@ -1109,7 +1163,7 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -1164,6 +1218,14 @@
 
     // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1250,22 +1312,12 @@
 
 - Python
 
-    {% cut "asyncio" %}
+    {% list tabs %}
+    - Native SDK
 
-    ```python
-    import ydb
+      ```python
+      import ydb
 
-<<<<<<< HEAD
-    async def search_items_vector_as_bytes(
-        pool: ydb.aio.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
       def search_items_vector_as_bytes(
           pool: ydb.QuerySessionPool,
           table_name: str,
@@ -1276,63 +1328,13 @@
           top_clusters: int = 10,
       ) -> list[dict]:
           view_index = f"VIEW {index_name}" if index_name else ""
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
-        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-        query = f"""
-        DECLARE $embedding as String;
-
-        SELECT
-            id,
-            document,
-            Knn::{strategy}(embedding, $embedding) as score
-        FROM {table_name} {view_index}
-        ORDER BY score {sort_order}
-        LIMIT {limit};
-        """
-
-        result = await pool.execute_with_retries(
-            query,
-            {
-                "$embedding": (
-                    convert_vector_to_bytes(embedding),
-                    ydb.PrimitiveType.String,
-                ),
-            },
-        )
-
-        items = []
-
-        for result_set in result:
-            for row in result_set.rows:
-                items.append(
-                    {
-                        "id": row["id"],
-                        "document": row["document"],
-                        "score": row["score"],
-                    }
-                )
-
-        return items
-    ```
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
           query = f"""
           PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
           DECLARE $embedding as String;
 
-<<<<<<< HEAD
-    ```python
-    def search_items_vector_as_bytes(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
           SELECT
               id,
               document,
@@ -1341,7 +1343,6 @@
           ORDER BY score {sort_order}
           LIMIT {limit};
           """
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
           result = pool.execute_with_retries(
               query,
@@ -1353,12 +1354,7 @@
               },
           )
 
-<<<<<<< HEAD
-        query = f"""
-        DECLARE $embedding as String;
-=======
           items = []
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
           for result_set in result:
               for row in result_set.rows:
@@ -1373,20 +1369,61 @@
           return items
       ```
 
-        items = []
+    - Native SDK (Asyncio)
 
-        for result_set in result:
-            for row in result_set.rows:
-                items.append(
-                    {
-                        "id": row["id"],
-                        "document": row["document"],
-                        "score": row["score"],
-                    }
-                )
+      ```python
+      import ydb
 
-        return items
-    ```
+      async def search_items_vector_as_bytes(
+          pool: ydb.aio.QuerySessionPool,
+          table_name: str,
+          embedding: list[float],
+          strategy: str = "CosineSimilarity",
+          limit: int = 1,
+          index_name: str | None = None,
+      ) -> list[dict]:
+          view_index = f"VIEW {index_name}" if index_name else ""
+
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+          query = f"""
+          DECLARE $embedding as String;
+
+          SELECT
+              id,
+              document,
+              Knn::{strategy}(embedding, $embedding) as score
+          FROM {table_name} {view_index}
+          ORDER BY score {sort_order}
+          LIMIT {limit};
+          """
+
+          result = await pool.execute_with_retries(
+              query,
+              {
+                  "$embedding": (
+                      convert_vector_to_bytes(embedding),
+                      ydb.PrimitiveType.String,
+                  ),
+              },
+          )
+
+          items = []
+
+          for result_set in result:
+              for row in result_set.rows:
+                  items.append(
+                      {
+                          "id": row["id"],
+                          "document": row["document"],
+                          "score": row["score"],
+                      }
+                  )
+
+          return items
+      ```
+
+    {% endlist %}
 
 - C++
 
@@ -1397,12 +1434,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as String;
             SELECT
                 id,
@@ -1411,7 +1450,7 @@
             FROM {0} {1}
             ORDER BY score {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         auto params = NYdb::TParamsBuilder()
             .AddParam("$embedding")
@@ -1599,22 +1638,12 @@
 
 - Python (alternative)
 
-    {% cut "asyncio" %}
+    {% list tabs %}
+    - Native SDK
 
-    ```python
-    import ydb
+      ```python
+      import ydb
 
-<<<<<<< HEAD
-    async def search_items_vector_as_float_list(
-        pool: ydb.aio.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
       def search_items_vector_as_float_list(
           pool: ydb.QuerySessionPool,
           table_name: str,
@@ -1625,65 +1654,14 @@
           top_clusters: int = 10,
       ) -> list[dict]:
           view_index = f"VIEW {index_name}" if index_name else ""
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
-        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-        query = f"""
-        DECLARE $embedding as List<Float>;
-
-        $target_embedding = Knn::ToBinaryStringFloat($embedding);
-
-        SELECT
-            id,
-            document,
-            Knn::{strategy}(embedding, $target_embedding) as score
-        FROM {table_name} {view_index}
-        ORDER BY score
-        {sort_order}
-        LIMIT {limit};
-        """
-
-        result = await pool.execute_with_retries(
-            query,
-            {
-                "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-            },
-        )
-
-        items = []
-
-        for result_set in result:
-            for row in result_set.rows:
-                items.append(
-                    {
-                        "id": row["id"],
-                        "document": row["document"],
-                        "score": row["score"],
-                    }
-                )
-
-        return items
-    ```
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
           query = f"""
           PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
           DECLARE $embedding as List<Float>;
 
-<<<<<<< HEAD
-    ```python
-    def search_items_vector_as_float_list(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
           $target_embedding = Knn::ToBinaryStringFloat($embedding);
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
           SELECT
               id,
@@ -1695,17 +1673,12 @@
           LIMIT {limit};
           """
 
-<<<<<<< HEAD
-        query = f"""
-        DECLARE $embedding as List<Float>;
-=======
           result = pool.execute_with_retries(
               query,
               {
                   "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
               },
           )
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
           items = []
 
@@ -1722,20 +1695,61 @@
           return items
       ```
 
-        items = []
+    - Native SDK (Asyncio)
 
-        for result_set in result:
-            for row in result_set.rows:
-                items.append(
-                    {
-                        "id": row["id"],
-                        "document": row["document"],
-                        "score": row["score"],
-                    }
-                )
+      ```python
+      import ydb
 
-        return items
-    ```
+      async def search_items_vector_as_float_list(
+          pool: ydb.aio.QuerySessionPool,
+          table_name: str,
+          embedding: list[float],
+          strategy: str = "CosineSimilarity",
+          limit: int = 1,
+          index_name: str | None = None,
+      ) -> list[dict]:
+          view_index = f"VIEW {index_name}" if index_name else ""
+
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+          query = f"""
+          DECLARE $embedding as List<Float>;
+
+          $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+          SELECT
+              id,
+              document,
+              Knn::{strategy}(embedding, $target_embedding) as score
+          FROM {table_name} {view_index}
+          ORDER BY score
+          {sort_order}
+          LIMIT {limit};
+          """
+
+          result = await pool.execute_with_retries(
+              query,
+              {
+                  "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+              },
+          )
+
+          items = []
+
+          for result_set in result:
+              for row in result_set.rows:
+                  items.append(
+                      {
+                          "id": row["id"],
+                          "document": row["document"],
+                          "score": row["score"],
+                      }
+                  )
+
+          return items
+      ```
+
+    {% endlist %}
 
 - C++ (альтернативный)
 
@@ -1746,12 +1760,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as List<Float>;
 
             $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
@@ -1764,7 +1780,7 @@
             ORDER BY score
             {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         NYdb::TParamsBuilder paramsBuilder;
         auto& valueBuilder = paramsBuilder.AddParam("$embedding");
@@ -1810,6 +1826,14 @@
     LIMIT ${unsafe(limit)};
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ## Итоговый пример {#full-example}
@@ -1821,7 +1845,7 @@
 3. Вставка объектов
 4. Поиск ближайших векторов без использования индекса
 5. Добавление векторного индекса
-6. Поиск ближайших векторов с использованем индекса
+6. Поиск ближайших векторов с использованием индекса
 
 {% list tabs %}
 
@@ -1833,100 +1857,20 @@
 
     Пример использования
 
-    {% cut "asyncio" %}
+    {% list tabs %}
+    - Native SDK
 
-    ```python
-    import os
-    import ydb
-    import asyncio
+      ```python
+      import os
+      import ydb
 
-    def print_results(items):
-        if len(items) == 0:
-            print("No items found")
-            return
+      def print_results(items):
+          if len(items) == 0:
+              print("No items found")
+              return
 
-        for item in items:
-            print(f"[score={item['score']}] {item['id']}: {item['document']}")
-
-    async def drop_vector_table_if_exists(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
-        await pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
-
-        print("Vector table dropped")
-
-    async def main(
-        ydb_endpoint: str,
-        ydb_database: str,
-        ydb_credentials: ydb.AbstractCredentials,
-        table_name: str,
-        index_name: str,
-    ):
-        async with ydb.aio.Driver(
-            endpoint=ydb_endpoint,
-            database=ydb_database,
-            credentials=ydb_credentials,
-        ) as driver:
-            await driver.wait(5, fail_fast=True)
-            pool = ydb.aio.QuerySessionPool(driver)
-
-            await drop_vector_table_if_exists(pool, table_name)
-
-            await create_vector_table(pool, table_name)
-
-            items = [
-                {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
-                {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
-                {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
-                {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
-                {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
-                {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
-                {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
-                {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
-                {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
-            ]
-
-            await insert_items_vector_as_bytes(pool, table_name, items)
-
-            items = await search_items_vector_as_bytes(
-                pool,
-                table_name,
-                embedding=[1, 0, 0],
-                strategy="CosineSimilarity",
-                limit=3,
-            )
-            print_results(items)
-
-            await add_vector_index(
-                pool,
-                driver,
-                table_name,
-                index_name=index_name,
-                strategy="similarity=cosine",
-                dimension=3,
-                levels=1,
-                clusters=3,
-            )
-
-            items = await search_items_vector_as_bytes(
-                pool,
-                table_name,
-                embedding=[1, 0, 0],
-                index_name=index_name,
-                strategy="CosineSimilarity",
-                limit=3,
-            )
-            print_results(items)
-
-            await pool.stop()
-
-    if __name__ == "__main__":
-        asyncio.run(main(
-            ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
-            ydb_database=os.environ.get("YDB_DATABASE", "/local"),
-            ydb_credentials=ydb.credentials_from_env_variables(),
-            table_name="ydb_vector_search",
-            index_name="ydb_vector_index",
-        ))
-    ```
+          for item in items:
+              print(f"[score={item['score']}] {item['id']}: {item['document']}")
 
       def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
           pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
@@ -1998,32 +1942,10 @@
           )
           print_results(items)
 
-<<<<<<< HEAD
-        items = search_items_vector_as_bytes(
-            pool,
-            table_name,
-            embedding=[1, 0, 0],
-            strategy="CosineSimilarity",
-            limit=3,
-        )
-        print_results(items)
-=======
           pool.stop()
           driver.stop()
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 
-<<<<<<< HEAD
-        items = search_items_vector_as_bytes(
-            pool,
-            table_name,
-            embedding=[1, 0, 0],
-            index_name=index_name,
-            strategy="CosineSimilarity",
-            limit=3,
-        )
-        print_results(items)
-=======
       if __name__ == "__main__":
           main(
               ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
@@ -2040,21 +1962,96 @@
       import os
       import ydb
       import asyncio
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
-        pool.stop()
-        driver.stop()
+      def print_results(items):
+          if len(items) == 0:
+              print("No items found")
+              return
 
+          for item in items:
+              print(f"[score={item['score']}] {item['id']}: {item['document']}")
 
-    if __name__ == "__main__":
-        main(
-            ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
-            ydb_database=os.environ.get("YDB_DATABASE", "/local"),
-            ydb_credentials=ydb.credentials_from_env_variables(),
-            table_name="ydb_vector_search",
-            index_name="ydb_vector_index",
-        )
-    ```
+      async def drop_vector_table_if_exists(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
+          await pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
+
+          print("Vector table dropped")
+
+      async def main(
+          ydb_endpoint: str,
+          ydb_database: str,
+          ydb_credentials: ydb.AbstractCredentials,
+          table_name: str,
+          index_name: str,
+      ):
+          async with ydb.aio.Driver(
+              endpoint=ydb_endpoint,
+              database=ydb_database,
+              credentials=ydb_credentials,
+          ) as driver:
+              await driver.wait(5, fail_fast=True)
+              pool = ydb.aio.QuerySessionPool(driver)
+
+              await drop_vector_table_if_exists(pool, table_name)
+
+              await create_vector_table(pool, table_name)
+
+              items = [
+                  {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
+                  {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
+                  {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
+                  {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
+                  {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
+                  {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
+                  {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
+                  {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
+                  {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
+              ]
+
+              await insert_items_vector_as_bytes(pool, table_name, items)
+
+              items = await search_items_vector_as_bytes(
+                  pool,
+                  table_name,
+                  embedding=[1, 0, 0],
+                  strategy="CosineSimilarity",
+                  limit=3,
+              )
+              print_results(items)
+
+              await add_vector_index(
+                  pool,
+                  driver,
+                  table_name,
+                  index_name=index_name,
+                  strategy="similarity=cosine",
+                  dimension=3,
+                  levels=1,
+                  clusters=3,
+              )
+
+              items = await search_items_vector_as_bytes(
+                  pool,
+                  table_name,
+                  embedding=[1, 0, 0],
+                  index_name=index_name,
+                  strategy="CosineSimilarity",
+                  limit=3,
+              )
+              print_results(items)
+
+              await pool.stop()
+
+      if __name__ == "__main__":
+          asyncio.run(main(
+              ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
+              ydb_database=os.environ.get("YDB_DATABASE", "/local"),
+              ydb_credentials=ydb.credentials_from_env_variables(),
+              table_name="ydb_vector_search",
+              index_name="ydb_vector_index",
+          ))
+      ```
+
+    {% endlist %}
 
     Вывод программы:
 
@@ -2117,7 +2114,7 @@
             InsertItemsAsBytes(client, tableName, items);
             PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
             AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
-            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
+            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10, indexName));
         } catch (const std::exception& e) {
             std::cerr << "Execution failed: " << e.what() << std::endl;
         }
@@ -2134,7 +2131,7 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -2217,5 +2214,13 @@
     ```
 
     Вывод совпадает с примером на Python.
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

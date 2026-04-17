@@ -137,6 +137,21 @@
   await using var connection = await dataSource.OpenConnectionAsync();
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, StaticCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(StaticCredentials::new(
+          std::env::var("YDB_USER")?,
+          std::env::var("YDB_PASSWORD")?,
+          http::Uri::from_static("grpc://localhost:2136"),
+          "local".into(),
+      ))
+      .client()?;
+  ```
+
 - PHP
 
   ```php

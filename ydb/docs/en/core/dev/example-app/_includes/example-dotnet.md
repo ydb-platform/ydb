@@ -96,11 +96,9 @@ while (await reader.ReadAsync())
 }
 ```
 
-<<<<<<< HEAD
 {% include [scan_query.md](steps/08_scan_query.md) %}
-=======
+
 For sequential row reading from another query:
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 ```c#
 await using var command = new YdbCommand(

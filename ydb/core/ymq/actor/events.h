@@ -147,6 +147,12 @@ struct TSqsEvents {
         EvGetMessageGroups,
         EvGetMessageGroupsResponse,
 
+        /// Periodic wakeup for deferred LogBroker topic creation (SQS service self-schedules).
+        EvPeriodicCreateTopic,
+
+        /// Result of deferred PersQueue topic creation (see deferred_create_topic.cpp).
+        EvDeferredTopicCreationResult,
+
         EvEnd,
     };
 
@@ -579,6 +585,15 @@ struct TSqsEvents {
     };
 
     struct TEvQueueLeaderDecRef : public NActors::TEventLocal<TEvQueueLeaderDecRef, EvQueueLeaderDecRef> {
+    };
+
+    struct TEvPeriodicCreateTopic : public NActors::TEventLocal<TEvPeriodicCreateTopic, EvPeriodicCreateTopic> {
+    };
+
+    struct TEvDeferredTopicCreationResult : public NActors::TEventLocal<TEvDeferredTopicCreationResult, EvDeferredTopicCreationResult> {
+        TString UserName;
+        TString QueueName;
+        bool Success = false;
     };
 
     struct TEvGetQueueId : public NActors::TEventLocal<TEvGetQueueId, EvGetQueueId> {

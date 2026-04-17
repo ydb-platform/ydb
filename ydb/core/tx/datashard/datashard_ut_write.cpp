@@ -3984,5 +3984,274 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             "ERROR: ABORTED");
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(LocksBrokenStats) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+
+        // Insert initial data
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);"));
+
+        TString sessionId, txId;
+        KqpSimpleBegin(runtime, sessionId, txId, Q_("SELECT * FROM `/Root/table-1` WHERE key = 1;"));
+        UNIT_ASSERT(!txId.empty());
+
+        // Breaker write - breaks the locks established by the SELECT above
+        auto writeRequest = MakeWriteRequestOneKeyValue(
+            std::nullopt,  // No lock context - this will break locks
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            tableId,
+            opts.Columns_,
+            1,  // key
+            200 // value
+        );
+
+        auto writeResult = Write(runtime, sender, shard, std::move(writeRequest), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // Verify breaker stats
+        UNIT_ASSERT(writeResult.HasTxStats());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxStats().GetLocksBrokenAsBreaker(), 1u);
+
+        // Now try to commit the victim transaction - it should fail with LOCKS_BROKEN
+        TMaybe<NKikimrDataEvents::TEvWriteResult> victimRecord;
+        auto observer = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+            if (ev->Get()->Record.GetOrigin() == shard &&
+                ev->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+                victimRecord = ev->Get()->Record;
+            }
+        });
+
+        auto commitResult = KqpSimpleCommit(runtime, sessionId, txId, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 300);"));
+        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+
+        // Verify victim was captured
+        UNIT_ASSERT(victimRecord.Defined());
+
+        auto tableState = ReadTable(server, shards, tableId);
+        UNIT_ASSERT(tableState.find("key = 1, value = 200") != TString::npos);
+    }
+
+    Y_UNIT_TEST(TliLocksBrokenByWrite) {
+        TStringStream ss;
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetLogBackend(new TStreamLogBackend(&ss));
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+
+        // Insert initial data
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);"));
+
+        TString sessionId, txId;
+        KqpSimpleBegin(runtime, sessionId, txId, Q_("SELECT * FROM `/Root/table-1` WHERE key = 1;"));
+        UNIT_ASSERT(!txId.empty());
+
+        // Breaker write - breaks the locks established by the SELECT above
+        auto writeRequest = MakeWriteRequestOneKeyValue(
+            std::nullopt,  // No lock context - this will break locks
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            tableId,
+            opts.Columns_,
+            1,  // key
+            200 // value
+        );
+
+        auto writeResult = Write(runtime, sender, shard, std::move(writeRequest), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // Verify breaker stats
+        UNIT_ASSERT(writeResult.HasTxStats());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxStats().GetLocksBrokenAsBreaker(), 1u);
+
+        // Verify TLI logs contain the lock breaking information
+        // The log should contain: Component: DataShard, TabletId, TxId, Message: "Write transaction broke other locks", BrokenLocks: [...]
+        TVector<std::pair<TString, ui64>> regexToMatchCount{
+            {NTestTli::ConstructRegexToCheckLogs("INFO", "DataShard", "Write transaction broke other locks"), 1},
+        };
+
+        NTestTli::CheckRegexMatch(ss.Str(), regexToMatchCount);
+    }
+
+    Y_UNIT_TEST(ImmediateWriteVolatileTxIdOnPageFault) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        // Start blocking readsets
+        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime);
+
+        // Prepare a distributed upsert
+        Cerr << "... starting a distributed upsert" << Endl;
+        auto distributedUpsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001), (12, 2002);
+        )");
+        runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 4; });
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "... compacting shard " << shards.at(0) << Endl;
+        CompactTable(runtime, shards.at(0), tableId, false);
+        Cerr << "... rebooting shard " << shards.at(0) << Endl;
+        RebootTablet(runtime, shards.at(0), sender);
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        Cerr << "... sending an immediate upsert" << Endl;
+        auto immediateUpsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (2, 3001);
+        )");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Check shard open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            for (ui64 txId : ev->Get()->OpenTxs) {
+                UNIT_ASSERT_C(txId > 1000000, "unexpected open tx " << txId << " at shard " << shards.at(0));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TxCompleteLagForEvWrite) {
+        // Verifies that a planned-but-not-completed TEvWrite transaction
+        // contributes to the TxCompleteLag metric.
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+        const TActorId shardActor = ResolveTablet(runtime, shard);
+
+        auto getDataTxCompleteLag = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvDataShard::TEvGetInfoRequest(),
+                0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto* resp = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+            UNIT_ASSERT(resp);
+            return resp->Record.GetActivities().GetDataTxCompleteLag();
+        };
+
+        auto getTxCompleteLagCounter = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvTablet::TEvGetCounters(),
+                0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+            UNIT_ASSERT(ev);
+            for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                if (counter.GetName() == "DataShard/TxCompleteLag") {
+                    return counter.GetValue();
+                }
+            }
+            UNIT_ASSERT_C(false, "DataShard/TxCompleteLag counter not found");
+            return 0;
+        };
+
+        Cout << "========= Baseline: no pending tx, lag must be 0 =========\n";
+        UNIT_ASSERT_VALUES_EQUAL(getDataTxCompleteLag(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
+
+        Cout << "========= Prepare a distributed write =========\n";
+        const ui64 txId = 100;
+        const ui32 rowCount = 1;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount,
+                txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        // Block TEvPrivate::TEvProgressTransaction so the write stays in the plan
+        // queue after the plan step is processed. This keeps the oldest-planned
+        // WriteTx pinned at its plan step while mediator time keeps advancing.
+        TBlockEvents<IEventHandle> blockedProgress(runtime,
+            [shardActor](const TAutoPtr<IEventHandle>& ev) {
+                return ev->GetRecipientRewrite() == shardActor &&
+                    ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+            });
+
+        Cout << "========= Send propose to coordinator =========\n";
+        SendProposeToCoordinator(runtime, sender, shards, {
+            .TxId = txId,
+            .Coordinator = coordinator,
+            .MinStep = minStep,
+            .MaxStep = maxStep,
+        });
+
+        runtime.WaitFor("blocked progress transaction",
+            [&]{ return blockedProgress.size() >= 1; });
+
+        // Sleep long enough for mediator time to advance past the plan step and
+        // for at least one periodic tablet wakeup (5s) to refresh the counter.
+        Cout << "========= Let mediator time advance past the plan step =========\n";
+        runtime.SimulateSleep(TDuration::Seconds(6));
+
+        const ui64 lag = getDataTxCompleteLag();
+        Cout << "========= Observed DataTxCompleteLag = " << lag << " ms =========\n";
+        UNIT_ASSERT_C(lag > 0,
+            "Expected non-zero DataTxCompleteLag for a pending WriteTx, got " << lag);
+
+        const ui64 counterLag = getTxCompleteLagCounter();
+        Cout << "========= Observed TxCompleteLag counter = " << counterLag << " ms =========\n";
+        UNIT_ASSERT_C(counterLag > 0,
+            "Expected non-zero TxCompleteLag counter for a pending WriteTx, got " << counterLag);
+
+        // Unblock and let the write finish so the lag returns to 0.
+        blockedProgress.Stop().Unblock();
+        WaitForWriteCompleted(runtime, sender);
+
+        // Another periodic wakeup is needed for the counter to be refreshed.
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(getDataTxCompleteLag(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
+    }
+
+>>>>>>> 18762e97139 (DataShard: add test for TxCompleteLag (#38262))
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

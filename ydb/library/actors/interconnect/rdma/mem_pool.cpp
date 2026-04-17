@@ -70,6 +70,45 @@ namespace NInterconnect::NRdma {
     static void* allocateMemory(size_t size, size_t alignment, bool hp);
     static void freeMemory(void* ptr) noexcept;
 
+    class TRegularMemChunk : public IContiguousChunk {
+    public:
+        explicit TRegularMemChunk(TRcBuf buffer)
+            : Buffer(std::move(buffer))
+        {}
+
+        static TIntrusivePtr<TRegularMemChunk> Allocate(size_t size, bool pageAligned) {
+            return MakeIntrusive<TRegularMemChunk>(
+                pageAligned ? TRcBuf::UninitializedPageAligned(size) : TRcBuf::Uninitialized(size));
+        }
+
+        TContiguousSpan GetData() const override {
+            return Buffer.GetContiguousSpan();
+        }
+
+        TMutableContiguousSpan UnsafeGetDataMut() override {
+            return Buffer.UnsafeGetContiguousSpanMut();
+        }
+
+        bool IsPrivate() const override {
+            return RefCount() == 1 && Buffer.IsPrivate();
+        }
+
+        size_t GetOccupiedMemorySize() const override {
+            return Buffer.GetOccupiedMemorySize();
+        }
+
+        IContiguousChunk::TPtr Clone() noexcept override {
+            static const ui64 pageAlignMask = NSystemInfo::GetPageSize() - 1;
+            const bool pageAligned = (reinterpret_cast<ui64>(Buffer.GetData()) & pageAlignMask) == 0;
+            auto cloned = Allocate(Buffer.GetSize(), pageAligned);
+            ::memcpy(cloned->UnsafeGetDataMut().GetData(), Buffer.GetData(), Buffer.GetSize());
+            return cloned;
+        }
+
+    private:
+        TRcBuf Buffer;
+    };
+
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk>, public TIntrusiveListItem<TChunk> {
         friend class TMemPoolBase;
     public:
@@ -268,11 +307,19 @@ namespace NInterconnect::NRdma {
 
     IContiguousChunk::TPtr TMemRegion::Clone() noexcept {
         static const ui64 pageAlign = NSystemInfo::GetPageSize() - 1;
-        const IMemPool::Flags flag = (((ui64)GetAddr() & pageAlign) == 0) ? IMemPool::PAGE_ALIGNED : IMemPool::EMPTY;
-        TMemRegionPtr newRegion = Chunk->AllocMr(GetSize(), flag);
-        auto span = newRegion->UnsafeGetDataMut();
-        ::memcpy(span.GetData(), GetAddr(), GetSize());
-        return newRegion;
+        const bool pageAligned = ((reinterpret_cast<ui64>(GetAddr()) & pageAlign) == 0);
+        const IMemPool::Flags flag = pageAligned ? IMemPool::PAGE_ALIGNED : IMemPool::EMPTY;
+        if (TMemRegionPtr newRegion = Chunk->AllocMr(GetSize(), flag)) {
+            auto span = newRegion->UnsafeGetDataMut();
+            ::memcpy(span.GetData(), GetAddr(), GetSize());
+            return newRegion;
+        }
+
+        // Fallback to regular memory if RDMA pool can't allocate clone buffer.
+        // Preserve page alignment requirement when source region is page aligned.
+        auto fallback = TRegularMemChunk::Allocate(GetSize(), pageAligned);
+        ::memcpy(fallback->UnsafeGetDataMut().GetData(), GetAddr(), GetSize());
+        return fallback;
     }
 
     TMemRegionSlice::TMemRegionSlice(TIntrusivePtr<TMemRegion> memRegion, uint32_t offset, uint32_t size) noexcept

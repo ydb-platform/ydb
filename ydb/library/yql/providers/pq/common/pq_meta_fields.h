@@ -19,10 +19,10 @@ struct TMetaFieldDescriptor {
 
 std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransparent = nullptr);
 
-std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorByKey(const TString& key, bool allowTransparentColumns);
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(const TString& key, bool addTransparentPrefix);
 
-std::optional<TMetaFieldDescriptor> FindPqMetaFieldDescriptorBySysColumn(const TString& sysColumn);
+std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(const TString& sysColumn);
 
-std::vector<TString> AllowedPqMetaSysColumns(bool allowTransparentColumns);
+std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix);
 
 } // namespace NYql

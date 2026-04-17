@@ -52,7 +52,7 @@ public:
 public:
     bool SupportRtmrMode = false;
     bool UseActorSystemThreadsInTopicClient = true;
-    bool AllowTransparentSystemColumns = true;
+    bool AddTransparentPrefixToTransparentSystemColumns = true;
     bool StreamingTopicsReadByDefault = true;
     bool UseYtflowEngine = false;
     const TString SessionId;

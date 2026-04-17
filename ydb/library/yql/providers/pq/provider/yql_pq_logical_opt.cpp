@@ -71,7 +71,7 @@ TVector<TCoNameValueTuple> DropUnusedMetadata(const TPqTopic& pqTopic, const std
     TVector<TCoNameValueTuple> newSourceMetadata;
     for (auto metadataItem : pqTopic.Metadata()) {
         auto metadataName = metadataItem.Cast<TCoNameValueTuple>().Value().Maybe<TCoAtom>().Cast().StringValue();
-        if (FindPqMetaFieldDescriptorBySysColumn(metadataName) && usedColumnNames.contains(metadataName)) {
+        if (GetPqMetaFieldDescriptorBySysColumn(metadataName) && usedColumnNames.contains(metadataName)) {
             newSourceMetadata.push_back(metadataItem);
         }
     }

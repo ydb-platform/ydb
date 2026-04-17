@@ -1629,15 +1629,22 @@ private:
             },
             [&ev](const IWmQueryClassifier::TBypass&) {
                 KQP_PROXY_LOG_D("Proxy Classify returns: bypass");
-                // Clear user-specified PoolId to prevent it from appearing in EffectivePoolId.
-                // Without this, if user specifies a PoolId but WM is bypassed (e.g., disabled),
-                // the response would incorrectly show the user's PoolId as EffectivePoolId,
-                // even though no resource pool management was actually applied.
-                ev->Get()->SetPoolId("");
+                // When WM is bypassed (either by rule or because WM is disabled), EffectivePoolId
+                // is expected to be set to the default pool. The PoolId in the query plan is also
+                // expected to be the default one. TBypass guarantees that WM is skipped, but
+                // SetPoolId ensures this value is reflected in both EffectivePoolId and the query plan.
+                // TODO: Consider reviewing and possibly removing this behavior.
+                ev->Get()->SetPoolId(DEFAULT_POOL_ID);
                 return true;
             },
-            [](const IWmQueryClassifier::TPendingCompilation&) {
+            [&ev](const IWmQueryClassifier::TPendingCompilation&) {
                 KQP_PROXY_LOG_D("Proxy Classify returns: need compilation");
+                // Same as TBypass above but for post-compile classification path.
+                // Set default pool as initial value for query plan stats generated during compilation.
+                // If PostCompileClassify resolves to a specific pool, UserRequestContext->PoolId will
+                // be overwritten with the actual pool. If it returns TBypass, default remains correct.
+                // TODO: Consider reviewing and possibly removing this behavior.
+                ev->Get()->SetPoolId(DEFAULT_POOL_ID);
                 return true;
             }
         }, status);

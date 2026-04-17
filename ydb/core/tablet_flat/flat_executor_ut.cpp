@@ -7832,7 +7832,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
                 UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
                 UNIT_ASSERT_LE(event->Record.GetGroupID(), 1);
                 wasCutHistory = true;
-                Cerr << "!! TEST SHOULD BE FINISHED\n";
                 return TTestActorRuntime::EEventAction::DROP;
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -7877,6 +7876,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         TMyEnvBase env;
         TRowsModel data;
         bool wasCutHistory = false;
+        bool wasHardBarrier = false;
         env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTablet::EvCutTabletHistory: {
@@ -7889,6 +7889,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
                 case TEvBlobStorage::EvCollectGarbage: {
                     auto* event = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
                     if (event->Channel == 2) {
+                        if (event->Hard) {
+                            wasHardBarrier = true;
+                            UNIT_ASSERT_LE(event->CollectGeneration, 1);
+                        }
                         return TTestActorRuntime::EEventAction::PROCESS;
                     } else {
                         return TTestActorRuntime::EEventAction::DROP;
@@ -7921,6 +7925,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         while (!wasCutHistory) {
             env.Env.DispatchEvents({});
         }
+        UNIT_ASSERT(wasHardBarrier);
     }
 
     Y_UNIT_TEST(TestSeeOuterBlobs) {

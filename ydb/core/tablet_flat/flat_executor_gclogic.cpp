@@ -143,16 +143,16 @@ TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGar
     TChannelInfo& channel = ChannelInfo[channelId];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
         if (channel.OnCollectGarbageSuccess() && channel.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::SentBarrier) {
-        auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
-        for (const auto* historyEntry : historyToCut) {
-            TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
-            auto &record = ev->Record;
-            record.SetTabletID(TabletStorageInfo->TabletID);
-            record.SetChannel(channelId);
-            record.SetFromGeneration(historyEntry->FromGeneration);
-            record.SetGroupID(historyEntry->GroupID);
-            ctx.Send(launcher, ev.Release());
-        }
+            auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
+            for (const auto* historyEntry : historyToCut) {
+                TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
+                auto &record = ev->Record;
+                record.SetTabletID(TabletStorageInfo->TabletID);
+                record.SetChannel(channelId);
+                record.SetFromGeneration(historyEntry->FromGeneration);
+                record.SetGroupID(historyEntry->GroupID);
+                ctx.Send(launcher, ev.Release());
+            }
         }
     } else {
         channel.OnCollectGarbageFailure();
@@ -206,7 +206,7 @@ void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
             if (!seenGroups.contains(historyEntry->GroupID)) {
                 // we can cut this entry AND entries before it do not use same group
                 // we can put a hard barrier on it
-                channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, historyEntry->GroupID, Generation, true, TGCTime{(historyEntry + 1)->FromGeneration, Max<ui32>()});
+                channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, historyEntry->GroupID, Generation, true, TGCTime{(historyEntry + 1)->FromGeneration - 1, Max<ui32>()});
             }
             channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
         }

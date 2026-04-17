@@ -4,6 +4,7 @@
 #include "incr_restore_helpers.h"
 #include "stream_scan_common.h"
 
+#include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "aclib.h"
+
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <util/generic/ptr.h>
 

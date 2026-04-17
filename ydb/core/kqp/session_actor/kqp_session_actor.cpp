@@ -611,10 +611,6 @@ public:
             (trace_id, TraceId()),
             (reason, ev->Get()->Reason));
 
-        // This pool ID is only needed for legacy tests to run
-        QueryState->UserRequestContext->PoolId = DEFAULT_POOL_ID;
-        QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
-
         CompileOrExecuteQuery();
     }
 
@@ -625,10 +621,6 @@ public:
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             STLOG_T("Failed to place request in resource pool, feature flag is disabled",
                 (trace_id, TraceId()));
-
-            // This pool ID is only needed for legacy tests to run
-            QueryState->UserRequestContext->PoolId = DEFAULT_POOL_ID;
-            QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
 
             CompileOrExecuteQuery();
             return;
@@ -1038,8 +1030,6 @@ public:
                     },
                     [this](const IWmQueryClassifier::TBypass&) {
                         STLOG_D("PostCompile Classify bypass", (trace_id, TraceId()));
-                        QueryState->UserRequestContext->PoolId.clear();
-                        QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
                     },
                     [this](const IWmQueryClassifier::TReject& r) {
                         STLOG_N("PostCompile Classify rejected", (trace_id, TraceId()));

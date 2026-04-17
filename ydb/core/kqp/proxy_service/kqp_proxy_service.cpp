@@ -1629,14 +1629,15 @@ private:
             },
             [&ev](const IWmQueryClassifier::TBypass&) {
                 KQP_PROXY_LOG_D("Proxy Classify returns: bypass");
-                // This pool ID is only needed for legacy tests to run
-                ev->Get()->SetPoolId(DEFAULT_POOL_ID);
-                ev->Get()->SetPoolConfig(IWmQueryClassifier::EMPTY_POOL);
+                // Clear user-specified PoolId to prevent it from appearing in EffectivePoolId.
+                // Without this, if user specifies a PoolId but WM is bypassed (e.g., disabled),
+                // the response would incorrectly show the user's PoolId as EffectivePoolId,
+                // even though no resource pool management was actually applied.
+                ev->Get()->SetPoolId("");
                 return true;
             },
-            [&ev](const IWmQueryClassifier::TPendingCompilation&) {
+            [](const IWmQueryClassifier::TPendingCompilation&) {
                 KQP_PROXY_LOG_D("Proxy Classify returns: need compilation");
-                ev->Get()->SetPoolId("");
                 return true;
             }
         }, status);

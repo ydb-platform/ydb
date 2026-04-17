@@ -255,6 +255,34 @@ Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck_TrackProducerId) 
     TestReadWriteOperationsOnePartition(true, true);
 }
 
+Y_UNIT_TEST(ShouldOmitPeerTopicPredicateExchange_WriteOnlySkipConflict) {
+    const TString TOPIC = "topic";
+    NTopic::TTopicOperations topicOps;
+    topicOps.SetSkipConflictCheck(true);
+    topicOps.SetTrackProducerId(false);
+
+    AddWriteOperation(topicOps, TOPIC, 0, {});
+    topicOps.SetTabletId(TOPIC, 0, 100);
+    AddWriteOperation(topicOps, TOPIC, 1, {});
+    topicOps.SetTabletId(TOPIC, 1, 200);
+
+    UNIT_ASSERT(topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange());
+}
+
+Y_UNIT_TEST(ShouldOmitPeerTopicPredicateExchange_FalseWhenConsumerReads) {
+    const TString TOPIC = "topic";
+    NTopic::TTopicOperations topicOps;
+    topicOps.SetSkipConflictCheck(true);
+    topicOps.SetTrackProducerId(false);
+
+    AddReadOperation(topicOps, TOPIC, 0, 1, 2, "c");
+    topicOps.SetTabletId(TOPIC, 0, 100);
+    AddWriteOperation(topicOps, TOPIC, 1, {});
+    topicOps.SetTabletId(TOPIC, 1, 200);
+
+    UNIT_ASSERT(!topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange());
+}
+
 }
 
 }

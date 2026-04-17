@@ -129,18 +129,44 @@ namespace {
         }
     }
 
-    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, ui64 recipientTopicTabletId) {
         transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
 
         if (!isImmediateCommit) {
             const auto prepareSettings = txManager->GetPrepareTransactionInfo();
+            const auto& topicOps = txManager->GetTopicOperations();
+
+            THashSet<ui64> topicTabletPeers;
+            const bool omitPeerTopicTablets = topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange();
+            if (omitPeerTopicTablets) {
+                for (ui64 id : topicOps.GetReceivingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+                for (ui64 id : topicOps.GetSendingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+            }
+
+            const auto keepShardForPropose = [&](ui64 shardId) {
+                if (!omitPeerTopicTablets) {
+                    return true;
+                }
+                if (!topicTabletPeers.contains(shardId)) {
+                    return true;
+                }
+                return shardId == recipientTopicTabletId;
+            };
 
             if (!prepareSettings.ArbiterColumnShard) {
                 for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                    transaction.AddSendingShards(sendingShardId);
+                    if (keepShardForPropose(sendingShardId)) {
+                        transaction.AddSendingShards(sendingShardId);
+                    }
                 }
                 for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                    transaction.AddReceivingShards(receivingShardId);
+                    if (keepShardForPropose(receivingShardId)) {
+                        transaction.AddReceivingShards(receivingShardId);
+                    }
                 }
             } else {
                 transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
@@ -3885,7 +3911,7 @@ public:
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            FillTopicsCommit(isImmediateCommit, transaction, TxManager);
+            FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId);
 
             if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();

@@ -7,13 +7,10 @@ namespace NKikimr::NViewer {
 
 namespace {
 
-// Keep aligned with test_mon_endpoints_auth.VIEWER_JSON_PATHS_REQUIRING_EXPLICIT_DATABASE_QUERY
+// Keep aligned with ydb/tests/functional/security/test_mon_endpoints_auth.DATABASE_ENDPOINTS_LIST
 const TStringBuf VIEWER_JSON_PATHS_REQUIRING_EXPLICIT_DATABASE_QUERY[] = {
-    TStringBuf("/viewer/bscontrollerinfo"),
     TStringBuf("/viewer/browse"),
-    TStringBuf("/viewer/cluster"),
     TStringBuf("/viewer/compute"),
-    TStringBuf("/viewer/config"),
     TStringBuf("/viewer/counters"),
     TStringBuf("/viewer/graph"),
     TStringBuf("/viewer/hiveinfo"),

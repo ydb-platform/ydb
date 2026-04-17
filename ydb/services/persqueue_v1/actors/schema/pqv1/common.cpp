@@ -5,7 +5,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/core/persqueue/public/schema/common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>

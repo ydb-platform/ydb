@@ -1,7 +1,14 @@
 #pragma once
 
-#include <ydb/core/grpc_services/base/base.h>
-#include <ydb/services/persqueue_v1/actors/events.h>
+#include <util/generic/fwd.h>
+
+namespace NActors {
+class IActor;
+}
+
+namespace NKikimr::NGRpcService {
+class IRequestOpCtx;
+}
 
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 

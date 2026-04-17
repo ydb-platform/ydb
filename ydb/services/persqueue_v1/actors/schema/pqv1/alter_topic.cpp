@@ -49,7 +49,6 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     const TString LocalCluster;
 
     Ydb::PersQueue::V1::AlterTopicRequest Request;
-
 };
 
 class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NKikimr::NGRpcService::TEvPQAlterTopicRequest> {

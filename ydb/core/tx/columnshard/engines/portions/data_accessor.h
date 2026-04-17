@@ -186,7 +186,7 @@ class TColumnAssemblingInfo {
 private:
     std::vector<TAssembleBlobInfo> BlobsInfo;
     YDB_READONLY(ui32, ColumnId, 0);
-    const ui32 RecordsCount;
+    YDB_READONLY(ui32, RecordsCount, 0);
     ui32 RecordsCountByChunks = 0;
     const std::shared_ptr<TColumnLoader> DataLoader;
     const std::shared_ptr<TColumnLoader> ResultLoader;

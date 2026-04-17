@@ -1219,7 +1219,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 break;
             }
             case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
-                using TDefaults = NKikimr::NOlap::NIndexes::NDefaults;
+                namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
                 using TConstants = NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants;
 
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
@@ -1245,12 +1245,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 ngram->SetNGrammSize(
                     ngramSettings.ngram_size()
                         ? ngramSettings.ngram_size()
-                        : TDefaults::NGrammSize);
+                        : NDefaults::NGrammSize);
 
                 ngram->SetCaseSensitive(
                     ngramSettings.has_case_sensitive()
                         ? ngramSettings.case_sensitive()
-                        : TDefaults::CaseSensitive);
+                        : NDefaults::CaseSensitive);
 
                 const bool hasExplicitFpp = ngramSettings.has_false_positive_probability();
                 const ui32 rawHashesCount = ngramSettings.hashes_count();
@@ -1260,7 +1260,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 if (hasExplicitFpp || recordsCount == 0) {
                     const double fpp = hasExplicitFpp
                         ? ngramSettings.false_positive_probability()
-                        : TDefaults::FalsePositiveProbability;
+                        : NDefaults::FalsePositiveProbability;
 
                     ngram->SetFilterSizeBytes(TConstants::CalcDeprecatedFilterSizeBytes(fpp));
                     ngram->SetHashesCount(TConstants::CalcHashesCount(fpp));
@@ -1269,11 +1269,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 } else {
                     const ui32 hashesCount = rawHashesCount
                         ? rawHashesCount
-                        : TDefaults::HashesCount;
+                        : NDefaults::HashesCount;
 
                     const ui32 filterSizeBytes = rawFilterSizeBytes
                         ? rawFilterSizeBytes
-                        : TConstants::CalcDeprecatedFilterSizeBytes(TDefaults::FalsePositiveProbability);
+                        : TConstants::CalcDeprecatedFilterSizeBytes(NDefaults::FalsePositiveProbability);
 
                     if (!TConstants::CheckHashesCount(hashesCount)) {
                         return failBadRequest("hashes_count");

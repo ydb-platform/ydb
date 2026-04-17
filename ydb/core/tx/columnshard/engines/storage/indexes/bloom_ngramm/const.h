@@ -57,7 +57,7 @@ public:
             static_cast<ui32>(std::ceil(bitsCount / 8.0)), MinFilterSizeBytes, MaxFilterSizeBytes);
     }
 
-    static double FalsePositiveProvavilityFromDeprecatedSizing(const std::optional<ui32> hashesCount, const std::optional<ui32> filterSizeBytes, const std::optional<ui32> recordsCount) {
+    static double FalsePositiveProbabilityFromDeprecatedSizing(const std::optional<ui32> hashesCount, const std::optional<ui32> filterSizeBytes, const std::optional<ui32> recordsCount) {
         const double k = static_cast<double>(hashesCount.value_or(NDefaults::HashesCount));
         const double m = static_cast<double>(filterSizeBytes.value_or(CalcDeprecatedFilterSizeBytes(NDefaults::FalsePositiveProbability)) * 8);
         const double n = static_cast<double>(recordsCount.value_or(DeprecatedRecordsCount));

@@ -114,24 +114,30 @@
 
   {% include [auth-anonymous](../../_includes/python/async/auth-anonymous.md) %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new AnonymousProvider()
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
 
+<<<<<<< HEAD
+=======
+  Для Entity Framework и linq2db используйте тот же connectionString.
+
+- Rust
+
+  ```rust
+  use ydb::{AnonymousCredentials, ClientBuilder, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(AnonymousCredentials::new())
+      .client()?;
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - PHP
 
   ```php

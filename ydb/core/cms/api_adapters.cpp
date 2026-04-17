@@ -1056,10 +1056,12 @@ class TDropMaintenanceTask
         if (Requests > 0) {
             return;
         }
+
         auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
         cmsRequest->Record.SetUser(User);
         cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
         cmsRequest->Record.MutablePermissions()->Assign(Permissions.begin(), Permissions.end());
+
         Send(CmsActorId, std::move(cmsRequest));
         ++Requests;
     }

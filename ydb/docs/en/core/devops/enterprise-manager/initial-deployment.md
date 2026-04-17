@@ -163,7 +163,7 @@ Parameter | Description
 
 {% note warning %}
 
-{{ ydb-short-name }} binaries must be installed on all hosts in the `ydbd_dynamic` group before deploying YDB EM. For more details, see [{#T}](../deployment-options/ansible/initial-deployment/index.md).
+{{ ydb-short-name }} binaries must be installed on all hosts in the `ydbd_dynamic` group before deploying YDB EM. For more details, see Deploying cluster with ansible.
 
 {% endnote %}
 

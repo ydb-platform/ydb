@@ -1,45 +1,34 @@
 #pragma once
 
-#include "schema_int.h"
+#include "common.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ::NSchema {
 
-class TAlterTopicOperationActor: public TBaseActor<TAlterTopicOperationActor>
-                               , public TPipeCacheClient
-                               , public TConstantLogPrefix {
+class IAlterTopicStrategy {
 public:
-    TAlterTopicOperationActor(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings);
-    ~TAlterTopicOperationActor() = default;
+    virtual ~IAlterTopicStrategy() = default;
 
-    void Bootstrap();
-    void PassAway() override;
+    virtual const TString& GetTopicName() const = 0;
 
-    TString BuildLogPrefix() const override;
-    void OnException(const std::exception& exc) override;
-
-private:
-    void DoDescribe();
-    void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev);
-    STFUNC(DescribeState);
-
-private:
-    void DoAlter();
-    void Handle(TEvSchemaOperationResponse::TPtr& ev);
-    STFUNC(AlterState);
-
-private:
-    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage);
-    void ReplyOkAndDie();
-
-private:
-    const TTopicAltererSettings Settings;
-
-    NDescriber::TTopicInfo TopicInfo;
+    virtual TResult ApplyChanges(
+        NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
+        bool isCdcStream
+    ) = 0;
 };
+        
+struct TAlterTopicOperationSettings {
+    TString Database;
+    TString PeerName;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    std::unique_ptr<IAlterTopicStrategy> Strategy;
+    bool IfExists = false;
+    ui64 Cookie = 0;
+};
+   
+
+IActor* CreateAlterTopicOperationActor(TActorId parentId, TAlterTopicOperationSettings&& settings);
 
 } // namespace NKikimr::NPQ::NSchema

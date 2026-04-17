@@ -1,5 +1,5 @@
+#include "common.h"
 #include "drop_topic_operation.h"
-#include "schema_int.h"
 #include "schema_operation.h"
 
 #include <ydb/core/base/tablet_pipecache.h>

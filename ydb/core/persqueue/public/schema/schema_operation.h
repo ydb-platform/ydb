@@ -1,7 +1,5 @@
 #pragma once
 
-#include "schema_int.h"
-
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>

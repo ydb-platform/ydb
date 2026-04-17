@@ -1,5 +1,15 @@
 #include "schema_operation.h"
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+
+#include "common.h"
+
+#include <ydb/core/protos/tx_proxy.pb.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/services/services.pb.h>
+
 
 namespace NKikimr::NPQ::NSchema {
 

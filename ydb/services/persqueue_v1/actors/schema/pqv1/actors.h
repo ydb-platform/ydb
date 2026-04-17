@@ -5,6 +5,7 @@
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 
+NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDropTopicActor(NGRpcService::IRequestOpCtx* request);
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1

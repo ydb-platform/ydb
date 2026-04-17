@@ -8,7 +8,6 @@ SRCS(
     drop_topic.cpp
     drop_topic_operation.cpp
     schema.cpp
-    schema_int.cpp
     schema_operation.cpp
     validation.cpp
 )

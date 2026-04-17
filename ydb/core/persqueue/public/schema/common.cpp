@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
@@ -12,6 +13,16 @@
 
 namespace NKikimr::NPQ::NSchema {
 
+TString GetWorkingDir(const NDescriber::TTopicInfo& topicInfo) {
+    std::pair <TString, TString> pathPair;
+    try {
+        pathPair = NKikimr::NGRpcService::SplitPath(topicInfo.RealPath);
+    } catch (const std::exception &ex) {
+        return {};
+    }
+    return pathPair.first;
+}
+    
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
     if (duration.seconds() < 0) {
         return std::unexpected(TStringBuilder() << "duration seconds cannot be negative, provided " << duration.seconds());

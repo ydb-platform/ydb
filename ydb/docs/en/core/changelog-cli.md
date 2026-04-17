@@ -1,5 +1,14 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.31.0 {#2-31-0}
+
+Released on April 17, 2026. To update to version **2.31.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the `--no-producer-id-track` option to the `{{ ydb-cli }} workload topic run write|full` [commands](./reference/ydb-cli/workload-topic.md), allowing to disable ProducerId tracking in transactions when using `--use-tx`.
+* Added the `--stats` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), enabling extended execution statistics collection (e.g., `--stats profile`).
+
 ## Version 2.30.0 {#2-30-0}
 
 Released on April 7, 2026. To update to version **2.30.0**, select the [Downloads](downloads/ydb-cli.md) section.

@@ -361,7 +361,6 @@ private:
     ui64 NextEventQueueId = 0;
     bool EnableStreamingQueriesCounters = false;
     const TDuration CheckPartitionCountPeriod;
-    std::shared_ptr<std::atomic<bool>> ActorAlive = std::make_shared<std::atomic<bool>>(true);
 
     TMap<NActors::TActorId, TSet<ui32>> LastUsedPartitionDistribution;
     TMap<NActors::TActorId, TSet<ui32>> LastReceivedPartitionDistribution;
@@ -798,7 +797,6 @@ void TDqPqRdReadActor::StopSession(TSession& sessionInfo) {
 // IActor & IDqComputeActorAsyncInput
 void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     SRC_LOG_I("PassAway");
-    *ActorAlive = false;
     Become(&TDqPqRdReadActor::IgnoreState);
     PrintInternalState();
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
@@ -1689,12 +1687,8 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCount::TPtr& ev) {
         .Subscribe([
             index = clusterState.Index,
             actorSystem = TActivationContext::ActorSystem(),
-            selfId = SelfId(),
-            actorAlive = ActorAlive](const auto& describeTopicFuture)
+            selfId = SelfId()](const auto& describeTopicFuture)
         {
-            if (!*actorAlive) {
-                return;
-            }
             try {
                 auto& describeTopic = describeTopicFuture.GetValue();
                 if (!describeTopic.IsSuccess()) {

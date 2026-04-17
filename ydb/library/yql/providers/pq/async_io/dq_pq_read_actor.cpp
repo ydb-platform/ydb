@@ -82,6 +82,7 @@ struct TEvPrivate {
         EvDescribeTopicResult,
         EvExecuteTopicEvent,
         EvPartitionIdleness,
+        EvCheckPartitionTimer,
         EvCheckPartitionCount,
         EvCheckPartitionCountResult,
 
@@ -137,6 +138,8 @@ struct TEvPrivate {
     struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
         using TTopicEventBase::TTopicEventBase;
     };
+
+    struct TEvCheckPartitionTimer : public TEventLocal<TEvCheckPartitionTimer, EvCheckPartitionTimer> {};
 
     struct TEvCheckPartitionCount : public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
         explicit TEvCheckPartitionCount(ui32 clusterIndex)
@@ -240,7 +243,6 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
         NThreading::TFuture<void> EventFuture;
         bool SubscribedOnEvent = false;
         TMaybe<TInstant> WaitEventStartedAt;
-        bool PartitionCountCheckScheduled = false;
     };
 
 public:
@@ -446,6 +448,7 @@ private:
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
+        hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
@@ -499,7 +502,6 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        *ActorAlive = false;
         ClearMkqlData();
 
         for (auto& clusterState : Clusters) {
@@ -546,7 +548,7 @@ private:
             }
 
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
-            SchedulePartitionCountCheck();
+            SchedulePartitionCountTimer();
             return;
         }
 
@@ -642,7 +644,7 @@ private:
         SRC_LOG_D("Got partition info for cluster " << clusterIndex << " = " << partitionsCount);
         Clusters[clusterIndex].PartitionsCount = partitionsCount;
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
-        SchedulePartitionCountCheck();
+        SchedulePartitionCountTimer();
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
@@ -897,24 +899,27 @@ private:
         ReadyBuffer.swap(empty);
     }
 
-    void SchedulePartitionCountCheck() {
-        if (!CheckPartitionCountPeriod) {
+    void SchedulePartitionCountTimer() {
+        if (!CheckPartitionCountPeriod || PartitionCountTimerScheduled) {
             return;
         }
+        PartitionCountTimerScheduled = true;
+        Schedule(CheckPartitionCountPeriod, new TEvPrivate::TEvCheckPartitionTimer());
+    }
+
+    void Handle(TEvPrivate::TEvCheckPartitionTimer::TPtr& ev) {
+        PartitionCountTimerScheduled = false;
+        SchedulePartitionCountTimer();
+
         for (auto& clusterState : Clusters) {
-            if (clusterState.PartitionCountCheckScheduled) {
-                continue;
-            }
-            clusterState.PartitionCountCheckScheduled = true;
-            const auto checkTime = 2 * CheckPartitionCountPeriod * RandomNumber<double>();
-            SRC_LOG_T("Next partition count check in " << checkTime << " seconds");
+            const auto checkTime = CheckPartitionCountPeriod * RandomNumber<double>();
+            SRC_LOG_T("Next partition count check in " << checkTime << " seconds (cluster \"" << clusterState.Info.Name << "\")");
             Schedule(checkTime, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
         }
     }
-
+        
     void Handle(TEvPrivate::TEvCheckPartitionCount::TPtr& ev) {
         auto& clusterState = Clusters[ev->Get()->ClusterIndex];
-        clusterState.PartitionCountCheckScheduled = false;
         SRC_LOG_T("Checking partition count for topic \"" << SourceParams.GetTopicPath() << "\", cluster \"" << clusterState.Info.Name << "\"");
 
         std::string clusterTopicPath = SourceParams.GetTopicPath();
@@ -925,12 +930,8 @@ private:
             .Subscribe([
                 index = clusterState.Index,
                 actorSystem = TActivationContext::ActorSystem(),
-                selfId = SelfId(),
-                actorAlive = ActorAlive](const auto& describeTopicFuture)
+                selfId = SelfId()](const auto& describeTopicFuture)
             {
-                if (!*actorAlive) {
-                    return;
-                }
                 try {
                     auto& describeTopic = describeTopicFuture.GetValue();
                     if (!describeTopic.IsSuccess()) {
@@ -954,7 +955,6 @@ private:
         if (ev->Get()->Status) {
             SRC_LOG_W("Periodic DescribeTopic failed for topic \"" << SourceParams.GetTopicPath() << "\""
                 << " on cluster index " << clusterIndex << ": " << ev->Get()->Status->GetIssues().ToOneLineString());
-            SchedulePartitionCountCheck();
             return;
         }
         if (clusterIndex < Clusters.size() && Clusters[clusterIndex].PartitionsCount != partitionsCount) {
@@ -969,7 +969,6 @@ private:
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
             return;
         }
-        SchedulePartitionCountCheck();
     }
 
     // must be called (visited) with bound allocator
@@ -1134,7 +1133,8 @@ private:
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
     const TDuration CheckPartitionCountPeriod;
-    std::shared_ptr<std::atomic<bool>> ActorAlive = std::make_shared<std::atomic<bool>>(true);
+    TInstant NextCheckPartitionTime = TInstant::Now();
+    bool PartitionCountTimerScheduled = false;
 };
 
 ui32 ExtractPartitionsFromParams(

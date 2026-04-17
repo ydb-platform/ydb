@@ -802,10 +802,6 @@ public:
         return clusterConfiguration;
     }
 
-<<<<<<< HEAD
-    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
-        return clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
-=======
     bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, TExprContext& ctx) const {
         std::string_view format = pqReadTopic.Format().Ref().Content();
         const auto& settings = pqReadTopic.Settings();
@@ -826,7 +822,6 @@ public:
             useSharedReading = false;
         }
         return useSharedReading;
->>>>>>> e0a95333e92 (YQ-5042 Table mode topics reading  (#37271))
     }
 
 private:

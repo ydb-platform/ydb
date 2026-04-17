@@ -96,11 +96,7 @@ message TDqPqTopicSource {
     google.protobuf.Duration MaxPartitionReadSkew = 28;
     uint64 ReadSessionBufferBytes = 29;
     google.protobuf.Duration PartitionsBalancingIdleTimeout = 30;
-<<<<<<< HEAD
-=======
-    repeated string UserSchemaColumns = 31;
     bool StopAtCurrentEndOffsets = 32;
->>>>>>> e0a95333e92 (YQ-5042 Table mode topics reading  (#37271))
 }
 
 message TDqPqTopicSink {

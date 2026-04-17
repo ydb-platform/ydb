@@ -422,7 +422,7 @@ public:
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
-        NACLib::TUserContext::TPtr userCtx)
+         TIntrusivePtr<NACLib::TUserContext> userCtx)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -1580,7 +1580,7 @@ private:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    NACLib::TUserContext::TPtr UserCtx;
+     TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TKqpTableWriterStatistics Stats;
 
@@ -2406,7 +2406,7 @@ public:
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
         TIntrusivePtr<TKqpCounters> counters,
-        NACLib::TUserContext::TPtr userCtx)
+         TIntrusivePtr<NACLib::TUserContext> userCtx)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
@@ -2769,7 +2769,7 @@ private:
     bool WaitingForTableActor = false;
 
     NWilson::TSpan DirectWriteActorSpan;
-    NACLib::TUserContext::TPtr UserCtx;
+     TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 
@@ -5277,7 +5277,7 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
-    NACLib::TUserContext::TPtr UserCtx;
+     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     ui64 QuerySpanId = 0;
 };
 

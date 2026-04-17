@@ -175,7 +175,7 @@ static void OutKvContainer(IOutputStream& out, const C& c) {
 template <typename SK>
 struct TStructRecordBase {
     TChangeRecord::EKind Kind;
-    NACLib::TUserContext::TPtr UserCtx;
+     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     NTable::ERowOp Rop;
     TStructKey<SK> Key;
     TStructValue Update;
@@ -198,7 +198,7 @@ struct TStructRecordBase {
     {
     }
 
-    TStructRecordBase(TChangeRecord::EKind kind, NACLib::TUserContext::TPtr userCtx, NTable::ERowOp rop,
+    TStructRecordBase(TChangeRecord::EKind kind,  TIntrusivePtr<NACLib::TUserContext> userCtx, NTable::ERowOp rop,
             const TStructKey<SK>& key,
             const TStructValue& update = {},
             const TStructValue& oldImage = {},
@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         {
         }
 
-        TStructRecord(NACLib::TUserContext::TPtr userCtx,
+        TStructRecord( TIntrusivePtr<NACLib::TUserContext> userCtx,
                 NTable::ERowOp rop,
                 const TStructKey<ui32>& key,
                 const TStructValue& update = {},
@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
-            const TShardedTableOptions& opts, NACLib::TUserContext::TPtr userCtx, const TVector<TCdcStream>& streams,
+            const TShardedTableOptions& opts,  TIntrusivePtr<NACLib::TUserContext> userCtx, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);
@@ -894,7 +894,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts,
-            NACLib::TUserContext::TPtr userCtx,
+             TIntrusivePtr<NACLib::TUserContext> userCtx,
             const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
@@ -1046,7 +1046,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
-    void CheckPassUserContext(NACLib::TUserContext::TPtr userCtx) {
+    void CheckPassUserContext( TIntrusivePtr<NACLib::TUserContext> userCtx) {
         Run("/Root/path", SimpleTable(), userCtx, TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",

@@ -150,7 +150,7 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 }
 
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates, NACLib::TUserContext::TPtr userCtx)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates,  TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
@@ -335,7 +335,7 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
 
 void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates,
-        NACLib::TUserContext::TPtr userCtx)
+         TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
@@ -345,7 +345,7 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
 void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags,
-        NACLib::TUserContext::TPtr userCtx)
+         TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, oldState, newState, valueTags);

@@ -96,7 +96,7 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(NACLib::TUserContext::TPtr userCtx);
+    TEvQueryRequest( TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     bool IsSerializable() const override {
         return true;
@@ -108,7 +108,7 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
-    NACLib::TUserContext::TPtr GetUserCtx();
+     TIntrusivePtr<NACLib::TUserContext> GetUserCtx();
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
         return RequestCtx;
@@ -474,7 +474,7 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
-    NACLib::TUserContext::TPtr UserCtx;
+     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TString YqlText;
     TString QueryId;
     TString PoolId;

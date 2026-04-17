@@ -3,7 +3,9 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 
-#include <ydb/library/aclib/user_context.h>
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -14,11 +16,11 @@ public:
 
     virtual bool OnUpdate(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        const TRowVersion& writeVersion, NACLib::TUserContext::TPtr userCtx) = 0;
+        const TRowVersion& writeVersion,  TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual bool OnUpdateTx(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        ui64 writeTxId, NACLib::TUserContext::TPtr userCtx) = 0;
+        ui64 writeTxId,  TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 };
 
 } // NMiniKQL

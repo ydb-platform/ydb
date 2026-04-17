@@ -2,8 +2,11 @@
 #include <yql/essentials/minikql/defs.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/tablet_flat/flat_database.h>
-#include <ydb/library/aclib/user_context.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -55,10 +58,10 @@ public:
 
     // Updates the single row. Column in commands must be unique.
     virtual void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        const TArrayRef<const TUpdateCommand>& commands, NACLib::TUserContext::TPtr userCtx) = 0;
+        const TArrayRef<const TUpdateCommand>& commands,  TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     // Erases the single row.
-    virtual void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, NACLib::TUserContext::TPtr userCtx) = 0;
+    virtual void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row,  TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     // Check that table is erased
     virtual bool IsPathErased(const TTableId& tableId) const = 0;

@@ -580,7 +580,7 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
                               TActiveTransaction::TPtr tx,
-                              NACLib::TUserContext::TPtr userCtx)
+                               TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
@@ -1455,7 +1455,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
                                            const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                           NACLib::TUserContext::TPtr userCtx)
+                                            TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto &rec = ev->Get()->Record;
     Y_ENSURE(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1736,7 +1736,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     return writeOp;
 }
 
-void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, NACLib::TUserContext::TPtr userCtx)
+void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx,  TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx);
     Y_ENSURE(dataTx->Ready());

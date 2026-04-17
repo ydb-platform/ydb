@@ -71,7 +71,7 @@ private:
 public:
     TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
         const TIntrusivePtr<TTxProxyMon>& mon,
-        NACLib::TUserContext::TPtr userCtx)
+         TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Services(services)
         , TxId(txid)
         , Sender(ev->Sender)
@@ -992,7 +992,7 @@ private:
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TControlWrapper DefaultTimeoutMs;
-    NACLib::TUserContext::TPtr UserCtx;
+     TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TInstant WallClockAccepted;
     TInstant WallClockResolveStarted;
@@ -1034,7 +1034,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
-    const TIntrusivePtr<TTxProxyMon>& mon, NACLib::TUserContext::TPtr userCtx)
+    const TIntrusivePtr<TTxProxyMon>& mon,  TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasTransaction());

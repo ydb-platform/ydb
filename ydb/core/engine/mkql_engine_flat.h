@@ -268,14 +268,14 @@ namespace NMiniKQL {
         bool EvaluateResultType = true;
         bool EvaluateResultValue = true;
         bool LlvmRuntime = false;
-        NACLib::TUserContext::TPtr UserCtx;
+         TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
         TEngineFlatSettings(
                 IEngineFlat::EProtocol protocol,
                 const IFunctionRegistry* functionRegistry,
                 IRandomProvider& randomProvider,
                 ITimeProvider& timeProvider,
-                NACLib::TUserContext::TPtr userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_NO_USER_SID).Build(),
+                 TIntrusivePtr<NACLib::TUserContext> userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_NO_USER_SID).Build(),
                 IEngineFlatHost* host = nullptr,
                 const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters()
                 )

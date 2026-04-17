@@ -965,7 +965,7 @@ private:
     const ui64 WriteBufferMemoryLimit;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     ui64 QuerySpanId = 0;
-    NACLib::TUserContext::TPtr UserCtx;
+     TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 } // namespace

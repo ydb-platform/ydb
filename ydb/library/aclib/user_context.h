@@ -8,7 +8,7 @@
 namespace NACLib {
 class TUserContext : public TThrRefBase {
 public:
-    using TPtr = TIntrusivePtr<TUserContext>;
+    using TPtr =  TIntrusivePtr<NACLib::TUserContext>;
 
     TUserContext(const TString& userSID, const NWilson::TTraceId& userTraceId):
         UserSID(userSID),
@@ -35,8 +35,6 @@ protected:
 
 class TUserContextBuilder {
 public:
-    using TPtr = TIntrusivePtr<TUserContext>;
-
     TString UserSID{BUILTIN_ACL_NO_USER_SID};
     NWilson::TTraceId UserTraceId;
 

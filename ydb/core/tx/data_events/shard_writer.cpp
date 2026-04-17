@@ -49,7 +49,7 @@ namespace NKikimr::NEvWrite {
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const std::optional<TDuration> timeout, NACLib::TUserContext::TPtr userCtx)
+        const std::optional<TDuration> timeout,  TIntrusivePtr<NACLib::TUserContext> userCtx)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)

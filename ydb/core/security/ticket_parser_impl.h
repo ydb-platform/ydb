@@ -10,6 +10,7 @@
 #include <ydb/core/security/certificate_check/cert_check.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/token_manager/token_manager.h>
+#include <ydb/core/security/util/net.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -24,71 +25,15 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 
 #include <library/cpp/digest/md5/md5.h>
-#include <library/cpp/ipv6_address/ipv6_address.h>
 
 #include <util/generic/queue.h>
+#include <util/generic/strbuf.h>
 #include <util/stream/file.h>
 #include <util/string/vector.h>
 
 #include <util/string/join.h>
 
-#include <regex>
-
 namespace NKikimr {
-
-inline bool IsGoodFormat(const TString& peername) {
-    static const auto isIPv4 = [](const TString& address) {
-        const auto ip = TIpv6Address::FromString(address);
-        return ip.IsValid() && !ip.IsIpv6();
-    };
-
-    static const auto isIPv6 = [](const TString& address) {
-        const auto ip = TIpv6Address::FromString(address);
-        return ip.IsValid() && ip.IsIpv6();
-    };
-
-    static std::regex fullSchemeV6{R"(ipv6:\[(.+)\]:(\d+))"};
-    if (std::smatch match; std::regex_match(peername.c_str(), match, fullSchemeV6) && match.ready() && match.size() == 3) {
-        const TString address = match.str(1);
-        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
-        return (port != 0) && isIPv6(address);
-    }
-
-    static std::regex fullSchemeV4{R"(ipv4:(.+):(\d+))"};
-    if (std::smatch match; std::regex_match(peername.c_str(), match, fullSchemeV4) && match.ready() && match.size() == 3) {
-        const TString address = match.str(1);
-        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
-        return (port != 0) && isIPv4(address);
-    }
-
-    static std::regex schemeV6{R"(ipv6:(.+))"};
-    if (std::smatch match; std::regex_match(peername.c_str(), match, schemeV6) && match.ready() && match.size() == 2) {
-        const TString address = match.str(1);
-        return isIPv6(address);
-    }
-
-    static std::regex schemeV4{R"(ipv4:(.+))"};
-    if (std::smatch match; std::regex_match(peername.c_str(), match, schemeV4) && match.ready() && match.size() == 2) {
-        const TString address = match.str(1);
-        return isIPv4(address);
-    }
-
-    static std::regex fullV6{R"(\[(.+)\]:(\d+))"};
-    if (std::smatch match; std::regex_match(peername.c_str(), match, fullV6) && match.ready() && match.size() == 3) {
-        const TString address = match.str(1);
-        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
-        return (port != 0) && isIPv6(address);
-    }
-
-    static std::regex fullV4{R"((.+):(\d+))"};
-    if (std::smatch match; std::regex_match(peername.c_str(), match, fullV4) && match.ready() && match.size() == 3) {
-        const TString address = match.str(1);
-        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
-        return (port != 0) && isIPv4(address);
-    }
-
-    return isIPv6(peername) || isIPv4(peername);
-}
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
     switch (status.GRpcStatusCode) {
@@ -1025,7 +970,7 @@ private:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-        if (!IsGoodFormat(ev->Get()->PeerName)) {
+        if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
             CounterWrongPeernameFormat->Inc();
 
             if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {

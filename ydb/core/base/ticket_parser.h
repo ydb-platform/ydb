@@ -68,14 +68,6 @@ namespace NKikimr {
 
             const TString Database;
             const TString Ticket;
-
-            // Possible formats:
-            // 1. <ipv4>
-            // 2. <ipv4>:<port>
-            // 3. ipv4:<ipv4>:<port>
-            // 4. <ipv6>
-            // 5. [<ipv6>]:<port>
-            // 6. ipv6:[<ipv6>]:<port>
             const TString PeerName;
 
             // if two identical permissions with different attributies are specified,

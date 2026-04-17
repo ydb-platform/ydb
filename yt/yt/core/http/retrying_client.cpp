@@ -180,7 +180,7 @@ private:
         const std::string& url,
         Args&&... args)
     {
-        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] {
+        return BIND([=, this, this_ = MakeStrong(this), func = std::forward<TCallable>(func), ...args = std::move(args)] {
             return DoMakeRequest(std::move(func), responseChecker, url, std::forward<Args>(args)...);
         }).AsyncVia(Invoker_).Run();
     }
@@ -222,7 +222,7 @@ private:
 
         while (true) {
             ++attempt;
-            auto future = BIND(func, UnderlyingClient_, url, std::forward<Args>(args)...)();
+            auto future = BIND(func, UnderlyingClient_, url, args...)();
             const auto rspOrError = WaitFor(future.WithTimeout(Config_->AttemptTimeout));
             if (!rspOrError.IsOK()) {
                 if (!shouldRetry(rspOrError)) {

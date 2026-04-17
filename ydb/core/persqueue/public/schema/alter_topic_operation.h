@@ -13,6 +13,7 @@ public:
     virtual const TString& GetTopicName() const = 0;
 
     virtual TResult ApplyChanges(
+        NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
         bool isCdcStream

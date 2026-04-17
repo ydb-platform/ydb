@@ -100,7 +100,7 @@ private:
 
         auto workingDir = GetWorkingDir(TopicInfo);
         if (workingDir.empty()) {
-            return  ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
+            return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
         }
     
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
@@ -120,7 +120,7 @@ private:
             applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
         }
     
-        auto result = Settings.Strategy->ApplyChanges(*config, TopicInfo.Info->Description, TopicInfo.CdcStream);
+        auto result = Settings.Strategy->ApplyChanges(modifyScheme, *config, TopicInfo.Info->Description, TopicInfo.CdcStream);
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
         }

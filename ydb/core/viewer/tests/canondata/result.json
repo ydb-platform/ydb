@@ -699,7 +699,7 @@
         },
         "evict_vdisk_monitoring_force": {
             "status_code": 403,
-            "text": "Access denied"
+            "text": "Administration access required when force=true"
         },
         "restart_pdisk_database": {
             "status_code": 403,
@@ -716,7 +716,7 @@
         },
         "restart_pdisk_monitoring_force": {
             "status_code": 403,
-            "text": "Access denied"
+            "text": "Administration access required when force=true"
         },
         "restart_pdisk_root": {
             "debugMessage": "text",
@@ -738,7 +738,7 @@
         },
         "status_pdisk_monitoring_force": {
             "status_code": 403,
-            "text": "Access denied"
+            "text": "Administration access required when force=true"
         },
         "storage_nodes_database": {
             "FieldsAvailable": "0000010000000110011000000110100000011",

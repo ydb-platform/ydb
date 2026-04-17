@@ -48,9 +48,8 @@ public:
         if (!Viewer->CheckAccessMonitoring(GetRequest())) {
             return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
-        Force = FromStringWithDefault<bool>(Params.Get("force"), Force);
-        if (Force && !Viewer->CheckAccessAdministration(GetRequest())) {
-            return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
+        if (!RequireAdminIfForce(Force)) {
+            return;
         }
         ui32 groupId = 0;
         ui32 groupGeneration = 0;

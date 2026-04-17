@@ -342,6 +342,7 @@ protected:
     void BuildParamsFromJson(TStringBuf data);
     void BuildParamsFromFormData(TStringBuf data);
     void SetupTracing(const TString& handlerName);
+    bool RequireAdminIfForce(bool& force, TStringBuf forceParamName = "force");
     void ApplyForceMode(TEvBlobStorage::TEvControllerConfigRequest& request);
 
     template<typename TJson>

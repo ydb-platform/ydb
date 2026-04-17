@@ -1139,7 +1139,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true,  TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
@@ -1226,7 +1226,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true,  TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
@@ -1468,7 +1468,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false,  TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr) {
+    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr) {
         NJsonWriter::TBuf body;
         auto root = body.BeginObject();
         auto payload = root.WriteKey("payload").BeginObject();
@@ -1738,7 +1738,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    void CheckLogDebezium( TIntrusivePtr<NACLib::TUserContext>& userCtx,  TIntrusivePtr<NACLib::TUserContext>& checkUserCtx, bool userSIDS = true, bool traceIds = true) {
+    void CheckLogDebezium( TIntrusivePtr<NACLib::TUserContext>& userCtx, TIntrusivePtr<NACLib::TUserContext>& checkUserCtx, bool userSIDS = true, bool traceIds = true) {
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", userSIDS, traceIds), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),

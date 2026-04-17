@@ -1034,7 +1034,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
-    const TIntrusivePtr<TTxProxyMon>& mon,  TIntrusivePtr<NACLib::TUserContext> userCtx)
+    const TIntrusivePtr<TTxProxyMon>& mon, TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasTransaction());

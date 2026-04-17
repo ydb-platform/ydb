@@ -120,7 +120,7 @@ namespace NMiniKQL {
         TIncomingResults Results;
     };
 
-    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly,  TIntrusivePtr<NACLib::TUserContext> userCtx);
+    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, TIntrusivePtr<NACLib::TUserContext> userCtx);
     TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData);
 
     NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,

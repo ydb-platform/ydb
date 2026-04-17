@@ -46,7 +46,7 @@ public:
     virtual bool NeedToReadKeys() const = 0;
 
     virtual bool Collect(const TTableId& tableId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,  TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 };
 
 class TBaseChangeCollector

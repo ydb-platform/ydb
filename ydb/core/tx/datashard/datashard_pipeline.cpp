@@ -1736,7 +1736,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     return writeOp;
 }
 
-void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx,  TIntrusivePtr<NACLib::TUserContext> userCtx)
+void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx);
     Y_ENSURE(dataTx->Ready());

@@ -858,7 +858,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 }
 
 // Erases the single row.
-void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row,  TIntrusivePtr<NACLib::TUserContext> userCtx) {
+void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, TIntrusivePtr<NACLib::TUserContext> userCtx) {
     ui64 localTid = LocalTableId(tableId);
     Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);

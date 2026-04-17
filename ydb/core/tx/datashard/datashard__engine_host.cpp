@@ -372,7 +372,7 @@ public:
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-        const ui32 defaultFilledColumnCount,  TIntrusivePtr<NACLib::TUserContext> userCtx) override
+        const ui32 defaultFilledColumnCount, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userCtx);
     }
@@ -389,22 +389,22 @@ public:
         UserDb.ReplaceRow(tableId, key, ops, userCtx);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,  TIntrusivePtr<NACLib::TUserContext> userCtx) override
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.InsertRow(tableId, key, ops, userCtx);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,  TIntrusivePtr<NACLib::TUserContext> userCtx) override
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.UpdateRow(tableId, key, ops, userCtx);
     }
 
-    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing,  TIntrusivePtr<NACLib::TUserContext> userCtx) override
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.IncrementRow(tableId, key, ops, insertMissing, userCtx);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row,  TIntrusivePtr<NACLib::TUserContext> userCtx) override {
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, TIntrusivePtr<NACLib::TUserContext> userCtx) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
             return;
@@ -418,7 +418,7 @@ public:
         UserDb.EraseRow(tableId, key, userCtx);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key,  TIntrusivePtr<NACLib::TUserContext> userCtx) override
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.EraseRow(tableId, key, userCtx);
     }

@@ -150,7 +150,7 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 }
 
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates,  TIntrusivePtr<NACLib::TUserContext> userCtx)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates, TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 

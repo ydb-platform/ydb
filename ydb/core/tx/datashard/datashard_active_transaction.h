@@ -373,7 +373,7 @@ public:
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
-                                       const TActorContext &ctx,  TIntrusivePtr<NACLib::TUserContext> userCtx, bool isPropose = false);
+                                       const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx, bool isPropose = false);
     void ClearDataTx() { DataTx = nullptr; }
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const
@@ -468,7 +468,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
-    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx,  TIntrusivePtr<NACLib::TUserContext> userCtx);
+    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx, TIntrusivePtr<NACLib::TUserContext> userCtx);
     void FinalizeDataTxPlan();
 
     // TOperation iface.

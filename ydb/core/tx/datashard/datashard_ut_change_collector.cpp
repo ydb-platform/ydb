@@ -198,7 +198,7 @@ struct TStructRecordBase {
     {
     }
 
-    TStructRecordBase(TChangeRecord::EKind kind,  TIntrusivePtr<NACLib::TUserContext> userCtx, NTable::ERowOp rop,
+    TStructRecordBase(TChangeRecord::EKind kind, TIntrusivePtr<NACLib::TUserContext> userCtx, NTable::ERowOp rop,
             const TStructKey<SK>& key,
             const TStructValue& update = {},
             const TStructValue& oldImage = {},
@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
-            const TShardedTableOptions& opts,  TIntrusivePtr<NACLib::TUserContext> userCtx, const TVector<TCdcStream>& streams,
+            const TShardedTableOptions& opts, TIntrusivePtr<NACLib::TUserContext> userCtx, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);

@@ -129,23 +129,12 @@ namespace {
         }
     }
 
-    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, ui64 recipientTopicTabletId) {
+    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, ui64 recipientTopicTabletId,
+                          bool omitPeerTopicTablets, const THashSet<ui64>& topicTabletPeers) {
         transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
 
         if (!isImmediateCommit) {
             const auto prepareSettings = txManager->GetPrepareTransactionInfo();
-            const auto& topicOps = txManager->GetTopicOperations();
-
-            THashSet<ui64> topicTabletPeers;
-            const bool omitPeerTopicTablets = topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange();
-            if (omitPeerTopicTablets) {
-                for (ui64 id : topicOps.GetReceivingTabletIds()) {
-                    topicTabletPeers.insert(id);
-                }
-                for (ui64 id : topicOps.GetSendingTabletIds()) {
-                    topicTabletPeers.insert(id);
-                }
-            }
 
             const auto keepShardForPropose = [&](ui64 shardId) {
                 if (!omitPeerTopicTablets) {
@@ -3908,10 +3897,25 @@ public:
         }
         bool kafkaTransaction = TxManager->GetTopicOperations().HasKafkaOperations();
 
+        THashSet<ui64> topicTabletPeers;
+        bool omitPeerTopicTablets = false;
+        if (!isImmediateCommit) {
+            const auto& topicOps = TxManager->GetTopicOperations();
+            omitPeerTopicTablets = topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange();
+            if (omitPeerTopicTablets) {
+                for (ui64 id : topicOps.GetReceivingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+                for (ui64 id : topicOps.GetSendingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+            }
+        }
+
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId);
+            FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId, omitPeerTopicTablets, topicTabletPeers);
 
             if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();

@@ -263,7 +263,7 @@ namespace {
         const TTableId TableId;
         TTupleType* const RowType;
         IComputationNode* const Row;
-         TIntrusivePtr<NACLib::TUserContext> UserCtx;
+        TIntrusivePtr<NACLib::TUserContext> UserCtx;
     };
 
     class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> {
@@ -353,7 +353,7 @@ namespace {
         IComputationNode* const Row;
         TStructLiteral* const UpdateStruct;
         IComputationNode* const Update;
-         TIntrusivePtr<NACLib::TUserContext> UserCtx;
+        TIntrusivePtr<NACLib::TUserContext> UserCtx;
     };
 
     IComputationNode* WrapAsDummy(TComputationMutables& mutables) {

@@ -60,7 +60,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     UserCtx = builder.Build();
 }
 
-TEvKqp::TEvQueryRequest::TEvQueryRequest( TIntrusivePtr<NACLib::TUserContext> userCtx) : TEvQueryRequest()
+TEvKqp::TEvQueryRequest::TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx) : TEvQueryRequest()
 {
     UserCtx = userCtx;
     if (userCtx != nullptr) {

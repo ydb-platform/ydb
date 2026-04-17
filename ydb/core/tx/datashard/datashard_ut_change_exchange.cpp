@@ -1738,7 +1738,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    void CheckLogDebezium( TIntrusivePtr<NACLib::TUserContext>& userCtx, TIntrusivePtr<NACLib::TUserContext>& checkUserCtx, bool userSIDS = true, bool traceIds = true) {
+    void CheckLogDebezium(TIntrusivePtr<NACLib::TUserContext>& userCtx, TIntrusivePtr<NACLib::TUserContext>& checkUserCtx, bool userSIDS = true, bool traceIds = true) {
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", userSIDS, traceIds), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),

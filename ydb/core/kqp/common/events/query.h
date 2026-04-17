@@ -96,7 +96,7 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest( TIntrusivePtr<NACLib::TUserContext> userCtx);
+    TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     bool IsSerializable() const override {
         return true;

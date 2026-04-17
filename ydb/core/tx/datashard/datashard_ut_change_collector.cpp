@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         {
         }
 
-        TStructRecord( TIntrusivePtr<NACLib::TUserContext> userCtx,
+        TStructRecord(TIntrusivePtr<NACLib::TUserContext> userCtx,
                 NTable::ERowOp rop,
                 const TStructKey<ui32>& key,
                 const TStructValue& update = {},
@@ -1046,7 +1046,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         });
     }
 
-    void CheckPassUserContext( TIntrusivePtr<NACLib::TUserContext> userCtx) {
+    void CheckPassUserContext(TIntrusivePtr<NACLib::TUserContext> userCtx) {
         Run("/Root/path", SimpleTable(), userCtx, TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",

@@ -13,4 +13,4 @@
 
 
 ====================COPYRIGHT====================
- * Copyright 2016 gRPC authors.
+// Copyright 2016 The gRPC Authors

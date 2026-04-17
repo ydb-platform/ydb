@@ -23,7 +23,7 @@ syntax = "proto3";
 
 package grpc.reflection.v1;
 
-option go_package = "google.golang.org/grpc/reflection/grpc_reflection_v1";
+option go_package = "a.yandex-team.ru/contrib/proto/grpc/grpc/reflection/v1;grpc_reflection_v1";
 option java_multiple_files = true;
 option java_package = "io.grpc.reflection.v1";
 option java_outer_classname = "ServerReflectionProto";

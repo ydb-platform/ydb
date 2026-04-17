@@ -3,6 +3,9 @@
 #include "native_types_support.h"
 #include "overloaded.h"
 
+#include <util/generic/string.h>
+#include <util/string/builder.h>
+
 #include <functional>
 #include <unordered_map>
 
@@ -78,11 +81,20 @@ struct TNativeTypeCodeMapping
     }
 
     template <typename T>
-    static std::string ToString(const T& value) {
+    static TString ToString(const T& value) {
         if constexpr (std::is_same_v<TValueType, T>) {
             return TNativeTypeSupport<TValueType>::ToString(value);
         } else {
             return TBase::ToString(value);
+        }
+    }
+
+    template <typename T>
+    static void AppendToString(const T& value, TStringBuilder& stringBuffer) {
+        if constexpr (std::is_same_v<TValueType, T>) {
+            return TNativeTypeSupport<TValueType>::AppendToString(value, stringBuffer);
+        } else {
+            return TBase::AppendToString(value, stringBuffer);
         }
     }
 
@@ -137,9 +149,15 @@ struct TNativeTypeCodeMapping<TPair>
     }
 
     template <typename T>
-    static std::string ToString(const T& value) {
+    static TString ToString(const T& value) {
         static_assert( std::is_same_v<TValueType, T>, "Unsupported type");
         return TNativeTypeSupport<TValueType>::ToString(value);
+    }
+
+    template <typename T>
+    static void AppendToString(const T& value, TStringBuilder& stringBuffer) {
+        static_assert( std::is_same_v<TValueType, T>, "Unsupported type");
+        return TNativeTypeSupport<TValueType>::AppendToString(value, stringBuffer);
     }
 
     template <typename C>

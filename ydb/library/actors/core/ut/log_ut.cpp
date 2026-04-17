@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/util/struct_log/create_message.h>
+#include <ydb/core/util/struct_log/json_writer.h>
 #include <ydb/core/util/struct_log/structured_message.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -100,7 +101,7 @@ namespace {
         };
 
         auto GetNameWithDots = [](const std::vector<TKeyName>& name) {
-            std::string result;
+            TString result;
             for(auto& item: name) {
                 if (!result.empty()) {
                     result += ".";
@@ -392,8 +393,8 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
         YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
         YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:393: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:394: Test message with data", YDBLOG_CREATE_MESSAGE({"value", 1}));
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:394: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:395: Test message with data", YDBLOG_CREATE_MESSAGE({"value", 1}));
     }
 
     Y_UNIT_TEST(SimpleWritePriority) {
@@ -410,15 +411,15 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         YDBLOG_CTX_COMP_DEBUG(env, 1, "Test message");
         YDBLOG_CTX_COMP_TRACE(env, 1, "Test message");
 
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:403: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE ALERT: log_ut.cpp:404: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE CRIT: log_ut.cpp:405: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE ERROR: log_ut.cpp:406: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE WARN: log_ut.cpp:407: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE NOTICE: log_ut.cpp:408: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE INFO: log_ut.cpp:409: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:410: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE TRACE: log_ut.cpp:411: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:404: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE ALERT: log_ut.cpp:405: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE CRIT: log_ut.cpp:406: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE ERROR: log_ut.cpp:407: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE WARN: log_ut.cpp:408: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE NOTICE: log_ut.cpp:409: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE INFO: log_ut.cpp:410: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:411: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE TRACE: log_ut.cpp:412: Test message");
     }
 
     Y_UNIT_TEST(SimpleWriteComponent) {
@@ -429,9 +430,9 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         YDBLOG_CTX_COMP_EMERG(env, 1001, "Test message");
         YDBLOG_CTX_COMP_EMERG(env, 1002, "Test message");
 
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :A EMERG: log_ut.cpp:428: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :B EMERG: log_ut.cpp:429: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:430: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :A EMERG: log_ut.cpp:429: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :B EMERG: log_ut.cpp:430: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:431: Test message");
     }
 
     Y_UNIT_TEST(SimpleWriteWithoutComponent) {
@@ -450,9 +451,9 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         YDBLOG_CTX_EMERG(env, "Test message");
 #undef YDBLOG_THIS_FILE_COMPONTENT
 
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :A EMERG: log_ut.cpp:442: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :B EMERG: log_ut.cpp:446: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:450: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :A EMERG: log_ut.cpp:443: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :B EMERG: log_ut.cpp:447: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :C EMERG: log_ut.cpp:451: Test message");
     }
 
     Y_UNIT_TEST(SimpleWriteWithContext) {
@@ -467,9 +468,9 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
             YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
             YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
-            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:467: Test message",
-                YDBLOG_CREATE_MESSAGE({"context", 1}));
             env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:468: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 1}));
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:469: Test message",
                 YDBLOG_CREATE_MESSAGE({"context", 1}, {"value", 100}));
         }
 
@@ -479,9 +480,9 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
             YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
             YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
-            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:479: Test message",
-                YDBLOG_CREATE_MESSAGE({"context", 2}));
             env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:480: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 2}));
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:481: Test message",
                 YDBLOG_CREATE_MESSAGE({"context", 2}, {"value", 100}));
 
             {
@@ -490,25 +491,80 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
                 YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
                 YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
-                env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:490: Test message",
-                    YDBLOG_CREATE_MESSAGE({"context", 3}, {"subcontext", 4}));
                 env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:491: Test message",
+                    YDBLOG_CREATE_MESSAGE({"context", 3}, {"subcontext", 4}));
+                env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:492: Test message",
                     YDBLOG_CREATE_MESSAGE({"context", 3}, {"subcontext", 4}, {"value", 100}));
             }
 
             YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
             YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
-            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:499: Test message",
-                YDBLOG_CREATE_MESSAGE({"context", 2}));
             env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:500: Test message",
+                YDBLOG_CREATE_MESSAGE({"context", 2}));
+            env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:501: Test message",
                 YDBLOG_CREATE_MESSAGE({"context", 2}, {"value", 100}));
         }
 
         YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
         YDBLOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
 
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:508: Test message");
-        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:509: Test message", YDBLOG_CREATE_MESSAGE({"value", 100}));
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:509: Test message");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:510: Test message", YDBLOG_CREATE_MESSAGE({"value", 100}));
+    }
+
+    TString GetMessageJsonString(const TStructuredMessage& message) {
+        TString jsonString;
+        TJsonWriter writer;
+        writer.Write(message);
+        return writer.GetJson();
+    }
+
+#define TEST_JSON_MESSAGE(M, S) { auto m = M; auto str = GetMessageJsonString(m); \
+    auto ok = (str == S); \
+    UNIT_ASSERT(ok); }
+
+    Y_UNIT_TEST(GenerateJson) {
+        TJsonWriter writer;
+
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(), R"({})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}), R"({"v1":1})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), R"({"v1":1,"v2":2})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), R"({"v1":1,"v2":2,"v3":3})");
+
+        // Empty pairs
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"v1", 1}, {}), R"({"v1":1})");
+
+        // Support types
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), R"({"value":1})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i8>(2)}), R"({"value":2})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":3})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":4})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":5})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), R"({"value":6})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), R"({"value":7})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), R"({"value":8})");
+
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", true}), R"({"value":true})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TString("abc")}), R"({"value":"abc"})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", "abc"}), R"({"value":"abc"})");
+
+        // reuse message and sub message
+        auto subMessage = YDBLOG_CREATE_MESSAGE({"subValue1", 1}, {"subValue2", 2});
+
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage), R"({"subValue1":1,"subValue2":2})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, subMessage), R"({"subValue1":1,"subValue2":2})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", subMessage}), R"({"value":{"subValue1":1,"subValue2":2}})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, {"value", subMessage}), R"({"subValue1":1,"subValue2":2,"value":{"subValue1":1,"subValue2":2}})");
+
+        // optional values
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui8>{}}), R"({})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui8>{1}}), R"({"value":1})");
+
+        // optional subMessages
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), R"({})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}), R"({"value":{"subValue1":1,"subValue2":2}})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), R"({})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":1,"subValue2":2})");
     }
 }

@@ -3,9 +3,9 @@
 #include "key_name.h"
 #include "structured_message.h"
 
+#include <util/generic/maybe.h>
+
 #include <initializer_list>
-#include <optional>
-#include <vector>
 
 namespace NKikimr::NStructLog {
 
@@ -21,9 +21,9 @@ public:
     }
 
     template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >
-    TCreateMessageArg(TKeyName&& name, const std::optional<T>& value) {
-        if (value.has_value()) {
-            GetBuildMessage().AppendValue({std::move(name)}, value.value());
+    TCreateMessageArg(TKeyName&& name, const TMaybe<T>& value) {
+        if (value.Defined()) {
+            GetBuildMessage().AppendValue({std::move(name)}, value.GetRef());
         }
     }
 
@@ -38,9 +38,9 @@ public:
         GetBuildMessage().AppendSubMessage({std::move(name)}, subMessage);
     }
 
-    TCreateMessageArg(TKeyName&& name, const std::optional<TStructuredMessage>& subMessage) {
-        if (subMessage.has_value()) {
-            GetBuildMessage().AppendSubMessage({std::move(name)}, subMessage.value());
+    TCreateMessageArg(TKeyName&& name, const TMaybe<TStructuredMessage>& subMessage) {
+        if (subMessage.Defined()) {
+            GetBuildMessage().AppendSubMessage({std::move(name)}, subMessage.GetRef());
         }
     }
 
@@ -48,9 +48,9 @@ public:
         GetBuildMessage().AppendMessage(message);
     }
 
-    TCreateMessageArg(const std::optional<TStructuredMessage>& message) {
-        if (message.has_value()) {
-            GetBuildMessage().AppendMessage(message.value());
+    TCreateMessageArg(const TMaybe<TStructuredMessage>& message) {
+        if (message.Defined()) {
+            GetBuildMessage().AppendMessage(message.GetRef());
         }
     }
 

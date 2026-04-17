@@ -1,13 +1,15 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
+
+#include <charconv>
 #include <cstdint>
 #include <cstring>
 #include <string>
 
 #include <type_traits>
 #include <vector>
-
 
 namespace NKikimr::NStructLog {
 
@@ -38,6 +40,12 @@ struct TNativePlainTypeSupport : public std::true_type
     static TString ToString(const T& value) {
         return std::to_string(value);
     }
+
+    static void AppendToString(const T& value, TStringBuilder& stringBuffer) {
+        static thread_local char buffer[64];
+        auto result = std::to_chars(buffer, buffer + 64, value);
+        stringBuffer.append(buffer, result.ptr - buffer);
+    }
 };
 
 template<> struct TNativeTypeSupport<i8> : public TNativePlainTypeSupport<i8>{};
@@ -53,6 +61,10 @@ template<> struct TNativeTypeSupport<bool> : public TNativePlainTypeSupport<bool
 {
     static TString ToString(const bool& value) {
         return value?"true":"false";
+    }
+
+    static void AppendToString(const bool& value, TStringBuilder& stringBuffer) {
+        stringBuffer.append(value ? "true" : "false");
     }
 };
 
@@ -89,6 +101,10 @@ template<> struct TNativeTypeSupport<TString> : public std::true_type
 
     static TString ToString(const TString& value) {
         return value;
+    }
+
+    static void AppendToString(const TString& value, TStringBuilder& stringBuffer) {
+        stringBuffer.append(value);
     }
 };
 

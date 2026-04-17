@@ -955,7 +955,7 @@ private:
         Schedule(CheckPartitionCountPeriod, new TEvPrivate::TEvCheckPartitionTimer());
     }
 
-    void Handle(TEvPrivate::TEvCheckPartitionTimer::TPtr& ev) {
+    void Handle(TEvPrivate::TEvCheckPartitionTimer::TPtr& /*ev*/) {
         PartitionCountTimerScheduled = false;
         SchedulePartitionCountTimer();
 

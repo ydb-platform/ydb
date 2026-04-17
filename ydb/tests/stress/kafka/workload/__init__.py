@@ -87,8 +87,8 @@ class Workload(unittest.TestCase):
             self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
             for j in range(self.num_workers):
                 processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap,
-                                                   f"streams-store-{i * self.num_workers + j}", self.test_topic_path,
-                                                   targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
+                                                   f"streams-store-{i * self.num_workers + j}", self.database + "/" + self.test_topic_path,
+                                                   self.database + "/" + targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
         processes[0].wait()
         assert processes[0].returncode == 0
 
@@ -117,13 +117,13 @@ class Workload(unittest.TestCase):
                 totalMessCountTarget += targetCount
 
             print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest},"
-                  "totalMessCountTarget = {totalMessCountTarget}")
+                  f"totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
+                assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
                        f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             else:
                 assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
-                       "{totalMessCountTest} and {totalMessCountTarget} respectively."
+                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             print(f"Total num of messages: {totalMessCountTest}")
         return
 

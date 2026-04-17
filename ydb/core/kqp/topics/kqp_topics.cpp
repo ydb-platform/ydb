@@ -698,4 +698,9 @@ bool TTopicOperations::CalcSkipConflictCheck() const
     return !TrackProducerId_ && SkipConflictCheck_;
 }
 
+bool TTopicOperations::ShouldOmitPeerTopicTabletsForPredicateExchange() const
+{
+    return CalcSkipConflictCheck() && !HasReadOperations();
+}
+
 }

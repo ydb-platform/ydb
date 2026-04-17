@@ -356,12 +356,22 @@ INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsin
 
 INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
-    const auto& tableSettings = node.Y(
-        node.Q("tableSettings"),
-        node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node)));
-    return node.Y(
-        node.Q(indexName),
-        node.Q(tableSettings));
+    auto alterIndexNode = node.Y(node.Q(indexName));
+    if (index.TableSettings.IsSet()) {
+        const auto& tableSettings = node.Y(
+            node.Q("tableSettings"),
+            node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node)));
+        alterIndexNode = node.L(alterIndexNode, node.Q(tableSettings));
+    }
+
+    if (index.IndexSettings) {
+        const auto& indexSettings = node.Y(
+            node.Q("indexSettings"),
+            node.Q(CreateIndexSettings(index.IndexSettings, node)));
+        alterIndexNode = node.L(alterIndexNode, node.Q(indexSettings));
+    }
+
+    return alterIndexNode;
 }
 
 INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {

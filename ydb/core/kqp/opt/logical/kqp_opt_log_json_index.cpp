@@ -182,7 +182,7 @@ std::optional<TPredicateCollectResult> CollectFromJsonCallable(const TString& co
     }
 
     auto& tokens = collectResult.GetTokens();
-    if (comparisonValue && !collectResult.IsFinished() && tokens.size() == 1) {
+    if (comparisonValue && collectResult.CanCollect()) {
         if (auto encodedValue = EncodeValueToJsonPath(*comparisonValue)) {
             tokens.front() += *encodedValue;
         }

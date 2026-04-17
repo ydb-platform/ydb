@@ -4240,7 +4240,9 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            TStringBuilder()
+                << "Failed to deliver message to tablet " << ev->Get()->TabletId << ". "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 
@@ -4260,7 +4262,10 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            TStringBuilder()
+                << "Failed to deliver message to tablet " << ev->Get()->TabletId
+                << " during prepare phase. "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 
@@ -4272,7 +4277,9 @@ public:
                 ReplyError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message to coordinator.",
+                    TStringBuilder()
+                        << "Failed to deliver commit message to coordinator "
+                        << ev->Get()->TabletId << ".",
                     {});
                 return;
             }
@@ -4285,7 +4292,9 @@ public:
             ReplyError(
                     NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                    TStringBuilder() << "State of operation is unknown. Failed to deviler message to coordinator.",
+                    TStringBuilder()
+                        << "Transaction state unknown: lost connection to coordinator "
+                        << ev->Get()->TabletId << ".",
                     {});
             return;
         }
@@ -4303,7 +4312,10 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNDETERMINED,
             NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-            TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
+            TStringBuilder()
+                << "Transaction state unknown: failed to deliver message to tablet "
+                << ev->Get()->TabletId << ". "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 

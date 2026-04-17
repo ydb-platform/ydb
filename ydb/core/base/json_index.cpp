@@ -12,7 +12,6 @@ namespace NJsonIndex {
 using NYql::TIssue;
 using NYql::TIssues;
 using namespace NYql::NJsonPath;
-
 namespace {
 
 NBinaryJson::EEntryType GetEntryType(const TJsonPathItem& item) {
@@ -48,30 +47,6 @@ void AppendKey(TString& prefix, TStringBuf key) {
         size >>= 7;
     } while (size > 0);
     prefix += key;
-}
-
-// Appends NUL, binary JSON entry type byte, and scalar payload (matches index token layout).
-void AppendLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {},
-    const double* numberPayload = nullptr)
-{
-    out.push_back(0);
-    out.push_back(static_cast<char>(type));
-    switch (type) {
-        case NBinaryJson::EEntryType::String:
-            out += stringPayload;
-            break;
-        case NBinaryJson::EEntryType::Number:
-            Y_ENSURE(numberPayload, "Number payload required");
-            out += TStringBuf(reinterpret_cast<const char*>(numberPayload), sizeof(double));
-            break;
-        case NBinaryJson::EEntryType::BoolFalse:
-        case NBinaryJson::EEntryType::BoolTrue:
-        case NBinaryJson::EEntryType::Null:
-            Y_ENSURE(!numberPayload, "No number payload for bool/null literal");
-            break;
-        case NBinaryJson::EEntryType::Container:
-            Y_ENSURE(false, "Container is not a scalar literal");
-    }
 }
 
 bool IsLiteralType(EJsonPathItemType type) {
@@ -310,16 +285,16 @@ TCollectResult TQueryCollector::Literal(const TJsonPathItem& item, EMode mode) {
     TString value;
     switch (item.Type) {
         case EJsonPathItemType::StringLiteral:
-            AppendLiteral(value, GetEntryType(item), item.GetString(), nullptr);
+            AppendJsonIndexLiteral(value, GetEntryType(item), item.GetString(), nullptr);
             break;
         case EJsonPathItemType::NumberLiteral: {
             double number = item.GetNumber();
-            AppendLiteral(value, GetEntryType(item), {}, &number);
+            AppendJsonIndexLiteral(value, GetEntryType(item), {}, &number);
             break;
         }
         case EJsonPathItemType::BooleanLiteral:
         case EJsonPathItemType::NullLiteral:
-            AppendLiteral(value, GetEntryType(item), {}, nullptr);
+            AppendJsonIndexLiteral(value, GetEntryType(item), {}, nullptr);
             break;
         default:
             return TCollectResult(TIssue("Expected a literal expression"));
@@ -335,7 +310,7 @@ TCollectResult TQueryCollector::ContextObject(EMode mode) {
 
 TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
-    if (!result.CanCollect()) {
+    if (result.IsError() || result.IsFinished()) {
         return result;
     }
 
@@ -378,7 +353,7 @@ TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMo
 
         TString value;
         double number = *val;
-        AppendLiteral(value, NBinaryJson::EEntryType::Number, {}, &number);
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &number);
         return TCollectResult(std::move(value));
     }
 
@@ -610,17 +585,17 @@ void TokenizeBinaryJson(NBinaryJson::TEntryCursor element, const TString& prefix
     TString token = prefix;
     switch (element.GetType()) {
     case NBinaryJson::EEntryType::String:
-        AppendLiteral(token, element.GetType(), element.GetString(), nullptr);
+        AppendJsonIndexLiteral(token, element.GetType(), element.GetString(), nullptr);
         break;
     case NBinaryJson::EEntryType::Number: {
         double number = element.GetNumber();
-        AppendLiteral(token, element.GetType(), {}, &number);
+        AppendJsonIndexLiteral(token, element.GetType(), {}, &number);
         break;
     }
     case NBinaryJson::EEntryType::BoolFalse:
     case NBinaryJson::EEntryType::BoolTrue:
     case NBinaryJson::EEntryType::Null:
-        AppendLiteral(token, element.GetType(), {}, nullptr);
+        AppendJsonIndexLiteral(token, element.GetType(), {}, nullptr);
         break;
     case NBinaryJson::EEntryType::Container:
         Y_ENSURE(false, "Unreachable");
@@ -659,6 +634,29 @@ void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString
 }
 
 }  // namespace
+
+void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload,
+    const double* numberPayload)
+{
+    out.push_back(0);
+    out.push_back(static_cast<char>(type));
+    switch (type) {
+        case NBinaryJson::EEntryType::String:
+            out += stringPayload;
+            break;
+        case NBinaryJson::EEntryType::Number:
+            Y_ENSURE(numberPayload, "Number payload required");
+            out += TStringBuf(reinterpret_cast<const char*>(numberPayload), sizeof(double));
+            break;
+        case NBinaryJson::EEntryType::BoolFalse:
+        case NBinaryJson::EEntryType::BoolTrue:
+        case NBinaryJson::EEntryType::Null:
+            Y_ENSURE(!numberPayload, "No number payload for bool/null literal");
+            break;
+        case NBinaryJson::EEntryType::Container:
+            Y_ENSURE(false, "Container is not a scalar literal");
+    }
+}
 
 TCollectResult::TCollectResult()
     : Result(TTokens{})
@@ -703,10 +701,6 @@ bool TCollectResult::IsFinished() const {
     return Finished;
 }
 
-bool TCollectResult::CanCollect() const {
-    return !IsError() && !IsFinished();
-}
-
 void TCollectResult::Finish() {
     Finished = true;
 }
@@ -743,6 +737,16 @@ TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
 
 TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType) {
     return TQueryCollector(path, callableType).Collect();
+}
+
+TCollectResult MergeAnd(TCollectResult left, TCollectResult right) {
+    return MergeBooleanOperands(std::move(left), std::move(right),
+        TCollectResult::ETokensMode::Or, TCollectResult::ETokensMode::And);
+}
+
+TCollectResult MergeOr(TCollectResult left, TCollectResult right) {
+    return MergeBooleanOperands(std::move(left), std::move(right),
+        TCollectResult::ETokensMode::And, TCollectResult::ETokensMode::Or);
 }
 
 }  // namespace NJsonIndex

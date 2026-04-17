@@ -2,6 +2,7 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
+#include <yql/essentials/types/binary_json/format.h>
 
 #include <variant>
 
@@ -41,8 +42,6 @@ public:
 
     bool IsFinished() const;
 
-    bool CanCollect() const;
-
     void Finish();
 
     ETokensMode GetTokensMode() const;
@@ -75,6 +74,15 @@ TVector<TString> TokenizeBinaryJson(const TStringBuf text);
 // The tokens are used for searching in the JSON index
 TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType);
 
+// Merges two collect results with AND semantics (all tokens must match)
+TCollectResult MergeAnd(TCollectResult left, TCollectResult right);
+
+// Merges two collect results with OR semantics (any token must match)
+TCollectResult MergeOr(TCollectResult left, TCollectResult right);
+
+// Appends NULL, binary JSON entry type byte, and scalar payload (the index token layout)
+void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {},
+    const double* numberPayload = nullptr);
 
 }  // namespace NJsonIndex
 

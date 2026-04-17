@@ -31,7 +31,8 @@ namespace NKikimr {
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , Task(task)
-                , Candidate(HullCtx->ChunkSize, HullCtx->HullCompFreeSpaceThreshold)
+                , FreeSpaceThreshold(GetCurrentFreeSpaceThreshold(*HullCtx))
+                , Candidate(HullCtx->ChunkSize, FreeSpaceThreshold)
             {}
 
             EAction Select() {
@@ -46,9 +47,9 @@ namespace NKikimr {
                     LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
                             NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: FreeSpace: action# %s timeSpent# %s candidate# %s",
+                                "%s: FreeSpace: action# %s timeSpent# %s freeSpaceThreshold# %g candidate# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(),
+                                ActionToStr(action), (finishTime - startTime).ToString().data(), FreeSpaceThreshold,
                                 Candidate.ToString().data()));
                 }
 
@@ -56,6 +57,10 @@ namespace NKikimr {
             }
 
         private:
+            static double GetCurrentFreeSpaceThreshold(const THullCtx& hullCtx) {
+                return static_cast<double>(hullCtx.VCfg->HullCompFreeSpaceThresholdPerMille) / 1000.0;
+            }
+
             ////////////////////////////////////////////////////////////////////////
             // NHullComp::NPriv::TMostAbusingSst
             ////////////////////////////////////////////////////////////////////////
@@ -108,17 +113,18 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            const double FreeSpaceThreshold;
             TMostAbusingSst Candidate;
 
             EAction FreeSpace() {
                 EAction action = ActNothing;
 
-                if (HullCtx->HullCompFreeSpaceThreshold <= 0) {
+                if (FreeSpaceThreshold <= 0) {
                     if (HullCtx->VCtx->ActorSystem) {
                         LOG_DEBUG_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                                 HullCtx->VCtx->VDiskLogPrefix
                                 << " TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is "
-                                << HullCtx->HullCompFreeSpaceThreshold);
+                                << FreeSpaceThreshold);
                     }
                     return ActNothing;
                 }

@@ -131,7 +131,6 @@ namespace NKikimr {
         const bool BarrierValidation;
         const ui32 HullSstSizeInChunksFresh;
         const ui32 HullSstSizeInChunksLevel;
-        const double HullCompFreeSpaceThreshold;
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
@@ -154,7 +153,6 @@ namespace NKikimr {
                 bool barrierValidation,
                 ui32 hullSstSizeInChunksFresh,
                 ui32 hullSstSizeInChunksLevel,
-                double hullCompFreeSpaceThreshold,
                 double hullCompReadBatchEfficiencyThreshold,
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration,

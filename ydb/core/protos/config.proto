@@ -1701,7 +1701,7 @@ message TImmediateControlsConfig {
             MaxValue: 300,
             DefaultValue: 0 }];
         optional uint64 HullCompFreeSpaceThresholdPerMille = 41 [(ControlOptions) = {
-            Description: "Free-space compaction threshold, converted to float and divided by 1'000 before ranking SST garbage/space ratio",
+            Description: "Garbage threshold for FreeSpace compaction strategy. This value is divided by 1000 and converted to double. Zero value entirely disables the FreeSpace compaction strategy.",
             MinValue: 0,
             MaxValue: 100000,
             DefaultValue: 2000 }];

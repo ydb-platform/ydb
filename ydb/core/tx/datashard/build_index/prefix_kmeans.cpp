@@ -73,6 +73,7 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
     ui64 InvalidEmbeddingRows = 0;
+    ui64 InvalidEmbeddingRowsInPrefix = 0;
 
     TBatchRowsUploader Uploader;
 
@@ -237,11 +238,11 @@ public:
 
         Uploader.Finish(record, status);
 
-        if (InvalidEmbeddingRows > 0) {
+        if (InvalidEmbeddingRows + InvalidEmbeddingRowsInPrefix > 0) {
             auto* issue = record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_WARNING);
             issue->set_message(TStringBuilder()
-                << InvalidEmbeddingRows << " row(s) with invalid vector format were skipped during index build");
+                << InvalidEmbeddingRows + InvalidEmbeddingRowsInPrefix << " row(s) with invalid vector format were skipped during index build");
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -400,6 +401,8 @@ protected:
     }
 
     void StartNewPrefix() {
+        InvalidEmbeddingRows += InvalidEmbeddingRowsInPrefix;
+        InvalidEmbeddingRowsInPrefix = 0;
         Parent = Child + K;
         Child = Parent + 1;
         State = EState::SAMPLE;
@@ -525,7 +528,7 @@ protected:
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
-            ++InvalidEmbeddingRows;
+            ++InvalidEmbeddingRowsInPrefix;
             return;
         }
 

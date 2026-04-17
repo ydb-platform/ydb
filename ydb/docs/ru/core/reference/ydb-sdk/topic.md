@@ -146,37 +146,23 @@
 
 - C#
 
-  Для работы с топиками нужно создать экземпляр драйвера {{ ydb-short-name }}.
-
-  Драйвер {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
-
-  Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
-
-  ```c#
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
-
-  await using var driver = await Driver.CreateInitialized(
-      config: config,
-      loggerFactory: loggerFactory
-  );
-  ```
+  Для работы с топиками достаточно передать строку подключения напрямую в конструктор нужного клиента.
 
   В этом примере используется анонимная аутентификация. Подробнее про [соединение с базой данных](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания различных клиентов к топикам:
 
   ```c#
-  var topicClient = new TopicClient(driver);
+  const string connectionString = "Host=localhost;Port=2136;Database=/local";
 
-  await using var writer = new WriterBuilder<string>(driver, topicName)
+  await using var topicClient = new TopicClient(connectionString);
+
+  await using var writer = new WriterBuilder<string>(connectionString, topicName)
   {
       ProducerId = "ProducerId_Example"
   }.Build();
 
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
@@ -448,6 +434,10 @@
                   .build());
 
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -539,6 +529,10 @@
           .join();
   TopicDescription description = topicDescriptionResult.getValue();
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -739,7 +733,20 @@
 
     ```
 
+<<<<<<< HEAD
   {% endlist %}
+=======
+    {% endlist %}
+
+- C#
+
+  ```c#
+  await using var writer = new WriterBuilder<string>(connectionString, topicName)
+  {
+      ProducerId = "ProducerId_Example"
+  }.Build();
+  ```
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 - JavaScript
 
@@ -1049,7 +1056,7 @@
         });
   ```
 
-- С#
+- C#
 
   Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
 
@@ -1149,6 +1156,10 @@
           .build();
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -1201,7 +1212,23 @@
 
 - Java
 
+<<<<<<< HEAD
   Функциональность на данный момент не поддерживается.
+=======
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 {% endlist %}
 
@@ -1561,6 +1588,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -1730,6 +1761,19 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- C#
+
+  ```c#
+  await using var reader = new ReaderBuilder<string>(connectionString)
+  {
+      ConsumerName = "Consumer_Example",
+      SubscribeSettings = { new SubscribeSettings(topicName) }
+  }.Build();
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - JavaScript
 
   ```javascript
@@ -1802,7 +1846,7 @@
 - C#
 
   ```c#
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings =
@@ -2268,6 +2312,38 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- C#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var batchMessages = await reader.ReadBatchAsync(readerCts.Token);
+
+          foreach (var message in batchMessages.Batch)
+          {
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);
+          }
+
+          try
+          {
+              await batchMessages.CommitBatchAsync();
+          }
+          catch (ReaderException e)
+          {
+              logger.LogError(e, "Failed to commit a message");
+          }
+      }
+  }
+  catch (OperationCanceledException)
+  {
+  }
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - JavaScript
 
   ```javascript
@@ -2386,6 +2462,21 @@
   });
   ```
 
+<<<<<<< HEAD
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 ### Чтение без указания Consumer'а {#no-consumer}
@@ -2461,6 +2552,10 @@
       event_handler=CustomEventHandler(),
   )
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -2652,6 +2747,23 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -2754,6 +2866,10 @@
 
   {% endlist %}
 
+- C#
+
+  Специальной обработки не требуется.
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -2852,6 +2968,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -3077,7 +3197,23 @@
 
 - Java
 
+<<<<<<< HEAD
   Функциональность на данный момент не поддерживается.
+=======
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 {% endlist %}
 
@@ -3123,6 +3259,37 @@
 
 - Java
 
+<<<<<<< HEAD
   Функциональность на данный момент не поддерживается.
+=======
+  ```java
+  TopicClient client = ...;
+
+  String sessionID = reader.getSessionId();
+  // У AsyncReader идентификатор сессии можно получить при обработке события SessionStartedEvent
+
+  client.commitOffset(
+      topicPath,
+      CommitOffsetSettings.newBuilder()
+          .setReadSessionId(sessionID)
+          .setPartitionId(partitionID)
+          .setConsumer(consumer)
+          .setOffset(offset)
+          .build()
+  ).join().expectSuccess("Error commit!");
+  ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 {% endlist %}

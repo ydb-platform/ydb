@@ -168,6 +168,23 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, FromEnvCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string(std::env::var("YDB_CONNECTION_STRING")?)?
+      .with_credentials(FromEnvCredentials::new()?)
+      .client()?;
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - PHP
 
   ```php

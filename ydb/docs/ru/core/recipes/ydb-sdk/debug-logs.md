@@ -414,7 +414,7 @@
   var loggerFactory = LoggerFactory.Create(builder =>
       builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
 
-  var builder = new YdbConnectionStringBuilder
+  var ydbBuilder = new YdbConnectionStringBuilder
   {
       Host = "localhost",
       Port = 2136,
@@ -422,7 +422,7 @@
       LoggerFactory = loggerFactory
   };
 
-  await using var dataSource = new YdbDataSource(builder);
+  await using var dataSource = new YdbDataSource(ydbBuilder);
   await using var connection = await dataSource.OpenConnectionAsync();
   ```
 

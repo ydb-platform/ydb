@@ -116,6 +116,8 @@ jobs:
     runs-on: ubuntu-latest
     if: success()
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Finalize release
         uses: ./.github/actions/finalize_release
         with:
@@ -128,7 +130,7 @@ jobs:
 
   cleanup-on-failure:
     name: Cleanup release branch on failure
-    needs: [prepare-release, gather-and-push-to-s3]
+    needs: [prepare-release, gather-and-push-to-s3, finalize-release]
     runs-on: ubuntu-latest
     if: failure() && needs.prepare-release.result == 'success'
     steps:

@@ -242,8 +242,8 @@ void ValidatePredicate(TQueryClient& db, const std::string& table, const std::st
 
     // Cerr << "MAIN: " << Endl << FormatResultSetYson(mainResult.GetResultSet(0)) << Endl;
     // Cerr << "INDEX: " << Endl << FormatResultSetYson(indexResult.GetResultSet(0)) << Endl;
+    // Cerr << predicate << ", main size: " << mainResult.GetResultSet(0).RowsCount() << ", index size: " << indexResult.GetResultSet(0).RowsCount() << Endl;
 
-    Cerr << predicate << ", main size: " << mainResult.GetResultSet(0).RowsCount() << ", index size: " << indexResult.GetResultSet(0).RowsCount() << Endl;
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
@@ -302,12 +302,11 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, const std::v
     auto plan = result.GetStats()->GetPlan();
     UNIT_ASSERT_C(plan, "Plan is empty");
 
-    Cerr << "PREDICATE: " << predicate << Endl;
-
-    auto ast = result.GetStats()->GetAst();
-    UNIT_ASSERT_C(ast, "AST is empty");
-    Cout << "AST: " << Endl << *ast << Endl;
-    Cout << "PLAN: " << Endl << *plan << Endl;
+    // Cerr << "PREDICATE: " << predicate << Endl;
+    // auto ast = result.GetStats()->GetAst();
+    // UNIT_ASSERT_C(ast, "AST is empty");
+    // Cout << "AST: " << Endl << *ast << Endl;
+    // Cout << "PLAN: " << Endl << *plan << Endl;
 
     NJson::TJsonValue planJson;
     auto success = NJson::ReadJsonTree(*plan, &planJson, true);

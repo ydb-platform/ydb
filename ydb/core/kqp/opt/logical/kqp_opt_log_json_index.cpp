@@ -331,8 +331,6 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
 } // namespace
 
 std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& body, const TExprBase& node, TExprContext& ctx) {
-    Cout << NYql::NCommon::ExprToPrettyString(ctx, body.Ref()) << Endl;
-
     auto result = VisitJsonPredicate(body, ctx, node.Pos());
     if (!result) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()

@@ -3,7 +3,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/util/struct_log/create_message.h>
-#include <ydb/core/util/struct_log/streamed_write_log.h>
 #include <ydb/core/util/struct_log/structured_message.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -512,23 +511,4 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:508: Test message");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE EMERG: log_ut.cpp:509: Test message", YDBLOG_CREATE_MESSAGE({"value", 100}));
     }
-}
-
-Y_UNIT_TEST_SUITE(TStreamedWriteLogTest) {
-
-#define TEST_STREAM_BUILD(Stream, ... )  \
-    do { \
-        TStructuredMessageStreamBuilder builder; \
-        builder << Stream; \
-        auto message = builder.GetStructMessage(); \
-        UNIT_ASSERT( CheckInclude(message, YDBLOG_CREATE_MESSAGE(__VA_ARGS__)) ); \
-    } while (false)
-
-    Y_UNIT_TEST(SimpleBuild) {
-        TEST_STREAM_BUILD(" value1# " << 1, {"value1", 1});
-        TEST_STREAM_BUILD(" value1# " << 1 << " value2# " << 2, {"value1", 1});
-        TEST_STREAM_BUILD(" value1# " << 1 << " value2# " << 2, {"value2", 2});
-        TEST_STREAM_BUILD(" value1# " << 1 << " value2# " << 2, {"value1", 1}, {"value2", 2});
-    }
-
 }

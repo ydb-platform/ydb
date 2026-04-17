@@ -469,6 +469,10 @@ enum EServiceKikimr {
     NBS_PARTITION = 3900;
     NBS2_LOAD_TEST = 3901;
 
+    // BlobChecker
+    BLOB_CHECKER_ORCHESTRATOR = 3902;
+    BLOB_CHECKER_WORKER = 3903;
+
     NBS_VOLUME = 4000;
 
     NBS_SS_PROXY = 4100;
@@ -1166,5 +1170,7 @@ message TActivity {
         BS_DDISK = 685;
         BS_PERSISTENT_BUFFER = 686;
         BS_SYNCER_MERGER = 687;
+        BLOB_CHECKER_ORCHESTRATOR_ACTOR = 688;
+        BLOB_CHECKER_WORKER_ACTOR = 689;
     };
 };

@@ -11,8 +11,6 @@
 #include <util/system/event.h>
 #include <util/system/thread.h>
 
-#include <atomic>
-
 namespace NYT {
 
 class TRawTableReader;
@@ -54,6 +52,8 @@ public:
     TMaybe<size_t> GetReadByteCount() const override;
     bool IsEndOfStream() const override;
     bool IsRawReaderExhausted() const override;
+    void Abort() override;
+    bool IsAborted() const override;
 
 private:
     void NextImpl();

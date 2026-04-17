@@ -632,7 +632,7 @@ IFileReaderPtr THttpRawClient::GetJobTrace(
     return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFile(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TFileReaderOptions& options)
@@ -827,7 +827,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteTable(
     return NRawClient::WriteTable(Context_, transactionId, path, format, options);
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TFormat& format,
@@ -854,7 +854,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
     return NRawClient::WriteFile(Context_, transactionId, path, options);
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadTablePartition(
     const TString& cookie,
     const TFormat& format,
     const TTablePartitionReaderOptions& options)
@@ -872,7 +872,7 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadBlobTable(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TKey& key,

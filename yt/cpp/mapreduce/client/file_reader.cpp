@@ -50,6 +50,16 @@ TStreamReaderBase::TStreamReaderBase(
         TStartTransactionOptions()))
 { }
 
+void TStreamReaderBase::Abort()
+{
+    Input_->Abort();
+}
+
+bool TStreamReaderBase::IsAborted() const
+{
+    return Input_->IsAborted();
+}
+
 TStreamReaderBase::~TStreamReaderBase() = default;
 
 TYPath TStreamReaderBase::Snapshot(const TYPath& path)
@@ -98,7 +108,7 @@ TFileReader::TFileReader(
     Path_.Path_ = TStreamReaderBase::Snapshot(Path_.Path_);
 }
 
-std::unique_ptr<IInputStream> TFileReader::Request(const TTransactionId& transactionId, ui64 readBytes)
+std::unique_ptr<IAbortableInputStream> TFileReader::Request(const TTransactionId& transactionId, ui64 readBytes)
 {
     const ui64 currentOffset = StartOffset_ + readBytes;
 
@@ -130,7 +140,7 @@ TBlobTableReader::TBlobTableReader(
     Path_ = TStreamReaderBase::Snapshot(path);
 }
 
-std::unique_ptr<IInputStream> TBlobTableReader::Request(const TTransactionId& transactionId, ui64 readBytes)
+std::unique_ptr<IAbortableInputStream> TBlobTableReader::Request(const TTransactionId& transactionId, ui64 readBytes)
 {
     const i64 currentOffset = StartOffset_ + readBytes;
     const i64 startPartIndex = currentOffset / Options_.PartSize_;

@@ -2,6 +2,7 @@
 
 #include "fwd.h"
 
+#include <yt/cpp/mapreduce/interface/abortable_stream.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 
 #include <util/datetime/base.h>
@@ -28,7 +29,7 @@ public:
     virtual ~IHttpResponse() = default;
 
     virtual int GetStatusCode() = 0;
-    virtual IInputStream* GetResponseStream() = 0;
+    virtual IAbortableInputStream* GetResponseStream() = 0;
     virtual TString GetResponse() = 0;
     virtual TString GetRequestId() const = 0;
 };
@@ -74,6 +75,16 @@ public:
         Underlying_ = Response_->GetResponseStream();
     }
 
+    void Abort() override
+    {
+        Underlying_->Abort();
+    }
+
+    bool IsAborted() const override
+    {
+        return Underlying_->IsAborted();
+    }
+
 private:
     size_t DoRead(void *buf, size_t len) override
     {
@@ -87,7 +98,7 @@ private:
 
 private:
     IHttpResponsePtr Response_;
-    IInputStream* Underlying_;
+    IAbortableInputStream* Underlying_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

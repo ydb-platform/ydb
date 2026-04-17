@@ -2098,6 +2098,7 @@ public:
 
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
+    void SendPendingBuildIndexFinalResponses(const TActorContext& ctx);
 
     TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
 
@@ -3505,14 +3506,6 @@ protected:
         }
         THolder<TEvDataShard::TEvStateChanged> ev(new TEvDataShard::TEvStateChanged(ctx.SelfID, TabletID(), state));
         NTabletPipe::SendData(ctx, StateReportPipe, ev.Release());
-    }
-
-    void ResendPendingBuildIndexFinalResponses(const TActorContext& ctx) {
-        for (auto& [buildId, response] : PendingBuildIndexFinalResponses) {
-            auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-            copy->Record = response->Record;
-            NTabletPipe::SendData(ctx, StateReportPipe, copy.Release());
-        }
     }
 
     TDuration GetStatsReportInterval(const TAppData&) const;

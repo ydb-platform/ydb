@@ -199,14 +199,10 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     // is a runtime value that is no longer valid after reboot.
     if (!Self->BuildIndexScanManager.GetScans().empty()) {
         for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
-            THolder<TEvDataShard::TEvBuildIndexProgressResponse> response;
+            auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
 
             if (scanInfo.ResponseType == IndexBuildScanResponseTypeFinal) {
-                response.Reset(new TEvDataShard::TEvBuildIndexProgressResponse());
                 response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);
-                auto pendingCopy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-                pendingCopy->Record = response->Record;
-                Self->PendingBuildIndexFinalResponses[buildId] = std::move(pendingCopy);
                 LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxInitRestored: resending persisted final build index progress to SchemeShard"
                     << ", buildId# " << buildId
@@ -215,7 +211,6 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
                     << ", responseType# " << scanInfo.ResponseType);
             } else if (scanInfo.ResponseType == TStringBuf("TEvBuildIndexProgressResponse")) {
                 TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
-                response.Reset(new TEvDataShard::TEvBuildIndexProgressResponse());
                 FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
                 response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
                 LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -228,14 +223,9 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
                 Y_ENSURE(false, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
             }
 
-            if (!Self->StateReportPipe) {
-                NTabletPipe::TClientConfig clientConfig;
-                clientConfig.RetryPolicy = Self->SchemeShardPipeRetryPolicy;
-                Self->StateReportPipe = ctx.Register(
-                    NTabletPipe::CreateClient(ctx.SelfID, Self->CurrentSchemeShardId, clientConfig));
-            }
-            NTabletPipe::SendData(ctx, Self->StateReportPipe, response.Release());
+            Self->PendingBuildIndexFinalResponses[buildId] = std::move(response);
         }
+        Self->SendPendingBuildIndexFinalResponses(ctx);
     }
 
     // InReadSets table might have a lot of garbage due to old bug.

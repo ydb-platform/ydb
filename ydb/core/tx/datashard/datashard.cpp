@@ -1625,10 +1625,25 @@ void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperati
     );
 }
 
+void TDataShard::SendPendingBuildIndexFinalResponses(const TActorContext& ctx) {
+    for (auto& [buildId, response] : PendingBuildIndexFinalResponses) {
+        if (!StateReportPipe) {
+            NTabletPipe::TClientConfig clientConfig;
+            clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
+            StateReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+        }
+        auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        copy->Record = response->Record;
+        NTabletPipe::SendData(ctx, StateReportPipe, copy.Release());
+    }
+}
+
 void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
     if (!txId) {
-        for (const auto& op : TransQueue.GetSchemaOperations())
+        for (const auto& op : TransQueue.GetSchemaOperations()) {
             NotifySchemeshard(ctx, op.first);
+        }
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 
@@ -3610,7 +3625,6 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         if (ev->Get()->Status != NKikimrProto::OK) {
             StateReportPipe = TActorId();
             ReportState(ctx, State);
-            ResendPendingBuildIndexFinalResponses(ctx);
         }
         return;
     }
@@ -3679,7 +3693,6 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
     if (ev->Get()->ClientId == StateReportPipe) {
         StateReportPipe = TActorId();
         ReportState(ctx, State);
-        ResendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 

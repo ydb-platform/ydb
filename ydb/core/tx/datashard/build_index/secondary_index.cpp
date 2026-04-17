@@ -569,7 +569,7 @@ public:
         const auto& scans = Self->BuildIndexScanManager.GetScans();
         if (const auto* info = scans.FindPtr(BuildId)) {
             if (info->SeqNoGeneration == seqNoGeneration && info->SeqNoRound == seqNoRound) {
-                ShouldForward = true;
+                ShouldSkip = false;
                 NIceDb::TNiceDb db(txc.DB);
                 TString serialized;
                 Y_ENSURE(record.SerializeToString(&serialized));
@@ -582,7 +582,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) {
-        if (ShouldForward) {
+        if (!ShouldSkip) {
             if (!Self->StateReportPipe) {
                 NTabletPipe::TClientConfig clientConfig;
                 clientConfig.RetryPolicy = Self->SchemeShardPipeRetryPolicy;
@@ -599,7 +599,7 @@ public:
 private:
     TEvDataShard::TEvBuildIndexProgressResponse::TPtr Ev;
     ui64 BuildId = 0;
-    bool ShouldForward = false;
+    bool ShouldSkip = true;
 };
 
 void TDataShard::Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx) {

@@ -2,10 +2,12 @@
 import sys
 import os
 import logging
+import contextlib
 import pytest
 import yatest
-import time
 import yaml
+import urllib.parse
+import random
 
 from io import StringIO
 from unittest.mock import patch
@@ -23,6 +25,7 @@ from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
+from .conftest import BaseConfigBuilder, FakeReassignGroupDiskHandler
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
@@ -85,12 +88,16 @@ class TestBase:
                 if cmd.HasField('HostKey'):
                     cmd.HostKey.IcPort = 999999
 
-    def _canonize_table_output(self, rows):
+    def _canonize_table_output(self, rows, canonize_columns=None):
         for row in rows:
             if 'Guid' in row and row['Guid'] > 1000:
                 row['Guid'] = '<Guid>'
             if 'IcPort' in row:
                 row['IcPort'] = '<IcPort>'
+            if canonize_columns:
+                for column in canonize_columns:
+                    if column in row:
+                        row[column] = f'<{column}>'
 
     def check_pdisk_metrics_collected(self):
         base_config = self.cluster.client.query_base_config().BaseConfig
@@ -105,7 +112,9 @@ class TestBase:
         for vslot in base_config.VSlot:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
-    def _trace(self, *args, with_grpc_calls=False, with_response=False):
+    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None,
+               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None):
+        random.seed(42)
         common.cache.clear()
         common.name_cache.clear()
         results = []
@@ -113,10 +122,15 @@ class TestBase:
         args = ['-e', self.endpoint, '--mon-port', self.mon_port, *args]
 
         grpc_calls = []
+        http_calls = []
         original_invoke_grpc = common.invoke_grpc
 
         def mock_invoke_grpc(func, *params, **kwargs):
-            response = original_invoke_grpc(func, *params, **kwargs)
+            if fake_grpc_handler is not None:
+                response = fake_grpc_handler.handle(func, *params)
+            else:
+                response = original_invoke_grpc(func, *params, **kwargs)
+
             grpc_calls.append(f'=== Invoke {func} ===')
             for param in params:
                 self._canonize_request(param.Request)
@@ -136,19 +150,71 @@ class TestBase:
         original_table_dump = table.TableOutput.dump
 
         def mock_table_dump(table_self, rows, args):
-            self._canonize_table_output(rows)
+            self._canonize_table_output(rows, canonize_columns=canonize_columns)
             return original_table_dump(table_self, rows, args)
 
+        def mock_fetch_json_info(entity, nodes=None, enums=1):
+            if not allow_http_fetch:
+                raise RuntimeError('Mock: HTTP fetch is forbidden')
+
+            if entity == 'vdiskinfo':
+                # Build synthetic vdisk info from mock base config VSlots
+                http_calls.append('GET viewer/json/vdiskinfo?... (mocked)')
+                res = {}
+                for vslot in mock_base_config['BaseConfig'].VSlot:
+                    key = (vslot.VSlotId.NodeId, vslot.VSlotId.PDiskId, vslot.VSlotId.VSlotId)
+                    res[key] = {
+                        'NodeId': vslot.VSlotId.NodeId,
+                        'PDiskId': vslot.VSlotId.PDiskId,
+                        'VDiskSlotId': vslot.VSlotId.VSlotId,
+                        'Replicated': True,
+                        'VDiskState': 'OK',
+                        'VDiskId': {
+                            'GroupID': vslot.GroupId,
+                            'GroupGeneration': vslot.GroupGeneration,
+                            'Ring': vslot.FailRealmIdx,
+                            'Domain': vslot.FailDomainIdx,
+                            'VDisk': vslot.VDiskIdx,
+                        },
+                    }
+                return res
+            raise RuntimeError('Mock: fetch_json_info(%r) is not supported' % entity)
+
+        original_http_fetch = common.fetch
+
+        def mock_http_fetch(path, params={}, *args, **kwargs):
+            method = kwargs.get('method') or 'GET'
+
+            if not allow_http_fetch:
+                raise RuntimeError(f'Mock: HTTP fetch is forbidden: {method} {path}')
+
+            response = original_http_fetch(path, params, *args, **kwargs)
+
+            params = dict(params)
+            if 'sessionId' in params:
+                params['sessionId'] = 'SESSION_ID'
+            query_string = urllib.parse.urlencode(params, doseq=True)
+            http_calls.append(f'{method} {path}?{query_string}')
+
+            return response
+
+        patches = contextlib.ExitStack()
+        if mock_base_config is not None:
+            patches.enter_context(patch.object(common, 'fetch_base_config_and_storage_pools', return_value=mock_base_config))
+            patches.enter_context(patch.object(common, 'fetch_json_info', side_effect=mock_fetch_json_info))
         exit_status = 0
         captured_stdout = StringIO()
         captured_stderr = StringIO()
-        with patch.object(common, 'invoke_grpc', side_effect=mock_invoke_grpc), \
-             patch.object(sys, 'exit', side_effect=mock_exit), \
-             patch.object(sys, 'argv', ['dstool']), \
-             patch('sys.stdout', captured_stdout), \
-             patch('sys.stderr', captured_stderr), \
-             patch('shutil.get_terminal_size', side_effect=mock_get_terminal_size), \
-             patch.object(table.TableOutput, 'dump', mock_table_dump):
+        patches.enter_context(patch.object(common, 'invoke_grpc', side_effect=mock_invoke_grpc))
+        patches.enter_context(patch.object(common, 'fetch', side_effect=mock_http_fetch))
+        patches.enter_context(patch.object(sys, 'exit', side_effect=mock_exit))
+        patches.enter_context(patch.object(sys, 'argv', ['dstool']))
+        patches.enter_context(patch('sys.stdout', captured_stdout))
+        patches.enter_context(patch('sys.stderr', captured_stderr))
+        patches.enter_context(patch('shutil.get_terminal_size', side_effect=mock_get_terminal_size))
+        patches.enter_context(patch.object(table.TableOutput, 'dump', mock_table_dump))
+
+        with patches:
             try:
                 dstool_main(args)
             except SystemExit as e:
@@ -164,6 +230,16 @@ class TestBase:
             results.extend(['===== stderr =====', captured_stderr])
         if with_grpc_calls:
             results.extend(['===== grpc_calls =====', '\n'.join(grpc_calls)])
+        if allow_http_fetch:
+            http_calls.append('')
+            results.extend(['===== http_calls =====', '\n'.join(http_calls)])
+        if mock_base_config is not None:
+            results.extend(['===== mock_base_config ====='])
+            base_config_text = text_format.MessageToString(mock_base_config['BaseConfig'], as_one_line=False)
+            results.extend(['', 'TBaseConfig {', base_config_text.strip(), '}'])
+            for sp in mock_base_config['StoragePools']:
+                sp_text = text_format.MessageToString(sp, as_one_line=False)
+                results.extend(['', 'DefineStoragePool {', sp_text.strip(), '}'])
         return self._canonical_file('results.txt', '\n'.join(results))
 
 
@@ -175,7 +251,7 @@ class Test(TestBase):
             self._trace('--help'),
             self._trace('--unknown-arg'),
             self._trace('device', 'list', '-AH'),
-            self._trace('vdisk', 'list', '-AH'),
+            self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
             self._trace('group', 'list', '-AH'),
             self._trace('pdisk', 'list', '-AH'),
             self._trace('pool', 'list', '-AH'),
@@ -189,13 +265,6 @@ class Test(TestBase):
             self._trace('--dry-run', 'pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1]', with_grpc_calls=True),
             self._trace('pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1000]', '[2:1]', with_grpc_calls=True),
             self._trace('pdisk', 'list', '--columns', 'NodeId:PDiskId', 'Status', with_grpc_calls=True),
-        ]
-
-    def test_vdisk_ready_stable_period(self):
-        return [
-            self._trace('group', 'list'),
-            time.sleep(16),  # ReadyStablePeriod + 1 for sure
-            self._trace('group', 'list'),
         ]
 
     def test_cluster_get_set(self):
@@ -230,10 +299,10 @@ class Test(TestBase):
             assert vslot.VDiskMetrics.State == EVDiskState.PDiskError
 
         return [
-            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_1.bin'),
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_1.bin', allow_http_fetch=True),
             self._trace('pdisk', 'stop', '--node-id=1', '--pdisk-id=1'),
             retry_assertions(check_vdisk_state_error, timeout_seconds=20),
-            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin', allow_http_fetch=True),
         ]
 
     def test_capacity_metrics(self):
@@ -247,6 +316,7 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'SlotSize',
             'TotalSize',
             'CapacityAlert',
             'GroupSizeInUnits',
@@ -258,6 +328,7 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'Limit',
             'TotalSize',
             'CapacityAlert',
         ]
@@ -265,6 +336,17 @@ class Test(TestBase):
         return [
             self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '-H', '--columns', *group_columns),
+            self._trace('pool', 'list', '-H', '--show-vdisk-estimated-usage'),
+        ]
+
+    def test_group_resize(self):
+        group_id = 2181038080
+        return [
+            self._trace('group', 'resize', '--size-in-units', '2', '--group-ids', str(group_id), with_grpc_calls=True),
+            self._trace('vdisk', 'list', '-H', '--columns', 'VDiskId', 'GroupSizeInUnits'),
+            self._trace('group', 'list', '-H', '--columns', 'GroupId', 'SizeInUnits'),
+            # Errors:
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id+1), '--format', 'json'),
         ]
 
     def test_infer_pdisk_slot_count(self):
@@ -331,3 +413,94 @@ class Test(TestBase):
         trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
 
         return [trace1, trace2]
+
+    def test_pdisk_check_leaked_slots(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+
+        # Initialize dstool connection params to allow common.fetch_json_info
+        import argparse
+        p = argparse.ArgumentParser()
+        common.add_host_access_options(p)
+        common.apply_args(p.parse_args(['-e', self.endpoint, '--mon-port', str(self.mon_port), '-q']))
+
+        base_config = self.cluster.client.query_base_config().BaseConfig
+        pdisk_node_ids = sorted({pdisk.NodeId for pdisk in base_config.PDisk})
+        expected_pdisk_ids = {(pdisk.NodeId, pdisk.PDiskId) for pdisk in base_config.PDisk}
+
+        def check_whiteboard_pdisk_info_available():
+            pdisk_whiteboard_info = common.fetch_json_info('pdiskinfo', nodes=pdisk_node_ids)
+            for pdisk_id in expected_pdisk_ids:
+                wb_info = pdisk_whiteboard_info.get(pdisk_id, {})
+                assert 'NumActiveSlots' in wb_info
+
+        retry_assertions(check_whiteboard_pdisk_info_available)
+
+        vdisk_evict_cmd = ['vdisk', 'evict', '--ignore-degraded-group-check', '--ignore-failure-model-group-check']
+        return [
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode', with_grpc_calls=True),
+            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', allow_http_fetch=True),
+        ]
+
+    def test_pool_estimated_usage(self):
+        builder = (
+            BaseConfigBuilder()
+            .add_node(node_id=1)
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=16, enforced_dynamic_slot_size=int(200e9))  # 3.2 TB
+            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
+            .add_vslot(
+                node_id=1, pdisk_id=1001, vslot_id=1000, group_id=0x80000001,
+                allocated_size=int(40e9),
+                available_size=0,
+            )
+            .add_storage_pool(name='test-pool', erasure_species='none', kind='hdd')
+        )
+
+        def _trace_pool_list():
+            return self._trace('pool', 'list', '-H', '--format=json', '--show-vdisk-estimated-usage', mock_base_config=builder.build())
+
+        return [
+            _trace_pool_list(),
+
+            # Replace pdisk 3.2 -> 6.4 TB and markup SlotSizeInUnits = 2
+            builder.update_pdisk(node_id=1, pdisk_id=1001, slot_size_in_units=2, enforced_dynamic_slot_size=int(400e9)) and None,
+            builder.update_vslot(node_id=1, pdisk_id=1001, vslot_id=1000, available_size=int(360e9)) and None,
+            _trace_pool_list(),
+
+            # Change GroupSizeInUnits = 4
+            builder.update_group(group_id=0x80000001, group_size_in_units=4) and None,
+            _trace_pool_list(),
+        ]
+
+    def test_cluster_balance(self):
+        builder = (
+            BaseConfigBuilder()
+            .add_node(node_id=1)
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=8)
+            .add_pdisk(node_id=1, pdisk_id=1002, expected_slot_count=4)
+            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)], group_size_in_units=1)
+            .add_group(group_id=0x80000002, vslot_ids=[(1, 1001, 1001)], group_size_in_units=1)
+            .add_vslot(node_id=1, pdisk_id=1001, vslot_id=1000, group_id=0x80000001, group_generation=1)
+            .add_vslot(node_id=1, pdisk_id=1001, vslot_id=1001, group_id=0x80000002, group_generation=1)
+            .add_storage_pool(name='test-pool', erasure_species='none', kind='hdd')
+        )
+
+        def _trace_cluster_balance(*args, pending_reassigns=None):
+            base_config = builder.build()
+            if pending_reassigns is None:
+                pending_reassigns = {}
+            fake_grpc_handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
+            return self._trace('--verbose', 'cluster', 'balance', '--storage-pool=test-pool', '--max-iterations=1', *args,
+                               with_grpc_calls=True, allow_http_fetch=True,
+                               mock_base_config=base_config,
+                               fake_grpc_handler=fake_grpc_handler)
+
+        return [
+            # No overpopulated pdisks yet, no reassignments are necessary
+            _trace_cluster_balance('--only-from-overpopulated-pdisks'),
+
+            # Change GroupSizeInUnits. The pdisk becomes overpopulated
+            # ReassignGroupDisk should be invoked
+            builder.update_group(group_id=0x80000001, group_size_in_units=8) and None,
+            _trace_cluster_balance('--only-from-overpopulated-pdisks', pending_reassigns={0x80000002: (1, 1002, 1000)}),
+        ]

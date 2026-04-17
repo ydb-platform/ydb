@@ -1,5 +1,21 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.30.0 {#2-30-0}
+
+Released on April 7, 2026. To update to version **2.30.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the `{{ ydb-cli }} config completion` command to generate shell completion scripts for bash and zsh.
+* Added the `{{ ydb-cli }} export nfs` and `{{ ydb-cli }} import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
+* Added the `--compact` option to the `{{ ydb-cli }} workload tpcc import` [command](./reference/ydb-cli/workload-tpcc.md).
+* Added the `--tx-mode` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), allowing to set the transaction mode (e.g., `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Added support for the new [compaction](./concepts/glossary.md#compaction) operation in the `{{ ydb-cli }} operation` [subcommands](./reference/ydb-cli/operation-list.md).
+
+### Improvements
+
+* When a [profile](./reference/ydb-cli/profile/index.md) is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
+
 ## Version 2.29.0 {#2-29-0}
 
 Released on February 11, 2026. To update to version **2.29.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -406,7 +422,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
 
-* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/import.md#pg-convert).
+* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](./postgresql/import.md#pg-convert).
 
 ## Version 2.7.0 {#2-7-0}
 
@@ -414,7 +430,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 ### Features
 
-* Added the [ydb tools pg-convert](postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+* Added the [ydb tools pg-convert](./postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 * Added the `{{ ydb-cli }} workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 * Added new `{{ ydb-cli }} scheme permissions list` command to list permissions.
 * In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.

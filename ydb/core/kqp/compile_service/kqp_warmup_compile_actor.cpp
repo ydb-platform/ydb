@@ -18,6 +18,7 @@
 
 #include <util/generic/hash.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 
@@ -239,17 +240,14 @@ void FillYdbParametersFromMetadata(
 
         const auto& parameters = json["parameters"].GetMap();
 
-        for (const auto& [paramName, encodedType] : parameters) {
-            if (!encodedType.IsString()) {
+        for (const auto& [paramName, typeJson] : parameters) {
+            if (!typeJson.IsMap()) {
                 continue;
             }
 
             try {
-                TString decodedProto = Base64Decode(encodedType.GetString());
                 Ydb::Type typeProto;
-                if (!typeProto.ParseFromString(decodedProto)) {
-                    continue;
-                }
+                NProtobufJson::Json2Proto(typeJson, typeProto);
 
                 Ydb::TypedValue typedValue;
                 typedValue.mutable_type()->CopyFrom(typeProto);

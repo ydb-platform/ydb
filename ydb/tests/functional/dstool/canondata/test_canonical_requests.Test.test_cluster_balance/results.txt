@@ -1,0 +1,120 @@
+dstool -e <endpoint> --mon-port <mon_port> --verbose cluster balance --storage-pool=test-pool --max-iterations=1 --only-from-overpopulated-pdisks
+Exit Status: 0
+===== stdout =====
+
+Start balancing iteration 1
+Number of used slots -> number pdisks: 0=>1 2=>1
+
+===== stderr =====
+success
+
+===== grpc_calls =====
+
+===== http_calls =====
+GET viewer/json/vdiskinfo?... (mocked)
+
+===== mock_base_config =====
+
+TBaseConfig {
+PDisk {
+  NodeId: 1
+  PDiskId: 1001
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 1
+  PDiskId: 1002
+  PDiskConfig {
+    ExpectedSlotCount: 4
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 4
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 4
+    SlotSizeInUnits: 0
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1001
+  }
+  GroupId: 2147483650
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  BoxId: 1
+  StoragePoolId: 1
+  GroupSizeInUnits: 1
+}
+Group {
+  GroupId: 2147483650
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1001
+  }
+  BoxId: 1
+  StoragePoolId: 1
+  GroupSizeInUnits: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+}
+
+DefineStoragePool {
+BoxId: 1
+StoragePoolId: 1
+Name: "test-pool"
+ErasureSpecies: "none"
+Kind: "hdd"
+}

@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -15,11 +16,9 @@ public:
     }
 
 private:
-    ui32 NGrammSize = 3;
-    ui32 FilterSizeBytes = 512;
-    ui32 HashesCount = 2;
-    ui32 RecordsCount = 10000;
-    bool CaseSensitive = true;
+    ui32 NGrammSize = NDefaults::NGrammSize;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+    bool CaseSensitive = NDefaults::CaseSensitive;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 
 protected:
@@ -29,6 +28,9 @@ protected:
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) override;
+
+private:
+    TConclusionStatus ValidateValues() const;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const override;
 
 public:

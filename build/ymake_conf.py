@@ -1306,7 +1306,7 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-mthumb')
 
         if target.is_arm_aml403:
-            self.c_flags_platform.append('-march=armv8-a -marm')
+            self.c_flags_platform.append('-march=armv8-a -mthumb')
             self.setup_amlogic_rtos_sdk()
 
         if target.is_arm64_aml403:
@@ -1413,12 +1413,18 @@ class GnuToolchain(Toolchain):
 
             return get_output('xcrun', '-sdk', sdk, '--show-sdk-path')
 
+        sdk_root = None
         if target.is_iossim:
-            self.env['SDKROOT'] = get_sdk_root('iphonesimulator')
+            sdk_root = get_sdk_root('iphonesimulator')
         elif target.is_ios:
-            self.env['SDKROOT'] = get_sdk_root('iphoneos')
+            sdk_root = get_sdk_root('iphoneos')
         elif target.is_macos:
-            self.env['SDKROOT'] = get_sdk_root('macosx')
+            sdk_root = get_sdk_root('macosx')
+
+        if sdk_root:
+            self.env['SDKROOT'] = sdk_root
+            self.c_flags_platform.append('--sysroot={}'.format(sdk_root))
+            self.swift_flags_platform += ['-sdk', sdk_root]
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)

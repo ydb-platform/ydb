@@ -912,7 +912,7 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
     auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
         return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
     },
-                                    /*typeParser=*/{})
+                                    /*typeParser=*/{}, /*typeWriter=*/{})
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);

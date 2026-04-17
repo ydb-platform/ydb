@@ -93,6 +93,9 @@ struct TKqpProviderContext : public TBaseProviderContext {
     double CONSTS_SHUFFLE_RIGHT_SIDE_MULT = 0.5;
     double CONSTS_SHUFFLE_RIGHT_SIDE_POW = 1.0;
 
+    double CONSTS_LEFT_SIDE_BYTESIZE_FACTOR = 1.0;
+    double CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR = 1.0;
+
     double CONSTS_INTERACTION_MULT = 0.5;
     double CONSTS_INTERACTION_POW = 0.5;
 

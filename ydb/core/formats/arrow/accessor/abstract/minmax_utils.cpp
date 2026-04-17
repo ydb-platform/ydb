@@ -105,13 +105,6 @@ TString TMinMax::ToBinaryString() const {
     return res;
 }
 
-NJson::TJsonValue TMinMax::ToJson() const {
-    NJson::TJsonValue json;
-    json.InsertValue("min", Min()->ToString());
-    json.InsertValue("max", Max()->ToString());
-    return json;
-}
-
 bool TMinMax::IsNull() const {
     AFL_VERIFY(Min()->is_valid == Max()->is_valid)("details", "inconsistent state");
     return !Min()->is_valid;

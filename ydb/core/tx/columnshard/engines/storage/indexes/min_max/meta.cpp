@@ -109,8 +109,62 @@ bool TIndexMeta::IsAvailableType(const NScheme::TTypeInfo type) {
 }
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
-    auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
-    return NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType).ToJson();
+    const auto& colFeatures = indexInfo.GetColumnFeaturesVerified(GetColumnId());
+    const auto minmax = NArrow::NAccessor::TMinMax::FromBinaryString(data, colFeatures.GetArrowField()->type());
+    const auto typeId = colFeatures.GetTypeInfo().GetTypeId();
+
+    NJson::TJsonValue json;
+
+    if (minmax.IsNull()) {
+        json.InsertValue("min", NJson::JSON_NULL);
+        json.InsertValue("max", NJson::JSON_NULL);
+        return json;
+    }
+
+    switch (typeId) {
+        case NScheme::NTypeIds::Date:
+            json.InsertValue("min", TInstant::Days(static_cast<const arrow::UInt16Scalar*>(minmax.Min().get())->value).ToString().substr(0, 10));
+            json.InsertValue("max", TInstant::Days(static_cast<const arrow::UInt16Scalar*>(minmax.Max().get())->value).ToString().substr(0, 10));
+            break;
+        case NScheme::NTypeIds::Date32: {
+            const i32 minDays = static_cast<const arrow::Int32Scalar*>(minmax.Min().get())->value;
+            const i32 maxDays = static_cast<const arrow::Int32Scalar*>(minmax.Max().get())->value;
+            json.InsertValue("min", minDays >= 0 ? TInstant::Days(minDays).ToString().substr(0, 10) : TString(minmax.Min()->ToString()));
+            json.InsertValue("max", maxDays >= 0 ? TInstant::Days(maxDays).ToString().substr(0, 10) : TString(minmax.Max()->ToString()));
+            break;
+        }
+        case NScheme::NTypeIds::Datetime:
+            json.InsertValue("min", TInstant::Seconds(static_cast<const arrow::UInt32Scalar*>(minmax.Min().get())->value).ToString());
+            json.InsertValue("max", TInstant::Seconds(static_cast<const arrow::UInt32Scalar*>(minmax.Max().get())->value).ToString());
+            break;
+        case NScheme::NTypeIds::Datetime64: {
+            const i64 minSecs = static_cast<const arrow::Int64Scalar*>(minmax.Min().get())->value;
+            const i64 maxSecs = static_cast<const arrow::Int64Scalar*>(minmax.Max().get())->value;
+            json.InsertValue("min", minSecs >= 0 ? TInstant::Seconds(minSecs).ToString() : TString(minmax.Min()->ToString()));
+            json.InsertValue("max", maxSecs >= 0 ? TInstant::Seconds(maxSecs).ToString() : TString(minmax.Max()->ToString()));
+            break;
+        }
+        case NScheme::NTypeIds::Timestamp: {
+            const i64 minMicros = static_cast<const arrow::TimestampScalar*>(minmax.Min().get())->value;
+            const i64 maxMicros = static_cast<const arrow::TimestampScalar*>(minmax.Max().get())->value;
+            json.InsertValue("min", minMicros >= 0 ? TInstant::MicroSeconds(minMicros).ToString() : TString(minmax.Min()->ToString()));
+            json.InsertValue("max", maxMicros >= 0 ? TInstant::MicroSeconds(maxMicros).ToString() : TString(minmax.Max()->ToString()));
+            break;
+        }
+        case NScheme::NTypeIds::Timestamp64: {
+            const i64 minMicros = static_cast<const arrow::Int64Scalar*>(minmax.Min().get())->value;
+            const i64 maxMicros = static_cast<const arrow::Int64Scalar*>(minmax.Max().get())->value;
+            json.InsertValue("min", minMicros >= 0 ? TInstant::MicroSeconds(minMicros).ToString() : TString(minmax.Min()->ToString()));
+            json.InsertValue("max", maxMicros >= 0 ? TInstant::MicroSeconds(maxMicros).ToString() : TString(minmax.Max()->ToString()));
+            break;
+        }
+        default:
+            json.InsertValue("min", TString(minmax.Min()->ToString()));
+            json.InsertValue("max", TString(minmax.Max()->ToString()));
+            break;
+    }
+
+    return json;
 }
 
 void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {

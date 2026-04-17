@@ -1926,8 +1926,6 @@ void TestResourceGuardsAccumulation() {
              << ", threshold=" << threshold
              << ", BUG_DETECTED=" << (maxGuardCount > threshold ? "YES" : "NO") << Endl;
 
-        // This assertion detects the bug: with accumulation, maxGuardCount >> threshold.
-        // EXPECTED TO FAIL until the fix is applied.
         UNIT_ASSERT_C(maxGuardCount <= threshold,
             "ResourceGuards are accumulating across streaming pages! "
             "maxGuardCount=" << maxGuardCount << " > threshold=" << threshold <<

@@ -18,7 +18,7 @@ struct TLogRecord {
     size_t Len;
     ELogPriority Priority;
     TMetaFlags MetaFlags;
-    const TMaybe<NKikimr::NStructLog::TStructuredMessage> StructMessage;
+    TMaybe<NKikimr::NStructLog::TStructuredMessage> StructMessage;
 
     inline TLogRecord(ELogPriority priority, const char* data, size_t len, TMetaFlags metaFlags = {}) noexcept
         : Data(data)

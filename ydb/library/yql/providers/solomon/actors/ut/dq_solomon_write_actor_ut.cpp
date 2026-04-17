@@ -24,7 +24,7 @@ void TestWriteBigBatch(bool isCloud) {
     TFakeCASetup setup;
     InitAsyncOutput(setup, BuildSolomonShardSettings(isCloud));
 
-    auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+    auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
     setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
         TUnboxedValueBatch res;
         for (int i = 0; i < batchSize; i++) {
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         TFakeCASetup setup;
         InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+        auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
             res.emplace_back(CreateStruct(holderFactory, {
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         TFakeCASetup setup;
         InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+        auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
 
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         CleanupSolomon(location);
         InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto stateSaved = setup.AsyncOutputPromises.StateSaved.GetFuture();
+        auto stateSaved = setup.AsyncOutputPromises->StateSaved.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
 
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         CleanupSolomon(location);
         InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto stateSaved = setup.AsyncOutputPromises.StateSaved.GetFuture();
+        auto stateSaved = setup.AsyncOutputPromises->StateSaved.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
             res.emplace_back(CreateStruct(holderFactory, {
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         }, CreateCheckpoint(1));
         UNIT_ASSERT(stateSaved.Wait(WaitTimeout));
 
-        auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+        auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
             res.emplace_back(CreateStruct(holderFactory, {

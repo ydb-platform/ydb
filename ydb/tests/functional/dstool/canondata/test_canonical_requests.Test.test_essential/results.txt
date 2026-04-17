@@ -40,6 +40,7 @@ dstool
 │  │  └─ usage-by-tablets               Estimate groups usage by tablets
 │  ├─ state                             Change or query group state
 │  ├─ take-snapshot                     Take snapshot of groups metadata
+│  ├─ resize                            Change group size in units
 │  ├─ list                              List groups
 │  └─ virtual
 │     ├─ create                         Create virtual group backed by BlobDepot
@@ -55,8 +56,33 @@ dstool
 ├─ node
 │  └─ list                              List nodes
 ├─ cluster
-│  ├─ balance                           Move vdisks out from overpopulated 
-│  │                                    pdisks.
+│  ├─ balance                           Balance VDisks across PDisks in a 
+│  │                                    storage pool by invoking 
+│  │                                    ReassignGroupDisk BSC command.
+│  │                                    It can operate in several modes:
+│  │                                    
+│  │                                    1. Overpopulated PDisk mode (--only-
+│  │                                    from-overpopulated-pdisks):
+│  │                                       Moves VDisks from PDisks that exceed 
+│  │                                    their expected slot count to less 
+│  │                                    populated PDisks.
+│  │                                    
+│  │                                    2. Slot-based balancing (--sort-
+│  │                                    by=slots, default):
+│  │                                       Redistributes VDisks to equalize slot
+│  │                                     usage across PDisks.
+│  │                                    
+│  │                                    3. Space-based balancing (--sort-
+│  │                                    by=space_ratio):
+│  │                                       Redistributes VDisks based on 
+│  │                                    available free space ratios.
+│  │                                    
+│  │                                    Use --storage-pool to limit balancing to
+│  │                                     a specific storage pool, or --group-ids
+│  │                                     to target
+│  │                                    specific groups. The tool runs 
+│  │                                    iteratively until balance is achieved or
+│  │                                     no more moves are possible.
 │  ├─ get                               Get cluster wide settings
 │  ├─ set                               Set cluster wide settings
 │  ├─ workload

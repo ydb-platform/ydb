@@ -28,6 +28,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
+    library/cpp/json
 )
 
 YQL_LAST_ABI_VERSION()

@@ -452,8 +452,12 @@ def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
 
 OPERATOR_ENDPOINTS_LIST = [
     '/actors/',
+    '/actors/configs_dispatcher',
+    '/actors/console_configs_provider',
+    '/actors/dnameserver',
     '/actors/dsproxynode',
     '/actors/feature_flags',
+    '/actors/icb',
     '/actors/kqp_node',
     '/actors/kqp_proxy',
     '/actors/kqp_resource_manager',
@@ -461,17 +465,23 @@ OPERATOR_ENDPOINTS_LIST = [
     '/actors/logger',
     '/actors/memory_tracker',
     '/actors/netclassifier',
+    '/actors/nodewarden',
     '/actors/pql2',
     '/actors/quoter_proxy',
+    '/actors/rb',
     '/actors/statservice',
+    '/actors/tenant_pool',
+    '/cms',
     '/grpc',
     '/healthcheck',
+    '/internal',
     '/jquery.tablesorter.css',
     '/jquery.tablesorter.js',
     '/memory/fragmentation',
     '/memory/heap',
     '/memory/peakheap',
     '/memory/statistics',
+    '/nodetabmon',
     '/static/css/bootstrap.min.css',
     '/static/fonts/glyphicons-halflings-regular.eot',
     '/static/fonts/glyphicons-halflings-regular.svg',
@@ -483,20 +493,19 @@ OPERATOR_ENDPOINTS_LIST = [
     '/tablets',
     '/trace',
     '/ver',
+    '/viewer/cluster',
+    '/viewer/config',
     '/viewer/healthcheck',
+    '/viewer/v2/json/config',
     '/viewer/v2/json/nodelist',
     '/viewer/v2/json/storage',
-    '/actors/configs_dispatcher',
-    '/actors/console_configs_provider',
-    '/actors/dnameserver',
-    '/actors/icb',
-    '/actors/nodewarden',
-    '/actors/rb',
-    '/actors/tenant_pool',
-    '/cms',
-    '/internal',
-    '/nodetabmon',
-    '/viewer/v2/json/config',
+]
+
+
+OPERATOR_CONTEXT_DEPENDENT_GET_PATHS = [
+    '/pdisk/info',
+    '/vdisk/vdiskstat',
+    '/vdisk/blobindexstat',
 ]
 
 
@@ -512,11 +521,10 @@ OPERATOR_UNRESOLVED_ENDPOINTS_LIST = [
     '/fq_diag/quotas',
 ]
 
-# pdisk_id=0: nonempty split before parts[0].
-# FIX https://nda.ya.ru/t/JmqU0jon7YLVMx
-OPERATOR_POST_BS_CONTROLLER_POST_PATHS = [
-    '/pdisk/restart?pdisk_id=0',
-    '/pdisk/status?pdisk_id=0',
+
+OPERATOR_POST_PATHS = [
+    '/pdisk/restart',
+    '/pdisk/status',
     '/vdisk/evict',
 ]
 
@@ -535,7 +543,7 @@ def test_operator_post_bs_controller_endpoints_with_enforce_user_token(
         'monitoring@builtin': 400,
         'root@builtin': 400,
     }
-    for endpoint_path in OPERATOR_POST_BS_CONTROLLER_POST_PATHS:
+    for endpoint_path in OPERATOR_POST_PATHS:
         for token, expected_status in expected_by_token.items():
             _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body={})
 
@@ -555,6 +563,23 @@ def test_operator_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforc
     _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
 
 
+def test_operator_context_dependent_get_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    }
+    expected_results = {
+        endpoint_path: expected_by_token for endpoint_path in OPERATOR_CONTEXT_DEPENDENT_GET_PATHS
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
 def test_operator_unresolved_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
     expected_results = {
         endpoint_path: {
@@ -570,12 +595,54 @@ def test_operator_unresolved_endpoints_list_with_enforce_user_token(ydb_cluster_
     _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
 
 
-# FIX https://nda.ya.ru/t/9iAsmOAG7YLakE
-ADMIN_POST_BS_CONTROLLER_POST_PATHS = [
-    '/pdisk/restart?pdisk_id=0&force=true',
-    '/pdisk/status?pdisk_id=0&force=true',
+ADMIN_BASE_GET_PATHS = [
+    '/viewer/bscontrollerinfo',
+]
+
+
+ADMIN_CONTEXT_DEPENDENT_GET_PATHS = [
+    '/viewer/topic_data',
+    '/vdisk/getblob',
+]
+
+
+ADMIN_POST_PATHS = [
+    '/pdisk/restart?force=true',
+    '/pdisk/status?force=true',
     '/vdisk/evict?force=true',
 ]
+
+
+def test_admin_get_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 200,
+    }
+    expected_results = {
+        endpoint_path: expected_by_token for endpoint_path in ADMIN_BASE_GET_PATHS
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+def test_admin_context_dependent_get_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 400,
+    }
+    expected_results = {
+        endpoint_path: expected_by_token for endpoint_path in ADMIN_CONTEXT_DEPENDENT_GET_PATHS
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
 
 
 def test_admin_post_bs_controller_endpoints_with_enforce_user_token(
@@ -592,6 +659,6 @@ def test_admin_post_bs_controller_endpoints_with_enforce_user_token(
         'monitoring@builtin': 403,
         'root@builtin': 400,
     }
-    for endpoint_path in ADMIN_POST_BS_CONTROLLER_POST_PATHS:
+    for endpoint_path in ADMIN_POST_PATHS:
         for token, expected_status in expected_by_token.items():
             _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body={})

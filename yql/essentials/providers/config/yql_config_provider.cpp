@@ -1140,19 +1140,19 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
-            Types_.EnableLineage = ("EnableLineage" == name);
+            Types_.LineageSettings.EnableLineage = ("EnableLineage" == name);
         } else if (name == "EnableStandaloneLineage" || name == "DisableStandaloneLineage") {
             if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
-            Types_.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+            Types_.LineageSettings.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
         } else if (name == "LineageOutputLimit") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                 return false;
             }
-            if (!TryFromString(args[0], Types_.LineageOutputLimit)) {
+            if (!TryFromString(args[0], Types_.LineageSettings.LineageOutputLimit)) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                 return false;
             }
@@ -1161,7 +1161,25 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                 return false;
             }
-            if (!TryFromString(args[0], Types_.LineageMemoryLimit)) {
+            if (!TryFromString(args[0], Types_.LineageSettings.LineageMemoryLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+        } else if (name == "LineageVersion") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageSettings.LineageVersion)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+        } else if (name == "LineageStandaloneVersion") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageSettings.LineageStandaloneVersion)) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                 return false;
             }

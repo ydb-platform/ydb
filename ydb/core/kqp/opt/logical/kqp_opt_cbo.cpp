@@ -448,7 +448,6 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
             case EJoinKind::LeftJoin:
                 selectivity = leftStats.Selectivity;
                 newCard = leftStats.Nrows * selectivity;
-                newByteSize = ComputeOneSideByteSize(newCard, leftStats);
                 break;
             default: { // when left side is FK
                 TMaybe<double> correction = ComputeSelectivityCorrection(rightStats, leftStats, rightJoinKeys, leftJoinKeys);
@@ -458,9 +457,10 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
                     selectivity = leftStats.Selectivity * rightStats.Selectivity;
                 }
                 newCard = leftStats.Nrows * selectivity;
-                newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
         }
+
+        newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
 
         leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable) {
@@ -473,7 +473,6 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
             case EJoinKind::RightJoin:
                 selectivity = rightStats.Selectivity;
                 newCard = rightStats.Nrows * selectivity;
-                newByteSize = ComputeOneSideByteSize(newCard, rightStats);
                 break;
             default: { // when right side is FK
                 TMaybe<double> correction = ComputeSelectivityCorrection(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
@@ -483,9 +482,10 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
                     selectivity = leftStats.Selectivity * rightStats.Selectivity;
                 }
                 newCard = rightStats.Nrows * selectivity;
-                newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
         }
+
+        newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
 
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable) {

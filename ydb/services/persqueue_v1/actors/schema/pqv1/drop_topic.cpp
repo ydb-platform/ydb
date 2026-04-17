@@ -25,13 +25,10 @@ public:
     void DoAction() {
         Become(&TDropTopicActor::StateWork);
 
-        Ydb::Topic::DropTopicRequest request;
-        request.set_path(GetProtoRequest()->path());
-
         Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
             .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
             .PeerName = Request_->GetPeerName(),
-            .Request = request,
+            .Path = GetProtoRequest()->path(),
             .UserToken = GetUserToken()
         }));
     }

@@ -101,7 +101,7 @@ struct TEvDropTopicResponse : public NActors::TEventLocal<TEvDropTopicResponse, 
 struct TDropTopicSettings {
     TString Database;
     TString PeerName;
-    Ydb::Topic::DropTopicRequest Request;
+    TString Path;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IfExists = false;
     ui64 Cookie = 0;

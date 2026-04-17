@@ -1,4 +1,4 @@
-#include "topic_alterer.h"
+#include "alter_topic_operation.h"
 #include "schema_operation.h"
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -7,33 +7,33 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-TTopicAlterer::TTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings)
-    : TBaseActor<TTopicAlterer>(service)
+TAlterTopicOperationActor::TAlterTopicOperationActor(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings)
+    : TBaseActor<TAlterTopicOperationActor>(service)
     , TPipeCacheClient(this)
     , Settings(std::move(settings))
 {
 }
 
-void TTopicAlterer::Bootstrap() {
-    Become(&TTopicAlterer::DescribeState);
+void TAlterTopicOperationActor::Bootstrap() {
     DoDescribe();
 }
 
-void TTopicAlterer::PassAway() {
+void TAlterTopicOperationActor::PassAway() {
     TPipeCacheClient::Close();
-    TBaseActor<TTopicAlterer>::PassAway();
+    TBaseActor<TAlterTopicOperationActor>::PassAway();
 }
 
-void TTopicAlterer::OnException(const std::exception& exc) {
+void TAlterTopicOperationActor::OnException(const std::exception& exc) {
     ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 }
 
-TString TTopicAlterer::BuildLogPrefix() const {
+TString TAlterTopicOperationActor::BuildLogPrefix() const {
     return TStringBuilder() << SelfId() << "[" << Settings.Strategy->GetTopicName() << "] ";
 }
 
-void TTopicAlterer::DoDescribe() {
+void TAlterTopicOperationActor::DoDescribe() {
     LOG_D("DoDescribe");
+    Become(&TAlterTopicOperationActor::DescribeState);
 
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
         SelfId(),
@@ -45,7 +45,7 @@ void TTopicAlterer::DoDescribe() {
         }));
 }
 
-void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+void TAlterTopicOperationActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
     auto& topics = ev->Get()->Topics;
@@ -74,17 +74,17 @@ void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     }
 }
 
-STFUNC(TTopicAlterer::DescribeState) {
+STFUNC(TAlterTopicOperationActor::DescribeState) {
     switch(ev->GetTypeRewrite()) {
         hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     }
 }
 
-void TTopicAlterer::DoAlter() {
+void TAlterTopicOperationActor::DoAlter() {
     LOG_D("DoAlter");
 
-    Become(&TTopicAlterer::AlterState);
+    Become(&TAlterTopicOperationActor::AlterState);
 
     auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
@@ -107,37 +107,34 @@ void TTopicAlterer::DoAlter() {
     ));
 }
 
-void TTopicAlterer::Handle(TEvSchemaOperationResponse::TPtr& ev) {
+void TAlterTopicOperationActor::Handle(TEvSchemaOperationResponse::TPtr& ev) {
     LOG_D("Handle TEvSchemaOperationResponse");
     auto& response = *ev->Get();
-    if (response.Status != Ydb::StatusIds::SUCCESS) {
-        return ReplyErrorAndDie(response.Status, std::move(response.ErrorMessage));
-    }
-    return ReplyOkAndDie();
+    return ReplyErrorAndDie(response.Status, std::move(response.ErrorMessage));
 }
 
 
-STFUNC(TTopicAlterer::AlterState) {
+STFUNC(TAlterTopicOperationActor::AlterState) {
     switch(ev->GetTypeRewrite()) {
         hFunc(TEvSchemaOperationResponse, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     }
 }
 
-void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+void TAlterTopicOperationActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
     Send(Settings.ParentId, Settings.Strategy->CreateErrorResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
     PassAway();
 }
 
-void TTopicAlterer::ReplyOkAndDie() {
+void TAlterTopicOperationActor::ReplyOkAndDie() {
     Send(Settings.ParentId, Settings.Strategy->CreateSuccessResponse(), 0, Settings.Cookie);
     PassAway();
 }
 
 
 IActor* CreateTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings) {
-    return new TTopicAlterer(service, std::move(settings));
+    return new TAlterTopicOperationActor(service, std::move(settings));
 }
 
 } // namespace NKikimr::NPQ::NSchema

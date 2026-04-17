@@ -28,7 +28,7 @@ public:
         Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
             .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
             .PeerName = Request_->GetPeerName(),
-            .Request = *GetProtoRequest(),
+            .Path = GetProtoRequest()->path(),
             .UserToken = GetUserToken()
         }));
     }

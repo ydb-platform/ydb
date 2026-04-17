@@ -28,7 +28,7 @@ public:
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
             .Database = Settings.Database,
             .Request = Settings.Request,
-            .UserToken = std::move(Settings.UserToken),
+            .UserToken = Settings.UserToken,
             .IfExists = Settings.IfExists
         }));
     }

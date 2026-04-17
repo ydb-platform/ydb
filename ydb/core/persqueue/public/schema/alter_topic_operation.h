@@ -9,12 +9,12 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-class TTopicAlterer : public TBaseActor<TTopicAlterer>
-                    , public TPipeCacheClient
-                    , public TConstantLogPrefix {
+class TAlterTopicOperationActor: public TBaseActor<TAlterTopicOperationActor>
+                               , public TPipeCacheClient
+                               , public TConstantLogPrefix {
 public:
-    TTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings);
-    ~TTopicAlterer() = default;
+    TAlterTopicOperationActor(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings);
+    ~TAlterTopicOperationActor() = default;
 
     void Bootstrap();
     void PassAway() override;

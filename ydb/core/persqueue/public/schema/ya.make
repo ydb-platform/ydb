@@ -3,12 +3,13 @@ LIBRARY()
 SRCS(
     alter_topic.cpp
     alter_topic_internal.cpp
+    alter_topic_operation.cpp
     common.cpp
     drop_topic.cpp
+    drop_topic_operation.cpp
     schema.cpp
     schema_int.cpp
     schema_operation.cpp
-    topic_alterer.cpp
     validation.cpp
 )
 

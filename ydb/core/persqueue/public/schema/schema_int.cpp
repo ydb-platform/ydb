@@ -5,8 +5,6 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-namespace {
-
 TString GetWorkingDir(const NDescriber::TTopicInfo& topicInfo) {
     std::pair <TString, TString> pathPair;
     try {
@@ -16,9 +14,7 @@ TString GetWorkingDir(const NDescriber::TTopicInfo& topicInfo) {
     }
     return pathPair.first;
 }
-        
-} // namespace
-        
+    
         
 //
 // IAlterTopicStrategy

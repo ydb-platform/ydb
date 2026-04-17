@@ -10,6 +10,8 @@
 
 namespace NKikimr::NPQ::NSchema {
 
+TString GetWorkingDir(const NDescriber::TTopicInfo& topicInfo);    
+
 class ITopicAltererStrategy {
 public:
     virtual ~ITopicAltererStrategy() = default;

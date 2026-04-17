@@ -14,6 +14,7 @@
 
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
+#include <util/generic/hash_set.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
 #include <util/system/fs.h>
@@ -157,10 +158,16 @@ protected:
         return response->Get()->Result;
     }
 
-    auto ListObjects(const TString& prefix = "") {
+    auto ListObjects(const TString& prefix = "", int maxKeys = 0, const TString& marker = "") {
         auto request = ListObjectsRequest();
         if (!prefix.empty()) {
             request.SetPrefix(prefix.c_str());
+        }
+        if (maxKeys > 0) {
+            request.SetMaxKeys(maxKeys);
+        }
+        if (!marker.empty()) {
+            request.SetMarker(marker.c_str());
         }
         auto response = Send<TEvListObjectsResponse>(
             new TEvListObjectsRequest(request));
@@ -211,7 +218,7 @@ class TFsStorageTests : public TFsStorageTestBase {
     UNIT_TEST(MultipartUploadFullCycleCreatesCorrectFile);
     UNIT_TEST(AbortMultipartUploadDeletesIncompleteFile);
     UNIT_TEST(DeleteObjectReturnsNotImplementedError);
-    UNIT_TEST(ListObjectsReturnsNotImplementedError);
+    UNIT_TEST(ListObjectsReturnsFilesInDirectory);
     UNIT_TEST(CheckObjectExistsReturnsNotImplementedError);
     UNIT_TEST(UploadPartCopyReturnsNotImplementedError);
     UNIT_TEST(ConcurrentMultipartUploadSessionsForSameKey);
@@ -474,9 +481,128 @@ public:
         UNIT_ASSERT(!result.IsSuccess());
     }
 
-    void ListObjectsReturnsNotImplementedError() {
-        auto result = ListObjects();
-        UNIT_ASSERT(!result.IsSuccess());
+    void ListObjectsReturnsFilesInDirectory() {
+        const TString file1 = KeyPath("data/file1.txt");
+        const TString file2 = KeyPath("data/file2.txt");
+        const TString file3 = KeyPath("other/file3.txt");
+        const TString content1 = "content1";
+        const TString content2 = "content22";
+        const TString content3 = "content333";
+
+        {
+            auto result = PutObject(file1, content1);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+        {
+            auto result = PutObject(file2, content2);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+        {
+            auto result = PutObject(file3, content3);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = ListObjects(TempDir->Name());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            const auto& contents = result.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents.size(), 3);
+            UNIT_ASSERT(!result.GetResult().GetIsTruncated());
+        }
+
+        {
+            auto result = ListObjects(KeyPath("data/"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            const auto& contents = result.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents.size(), 2);
+
+            THashSet<TString> keys;
+            for (const auto& obj : contents) {
+                keys.insert(TString(obj.GetKey().data(), obj.GetKey().size()));
+            }
+            UNIT_ASSERT(keys.contains(file1));
+            UNIT_ASSERT(keys.contains(file2));
+        }
+
+        {
+            auto result = ListObjects(KeyPath("other/"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            const auto& contents = result.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents.size(), 1);
+            UNIT_ASSERT_STRINGS_EQUAL(TString(contents[0].GetKey().data(), contents[0].GetKey().size()), file3);
+        }
+
+        {
+            auto result = ListObjects(KeyPath("nonexistent/"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT(result.GetResult().GetContents().empty());
+        }
+
+        {
+            auto result = ListObjects(TempDir->Name(), 1);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            const auto& contents = result.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents.size(), 1);
+            UNIT_ASSERT(result.GetResult().GetIsTruncated());
+        }
+
+        {
+            auto result = ListObjects(TempDir->Name(), 2);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            const auto& contents = result.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents.size(), 2);
+            UNIT_ASSERT(result.GetResult().GetIsTruncated());
+        }
+
+        {
+            auto result = ListObjects(TempDir->Name(), 3);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            const auto& contents = result.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents.size(), 3);
+            UNIT_ASSERT(!result.GetResult().GetIsTruncated());
+        }
+
+        {
+            auto result = ListObjects(TempDir->Name(), 10);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            const auto& contents = result.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents.size(), 3);
+            UNIT_ASSERT(!result.GetResult().GetIsTruncated());
+        }
+
+        {
+            auto result1 = ListObjects(TempDir->Name(), 1);
+            UNIT_ASSERT_C(result1.IsSuccess(), result1.GetError().GetMessage());
+            const auto& contents1 = result1.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents1.size(), 1);
+            UNIT_ASSERT(result1.GetResult().GetIsTruncated());
+            TString firstKey(contents1[0].GetKey().data(), contents1[0].GetKey().size());
+
+            auto result2 = ListObjects(TempDir->Name(), 1, firstKey);
+            UNIT_ASSERT_C(result2.IsSuccess(), result2.GetError().GetMessage());
+            const auto& contents2 = result2.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents2.size(), 1);
+            UNIT_ASSERT(result2.GetResult().GetIsTruncated());
+            TString secondKey(contents2[0].GetKey().data(), contents2[0].GetKey().size());
+            UNIT_ASSERT(secondKey > firstKey);
+
+            auto result3 = ListObjects(TempDir->Name(), 1, secondKey);
+            UNIT_ASSERT_C(result3.IsSuccess(), result3.GetError().GetMessage());
+            const auto& contents3 = result3.GetResult().GetContents();
+            UNIT_ASSERT_VALUES_EQUAL(contents3.size(), 1);
+            UNIT_ASSERT(!result3.GetResult().GetIsTruncated());
+            TString thirdKey(contents3[0].GetKey().data(), contents3[0].GetKey().size());
+            UNIT_ASSERT(thirdKey > secondKey);
+
+            THashSet<TString> allKeys;
+            allKeys.insert(firstKey);
+            allKeys.insert(secondKey);
+            allKeys.insert(thirdKey);
+            UNIT_ASSERT_VALUES_EQUAL(allKeys.size(), 3);
+            UNIT_ASSERT(allKeys.contains(file1));
+            UNIT_ASSERT(allKeys.contains(file2));
+            UNIT_ASSERT(allKeys.contains(file3));
+        }
     }
 
     void CheckObjectExistsReturnsNotImplementedError() {

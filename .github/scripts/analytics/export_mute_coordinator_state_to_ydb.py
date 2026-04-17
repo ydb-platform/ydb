@@ -6,7 +6,7 @@ import json
 import os
 import hashlib
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 import ydb
 
@@ -14,9 +14,14 @@ from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
+from mute_policy_rules import (
+    is_delete_candidate_counts,
+    load_mute_coordinator_thresholds as _load_thresholds,
+    passes_default_mute,
+    passes_default_unmute,
+)
 
 
-DEFAULT_CONFIG_REL_PATH = os.path.join("..", "..", "config", "mute_coordinator_thresholds.json")
 VALID_POLICY_TYPES = {
     "default_unmute",
     "quarantine_new_test",
@@ -25,13 +30,31 @@ VALID_POLICY_TYPES = {
     "quarantine_manual_mute",
 }
 
+# control_state.lifecycle_state — only three coarse values; use policy_type (+ decision_reason) for detail.
+LS_MUTED = "muted"
+LS_UNMUTED = "unmuted"
+LS_QUARANTINE = "quarantine"
 
-def _load_thresholds() -> Dict[str, int]:
-    base_dir = os.path.dirname(__file__)
-    config_path = os.path.normpath(os.path.join(base_dir, DEFAULT_CONFIG_REL_PATH))
-    with open(config_path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-    return {k: int(v) for k, v in payload.items()}
+_LIFECYCLE_COARSE: FrozenSet[str] = frozenset({LS_MUTED, LS_UNMUTED, LS_QUARANTINE})
+
+
+def _canon_lifecycle_state(lifecycle: Optional[str], policy_type: Optional[str]) -> str:
+    """Normalize lifecycle_state from DB (supports legacy quarantine_by_* / *_by_rules)."""
+    life = str(lifecycle or "").strip()
+    pol = str(policy_type or "").strip()
+    if life in _LIFECYCLE_COARSE:
+        return life
+    if life.startswith("quarantine_by_"):
+        return LS_QUARANTINE
+    if life == "muted_by_rules":
+        return LS_MUTED
+    if life == "unmuted_by_rules":
+        return LS_UNMUTED
+    if pol.startswith("quarantine_"):
+        return LS_QUARANTINE
+    if pol == "default_unmute" or pol == "":
+        return LS_MUTED
+    return LS_MUTED
 
 
 def _parse_date(value: str) -> datetime.date:
@@ -44,6 +67,31 @@ def _date_expr(as_of_date: Optional[datetime.date]) -> str:
     return f"Date('{as_of_date.isoformat()}')"
 
 
+def _to_utc_datetime(value: object) -> Optional[datetime.datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=datetime.timezone.utc)
+        return value.astimezone(datetime.timezone.utc)
+    if isinstance(value, (int, float)):
+        # YDB Timestamp is usually microseconds since epoch.
+        ts = float(value)
+        if abs(ts) > 1e12:
+            ts = ts / 1_000_000.0
+        return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+    if isinstance(value, str):
+        normalized = value.strip().replace("Z", "+00:00")
+        try:
+            dt = datetime.datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.astimezone(datetime.timezone.utc)
+    return None
+
+
 def _create_control_state_table(ydb_wrapper: YDBWrapper, table_path: str) -> None:
     create_sql = f"""
         CREATE TABLE IF NOT EXISTS `{table_path}` (
@@ -51,7 +99,7 @@ def _create_control_state_table(ydb_wrapper: YDBWrapper, table_path: str) -> Non
             `build_type` Utf8 NOT NULL,
             `full_name` Utf8 NOT NULL,
             `issue_number` Uint64,
-            `lifecycle_state` Utf8 NOT NULL,
+            `lifecycle_state` Utf8 NOT NULL, -- muted | unmuted | quarantine
             `policy_type` Utf8 NOT NULL,
             `policy_version` Utf8 NOT NULL,
             `policy_params_json` Json,
@@ -198,6 +246,14 @@ def _fetch_existing_control_state(
         full_name = row.get("full_name")
         if not full_name:
             continue
+        row["state_entered_at"] = _to_utc_datetime(row.get("state_entered_at"))
+        row["state_until"] = _to_utc_datetime(row.get("state_until"))
+        row["last_evaluated_at"] = _to_utc_datetime(row.get("last_evaluated_at"))
+        row["updated_at"] = _to_utc_datetime(row.get("updated_at"))
+        row["lifecycle_state"] = _canon_lifecycle_state(
+            str(row.get("lifecycle_state") or ""),
+            str(row.get("policy_type") or ""),
+        )
         out[str(full_name)] = row
     return out
 
@@ -402,18 +458,31 @@ def _fetch_manual_unmute_candidates(
     ydb_wrapper: YDBWrapper,
     branch: str,
     build_type: str,
-    default_min_runs: int,
+    thresholds: Dict[str, int],
     as_of_date: Optional[datetime.date] = None,
 ) -> List[str]:
+    """Detect is_muted 1→0 where the window ending on transition day does not match default_unmute.
+
+    Same window length as create_new_muted_ya (default_unmute_window_days), anchored on the monitor transition
+    day (first day is_muted=0), not on the coordinator sync date.
+
+    Skips quarantine when the case matches create_new_muted_ya delete-from-mutes criteria (no runs in window,
+    or last muted day was only skips while muted).
+    """
     tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
     anchor_date = _date_expr(as_of_date)
-    transition_query = f"""
-        SELECT full_name
-        FROM (
+    uw = max(int(thresholds["default_unmute_window_days"]), 1)
+    span = max(uw - 1, 0)
+    query = f"""
+        $ranked = (
             SELECT
                 full_name,
                 date_window,
                 is_muted,
+                COALESCE(pass_count, 0) AS pass_count,
+                COALESCE(fail_count, 0) AS fail_count,
+                COALESCE(mute_count, 0) AS mute_count,
+                COALESCE(skip_count, 0) AS skip_count,
                 ROW_NUMBER() OVER (
                     PARTITION BY full_name
                     ORDER BY date_window DESC
@@ -423,50 +492,68 @@ def _fetch_manual_unmute_candidates(
               AND build_type = '{build_type}'
               AND date_window >= {anchor_date} - 14*Interval("P1D")
               AND date_window <= {anchor_date}
-        )
-        GROUP BY full_name
-        HAVING
-            MAX(CASE WHEN rn = 1 THEN is_muted ELSE 0 END) = 0
-            AND MAX(CASE WHEN rn = 2 THEN is_muted ELSE 0 END) = 1
-    """
-    transition_rows = ydb_wrapper.execute_scan_query(
-        transition_query,
-        query_name=f"mute_coordinator_manual_transition_{branch}_{build_type}",
-    )
-    transitioned = sorted(str(row["full_name"]) for row in transition_rows if row.get("full_name"))
-    if not transitioned:
-        return []
+        );
 
-    escaped = ", ".join("'" + name.replace("'", "''") + "'" for name in transitioned)
-    stats_query = f"""
+        $transitions = (
+            SELECT
+                full_name,
+                MAX(CASE WHEN rn = 1 THEN date_window ELSE NULL END) AS transition_date,
+                MAX(CASE WHEN rn = 2 THEN pass_count ELSE 0 END) AS pre_muted_pass,
+                MAX(CASE WHEN rn = 2 THEN fail_count ELSE 0 END) AS pre_muted_fail,
+                MAX(CASE WHEN rn = 2 THEN mute_count ELSE 0 END) AS pre_muted_mute,
+                MAX(CASE WHEN rn = 2 THEN skip_count ELSE 0 END) AS pre_muted_skip
+            FROM $ranked
+            GROUP BY full_name
+            HAVING
+                MAX(CASE WHEN rn = 1 THEN is_muted ELSE 0 END) = 0
+                AND MAX(CASE WHEN rn = 2 THEN is_muted ELSE 0 END) = 1
+        );
+
         SELECT
-            full_name,
-            SUM(COALESCE(pass_count, 0)) AS pass_count,
-            SUM(COALESCE(fail_count, 0)) AS fail_count,
-            SUM(COALESCE(mute_count, 0)) AS mute_count
-        FROM `{tests_monitor_path}`
-        WHERE branch = '{branch}'
-          AND build_type = '{build_type}'
-          AND date_window >= {anchor_date} - 6*Interval("P1D")
-          AND date_window <= {anchor_date}
-          AND full_name IN ({escaped})
-        GROUP BY full_name
+            m.full_name AS full_name,
+            SUM(COALESCE(m.pass_count, 0)) AS pass_count,
+            SUM(COALESCE(m.fail_count, 0)) AS fail_count,
+            SUM(COALESCE(m.mute_count, 0)) AS mute_count,
+            SUM(COALESCE(m.skip_count, 0)) AS skip_count,
+            t.pre_muted_pass,
+            t.pre_muted_fail,
+            t.pre_muted_mute,
+            t.pre_muted_skip
+        FROM `{tests_monitor_path}` AS m
+        INNER JOIN $transitions AS t ON m.full_name = t.full_name
+        WHERE m.branch = '{branch}'
+          AND m.build_type = '{build_type}'
+          AND m.date_window >= t.transition_date - {span}*Interval("P1D")
+          AND m.date_window <= t.transition_date
+        GROUP BY
+            m.full_name,
+            t.pre_muted_pass,
+            t.pre_muted_fail,
+            t.pre_muted_mute,
+            t.pre_muted_skip
     """
     stats_rows = ydb_wrapper.execute_scan_query(
-        stats_query,
-        query_name=f"mute_coordinator_manual_candidate_stats_{branch}_{build_type}",
+        query,
+        query_name=f"mute_coordinator_manual_unmute_stats_{branch}_{build_type}",
     )
 
     candidates: List[str] = []
     stats_by_name = {str(row["full_name"]): row for row in stats_rows if row.get("full_name")}
-    for full_name in transitioned:
+    for full_name in sorted(stats_by_name.keys()):
         row = stats_by_name.get(full_name, {})
         pass_count = int(row.get("pass_count") or 0)
         fail_count = int(row.get("fail_count") or 0)
         mute_count = int(row.get("mute_count") or 0)
-        total_runs = pass_count + fail_count + mute_count
-        passes_default_unmute = total_runs >= default_min_runs and (fail_count + mute_count == 0)
-        if not passes_default_unmute:
+        skip_count = int(row.get("skip_count") or 0)
+        pre_p = int(row.get("pre_muted_pass") or 0)
+        pre_f = int(row.get("pre_muted_fail") or 0)
+        pre_m = int(row.get("pre_muted_mute") or 0)
+        pre_s = int(row.get("pre_muted_skip") or 0)
+        if is_delete_candidate_counts(pre_p, pre_f, pre_m, pre_s, is_muted=True):
+            continue
+        if is_delete_candidate_counts(pass_count, fail_count, mute_count, skip_count, is_muted=False):
+            continue
+        if not passes_default_unmute(pass_count, fail_count, mute_count, thresholds):
             candidates.append(full_name)
     return sorted(candidates)
 
@@ -475,13 +562,21 @@ def _fetch_manual_mute_candidates(
     ydb_wrapper: YDBWrapper,
     branch: str,
     build_type: str,
+    thresholds: Dict[str, int],
     as_of_date: Optional[datetime.date] = None,
 ) -> List[str]:
+    """Detect is_muted 0→1 where the pre-mute window does not match create_new_muted_ya mute rules.
+
+    Must aggregate pass/fail over default_mute_window_days, ending on the mute
+    transition day (not the coordinator sync anchor), otherwise ydbot mutes look like manual
+    after a few green days.
+    """
     tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
     anchor_date = _date_expr(as_of_date)
-    transition_query = f"""
-        SELECT full_name
-        FROM (
+    mw = max(int(thresholds["default_mute_window_days"]), 1)
+    span = max(mw - 1, 0)
+    query = f"""
+        $ranked = (
             SELECT
                 full_name,
                 date_window,
@@ -495,50 +590,164 @@ def _fetch_manual_mute_candidates(
               AND build_type = '{build_type}'
               AND date_window >= {anchor_date} - 14*Interval("P1D")
               AND date_window <= {anchor_date}
-        )
-        GROUP BY full_name
-        HAVING
-            MAX(CASE WHEN rn = 1 THEN is_muted ELSE 0 END) = 1
-            AND MAX(CASE WHEN rn = 2 THEN is_muted ELSE 0 END) = 0
-    """
-    transition_rows = ydb_wrapper.execute_scan_query(
-        transition_query,
-        query_name=f"mute_coordinator_manual_mute_transition_{branch}_{build_type}",
-    )
-    transitioned = sorted(str(row["full_name"]) for row in transition_rows if row.get("full_name"))
-    if not transitioned:
-        return []
+        );
 
-    escaped = ", ".join("'" + name.replace("'", "''") + "'" for name in transitioned)
-    stats_query = f"""
+        $transitions = (
+            SELECT
+                full_name,
+                MAX(CASE WHEN rn = 1 THEN date_window ELSE NULL END) AS transition_date
+            FROM $ranked
+            GROUP BY full_name
+            HAVING
+                MAX(CASE WHEN rn = 1 THEN is_muted ELSE 0 END) = 1
+                AND MAX(CASE WHEN rn = 2 THEN is_muted ELSE 0 END) = 0
+        );
+
         SELECT
-            full_name,
-            SUM(COALESCE(pass_count, 0)) AS pass_count,
-            SUM(COALESCE(fail_count, 0)) AS fail_count
-        FROM `{tests_monitor_path}`
-        WHERE branch = '{branch}'
-          AND build_type = '{build_type}'
-          AND date_window >= {anchor_date} - 3*Interval("P1D")
-          AND date_window <= {anchor_date}
-          AND full_name IN ({escaped})
-        GROUP BY full_name
+            m.full_name AS full_name,
+            SUM(COALESCE(m.pass_count, 0)) AS pass_count,
+            SUM(COALESCE(m.fail_count, 0)) AS fail_count
+        FROM `{tests_monitor_path}` AS m
+        INNER JOIN $transitions AS t ON m.full_name = t.full_name
+        WHERE m.branch = '{branch}'
+          AND m.build_type = '{build_type}'
+          AND m.date_window >= t.transition_date - {span}*Interval("P1D")
+          AND m.date_window <= t.transition_date
+        GROUP BY m.full_name
     """
     stats_rows = ydb_wrapper.execute_scan_query(
-        stats_query,
-        query_name=f"mute_coordinator_manual_mute_candidate_stats_{branch}_{build_type}",
+        query,
+        query_name=f"mute_coordinator_manual_mute_stats_{branch}_{build_type}",
     )
 
     candidates: List[str] = []
     stats_by_name = {str(row["full_name"]): row for row in stats_rows if row.get("full_name")}
-    for full_name in transitioned:
+    for full_name in sorted(stats_by_name.keys()):
         row = stats_by_name.get(full_name, {})
         pass_count = int(row.get("pass_count") or 0)
         fail_count = int(row.get("fail_count") or 0)
-        total_runs = pass_count + fail_count
-        passes_default_mute = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
-        if not passes_default_mute:
+        if not passes_default_mute(pass_count, fail_count, thresholds):
             candidates.append(full_name)
     return sorted(candidates)
+
+
+def _chunk_list(items: List[str], size: int) -> List[List[str]]:
+    if not items:
+        return []
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _as_calendar_date(value: object) -> Optional[datetime.date]:
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    dt = _to_utc_datetime(value)
+    return dt.date() if dt else None
+
+
+def _sanitize_mute_anchor_calendar(d: Optional[datetime.date]) -> Optional[datetime.date]:
+    """Drop sentinel / unset dates (e.g. 1970-01-01) from tests_monitor mute_state_change_date."""
+    if d is None or d.year < 2000:
+        return None
+    return d
+
+
+def _fetch_monitor_mute_anchor_dates_bulk(
+    ydb_wrapper: YDBWrapper,
+    branch: str,
+    build_type: str,
+    full_names: List[str],
+    anchor_calendar: datetime.date,
+) -> Dict[str, Optional[datetime.date]]:
+    """Per full_name: mute_state_change_date on latest date_window row <= anchor (batched IN)."""
+    out: Dict[str, Optional[datetime.date]] = {n: None for n in full_names}
+    if not full_names:
+        return out
+    tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    ad = anchor_calendar.isoformat()
+    for chunk in _chunk_list(sorted(set(full_names)), 250):
+        escaped = ", ".join("'" + n.replace("'", "''") + "'" for n in chunk)
+        query = f"""
+            $ranked = (
+                SELECT
+                    full_name,
+                    mute_state_change_date,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY full_name
+                        ORDER BY date_window DESC
+                    ) AS rn
+                FROM `{tests_monitor_path}`
+                WHERE branch = '{branch}'
+                  AND build_type = '{build_type}'
+                  AND full_name IN ({escaped})
+                  AND date_window <= Date('{ad}')
+            );
+
+            SELECT full_name, mute_state_change_date
+            FROM $ranked
+            WHERE rn = 1
+        """
+        rows = ydb_wrapper.execute_scan_query(
+            query,
+            query_name=f"mute_coordinator_monitor_mute_anchor_bulk_{branch}_{build_type}",
+        )
+        for row in rows:
+            fn = row.get("full_name")
+            if not fn:
+                continue
+            out[str(fn)] = _sanitize_mute_anchor_calendar(
+                _as_calendar_date(row.get("mute_state_change_date"))
+            )
+    return out
+
+
+def _fetch_mute_window_pass_fail_bulk(
+    ydb_wrapper: YDBWrapper,
+    branch: str,
+    build_type: str,
+    full_names: List[str],
+    end_date: datetime.date,
+    window_days: int,
+) -> Dict[str, Tuple[int, int]]:
+    """Sum pass/fail per full_name over [end_date - (window_days-1), end_date] inclusive."""
+    out: Dict[str, Tuple[int, int]] = {}
+    if not full_names:
+        return out
+    tests_monitor_path = ydb_wrapper.get_table_path("tests_monitor")
+    w = max(int(window_days), 1)
+    span = max(w - 1, 0)
+    end_d = end_date.isoformat()
+    for chunk in _chunk_list(sorted(set(full_names)), 250):
+        escaped = ", ".join("'" + n.replace("'", "''") + "'" for n in chunk)
+        query = f"""
+            SELECT
+                full_name,
+                SUM(COALESCE(pass_count, 0)) AS pass_count,
+                SUM(COALESCE(fail_count, 0)) AS fail_count
+            FROM `{tests_monitor_path}`
+            WHERE branch = '{branch}'
+              AND build_type = '{build_type}'
+              AND full_name IN ({escaped})
+              AND date_window >= Date('{end_d}') - {span}*Interval("P1D")
+              AND date_window <= Date('{end_d}')
+            GROUP BY full_name
+        """
+        rows = ydb_wrapper.execute_scan_query(
+            query,
+            query_name=f"mute_coordinator_mute_window_bulk_{branch}_{build_type}",
+        )
+        for row in rows:
+            fn = row.get("full_name")
+            if not fn:
+                continue
+            out[str(fn)] = (
+                int(row.get("pass_count") or 0),
+                int(row.get("fail_count") or 0),
+            )
+    return out
 
 
 def _fetch_quarantine_stats(
@@ -686,12 +895,10 @@ def _is_expired_quarantine(row: Dict[str, object], now: datetime.datetime) -> bo
     policy_type = str(row.get("policy_type") or "")
     if not policy_type.startswith("quarantine_"):
         return False
-    state_until = row.get("state_until")
+    state_until = _to_utc_datetime(row.get("state_until"))
     if state_until is None:
         return False
-    if isinstance(state_until, datetime.datetime):
-        return state_until <= now
-    return False
+    return state_until <= now
 
 
 def _validate_single_active_rule_invariant(
@@ -713,6 +920,13 @@ def _validate_single_active_rule_invariant(
         )
 
     for full_name, state_row in state_map.items():
+        lifecycle_state = str(state_row.get("lifecycle_state") or "")
+        if lifecycle_state not in _LIFECYCLE_COARSE:
+            raise RuntimeError(
+                "Invariant violation: lifecycle_state must be one of "
+                f"{sorted(_LIFECYCLE_COARSE)} for {full_name} "
+                f"(branch={branch}, build_type={build_type}, lifecycle_state={lifecycle_state!r})"
+            )
         policy_type = str(state_row.get("policy_type") or "")
         if policy_type not in VALID_POLICY_TYPES:
             raise RuntimeError(
@@ -766,13 +980,14 @@ def sync_effective_rules(
             ydb_wrapper,
             branch=branch,
             build_type=build_type,
-            default_min_runs=int(thresholds["default_unmute_min_runs"]),
+            thresholds=thresholds,
             as_of_date=as_of_date,
         )
         manual_mute_quarantine_candidates = _fetch_manual_mute_candidates(
             ydb_wrapper,
             branch=branch,
             build_type=build_type,
+            thresholds=thresholds,
             as_of_date=as_of_date,
         )
         new_test_candidates = _fetch_new_test_candidates(
@@ -798,7 +1013,7 @@ def sync_effective_rules(
             previous = existing_state.get(full_name)
             if previous:
                 policy_type = str(previous.get("policy_type") or "default_unmute")
-                lifecycle_state = str(previous.get("lifecycle_state") or "muted_active")
+                lifecycle_state = str(previous.get("lifecycle_state") or LS_MUTED)
                 state_entered_at = previous.get("state_entered_at") or now
                 state_until = previous.get("state_until")
                 issue_number = int(previous.get("issue_number") or 0)
@@ -806,7 +1021,7 @@ def sync_effective_rules(
                 decision_reason = previous.get("decision_reason")
             else:
                 policy_type = "default_unmute"
-                lifecycle_state = "muted_active"
+                lifecycle_state = LS_MUTED
                 state_entered_at = now
                 state_until = None
                 issue_number = 0
@@ -851,7 +1066,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=0,
-                lifecycle_state="quarantine_new_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_new_test",
                 policy_snapshot=policy_snapshot,
                 request_source="auto_new_test_detected",
@@ -864,7 +1079,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=0,
-                lifecycle_state="quarantine_new_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_new_test",
                 thresholds=thresholds,
                 now=now,
@@ -884,7 +1099,7 @@ def sync_effective_rules(
                     "issue_number": 0,
                     "event_type": "new_test_quarantine_started",
                     "before_state": "none",
-                    "after_state": "quarantine_new_active",
+                    "after_state": LS_QUARANTINE,
                     "before_policy": "none",
                     "after_policy": "quarantine_new_test",
                     "actor_login": None,
@@ -908,7 +1123,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=issue_number,
-                lifecycle_state="quarantine_user_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_user_fixed",
                 policy_snapshot=policy_snapshot,
                 request_source="issue_closed_request",
@@ -921,7 +1136,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=issue_number,
-                lifecycle_state="quarantine_user_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_user_fixed",
                 thresholds=thresholds,
                 now=now,
@@ -940,8 +1155,8 @@ def sync_effective_rules(
                     "full_name": full_name,
                     "issue_number": int(issue_number),
                     "event_type": "user_fixed_quarantine_started",
-                    "before_state": str((previous or {}).get("lifecycle_state") or "muted_active"),
-                    "after_state": "quarantine_user_active",
+                    "before_state": str((previous or {}).get("lifecycle_state") or LS_MUTED),
+                    "after_state": LS_QUARANTINE,
                     "before_policy": str((previous or {}).get("policy_type") or "default_unmute"),
                     "after_policy": "quarantine_user_fixed",
                     "actor_login": None,
@@ -965,7 +1180,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=int((previous or {}).get("issue_number") or 0),
-                lifecycle_state="quarantine_manual_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_manual_unmute",
                 policy_snapshot=policy_snapshot,
                 request_source="manual_unmute_without_default_criteria",
@@ -978,7 +1193,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=int((previous or {}).get("issue_number") or 0),
-                lifecycle_state="quarantine_manual_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_manual_unmute",
                 thresholds=thresholds,
                 now=now,
@@ -997,8 +1212,8 @@ def sync_effective_rules(
                     "full_name": full_name,
                     "issue_number": int((previous or {}).get("issue_number") or 0),
                     "event_type": "manual_unmute_quarantine_started",
-                    "before_state": str((previous or {}).get("lifecycle_state") or "unmuted"),
-                    "after_state": "quarantine_manual_active",
+                    "before_state": str((previous or {}).get("lifecycle_state") or LS_UNMUTED),
+                    "after_state": LS_QUARANTINE,
                     "before_policy": str((previous or {}).get("policy_type") or "default_unmute"),
                     "after_policy": "quarantine_manual_unmute",
                     "actor_login": None,
@@ -1026,7 +1241,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=int((previous or {}).get("issue_number") or 0),
-                lifecycle_state="quarantine_manual_mute_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_manual_mute",
                 policy_snapshot=policy_snapshot,
                 request_source="manual_mute_without_default_criteria",
@@ -1039,7 +1254,7 @@ def sync_effective_rules(
                 build_type=build_type,
                 full_name=full_name,
                 issue_number=int((previous or {}).get("issue_number") or 0),
-                lifecycle_state="quarantine_manual_mute_active",
+                lifecycle_state=LS_QUARANTINE,
                 policy_type="quarantine_manual_mute",
                 thresholds=thresholds,
                 now=now,
@@ -1058,8 +1273,8 @@ def sync_effective_rules(
                     "full_name": full_name,
                     "issue_number": int((previous or {}).get("issue_number") or 0),
                     "event_type": "manual_mute_quarantine_started",
-                    "before_state": str((previous or {}).get("lifecycle_state") or "unmuted"),
-                    "after_state": "quarantine_manual_mute_active",
+                    "before_state": str((previous or {}).get("lifecycle_state") or LS_UNMUTED),
+                    "after_state": LS_QUARANTINE,
                     "before_policy": previous_policy,
                     "after_policy": "quarantine_manual_mute",
                     "actor_login": None,
@@ -1073,6 +1288,109 @@ def sync_effective_rules(
                     ),
                 }
             )
+
+        # 5.5) Reconcile active manual-mute quarantine: re-check default mute criteria on the window
+        # ending on the mute flip day from tests_monitor (mute_state_change_date), not only
+        # control_state.state_entered_at (sync time can drift from the monitor mute anchor).
+        # Batched YQL: one anchor scan per chunk of tests, then one pass/fail scan per distinct end_date.
+        anchor_cal = as_of_date if as_of_date is not None else now.date()
+        reconcile_targets: List[Tuple[str, Dict[str, object], datetime.date]] = []
+        for full_name, row in list(state_map.items()):
+            if str(row.get("policy_type") or "") != "quarantine_manual_mute":
+                continue
+            if str(row.get("lifecycle_state") or "") != LS_QUARANTINE:
+                continue
+            entered = _to_utc_datetime(row.get("state_entered_at")) or now
+            reconcile_targets.append((full_name, row, entered.date()))
+
+        if reconcile_targets:
+            mw = int(thresholds["default_mute_window_days"])
+            all_names = sorted({t[0] for t in reconcile_targets})
+            anchors: Dict[str, Optional[datetime.date]] = {}
+            for chunk in _chunk_list(all_names, 250):
+                anchors.update(
+                    _fetch_monitor_mute_anchor_dates_bulk(
+                        ydb_wrapper, branch, build_type, chunk, anchor_cal
+                    )
+                )
+            end_to_names: Dict[datetime.date, List[str]] = {}
+            for full_name, _row, entered_date in reconcile_targets:
+                monitor_anchor = anchors.get(full_name)
+                end_date = min((monitor_anchor or entered_date), anchor_cal)
+                end_to_names.setdefault(end_date, []).append(full_name)
+
+            stats_by_name: Dict[str, Tuple[int, int]] = {}
+            for end_date, names in end_to_names.items():
+                for chunk in _chunk_list(sorted(set(names)), 250):
+                    stats_by_name.update(
+                        _fetch_mute_window_pass_fail_bulk(
+                            ydb_wrapper, branch, build_type, chunk, end_date, mw
+                        )
+                    )
+
+            for full_name, row, entered_date in reconcile_targets:
+                monitor_anchor = anchors.get(full_name)
+                end_date = min((monitor_anchor or entered_date), anchor_cal)
+                pc, fc = stats_by_name.get(full_name, (0, 0))
+                if not passes_default_mute(pc, fc, thresholds):
+                    continue
+                issue_number = int(row.get("issue_number") or 0)
+                state_map[full_name] = _build_state_row(
+                    branch=branch,
+                    build_type=build_type,
+                    full_name=full_name,
+                    issue_number=issue_number,
+                    lifecycle_state=LS_MUTED,
+                    policy_type="default_unmute",
+                    policy_snapshot=policy_snapshot,
+                    request_source="reconcile_manual_mute_quarantine",
+                    now=now,
+                    state_entered_at=row.get("state_entered_at") or now,
+                    state_until=None,
+                    decision_reason="default_mute_criteria_met_on_mute_window",
+                )
+                rule_map[full_name] = _build_effective_row(
+                    branch=branch,
+                    build_type=build_type,
+                    full_name=full_name,
+                    issue_number=issue_number,
+                    lifecycle_state=LS_MUTED,
+                    policy_type="default_unmute",
+                    thresholds=thresholds,
+                    now=now,
+                    state_entered_at=row.get("state_entered_at") or now,
+                    state_until=None,
+                )
+                event_rows.append(
+                    {
+                        "event_date": now.date(),
+                        "event_id": _event_id(
+                            f"manual_mute_quarantine_reconciled:{branch}:{build_type}:{full_name}:{now.date().isoformat()}"
+                        ),
+                        "event_time": now,
+                        "branch": branch,
+                        "build_type": build_type,
+                        "full_name": full_name,
+                        "issue_number": issue_number,
+                        "event_type": "manual_mute_quarantine_reconciled",
+                        "before_state": LS_QUARANTINE,
+                        "after_state": LS_MUTED,
+                        "before_policy": "quarantine_manual_mute",
+                        "after_policy": "default_unmute",
+                        "actor_login": None,
+                        "actor_type": "system",
+                        "payload_json": json.dumps(
+                            {
+                                "reason": "default_mute_criteria_met_on_mute_window",
+                                "pass_count": pc,
+                                "fail_count": fc,
+                                "window_days": mw,
+                                "window_end_date": end_date.isoformat(),
+                            },
+                            ensure_ascii=True,
+                        ),
+                    }
+                )
 
         # 6) Resolve expired quarantines.
         expired_quarantine = {
@@ -1116,13 +1434,13 @@ def sync_effective_rules(
                 mute_count = int(stats["mute_count"])
                 runs = pass_count + fail_count + mute_count
                 if runs == 0:
-                    new_state = "unmuted"
+                    new_state = LS_UNMUTED
                     reason = "no_runs_after_quarantine"
                     if full_name in deleted_signals:
                         reason = "test_deleted_confirmed"
                 else:
                     is_stable = runs >= int(thresholds["quarantine_min_runs"]) and (fail_count + mute_count == 0)
-                    new_state = "unmuted" if is_stable else "muted_active"
+                    new_state = LS_UNMUTED if is_stable else LS_MUTED
                     reason = "stable_window_passed" if is_stable else "ttl_expired_not_stable"
                 issue_number = int(old_row.get("issue_number") or 0)
                 state_map[full_name] = _build_state_row(
@@ -1187,7 +1505,7 @@ def sync_effective_rules(
             if full_name in state_map:
                 continue
             policy_type = str(row.get("policy_type") or "default_unmute")
-            lifecycle_state = str(row.get("lifecycle_state") or "muted_active")
+            lifecycle_state = str(row.get("lifecycle_state") or LS_MUTED)
             if not policy_type.startswith("quarantine_"):
                 continue
             if _is_expired_quarantine(row, now):

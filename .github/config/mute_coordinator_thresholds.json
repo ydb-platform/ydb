@@ -1,6 +1,13 @@
 {
+  "default_mute_window_days": 4,
   "default_unmute_window_days": 7,
+  "default_delete_window_days": 7,
   "default_unmute_min_runs": 4,
+  "default_mute_total_runs_branch_boundary": 10,
+  "default_mute_min_fails_high_volume": 3,
+  "default_mute_min_fails_low_volume": 2,
+  "default_mute_min_fails_medium_volume": 2,
+  "default_mute_medium_volume_total_runs_gt_exclusive": 10,
   "quarantine_new_test_window_days": 5,
   "quarantine_user_fixed_window_days": 7,
   "quarantine_manual_unmute_window_days": 7,

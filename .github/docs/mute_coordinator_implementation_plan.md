@@ -40,7 +40,7 @@ The rule currently applied to each test must be queryable directly from DB.
 
 1. Add resolver logic for expired quarantines:
    - evaluate stability only on quarantine window,
-   - transition to `unmuted` or back to `muted_active`,
+   - transition to coarse `unmuted` or back to `muted` (`policy_type` stays `default_unmute` for rule-engine rows),
    - write explicit `decision_reason`.
 2. Add idempotency guards to avoid duplicate transitions/comments.
 

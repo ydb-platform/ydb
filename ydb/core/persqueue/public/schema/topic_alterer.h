@@ -12,7 +12,6 @@ namespace NKikimr::NPQ::NSchema {
 class TTopicAlterer : public TBaseActor<TTopicAlterer>
                     , public TPipeCacheClient
                     , public TConstantLogPrefix {
-    static constexpr size_t MaxWaitTxCompletionRetries = 3;
 public:
     TTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings);
     ~TTopicAlterer() = default;
@@ -30,15 +29,8 @@ private:
 
 private:
     void DoAlter();
-    void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev);
-    void HandleOnAlter(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
+    void Handle(TEvSchemaOperationResponse::TPtr& ev);
     STFUNC(AlterState);
-
-private:
-    void DoWaitTxCompletion();
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
-    void HandleOnWaitTxCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
-    STFUNC(WaitTxCompletionState);
 
 private:
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage);
@@ -48,10 +40,6 @@ private:
     const TTopicAltererSettings Settings;
 
     NDescriber::TTopicInfo TopicInfo;
-
-    ui64 SchemeShardTabletId = 0;
-    ui64 TxId = 0;
-    size_t WaitTxCompletionRetries = 0;
 };
 
 } // namespace NKikimr::NPQ::NSchema

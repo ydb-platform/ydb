@@ -1,4 +1,5 @@
 #include "topic_alterer.h"
+#include "schema_operation.h"
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
@@ -98,78 +99,27 @@ void TTopicAlterer::DoAlter() {
         return ReplyErrorAndDie(status, std::move(error));
     }
 
-    Send(MakeTxProxyID(), std::move(proposal));
+    RegisterWithSameMailbox(CreateSchemaOperation(
+        SelfId(),
+        TopicInfo.RealPath,
+        std::move(proposal),
+        Settings.Cookie
+    ));
 }
 
-void TTopicAlterer::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-    LOG_D("Handle TEvTxUserProxy::TEvProposeTransactionStatus");
-
-    auto msg = ev->Get();
-    const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
-
-    if (status == TEvTxUserProxy::TResultStatus::ExecError && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPreconditionFailed)
-    {
-        return ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-    TStringBuilder() << "Topic with name " << TopicInfo.RealPath << " has another alter in progress");
+void TTopicAlterer::Handle(TEvSchemaOperationResponse::TPtr& ev) {
+    LOG_D("Handle TEvSchemaOperationResponse");
+    auto& response = *ev->Get();
+    if (response.Status != Ydb::StatusIds::SUCCESS) {
+        return ReplyErrorAndDie(response.Status, std::move(response.ErrorMessage));
     }
-
-    Ydb::StatusIds::StatusCode ydbStatus = NKikimr::YdbStatusFromProxyStatus(msg);
-    if (!NKikimr::IsTxProxyInProgress(ydbStatus)) {
-        TString empty;
-        const TString* errorMessage = &empty;
-        auto issueMessage = msg->Record.GetIssues();
-        if (issueMessage.size() > 0 && issueMessage[0].message().size() > 0) {
-            errorMessage = &issueMessage[0].message();
-        }
-        return ReplyErrorAndDie(ydbStatus, TString{*errorMessage});
-    }
-
-    SchemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-    TxId = msg->Record.GetTxId();
-
-    DoWaitTxCompletion();
+    return ReplyOkAndDie();
 }
 
-void TTopicAlterer::HandleOnAlter(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
-    TPipeCacheClient::OnUndelivered(ev);
-    return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Scheme shard " << ev->Get()->TabletId << " is unavailable");
-}
 
 STFUNC(TTopicAlterer::AlterState) {
     switch(ev->GetTypeRewrite()) {
-        hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-        hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnAlter);
-        sFunc(TEvents::TEvPoison, PassAway);
-    }
-}
-
-void TTopicAlterer::DoWaitTxCompletion() {
-    LOG_D("DoWaitTxCompletion");
-    Become(&TTopicAlterer::WaitTxCompletionState);
-
-    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
-    SendToTablet(SchemeShardTabletId, request.release());
-}
-
-void TTopicAlterer::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
-    ReplyOkAndDie();
-}
-
-void TTopicAlterer::HandleOnWaitTxCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
-    OnUndelivered(ev);
-    if (++WaitTxCompletionRetries > MaxWaitTxCompletionRetries) {
-        return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "SchemeShard " << ev->Get()->TabletId << " is unavailable");
-    }
-    DoWaitTxCompletion();
-}
-
-STFUNC(TTopicAlterer::WaitTxCompletionState) {
-    switch(ev->GetTypeRewrite()) {
-        hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-        hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnWaitTxCompletion);
+        hFunc(TEvSchemaOperationResponse, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     }
 }

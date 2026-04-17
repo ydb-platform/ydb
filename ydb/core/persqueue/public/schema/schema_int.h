@@ -4,6 +4,7 @@
 
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/services/services.pb.h>
 

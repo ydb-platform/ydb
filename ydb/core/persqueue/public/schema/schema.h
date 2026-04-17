@@ -14,9 +14,24 @@ namespace NKikimr::NPQ::NSchema {
 
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
+    EvSchemaOperationResponse,
     EvAlterTopicResponse,
     EvDropTopicResponse,
     EvEnd
+};
+
+struct TEvSchemaOperationResponse: public NActors::TEventLocal<TEvSchemaOperationResponse, EEv::EvSchemaOperationResponse> {
+    TEvSchemaOperationResponse(
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
+        TString&& errorMessage = {}
+    )
+        : Status(status)
+        , ErrorMessage(std::move(errorMessage))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorMessage;
 };
 
 //
@@ -28,8 +43,8 @@ struct TAlterTopicResponse {
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
 };
 
-struct TEvAlterTopicResponse : public NActors::TEventLocal<TEvAlterTopicResponse, EEv::EvAlterTopicResponse>
-                             , public TAlterTopicResponse {
+struct TEvAlterTopicResponse: public NActors::TEventLocal<TEvAlterTopicResponse, EEv::EvAlterTopicResponse>
+                            , public TAlterTopicResponse {
     TEvAlterTopicResponse(
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         TString&& errorMessage = {},

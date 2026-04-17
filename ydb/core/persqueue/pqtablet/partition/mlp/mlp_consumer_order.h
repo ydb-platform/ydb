@@ -22,7 +22,8 @@ namespace NKikimr::NPQ::NMLP {
             Initial = 1 << 0,
             DeliveryProblem = 1 << 1,
             Commit = 1 << 2,
-            ParentDone = 1 << 3,
+            Done = 1 << 3, // current partition has been read to the end
+            ParentChange = 1 << 4, // propagate change from (grand-)parent partition
         };
 
         struct TChildrenPartitionWithKeepOrder {
@@ -30,7 +31,7 @@ namespace NKikimr::NPQ::NMLP {
             ui32 Cookie = 0;
             struct TFullState {
                 ESendReasons Reasons = ESendReasons::None;
-                ui64 InflightMessagesCount = Max<ui64>();
+                ui64 GroupsCount = Max<ui64>();
             };
 
             TFullState SendReasons;

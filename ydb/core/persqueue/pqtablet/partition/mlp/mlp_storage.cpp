@@ -350,6 +350,9 @@ TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::DoUpdateExternalLoc
     if (info->ReadWithKeepOrder == NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST) {
         Y_ASSERT(record.HasFullBlacklist());
     }
+    if (info->ReadWithKeepOrder == NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL) {
+        info->LockedMessageGroupsIdSet.clear(); // free blacklist if any
+    }
     if (record.HasFullBlacklist() || info->ReadWithKeepOrder == NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST) {
         const auto& list = record.GetFullBlacklist().GetParentLockedMessageGroupsIdHash();
         absl::flat_hash_set<ui32> lockedMessageGroupsIdSet(list.begin(), list.end());
@@ -1526,6 +1529,43 @@ void TStorage::TMessageGroups::Clear() {
     UnlockedMessageGroupsId.clear();
     LockedMessageGroupsId.clear();
     UnorderedOffsets.clear();
+}
+
+void TStorage::IterateMessageGroupsIdExclusiveFromParent(const std::function<void(ui32)>& callback) const {
+    // handle case, when current partition is exhaused, but parent partition is still contains some unprocessed messages
+
+    if (ParentPartitionExternalLockInfo.size() <= 1) [[likely]] {
+        for (const auto& parentLockInfo : ParentPartitionExternalLockInfo) {
+            for (const auto& messageGroupsId : parentLockInfo.LockedMessageGroupsIdSet) {
+                if (MessageGroups.Groups.contains(messageGroupsId)) {
+                    continue;
+                }
+                callback(messageGroupsId);
+            }
+        }
+        return;
+    }
+
+    absl::flat_hash_set<ui32> processed;
+    for (const auto& parentLockInfo : ParentPartitionExternalLockInfo) {
+        for (const auto& messageGroupsId : parentLockInfo.LockedMessageGroupsIdSet) {
+            if (MessageGroups.Groups.contains(messageGroupsId)) {
+                continue;
+            }
+            if (!processed.insert(messageGroupsId).second) {
+                continue;
+            }
+            callback(messageGroupsId);
+        }
+    }
+}
+
+size_t TStorage::GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents() const {
+    size_t n = MessageGroups.Groups.size();
+    for (const auto& parentLockInfo : ParentPartitionExternalLockInfo) {
+        n += parentLockInfo.LockedMessageGroupsIdSet.size();
+    }
+    return n;
 }
 
 } // namespace NKikimr::NPQ::NMLP

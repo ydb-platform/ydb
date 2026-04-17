@@ -215,8 +215,10 @@ public:
     bool DLQEmpty() const;
     std::deque<TDLQMessage> GetDLQMessages();
     const absl::flat_hash_set<ui32>& GetLockedMessageGroupsId() const;
-    auto GetMessageGroupsIdFromSelfAndParent() const;
-    size_t GetLockedMessageGroupsIdSize() const;
+    auto GetMessageGroupsIdFromSelf() const;
+    void IterateMessageGroupsIdExclusiveFromParent(const std::function<void(ui32)>& callback) const;
+    size_t GetLockedMessageGroupsIdSize() const; // from current partition only
+    size_t GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents() const;
     void InitMetrics();
     bool HasRetentionExpiredMessages() const;
     bool GetKeepMessageOrder() const;
@@ -388,9 +390,7 @@ private:
     TMetrics Metrics;
 };
 
-inline auto TStorage::GetMessageGroupsIdFromSelfAndParent() const {
-    // Return all keys.
-    // Child partition forbidden to read even unlocked groups, if they have unprocessed messages
+inline auto TStorage::GetMessageGroupsIdFromSelf() const {
     return IterateKeys(MessageGroups.Groups);
 }
 

@@ -439,11 +439,11 @@ void TConsumerActor::UpdateChildPartitionsOnCommit() {
     }
     bool update = false;
     if (LastCommittedOffset == PartitionEndOffset) {
-        update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::ParentDone, Storage->GetMetrics().InflightMessageCount);
+        update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::Done, Storage->GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents());
     }
     if (!update) {
         if (PartitionEndOffset <= Storage->GetLastOffset()) {
-            update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetMetrics().InflightMessageCount);
+            update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents());
         }
     }
     if (update) {
@@ -699,6 +699,9 @@ void TConsumerActor::ProcessEventQueue() {
         const NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId& record = ev->Get()->Record;
         auto updateResult = Storage->UpdateExternalLockedMessageGroupsId(record.GetUpdate());
         LOG_D("UpdateExternalLockedMessageGroupsId: " << "Applied=" << updateResult.Applied << ", " << "Invalid=" << updateResult.Invalid << ", " << "ModeChanged=" << updateResult.ModeChanged << ", " << "SetChanged=" << updateResult.SetChanged << ", " << "VersionChanged=" << updateResult.VersionChanged << "; " << ShortDebugString(record.GetUpdate()));
+        if (updateResult.Applied) {
+            ChildPartitionsOrderManager.SetSendFullStateToAll(updateResult.ModeChanged ? TChildPartitionsOrderManager::ESendReasons::ParentChange : TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents());
+        }
     }
     UpdateExternalLockedMessageGroupsIdRequestsQueue.clear();
 
@@ -1140,7 +1143,7 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
     const NKikimrPQ::ETopicPartitionStatus status = partitionConfig.GetStatus();
     Y_ASSERT(status != ETopicPartitionStatus::Active);
     const bool almostAllRead = (PartitionEndOffset <= Storage->GetLastOffset());
-    const bool allRead = almostAllRead && (Storage->GetMessageCount() == 0);
+    const bool allRead = almostAllRead && (Storage->GetMessageCount() == 0) && Storage->ReadWithKeepOrder() == EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL;
     const EReadWithKeepOrder childMode = allRead
         ? EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL
         : almostAllRead && ChildPartitionsOrderManager.EnableSendFullBlacklist
@@ -1162,9 +1165,13 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
         update->SetMode(childMode);
         if (childMode == EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST) {
             auto* list = update->MutableFullBlacklist();
-            for (ui32 lockedHash : Storage->GetMessageGroupsIdFromSelfAndParent()) {
+            auto append = [list](ui32 lockedHash) {
                 list->AddParentLockedMessageGroupsIdHash(lockedHash);
+            };
+            for (ui32 lockedHash : Storage->GetMessageGroupsIdFromSelf()) {
+                append(lockedHash);
             }
+            Storage->IterateMessageGroupsIdExclusiveFromParent(append);
         }
         LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << "; reason=" << state.SendFullStateReasonsAsString() << "; update=" << ShortDebugString(record));
         auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), state.TabletId, true, state.Cookie);

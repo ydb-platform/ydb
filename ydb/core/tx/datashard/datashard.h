@@ -1016,22 +1016,14 @@ namespace TEvDataShard {
         // CellVec (TODO: add schema?)
 
         TConstArrayRef<TCell> GetCells(size_t row) const {
-            if (Rows.empty() && Batch.Empty() && RowsSerialized.empty())
+            if (Batch.Empty() && RowsSerialized.empty())
                 return {};
-
-            if (!Rows.empty()) {
-                return Rows[row];
-            }
 
             if (!Batch.Empty()) {
                 return Batch[row];
             }
 
             return RowsSerialized[row].GetCells();
-        }
-
-        void SetRows(TVector<TOwnedCellVec>&& rows) {
-            Rows = std::move(rows);
         }
 
         void SetBatch(TOwnedCellVecBatch&& batch) {
@@ -1047,10 +1039,9 @@ namespace TEvDataShard {
         std::shared_ptr<arrow::RecordBatch> GetArrowBatch();
         std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const;
 
-    private:
-        // for local events
-        TVector<TOwnedCellVec> Rows;
+        size_t GetDataSizeEstimate() const;
 
+    private:
         // batch for local events
         TOwnedCellVecBatch Batch;
 

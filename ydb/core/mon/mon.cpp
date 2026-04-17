@@ -1,6 +1,6 @@
 #include "mon.h"
 #include "mon_impl.h"
-#include "mon_events.h"
+#include "events_internal.h"
 #include "counters_adapter_impl.h"
 
 #include <ydb/core/base/appdata.h>
@@ -40,7 +40,7 @@ namespace NActors {
 namespace {
 
 using namespace NKikimr;
-using NMonitoring::TEvMon;
+using namespace NMonitoring::NPrivate;
 
 struct TIssueInfo {
     const Ydb::Issue::IssueMessage* Issue = nullptr;

@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    mon_events.h
+    events_internal.h
     mon.cpp
     mon.h
     crossref.cpp

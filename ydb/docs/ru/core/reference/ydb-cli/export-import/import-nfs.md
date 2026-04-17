@@ -1,7 +1,1 @@
----
-import-kind: nfs
-import-op-kind: fs
-import-source-iz: "из файловой системы"
-import_is_nfs: true
----
-{% include [import.md](_includes/import.md) %}
+{% include [import-nfs.md](_includes/import-nfs.md) %}

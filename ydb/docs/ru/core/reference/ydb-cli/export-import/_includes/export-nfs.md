@@ -1,9 +1,9 @@
-# Выгрузка {{ export-target-v }}
+# Выгрузка в сетевую файловую систему хостов кластера {{ ydb-short-name }}
 
-Команда `export {{ export-kind }}` запускает на стороне сервера процесс выгрузки {{ export-target-v }} данных и информации об объектах схемы, в описанном в статье [Файловая структура](../file-structure.md) формате:
+Команда `export nfs` запускает на стороне сервера процесс выгрузки на сетевую файловую систему ([Network File System](https://ru.wikipedia.org/wiki/Network_File_System), NFS) хостов кластера {{ ydb-short-name }} данных и информации об объектах схемы, в описанном в статье [Файловая структура](../file-structure.md) формате:
 
 ```bash
-{{ ydb-cli }} [connection options] export {{ export-kind }} [options]
+{{ ydb-cli }} [connection options] export nfs [options]
 ```
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
@@ -17,41 +17,25 @@
 - [вторичный индекс](../../../../concepts/glossary.md#secondary-index).
 - [векторный индекс](../../../../concepts/glossary.md#vector-index).
 
-{% if export_is_s3 %}
-
-Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
-
-{% endif %}
-
 {% endnote %}
 
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:
 
-{% if export_is_s3 %}
+### Параметры NFS {#nfs-params}
 
-### Параметры S3 {#s3-params}
+Команда выгрузки в NFS требует указания монтированной директории (или поддиректории) общей для всех объектов, участвующих в экспорте. Так как выгрузка производится в асинхронном режиме на всех хостах {{ ydb-short-name }}, указанная директория должна быть на каждом хосте {{ ydb-short-name }} и монтированна в NFS.
 
-{% include [export-s3-storage-params.md](export-s3-storage-params.md) %}
-
-{% endif %}
-
-{% if export_is_nfs %}
-
-### Параметры файловой системы {#nfs-params}
-
-{% include [export-nfs-storage-params.md](export-nfs-storage-params.md) %}
-
-{% endif %}
+`--fs-path PATH`: путь до монтированной директории (или поддиректории).
 
 ### Перечень выгружаемых объектов {#items}
 
 `--root-path PATH`: Корневая директория для выгружаемых объектов. Если не указана, используется корневая директория базы данных.
 
-`--include PATH`: Объекты схемы данных для включения в экспорт. Директории обходятся рекурсивно. Пути указываются относительно `root-path`. Данный параметр может быть указан несколько раз для включения нескольких объектов. Если не указан, выполняется выгрузка всех несистемных объектов в `root-path`.
+`--include PATH`: Объекты схемы данных для включения в экспорт. Директории обходятся рекурсивно. Пути указываются относительно `fs-path`. Данный параметр может быть указан несколько раз для включения нескольких объектов. Если не указан, выполняется выгрузка всех несистемных объектов в `fs-path`.
 
-`--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Пути указываются относительно `root-path`. Данный параметр может быть указан несколько раз для разных шаблонов.
+`--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Пути указываются относительно `fs-path`. Данный параметр может быть указан несколько раз для разных шаблонов.
 
 {% cut "Альтернативный способ" %}
 
@@ -60,8 +44,7 @@
 `--item STRING`: Описание объекта выгрузки. Параметр `--item` может быть указан несколько раз, если необходимо выполнить выгрузку нескольких объектов. `STRING` задается в формате `<свойство>=<значение>,...`, со следующими обязательными свойствами:
 
 - `source`, `src`, или `s` — путь до выгружаемой директории или таблицы, `.` указывает на корневую директорию базы данных. При указании директории выгружаются все несистемные объекты в ней, а также рекурсивно все несистемные поддиректории.
-{% if export_is_s3 %}- `destination`, `dst`, или `d` —  путь (префикс ключа) в S3 для размещения выгружаемых объектов.{% endif %}
-{% if export_is_nfs %}- `destination`, `dst`, или `d` — путь на файловой системе относительно `fs-path` для размещения выгружаемых объектов.{% endif %}
+- `destination`, `dst`, или `d` —  путь в NFS (относительно `fs`).
 
 `--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз для разных шаблонов.
 
@@ -88,7 +71,7 @@
 
 ### Результат запуска {#result}
 
-При успешном исполнении команда `export {{ export-kind }}` выводит сводную информацию о поставленной в очередь операции выгрузки, в заданном опцией `--format` формате. Фактическая выгрузка производится сервером асинхронно. В сводной информации выводится ID операции, который может быть использован в дальнейшем для проверки статуса и действий с операцией:
+При успешном исполнении команда `export nfs` выводит сводную информацию о поставленной в очередь операции выгрузки в NFS, в заданном опцией `--format` формате. Фактическая выгрузка производится сервером асинхронно. В сводной информации выводится ID операции, который может быть использован в дальнейшем для проверки статуса и действий с операцией:
 
 - В режиме вывода `pretty` (по умолчанию) идентификатор операции показывается в выделенном псевдографикой поле id:
 
@@ -96,8 +79,9 @@
   ┌───────────────────────────────────────────┬───────┬─────...
   | id                                        | ready | stat...
   ├───────────────────────────────────────────┼───────┼─────...
-  | ydb://export/6?id=281474976788395&kind={{ export-op-kind }} | true  | SUCC...
+  | ydb://export/6?id=281474976788395&kind=fs | true  | SUCC...
   ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
+  | StorageClass: NOT_SET
   | Items:
   ...
   ```
@@ -105,7 +89,7 @@
 - В режиме вывода `proto-json-base64` идентификатор находится в атрибуте "id":
 
   ```json
-  {"id":"ydb://export/6?id=281474976788395&kind={{ export-op-kind }}","ready":true, ... }
+  {"id":"ydb://export/6?id=281474976788395&kind=fs","ready":true, ... }
   ```
 
 ### Статус выгрузки {#status}
@@ -113,7 +97,7 @@
 Выгрузка данных выполняется в фоновом режиме. Получить информацию о статусе и прогрессе выгрузки можно вызовом команды `operation get`, параметром которой должен быть передан **заключенный в кавычки** идентификатор операции, например:
 
 ```bash
-{{ ydb-cli }} -p quickstart operation get "ydb://export/6?id=281474976788395&kind={{ export-op-kind }}"
+{{ ydb-cli }} -p quickstart operation get "ydb://export/6?id=281474976788395&kind=fs"
 ```
 
 Формат вывода `operation get` также устанавливается опцией `--format`.
@@ -144,15 +128,15 @@
 После выполнения выгрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка считалась завершённой (была удалена из перечня операций):
 
 ```bash
-{{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind={{ export-op-kind }}"
+{{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind=fs"
 ```
 
 ### Список операций выгрузки {#list}
 
-Для получения списка операций выгрузки воспользуйтесь командой `operation list export/{{ export-kind }}`:
+Для получения списка операций выгрузки воспользуйтесь командой `operation list export/nfs`:
 
 ```bash
-{{ ydb-cli }} -p quickstart operation list export/{{ export-kind }}
+{{ ydb-cli }} -p quickstart operation list export/nfs
 ```
 
 Формат вывода `operation list` также устанавливается опцией `--format`.
@@ -161,36 +145,80 @@
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-{% if export_is_s3 %}
+### Выгрузка базы данных {#example-full-db}
 
-{% include [export-s3-examples.md](export-s3-examples.md) %}
+Выгрузка всех несистемных объектов базы данных в директорию `/mnt/nfs/backups/export1` на файловой системе:
 
-{% endif %}
+```bash
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1
+```
 
-{% if export_is_nfs %}
+### Выгрузка нескольких директорий {#example-specific-dirs}
 
-{% include [export-nfs-examples.md](export-nfs-examples.md) %}
+Выгрузка объектов из директорий `dir1` и `dir2` базы данных в директорию `/mnt/nfs/backups/export1` на файловой системе:
 
-{% endif %}
+```bash
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1 \
+  --include dir1 --include dir2
+```
+
+Либо с использованием альтернативного способа:
+
+```bash
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups \
+  --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+```
+
+### Выгрузка с шифрованием {#example-encryption}
+
+Выгрузка всей базы данных с шифрованием:
+- С использованием алгоритма шифрования `AES-128-GCM`
+- С генерацией случайного ключа утилитой `openssl` в файл `~/my_secret_key`
+- С чтением сгенерированного ключа из файла `~/my_secret_key`
+- В директорию `/mnt/nfs/backups/export1` на файловой системе
+
+```bash
+openssl rand -out ~/my_secret_key 16
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1 \
+  --encryption-algorithm AES-128-GCM --encryption-key-file ~/my_secret_key
+```
+
+Выгрузка директории `dir1` базы данных с шифрованием:
+- С использованием алгоритма шифрования `AES-256-GCM`
+- С генерацией случайного ключа утилитой `openssl` в переменную окружения `YDB_ENCRYPTION_KEY`
+- С чтением сгенерированного ключа из переменной окружения `YDB_ENCRYPTION_KEY`
+- В директорию `/mnt/nfs/backups/export1` на файловой системе
+
+```bash
+export YDB_ENCRYPTION_KEY=$(openssl rand -hex 32)
+{{ ydb-cli }} -p quickstart export nfs \
+  --root-path dir1 \
+  --fs-path /mnt/nfs/backups/export1 \
+  --encryption-algorithm AES-256-GCM
+```
 
 ### Получение идентификаторов операций {#example-list-oneline}
 
 Для получения перечня идентификаторов операций выгрузки в удобном для обработки в скриптах bash формате вы можете применить утилиту [jq](https://stedolan.github.io/jq/download/):
 
 ```bash
-{{ ydb-cli }} -p quickstart operation list export/{{ export-kind }} --format proto-json-base64 | jq -r ".operations[].id"
+{{ ydb-cli }} -p quickstart operation list export/nfs --format proto-json-base64 | jq -r ".operations[].id"
 ```
 
 Вы получите вывод, где в каждой новой строке находится идентификатор операции, например:
 
 ```text
-ydb://export/6?id=281474976789577&kind={{ export-op-kind }}
-ydb://export/6?id=281474976789526&kind={{ export-op-kind }}
-ydb://export/6?id=281474976788779&kind={{ export-op-kind }}
+ydb://export/6?id=281474976789577&kind=fs
+ydb://export/6?id=281474976789526&kind=fs
+ydb://export/6?id=281474976788779&kind=fs
 ```
 
 По этим идентификаторам может быть, например, запущен цикл для завершения всех текущих операций:
 
 ```bash
-{{ ydb-cli }} -p quickstart operation list export/{{ export-kind }} --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
+{{ ydb-cli }} -p quickstart operation list export/nfs --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```

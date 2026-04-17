@@ -276,7 +276,7 @@ public:
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                     TIntrusivePtr<NACLib::TUserContext> userCtx);
+                                    TIntrusivePtr<NACLib::TUserContext> userCtx);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
@@ -284,12 +284,12 @@ public:
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx,
-                      TIntrusivePtr<NACLib::TUserContext> userCtx);
+                     TIntrusivePtr<NACLib::TUserContext> userCtx);
     ERestoreDataStatus RestoreDataTx(
             TActiveTransaction *tx,
             TTransactionContext &txc,
             const TActorContext &ctx,
-             TIntrusivePtr<NACLib::TUserContext> userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
     {
         return tx->RestoreTxData(Self, txc, ctx, userCtx);
     }

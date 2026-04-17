@@ -370,7 +370,7 @@ private:
     void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
 
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->DataReqInFly;
@@ -465,7 +465,7 @@ public:
 
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,
              const TRequestControls& requestControls,
-              TIntrusivePtr<NACLib::TUserContext> userCtx)
+             TIntrusivePtr<NACLib::TUserContext> userCtx)
         : TActor(&TThis::StateWaitInit)
         , Services(services)
         , TxId(txid)

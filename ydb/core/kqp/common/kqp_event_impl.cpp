@@ -71,7 +71,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> use
     }
 }
 
- TIntrusivePtr<NACLib::TUserContext> TEvKqp::TEvQueryRequest::GetUserCtx()
+TIntrusivePtr<NACLib::TUserContext> TEvKqp::TEvQueryRequest::GetUserCtx()
 {
     if (UserCtx != nullptr) {
         return UserCtx;

@@ -17,7 +17,7 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
                                                                         bool delayed,
                                                                         NWilson::TSpan &&datashardTransactionSpan,
-                                                                         TIntrusivePtr<NACLib::TUserContext> userCtx)
+                                                                        TIntrusivePtr<NACLib::TUserContext> userCtx)
     : TBase(self, datashardTransactionSpan.GetTraceId())
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)

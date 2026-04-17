@@ -104,7 +104,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-     TIntrusivePtr<NACLib::TUserContext> userCtx);
+    TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -129,7 +129,7 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -210,7 +210,7 @@ public:
     }
 
     explicit TUploadRowsBase(std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
-                              TIntrusivePtr<NACLib::TUserContext> userCtx,
+                             TIntrusivePtr<NACLib::TUserContext> userCtx,
                              TDuration timeout = TDuration::Max(),
                              bool diskQuotaExceeded = false,
                              NWilson::TSpan span = {})

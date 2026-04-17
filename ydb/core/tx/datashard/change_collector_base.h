@@ -32,7 +32,7 @@ public:
     virtual TVersionState GetVersionState() = 0;
     virtual void SetVersionState(const TVersionState& state) = 0;
     virtual void AddChange(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, const TDataChange& body,
-         TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
+        TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
 protected:
     ~IBaseChangeCollectorSink() = default;

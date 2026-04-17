@@ -136,7 +136,7 @@ public:
                      TInstant receivedAt,
                      const TString &txBody,
                      bool usesMvccSnapshot,
-                      TIntrusivePtr<NACLib::TUserContext> userCtx,
+                     TIntrusivePtr<NACLib::TUserContext> userCtx,
                      bool isPropose = false);
 
     ~TValidatedDataTx();
@@ -331,11 +331,11 @@ public:
                     const TString &txBody,
                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                     ui64 artifactFlags,
-                     TIntrusivePtr<NACLib::TUserContext> userCtx);
+                    TIntrusivePtr<NACLib::TUserContext> userCtx);
     void FillVolatileTxData(TDataShard *self,
                             TTransactionContext &txc,
                             const TActorContext &ctx,
-                             TIntrusivePtr<NACLib::TUserContext> userCtx);
+                            TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     const TString &GetTxBody() const { return TxBody; }
     void SetTxBody(const TString &txBody) {
@@ -542,7 +542,7 @@ public:
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
     void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 
-     TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const {
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const {
         return UserCtx;
     }
 
@@ -572,7 +572,7 @@ private:
     TActorId StreamSink;
     TActorId ScanActor;
     ui64 PageFaultCount = 0;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 inline IOutputStream& operator << (IOutputStream& out, const TActiveTransaction& tx) {

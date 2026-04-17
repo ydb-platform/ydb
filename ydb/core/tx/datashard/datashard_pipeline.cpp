@@ -580,7 +580,7 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
                               TActiveTransaction::TPtr tx,
-                               TIntrusivePtr<NACLib::TUserContext> userCtx)
+                              TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
@@ -1455,7 +1455,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
                                            const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                            TIntrusivePtr<NACLib::TUserContext> userCtx)
+                                           TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto &rec = ev->Get()->Record;
     Y_ENSURE(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));

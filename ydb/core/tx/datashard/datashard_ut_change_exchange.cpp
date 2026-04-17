@@ -1397,7 +1397,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records,
-                 TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
@@ -1433,7 +1433,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true,
-                 TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
         {
             Y_UNUSED(checkKey);
 

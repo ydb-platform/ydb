@@ -119,7 +119,7 @@ public:
         const TPathId& pathId,
         TChangeRecord::EKind kind,
         const TDataChange& body,
-         TIntrusivePtr<NACLib::TUserContext> userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         NIceDb::TNiceDb db(Db);
 

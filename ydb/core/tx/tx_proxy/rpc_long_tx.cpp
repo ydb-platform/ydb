@@ -59,7 +59,7 @@ public:
         const TString& token,
         const TLongTxId& longTxId,
         const TString& dedupId,
-         TIntrusivePtr<NACLib::TUserContext> userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
@@ -227,7 +227,7 @@ private:
     NEvWrite::TWritersController::TPtr InternalController;
     bool ColumnShardReady = false;
     bool IndexReady = false;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 // LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)
@@ -309,7 +309,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-     TIntrusivePtr<NACLib::TUserContext> userCtx) {
+    TIntrusivePtr<NACLib::TUserContext> userCtx) {
     return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, userCtx));
 }
 

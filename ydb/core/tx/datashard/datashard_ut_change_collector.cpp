@@ -175,7 +175,7 @@ static void OutKvContainer(IOutputStream& out, const C& c) {
 template <typename SK>
 struct TStructRecordBase {
     TChangeRecord::EKind Kind;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     NTable::ERowOp Rop;
     TStructKey<SK> Key;
     TStructValue Update;
@@ -894,7 +894,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts,
-             TIntrusivePtr<NACLib::TUserContext> userCtx,
+            TIntrusivePtr<NACLib::TUserContext> userCtx,
             const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {

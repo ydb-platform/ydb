@@ -367,7 +367,7 @@ public:
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml = true,
-                                                       TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
+                                                      TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
 class TLambdaActor : public IActorCallback {
 public:
@@ -825,13 +825,13 @@ void ExecSQL(Tests::TServer::TPtr server,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
              NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext(),
-              TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
+             TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
 void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-              TIntrusivePtr<NACLib::TUserContext> userCtx);
+             TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 

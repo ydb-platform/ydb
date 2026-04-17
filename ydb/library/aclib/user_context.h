@@ -8,8 +8,6 @@
 namespace NACLib {
 class TUserContext : public TThrRefBase {
 public:
-    using TPtr =  TIntrusivePtr<NACLib::TUserContext>;
-
     TUserContext(const TString& userSID, const NWilson::TTraceId& userTraceId):
         UserSID(userSID),
         UserTraceId(userTraceId ? userTraceId.Clone() : NWilson::TTraceId())
@@ -61,7 +59,7 @@ public:
         return DeserializeFromEvent(*eventHandle.Get(), eventHandle.TraceId);
     }
 
-    TUserContext::TPtr Build() {
+    TIntrusivePtr<NACLib::TUserContext> Build() {
         return MakeIntrusive<TUserContext>(UserSID, UserTraceId);
     }
 };

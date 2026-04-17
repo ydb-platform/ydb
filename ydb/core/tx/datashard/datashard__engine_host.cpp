@@ -353,7 +353,7 @@ public:
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
-         TIntrusivePtr<NACLib::TUserContext> userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
@@ -378,13 +378,13 @@ public:
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-         TIntrusivePtr<NACLib::TUserContext> userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.UpsertRow(tableId, key, ops, userCtx);
     }
 
     void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-         TIntrusivePtr<NACLib::TUserContext> userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.ReplaceRow(tableId, key, ops, userCtx);
     }
@@ -510,7 +510,7 @@ private:
 //
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId,
-     TIntrusivePtr<NACLib::TUserContext> userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
     : StepTxId(stepTxId)
     , KeyValidator(*self)
 {

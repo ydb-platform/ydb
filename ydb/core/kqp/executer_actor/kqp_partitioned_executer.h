@@ -34,7 +34,7 @@ struct TKqpPartitionedExecuterSettings {
     ui64 WriteBufferInitialMemoryLimit;
     ui64 WriteBufferMemoryLimit;
     ui64 QuerySpanId = 0;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService);

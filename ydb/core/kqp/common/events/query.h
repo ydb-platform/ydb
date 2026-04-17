@@ -108,7 +108,7 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
-     TIntrusivePtr<NACLib::TUserContext> GetUserCtx();
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx();
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
         return RequestCtx;
@@ -474,7 +474,7 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TString YqlText;
     TString QueryId;
     TString PoolId;

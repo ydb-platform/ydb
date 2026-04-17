@@ -75,7 +75,7 @@ public:
                               TInstant receivedAt, ui64 tieBreakerIndex,
                               bool delayed,
                               NWilson::TSpan &&datashardTransactionSpan,
-                               TIntrusivePtr<NACLib::TUserContext> userCtx);
+                              TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;
@@ -100,7 +100,7 @@ protected:
     bool Rescheduled = false;
     bool WaitComplete = false;
     NWilson::TSpan DatashardTransactionSpan;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 class TDataShard::TTxWrite: public NTabletFlatExecutor::TTransactionBase<TDataShard> {

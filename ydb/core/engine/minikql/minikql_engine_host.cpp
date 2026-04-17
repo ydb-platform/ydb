@@ -824,7 +824,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 
 // Updates the single row. Column in commands must be unique.
 void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
-         TIntrusivePtr<NACLib::TUserContext> userCtx) {
+        TIntrusivePtr<NACLib::TUserContext> userCtx) {
     ui64 localTid = LocalTableId(tableId);
     Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);

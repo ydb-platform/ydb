@@ -71,7 +71,7 @@ private:
 public:
     TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
         const TIntrusivePtr<TTxProxyMon>& mon,
-         TIntrusivePtr<NACLib::TUserContext> userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Services(services)
         , TxId(txid)
         , Sender(ev->Sender)
@@ -992,7 +992,7 @@ private:
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TControlWrapper DefaultTimeoutMs;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TInstant WallClockAccepted;
     TInstant WallClockResolveStarted;

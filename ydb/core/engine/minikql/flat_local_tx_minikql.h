@@ -77,7 +77,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     const TActorId Sender;
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TString SerializedMiniKQLProgram;
     TString SerializedMiniKQLParams;
@@ -368,7 +368,7 @@ public:
             TActorId sender,
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory,
-             TIntrusivePtr<NACLib::TUserContext> userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Sender(sender)
         , SourceProgram(program)
         , Factory(factory)

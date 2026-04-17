@@ -149,12 +149,12 @@ struct TExecuterConfig : TNonCopyable {
     TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
     const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
     const NKikimrConfig::TTliConfig& TliConfig;
-     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TExecuterConfig(TIntrusivePtr<TExecuterMutableConfig> mutableConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TTliConfig& tliConfig,
-         TIntrusivePtr<NACLib::TUserContext> userCtx
+        TIntrusivePtr<NACLib::TUserContext> userCtx
     )
         : MutableConfig(mutableConfig)
         , TableServiceConfig(tableServiceConfig)

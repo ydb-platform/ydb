@@ -15,7 +15,7 @@ public:
         const TString& table,
         std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
-         TIntrusivePtr<NACLib::TUserContext> userCtx,
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
         bool writeToIndexImplTable,

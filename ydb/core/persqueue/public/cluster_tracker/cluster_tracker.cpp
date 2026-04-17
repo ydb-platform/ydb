@@ -11,7 +11,6 @@
 #include <util/generic/scope.h>
 
 #include <tuple>
-#include <vector>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 

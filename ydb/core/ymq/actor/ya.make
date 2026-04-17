@@ -18,6 +18,7 @@ SRCS(
     executor.cpp
     fifo_cleanup.cpp
     garbage_collector.cpp
+    get_message_groups.cpp
     get_queue_attributes.cpp
     get_queue_url.cpp
     index_events_processor.cpp

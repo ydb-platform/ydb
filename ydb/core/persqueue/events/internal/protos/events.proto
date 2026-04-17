@@ -72,6 +72,7 @@ message TEvMLPReadRequest {
     optional uint64 ProcessingTimeoutMilliseconds = 5;
     // The maximum number of messages to return.
     optional uint32 MaxNumberOfMessages = 6;
+    repeated string SkipMessageGroup = 7;
 }
 
 // From PQTablet

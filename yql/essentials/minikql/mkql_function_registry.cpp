@@ -346,6 +346,10 @@ public:
                     Properties_.IsTypeAwareness = true;
                 }
 
+                void SetPolyArgs(const NUdf::TStringRef& config) final {
+                    Properties_.PolyArgs = config;
+                }
+
                 TFunctionProperties& Properties_;
             };
 

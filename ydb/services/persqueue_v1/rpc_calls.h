@@ -37,7 +37,7 @@ IActor* TEvRpcAlterTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestO
 
 template<>
 IActor* TEvRpcDropTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new NGRpcProxy::V1::TDropTopicActor(msg);
+    return NGRpcProxy::V1::NTopic::CreateDropTopicActor(msg);
 }
 
 } // namespace NKikimr::NGRpcService

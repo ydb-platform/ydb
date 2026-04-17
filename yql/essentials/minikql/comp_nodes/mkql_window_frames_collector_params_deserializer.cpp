@@ -45,6 +45,11 @@ struct TPromoteToRangeType<TPlainNumericTag{}, T> {
     using type = std::conditional_t<(sizeof(TUnsigned) <= 2), ui32, TUnsigned>;
 };
 
+template <>
+struct TPromoteToRangeType<TPlainNumericTag{}, NYql::NDecimal::TInt128> {
+    using type = NYql::NDecimal::TInt128;
+};
+
 using TBlackboxTypeData = TBlackboxTypeData<TComputationContext, NUdf::TUnboxedValue>;
 using TRangeBound = TRangeBound<TComputationContext, NUdf::TUnboxedValue>;
 using TColumnTypeWithScale = TColumnTypeWithScale<TComputationContext, NUdf::TUnboxedValue>;
@@ -69,7 +74,7 @@ T GetValue(const TRuntimeNode& node) {
     return AS_VALUE(TDataLiteral, node)->AsValue().Get<T>();
 }
 
-std::variant<TCurrentRowTag, TInfTag, NUdf::EDataSlot> GetDataSlotFromBound(const TRuntimeNode& boundNode) {
+std::variant<TCurrentRowTag, TInfTag, TDataType*> GetDataTypeFromBound(const TRuntimeNode& boundNode) {
     auto structLit = AS_VALUE(TStructLiteral, boundNode);
     auto numberNode = GetMember(structLit, KeyNumber);
     MKQL_ENSURE(numberNode.GetStaticType(), "Static type expected.");
@@ -90,7 +95,7 @@ std::variant<TCurrentRowTag, TInfTag, NUdf::EDataSlot> GetDataSlotFromBound(cons
         numberNode = GetMember(innerStruct, KeyFiniteValue);
         type = numberNode.GetStaticType();
         auto dataType = AS_TYPE(TDataType, type);
-        return *dataType->GetDataSlot();
+        return dataType;
     }
     ythrow yexception() << "Expected tagged or struct type for window frame range bound";
 }
@@ -119,7 +124,7 @@ std::variant<TCurrentRowTag, TInfTag, TPgFiniteBound> GetPgBound(const TRuntimeN
 }
 
 template <bool IsRangeBound, typename TCallback>
-auto DispatchByDataSlot(std::variant<TCurrentRowTag, TInfTag, NUdf::EDataSlot> slot, TCallback&& callback) {
+auto DispatchByDataSlot(std::variant<TCurrentRowTag, TInfTag, TDataType*> slot, TCallback&& callback) {
     if constexpr (IsRangeBound) {
         if (std::holds_alternative<TInfTag>(slot)) {
             return callback.template operator()<nullptr, TInfTag, void>();
@@ -127,13 +132,13 @@ auto DispatchByDataSlot(std::variant<TCurrentRowTag, TInfTag, NUdf::EDataSlot> s
             return callback.template operator()<nullptr, TCurrentRowTag, void>();
         }
     } else {
-        MKQL_ENSURE(std::holds_alternative<NUdf::EDataSlot>(slot), "Slot must be defined");
+        MKQL_ENSURE(std::holds_alternative<TDataType*>(slot), "Slot must be defined");
     }
 
     using TScaledInterval = TScaledDateType<NUdf::TInterval>;
     using TScaledInterval64 = TScaledDateType<NUdf::TInterval64>;
 
-    switch (std::get<NUdf::EDataSlot>(slot)) {
+    switch (*std::get<TDataType*>(slot)->GetDataSlot()) {
         case NUdf::EDataSlot::Int8:
             return callback.template operator()<TPlainNumericTag{}, i8, TNoScaledType<ui32>>();
         case NUdf::EDataSlot::Uint8:
@@ -158,12 +163,16 @@ auto DispatchByDataSlot(std::variant<TCurrentRowTag, TInfTag, NUdf::EDataSlot> s
             return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TInterval>>, NUdf::TDataType<NUdf::TInterval>::TLayout, TScaledInterval>();
         case NUdf::EDataSlot::Interval64:
             return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>, NUdf::TDataType<NUdf::TInterval64>::TLayout, TScaledInterval64>();
+        case NUdf::EDataSlot::Decimal: {
+            const auto precision = TMaybe<ui8>(static_cast<TDataDecimalType*>(std::get<TDataType*>(slot))->GetParams().first);
+            return callback.template operator()<TPlainNumericTag{}, NYql::NDecimal::TInt128, TNoScaledType<NYql::NDecimal::TInt128>>(precision);
+        }
         default:
             break;
     }
 
     if constexpr (!IsRangeBound) {
-        switch (std::get<NUdf::EDataSlot>(slot)) {
+        switch (*std::get<TDataType*>(slot)->GetDataSlot()) {
             case NUdf::EDataSlot::Date:
                 return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TDate>>, NUdf::TDataType<NUdf::TDate>::TLayout, TScaledInterval>();
             case NUdf::EDataSlot::Datetime:
@@ -193,7 +202,7 @@ auto DispatchByDataSlot(std::variant<TCurrentRowTag, TInfTag, NUdf::EDataSlot> s
         }
     }
 
-    ythrow yexception() << "Unsupported data slot: " << std::get<NUdf::EDataSlot>(slot);
+    ythrow yexception() << "Unsupported data slot: " << *std::get<TDataType*>(slot)->GetDataSlot();
 }
 
 TUnboxedValueVariantBound DeserializeBoundAsVariant(const TRuntimeNode& boundNode, const TStructType* streamType, std::vector<IComputationNode*>& dependentNodes, TNodeExtractor nodeExtractor, ui32& ctxIndex) {
@@ -232,13 +241,19 @@ TUnboxedValueVariantBound DeserializeBoundAsVariant(const TRuntimeNode& boundNod
                               }}, pgBound);
     }
 
-    auto slot = GetDataSlotFromBound(boundNode);
+    auto type = GetDataTypeFromBound(boundNode);
     MKQL_ENSURE(columnType->IsData() && AS_TYPE(TDataType, columnType)->GetDataSlot().Defined(), "Column type must be data slot");
-    auto visitColumnLambda = [&]<auto TColumnScaler, typename TColumnType, typename TZeroBoundType>()
+    auto visitColumnLambda = [&]<auto TColumnScaler, typename TColumnType, typename TZeroBoundType>(TMaybe<ui8> precision = {})
         -> std::pair<TColumnTypeWithScale, TRangeTypeWithScale> {
-        return std::make_pair(TWithScale<TColumnScaler, TColumnType>{.Value = TColumnType{0}}, TZeroBoundType{});
+        if constexpr (std::is_same_v<TColumnType, NYql::NDecimal::TInt128>) {
+            return std::make_pair(TWithScale<TColumnScaler, TColumnType>{.Value = TColumnType{0}, .Precision = *precision},
+                                  TZeroBoundType{.Value = {}, .Precision = *precision});
+        } else {
+            return std::make_pair(TWithScale<TColumnScaler, TColumnType>{.Value = TColumnType{0}},
+                                  TZeroBoundType{.Value = {}});
+        }
     };
-    auto [column, scaledZeroBound] = DispatchByDataSlot</*IsRangeBound=*/false>(*AS_TYPE(TDataType, columnType)->GetDataSlot(),
+    auto [column, scaledZeroBound] = DispatchByDataSlot</*IsRangeBound=*/false>(AS_TYPE(TDataType, columnType),
                                                                                 visitColumnLambda);
 
     auto finiteValueNode = numberNode;
@@ -247,7 +262,7 @@ TUnboxedValueVariantBound DeserializeBoundAsVariant(const TRuntimeNode& boundNod
         finiteValueNode = GetMember(innerStruct, KeyFiniteValue);
     }
 
-    auto bound = DispatchByDataSlot</*IsRangeBound=*/true>(slot, [&]<auto TRangeScaler, typename TRangeType, typename TUnused>() -> TUnboxedValueVariantBound {
+    auto bound = DispatchByDataSlot</*IsRangeBound=*/true>(type, [&]<auto TRangeScaler, typename TRangeType, typename TUnused>(TMaybe<ui8> precision = {}) -> TUnboxedValueVariantBound {
         if constexpr (std::is_same_v<TInfTag, TRangeType>) {
             return TUnboxedValueVariantBound::Inf(direction);
         } else if constexpr (std::is_same_v<TCurrentRowTag, TRangeType>) {
@@ -256,8 +271,13 @@ TUnboxedValueVariantBound DeserializeBoundAsVariant(const TRuntimeNode& boundNod
             using TPromoted = typename TPromoteToRangeType<TRangeScaler, TRangeType>::type;
             MKQL_ENSURE(GetValue<TRangeType>(finiteValueNode) >= 0, "Range value must be non-negative");
             auto value = static_cast<TPromoted>(GetValue<TRangeType>(finiteValueNode));
-            TRangeTypeWithScale bound = TWithScale<TRangeScaler, TPromoted>{.Value = value};
-            return TUnboxedValueVariantBound(TRangeBound(std::move(bound), std::move(column), memberIndex), direction);
+            if constexpr (std::is_same_v<TRangeType, NYql::NDecimal::TInt128>) {
+                TRangeTypeWithScale bound = TWithScale<TRangeScaler, TPromoted>{.Value = value, .Precision = *precision};
+                return TUnboxedValueVariantBound(TRangeBound(std::move(bound), std::move(column), memberIndex), direction);
+            } else {
+                TRangeTypeWithScale bound = TWithScale<TRangeScaler, TPromoted>{.Value = value};
+                return TUnboxedValueVariantBound(TRangeBound(std::move(bound), std::move(column), memberIndex), direction);
+            }
         }
     });
     return bound;

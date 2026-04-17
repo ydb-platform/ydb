@@ -6,7 +6,9 @@
 
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
-class TAlterTopicActor : public TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest> {
+namespace {
+
+class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest> {
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>;
 
 public:
@@ -49,6 +51,8 @@ private:
         }
     }
 };
+
+} // namespace
     
 NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request) {
     return new TAlterTopicActor(request);

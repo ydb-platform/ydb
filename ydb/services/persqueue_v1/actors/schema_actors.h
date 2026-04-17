@@ -9,40 +9,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TDropPropose {
-public:
-    TDropPropose() {}
-    virtual ~TDropPropose() {}
-
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-                         const TString& workingDir, const TString& name);
-};
-
-class TPQDropTopicActor : public TPQGrpcSchemaBase<TPQDropTopicActor, NKikimr::NGRpcService::TEvPQDropTopicRequest>, public TDropPropose {
-using TBase = TPQGrpcSchemaBase<TPQDropTopicActor, TEvPQDropTopicRequest>;
-
-public:
-     TPQDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request);
-    ~TPQDropTopicActor() = default;
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-};
-
-class TDropTopicActor : public TPQGrpcSchemaBase<TDropTopicActor, NKikimr::NGRpcService::TEvDropTopicRequest>, public TDropPropose {
-using TBase = TPQGrpcSchemaBase<TDropTopicActor, TEvDropTopicRequest>;
-
-public:
-     TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* request);
-     TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
-    ~TDropTopicActor() = default;
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-};
-
 class TPQDescribeTopicActor : public TPQGrpcSchemaBase<TPQDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest>
                             , public TCdcStreamCompatible
 {

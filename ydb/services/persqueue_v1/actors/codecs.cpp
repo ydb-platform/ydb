@@ -4,7 +4,6 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/fwd.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NGRpcProxy {

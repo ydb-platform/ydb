@@ -161,6 +161,14 @@ public:
     //! default: 0
     TDriverConfig& SetMaxMessageSize(uint64_t maxMessageSize);
 
+    //! Append a segment to the SDK build info header (x-ydb-sdk-build-info).
+    //! Do not call this method unless you know exactly what you are doing.
+    //! Segments are joined with ';'. Each segment must match: <name>/<X>.<Y>.<Z>
+    //!   name chars: lowercase latin letters, digits, '-'
+    //!   X, Y, Z chars: lowercase latin letters, digits
+    //! Throws on invalid format or if total extra length exceeds 512 bytes.
+    TDriverConfig& AppendBuildInfo(std::string_view segment);
+
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);
 

@@ -1,6 +1,5 @@
 #include "topic_alterer.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
@@ -41,7 +40,7 @@ void TTopicAlterer::DoDescribe() {
         { Settings.Strategy->GetTopicName() },
         {
             .UserToken = Settings.UserToken,
-            .AccessRights = NACLib::EAccessRights::AlterSchema
+            .AccessRights = Settings.Strategy->GetRequiredPermission()
         }));
 }
 
@@ -54,7 +53,7 @@ void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     TopicInfo = std::move(topics.begin()->second);
     switch(TopicInfo.Status) {
         case NDescriber::EStatus::SUCCESS: {
-            if (TopicInfo.CdcStream && !Settings.IsCdcStreamCompatible) {
+            if (TopicInfo.CdcStream && !Settings.Strategy->IsCdcStreamCompatible()) {
                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NOT_FOUND));
             }
             return DoAlter();
@@ -86,11 +85,6 @@ void TTopicAlterer::DoAlter() {
 
     Become(&TTopicAlterer::AlterState);
 
-    auto workingDir = GetWorkingDir();
-    if (workingDir.empty()) {
-        return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
-    }
-
     auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
     proposal->Record.SetDatabaseName(Settings.Database);
@@ -99,31 +93,11 @@ void TTopicAlterer::DoAlter() {
         proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
     }
 
-    NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-
-    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
-    modifyScheme.SetWorkingDir(workingDir);
-    modifyScheme.SetAllowAccessToPrivatePaths(Settings.IsCdcStreamCompatible);
-
-    auto* config = modifyScheme.MutableAlterPersQueueGroup();
-    config->CopyFrom(TopicInfo.Info->Description);
-
-    // keep previous values or set in ModifyPersqueueConfig
-    config->ClearTotalGroupCount();
-    config->MutablePQTabletConfig()->ClearPartitionKeySchema();
-
-    {
-        auto applyIf = modifyScheme.AddApplyIf();
-        applyIf->SetPathId(TopicInfo.Self->Info.GetPathId());
-        applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
-    }
-
-    auto [status, error] = Settings.Strategy->ApplyChanges(*config, TopicInfo.Info->Description, TopicInfo.CdcStream);
+    auto [status, error] = Settings.Strategy->BuildTransaction(TopicInfo, proposal->Record.MutableTransaction());
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyErrorAndDie(status, std::move(error));
     }
 
-    ModifyScheme = modifyScheme;
     Send(MakeTxProxyID(), std::move(proposal));
 }
 
@@ -200,26 +174,17 @@ STFUNC(TTopicAlterer::WaitTxCompletionState) {
     }
 }
 
-TString TTopicAlterer::GetWorkingDir() const {
-    std::pair <TString, TString> pathPair;
-    try {
-        pathPair = NKikimr::NGRpcService::SplitPath(TopicInfo.RealPath);
-    } catch (const std::exception &ex) {
-        return {};
-    }
-    return pathPair.first;
-}
-
 void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
-    Send(Settings.ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+    Send(Settings.ParentId, Settings.Strategy->CreateErrorResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
     PassAway();
 }
 
 void TTopicAlterer::ReplyOkAndDie() {
-    Send(Settings.ParentId, new TEvAlterTopicResponse(), 0, Settings.Cookie);
+    Send(Settings.ParentId, Settings.Strategy->CreateSuccessResponse(), 0, Settings.Cookie);
     PassAway();
 }
+
 
 IActor* CreateTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings) {
     return new TTopicAlterer(service, std::move(settings));

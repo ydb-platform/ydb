@@ -186,6 +186,13 @@ public:
     void SetSkipConflictCheck(bool skipConflictCheck);
     void SetTrackProducerId(bool trackProducerId);
 
+    // Returns true when KQP may omit other PQ tablets of this transaction from
+    // TDataTransaction SendingShards/ReceivingShards (so PQ does not run a distributed
+    // predicate / ReadSet exchange only between topic peers). Preconditions:
+    // CalcSkipConflictCheck() is true (!TrackProducerId_ && SkipConflictCheck_) and
+    // there are no topic read operations (no consumer / offset-commit reads).
+    bool ShouldOmitPeerTopicTabletsForPredicateExchange() const;
+
 private:
     void MergeSkipConflictCheck(bool rhs);
     void MergeTrackProducerId(bool rhs);

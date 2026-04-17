@@ -509,6 +509,7 @@ namespace NLongTxService {
         void UpdateLocalSnapshots();
         void UpdateImmutableSnapshotsRegistry();
 
+    private:
         TLockStateHandle GetAwaiterHandle(const TLockInfo& awaiterInfo);
 
         void UpdateLockWaitEdges(
@@ -524,7 +525,7 @@ namespace NLongTxService {
         void UnlinkWaitEdge(TWaitEdge&);
         void UnlinkWaitNode(TWaitNode&);
 
-        void RunDeadlockDetection();
+        void RunDeadlockDetection(const TLockIsland&);
 
     private:
         const TLongTxServiceSettings Settings;

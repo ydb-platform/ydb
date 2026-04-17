@@ -1200,8 +1200,8 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
 
     // 1. Update the local graph.
 
-    bool deadlockPossible = false;
     TVector<TWaitEdgeInfo> actuallyAdded;
+    THashSet<TLockIsland*> islandsWithPossibleDeadlock;
     for (const auto& addedEdge : added) {
         auto existingIt = WaitEdges.find(addedEdge.Id);
         if (existingIt != WaitEdges.end()) {
@@ -1269,7 +1269,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             delete smaller;
         } else {
             // Awaiter and blocker belong to the same island, deadlock is possible.
-            deadlockPossible = true;
+            islandsWithPossibleDeadlock.insert(awaiter.WaitNode().Island);
         }
 
         if (Settings.Counters) {
@@ -1380,8 +1380,8 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
     }
 
     // 3. Run deadlock detection
-    if (deadlockPossible) {
-        RunDeadlockDetection();
+    for (auto* island: islandsWithPossibleDeadlock) {
+        RunDeadlockDetection(*island);
     }
 }
 
@@ -1549,7 +1549,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev
 }
 
 
-void TLongTxServiceActor::RunDeadlockDetection() {
+void TLongTxServiceActor::RunDeadlockDetection(const TLockIsland& island) {
     auto hashFunc = [](const TLockStateHandle& lh) { return lh.Hash(); };
 
     // The higher priority, the more likely we are to break the wait by this lock.
@@ -1562,9 +1562,12 @@ void TLongTxServiceActor::RunDeadlockDetection() {
     };
 
     THashSet<TLockStateHandle, decltype(hashFunc)> awaitersWithLocalEdges;
-    for (const auto& [id, edge] : WaitEdges) {
-        if (id.OwnerId.NodeId() == SelfId().NodeId()) {
-            awaitersWithLocalEdges.insert(edge.Awaiter);
+    for (const auto& lock : island.Locks) {
+        for (const auto& edge : lock.Blockers) {
+            if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
+                awaitersWithLocalEdges.insert(edge.Awaiter);
+                break;
+            }
         }
     }
 

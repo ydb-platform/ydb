@@ -2284,6 +2284,11 @@
                 "ColumnId": 4,
                 "ColumnName": "ResponseType",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "FinalProgressRecord",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2293,7 +2298,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

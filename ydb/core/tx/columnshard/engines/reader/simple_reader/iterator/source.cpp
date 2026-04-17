@@ -30,6 +30,12 @@ bool IDataSource::HasMorePages() const {
     if (!StreamingMode || EarlyPages.empty()) {
         return false;
     }
+    // Terminal sentinel: AdvanceEarlyPage() may set CurrentEarlyPageIndex to
+    // EarlyPages.size() when all pages are exhausted (reverse mode).  Guard
+    // against that before applying the direction-specific checks.
+    if (CurrentEarlyPageIndex >= EarlyPages.size()) {
+        return false;
+    }
     // In reverse scan mode, there are more pages if we haven't reached the first page (index 0).
     // In forward scan mode, there are more pages if we haven't reached the last page.
     if (GetContext()->GetReadMetadata()->IsDescSorted()) {
@@ -77,7 +83,9 @@ void IDataSource::AdvanceEarlyPage() {
         ("current_index_before", CurrentEarlyPageIndex)
         ("total_pages", EarlyPages.size())
         ("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
-    AFL_VERIFY(StreamingMode && CurrentEarlyPageIndex < EarlyPages.size());
+    AFL_VERIFY(StreamingMode && CurrentEarlyPageIndex < EarlyPages.size())
+        ("current_index", CurrentEarlyPageIndex)("total_pages", EarlyPages.size())
+        ("streaming", StreamingMode)("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
     if (GetContext()->GetReadMetadata()->IsDescSorted()) {
         // In reverse scan mode, move to the previous page (decrement index).
         // When the current page is index 0, advancing means the source is fully

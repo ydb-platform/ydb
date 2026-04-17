@@ -1,3 +1,7 @@
+* Supported gRPC compression option on client side
+
+## v3.17.0
+
 * Added support of describe for scheme objects with type 'secret' via new TSecretClient
 
 * Added support for METRICS_LEVEL for the CreateTable/AlterTable requests.

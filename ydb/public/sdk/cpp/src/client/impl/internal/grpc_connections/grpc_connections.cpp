@@ -168,6 +168,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , GRpcKeepAliveTimeout_(TDeadline::SafeDurationCast(params->GetGRpcKeepAliveTimeout()))
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
     , GRpcLoadBalancingPolicy_(params->GetGRpcLoadBalancingPolicy())
+    , GRpcCompressionAlgorithm_(params->GetGRpcCompressionAlgorithm())
     , MemoryQuota_(params->GetMemoryQuota())
     , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
     , MaxOutboundMessageSize_(params->GetMaxOutboundMessageSize())
@@ -347,6 +348,20 @@ void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config,
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = timeoutMs;
     config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = permitWithoutCalls ? 1 : 0;
+}
+
+void TGRpcConnectionsImpl::SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm) {
+    switch (algorithm) {
+        case EGrpcCompressionAlgorithm::None:
+            config.CompressionAlgorithm = GRPC_COMPRESS_NONE;
+            break;
+        case EGrpcCompressionAlgorithm::Deflate:
+            config.CompressionAlgorithm = GRPC_COMPRESS_DEFLATE;
+            break;
+        case EGrpcCompressionAlgorithm::Gzip:
+            config.CompressionAlgorithm = GRPC_COMPRESS_GZIP;
+            break;
+    }
 }
 
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {

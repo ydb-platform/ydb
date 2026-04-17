@@ -14,6 +14,8 @@
 
 #include <library/cpp/logger/backend.h>
 
+#include <grpcpp/grpcpp.h>
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NYdb::inline Dev {
@@ -138,6 +140,11 @@ public:
     //! policy - name of the load balancing policy, see grpc documentation for available policies
     //! default: "round_robin"
     TDriverConfig& SetGRpcLoadBalancingPolicy(const std::string& policy);
+
+    //! Set grpc compression algorithm
+    //! algorithm - EGrpcCompressionAlgorithm enum value, see grpc documentation for available algorithms
+    //! default: EGrpcCompressionAlgorithm::None
+    TDriverConfig& SetGRpcCompressionAlgorithm(EGrpcCompressionAlgorithm algorithm);
 
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.

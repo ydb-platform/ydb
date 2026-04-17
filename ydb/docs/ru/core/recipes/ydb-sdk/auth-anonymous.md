@@ -141,23 +141,16 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new AnonymousProvider()
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
+
+  Для Entity Framework и linq2db используйте тот же connectionString.
 
 - Rust
 

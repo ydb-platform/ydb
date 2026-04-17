@@ -34,6 +34,10 @@
 
   Функциональность на данный момент не поддерживается
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   Функциональность на данный момент не поддерживается
@@ -106,6 +110,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 

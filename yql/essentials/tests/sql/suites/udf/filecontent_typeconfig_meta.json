@@ -1,0 +1,13 @@
+{
+  "name": "Test",
+  "format": "json",
+  "skip": 0,
+  "lists": {
+    "optional": false
+  },
+  "meta": "eNrjWsjIxV2UmlxapFdQlF+Sr9TJyMUSklpcIqTIxZqZl5daJMGowKjBbcStBxLV8wQJBUFkhCS5WEqAghJMYBWsYBVBYCEpKS4usFIwIcTDxZgINocziDFRSp2LFSIsx8WYCTVeAMl4iB2MmUlsYCcZAwC/Qiqb",
+  "view": {
+    "recursion": "ignore",
+    "enum": "number"
+  }
+}

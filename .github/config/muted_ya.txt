@@ -36,6 +36,7 @@ ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/viewer/tests test.py.test_async_replication_describe
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/tests test.py.test_viewer_query_long
 ydb/core/viewer/tests test.py.test_viewer_query_long_multipart

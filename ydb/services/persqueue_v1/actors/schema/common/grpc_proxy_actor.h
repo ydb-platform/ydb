@@ -24,8 +24,9 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         NGRpcService::TRpcOperationRequestActor<TDerived, TRequest>::Bootstrap(ctx);
 
-        if (this->Request_->GetSerializedToken().empty()) {
-            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (this->Request_->GetSerializedToken().empty() && !dynamic_cast<NGRpcService::IInternalRequestCtx*>(this->Request_.get())) {
+            const auto* appData = AppData(ctx);
+            if (appData->EnforceUserTokenRequirement || appData->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                       "Unauthenticated access is forbidden, please provide credentials");
             }

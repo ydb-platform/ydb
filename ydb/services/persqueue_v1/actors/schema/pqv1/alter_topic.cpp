@@ -18,7 +18,7 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
         const Ydb::PersQueue::V1::AlterTopicRequest& request
     )
         : Database(database)
-        , LocalCluster(localCluster)
+        , LocalCluster(std::move(localCluster))
         , Request(request)
     {
     }

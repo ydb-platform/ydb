@@ -66,7 +66,7 @@ const std::unordered_map<TString, TPqMetaExtractor::TPqMetaExtractorLambda> Extr
 } // anonymous namespace
 
 TPqMetaExtractor::TPqMetaExtractor() {
-    for (const auto& sysColumn : AllowedPqMetaSysColumns(true)) {
+    for (const auto& sysColumn : GetAllowedPqMetaSysColumns(true)) {
         const auto key = SkipPqSystemPrefix(sysColumn);
         Y_ENSURE(key, sysColumn);
         Y_ENSURE(ExtractorsMap.contains(*key), "Pq metadata field " << *key << " hasn't valid runtime extractor. You should add it.");

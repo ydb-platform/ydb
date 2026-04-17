@@ -829,7 +829,7 @@ private:
             .AppendTopics(topicReadSettings)
             .MaxMemoryUsageBytes(BufferSize)
             .ReadFromTimestamp(StartingMessageTimestamp)
-            .AutoPartitioningSupport(true);
+            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets());    // In table mode the query will not fail query by TEndPartitionSessionEvent.
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
@@ -948,7 +948,7 @@ private:
     }
 
     void SchedulePartitionCountTimer() {
-        if (!CheckPartitionCountPeriod || PartitionCountTimerScheduled) {
+        if (!CheckPartitionCountPeriod || SourceParams.GetStopAtCurrentEndOffsets() || PartitionCountTimerScheduled) {
             return;
         }
         PartitionCountTimerScheduled = true;
@@ -1119,11 +1119,12 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
-
-            TStringBuilder message;
-            message << "Topic (" << Self.SourceParams.GetTopicPath() << ") with auto partitioning is not supported.";
-            SRC_LOG_E(message);
-            Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+            if (!Self.SourceParams.GetStopAtCurrentEndOffsets()) {  // streaming mode
+                TStringBuilder message;
+                message << "Topic (" << Self.SourceParams.GetTopicPath() << ") with auto partitioning is not supported.";
+                SRC_LOG_E(message);
+                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+            }
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }

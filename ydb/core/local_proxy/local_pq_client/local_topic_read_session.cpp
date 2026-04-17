@@ -696,7 +696,6 @@ private:
     static void ValidateSettings(const TReadSessionSettings& settings) {
         TBase::ValidateSettings(settings);
 
-        Y_VALIDATE(settings.AutoPartitioningSupport_, "Automatic auto partitioning is not supported for local topic read session");
         Y_VALIDATE(settings.Decompress_, "Read session without decompression is not supported");
 
         const auto& eventHandlers = settings.EventHandlers_;

@@ -1665,7 +1665,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::SchedulePartitionCountTimer() {
-    if (!CheckPartitionCountPeriod || PartitionCountTimerScheduled) {
+    if (!CheckPartitionCountPeriod || SourceParams.GetStopAtCurrentEndOffsets() || PartitionCountTimerScheduled) {
         return;
     }
     PartitionCountTimerScheduled = true;

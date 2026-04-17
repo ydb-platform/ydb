@@ -52,7 +52,23 @@
   OAuth 2.0 token exchange | [tech.ydb.auth.OAuth2TokenExchangeProvider.fromFile(cfgFile);](https://github.com/ydb-platform/ydb-java-sdk/blob/master/auth-providers/oauth2-provider/src/main/java/tech/ydb/auth/OAuth2TokenExchangeProvider.java) |
   Определяется по переменным окружения | [tech.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/environ) |
 
+<<<<<<< HEAD
 - Node.js
+=======
+- C#
+
+  Режим | Метод                                                                                                                                                           
+  ----- |-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+  Anonymous | Ничего передавать для этого режима не нужно                                                                                                                      |
+  Access Token | [new TokenProvider(accessToken)](https://github.com/ydb-platform/ydb-dotnet-sdk/blob/main/src/Ydb.Sdk/src/Auth/TokenProvider.cs)                                 |
+  Metadata | [new Ydb.Sdk.Auth.MetadataProvider()](https://github.com/ydb-platform/ydb-dotnet-yc/blob/main/src/Ydb.Sdk.Yc.Auth/src/MetadataProvider.cs)                      |
+  Service Account Key | [new Ydb.Sdk.Auth.ServiceAccountProvider(saKeyFile);](https://github.com/ydb-platform/ydb-dotnet-yc/blob/main/src/Ydb.Sdk.Yc.Auth/src/ServiceAccountProvider.cs) |
+  OAuth 2.0 token exchange | Не поддерживается                                                                                                                                  |
+  Определяется по переменным окружения | Не поддерживается                                                                                                              |
+
+
+- JavaScript
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
   Режим | Метод
   ----- | -----

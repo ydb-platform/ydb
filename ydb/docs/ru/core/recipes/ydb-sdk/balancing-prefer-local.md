@@ -65,8 +65,78 @@
         ),
       ),
     )
+<<<<<<< HEAD
     if err != nil {
       panic(err)
+=======
+
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(timeout=5)
+        # ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        driver_config = ydb.DriverConfig(
+            endpoint=os.environ["YDB_ENDPOINT"],
+            database=os.environ["YDB_DATABASE"],
+            credentials=ydb.credentials_from_env_variables(),
+            use_all_nodes=False,  # предпочитать ближайший дата-центр
+        )
+        async with ydb.aio.Driver(driver_config) as driver:
+            await driver.wait()
+            # ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        os.environ["YDB_SQLALCHEMY_URL"],
+        connect_args={
+            "driver_config_kwargs": {
+                "use_all_nodes": False,  # предпочитать ближайший дата-центр
+            }
+        },
+    )
+    ```
+
+  {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.detectLocalDs())
+            .build()) {
+        // ...
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
     }
     defer nativeDriver.Close(ctx)
 

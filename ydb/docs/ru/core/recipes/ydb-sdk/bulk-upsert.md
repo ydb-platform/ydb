@@ -170,6 +170,166 @@
             e.printStackTrace();
         }
     }
+<<<<<<< HEAD
+=======
+    ```
+
+    В Spring Boot, Hibernate, JOOQ и других фреймворках вокруг ORM поверх JDBC можно выполнять нативный YQL (в том числе из репозиториев и `@Query`). Драйвер стремится оптимизировать крупные вставки; операции `UPDATE`, `INSERT`, `DELETE`, `UPSERT`, идущие через JDBC, при необходимости автоматически группируются в пакеты на стороне драйвера.
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import posixpath
+    import ydb
+
+    def bulk_upsert(driver: ydb.Driver, path: str):
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("id", ydb.PrimitiveType.Uint64)
+            .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        driver.table_client.bulk_upsert(posixpath.join(path, "tablename"), rows, column_types)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import posixpath
+    import ydb
+    import asyncio
+
+    async def bulk_upsert(driver: ydb.aio.Driver, path: str):
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("id", ydb.PrimitiveType.Uint64)
+            .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        await driver.table_client.bulk_upsert(
+            posixpath.join(path, "tablename"), rows, column_types
+        )
+
+    async def main():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            await bulk_upsert(driver, "/local")
+
+    asyncio.run(main())
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb
+
+    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
+    with engine.connect() as connection:
+        dbapi_conn = connection.connection
+
+        column_types = (
+              ydb.BulkUpsertColumns()
+              .add_column("id", ydb.PrimitiveType.Uint64)
+              .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+          )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+
+        dbapi_conn.bulk_upsert("tablename", rows, column_types)
+    ```
+
+  {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  ```rust
+  use ydb::{ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let rows: Vec<Value> = vec![
+          ydb_struct!(
+              "id" => 1_u64,
+              "val" => Value::Text("1".into()),
+          ),
+          ydb_struct!(
+              "id" => 2_u64,
+              "val" => Value::Text("2".into()),
+          ),
+          ydb_struct!(
+              "id" => 3_u64,
+              "val" => Value::Text("3".into()),
+          ),
+      ];
+
+      client
+          .table_client()
+          .retry_execute_bulk_upsert("/local/tablename".into(), rows)
+          .await?;
+
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $rows = [
+      ['id' => 1, 'val' => '1'],
+      ['id' => 2, 'val' => '2'],
+      ['id' => 3, 'val' => '3'],
+  ];
+
+  $ydb->table()->bulkUpsert('tablename', $rows, [
+      'id'  => 'UINT64',
+      'val' => 'UTF8',
+  ]);
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
   ```
 
 {% endlist %}

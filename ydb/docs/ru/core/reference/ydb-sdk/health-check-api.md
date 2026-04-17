@@ -22,6 +22,40 @@
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
+<<<<<<< HEAD
+=======
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+  Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 ## Параметры вызова {#call-parameters}
@@ -64,6 +98,33 @@
   };
   ```
 
+<<<<<<< HEAD
+=======
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 | Поле | Тип | Описание |

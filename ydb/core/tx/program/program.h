@@ -47,6 +47,15 @@ public:
         return Program ? Program->DebugString() : "NO_PROGRAM";
     }
 
+    bool HasDistinctCommand() const {
+        for (const auto& cmd : ProgramProto.GetCommand()) {
+            if (cmd.GetLineCase() == NKikimrSSA::TProgram::TCommand::kDistinct) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool HasProcessingColumnIds() const {
         return !!Program || !!OverrideProcessingColumnsVector;
     }

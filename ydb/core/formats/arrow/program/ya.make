@@ -43,6 +43,7 @@ SRCS(
     aggr_keys.cpp
     aggr_common.cpp
     filter.cpp
+    distinct.cpp
     projection.cpp
     assign_const.cpp
     assign_internal.cpp

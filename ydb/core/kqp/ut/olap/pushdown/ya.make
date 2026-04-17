@@ -13,6 +13,7 @@ ENDIF()
 
 SRCS(
     distinct_ut.cpp
+    distinct_exec_ut.cpp
 )
 
 PEERDIR(

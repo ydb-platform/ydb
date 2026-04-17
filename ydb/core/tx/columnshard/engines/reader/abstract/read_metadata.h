@@ -70,6 +70,10 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit);
     }
 
+    std::optional<ui64> GetRequestedLimitOptional() const {
+        return RequestedLimit;
+    }
+
     i64 GetLimitRobust() const {
         return std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
     }

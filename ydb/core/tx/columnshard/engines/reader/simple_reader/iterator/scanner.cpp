@@ -5,6 +5,7 @@
 #include "collections/limit_sorted.h"
 #include "collections/not_sorted.h"
 #include "sync_points/aggr.h"
+#include "sync_points/distinct_limit.h"
 #include "sync_points/limit.h"
 #include "sync_points/result.h"
 
@@ -25,6 +26,9 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     auto readMetadataContext = context->GetReadMetadata();
+    const std::optional<ui64> distinctLimit = (readMetadataContext->GetProgram().HasDistinctCommand())
+        ? readMetadataContext->GetRequestedLimitOptional()
+        : std::nullopt;
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
@@ -40,10 +44,16 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         } else {
             SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
         }
+        if (distinctLimit) {
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(*distinctLimit, SyncPoints.size(), context, SourcesCollection));
+        }
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
+        if (distinctLimit) {
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(*distinctLimit, SyncPoints.size(), context, SourcesCollection));
+        }
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     }
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {

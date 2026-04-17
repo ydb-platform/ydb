@@ -257,8 +257,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", "abc"}), "value:string=abc");
 
         // optional values
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<ui8>{}}), "");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<ui8>{1}}), "value:uint8=1");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui8>{}}), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui8>{1}}), "value:uint8=1");
     }
 
     Y_UNIT_TEST(CreateMessageWithReusage) {
@@ -270,10 +270,10 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, {"value", subMessage}), "subValue1:int32=1, subValue2:int32=2, value.subValue1:int32=1, value.subValue2:int32=2");
 
         // optional subMessages
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<TStructuredMessage>{}}), "");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", std::optional<TStructuredMessage>{subMessage}}), "value.subValue1:int32=1, value.subValue2:int32=2");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(std::optional<TStructuredMessage>{}), "");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(std::optional<TStructuredMessage>{subMessage}), "subValue1:int32=1, subValue2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}), "value.subValue1:int32=1, value.subValue2:int32=2");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), "");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), "subValue1:int32=1, subValue2:int32=2");
     }
 
     Y_UNIT_TEST(UpdateMessage) {
@@ -312,12 +312,12 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         TEST_MESSAGE(TLogStack::GetTop(), "");
 
-        UPDATE_STACK_TOP({"v1", 1});
+        YDBLOG_UPDATE_CONTEXT({"v1", 1});
         TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
 
         TLogStack::Push();
         TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
-        UPDATE_STACK_TOP({"v2", 2});
+        YDBLOG_UPDATE_CONTEXT({"v2", 2});
         TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1, v2:int32=2");
 
         TLogStack::Pop();
@@ -331,13 +331,13 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(TLogStack::GetTop(), "");
         {
             TLogStack::TLogGuard guard1;
-            UPDATE_STACK_TOP({"v1", 1});
+            YDBLOG_UPDATE_CONTEXT({"v1", 1});
             TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
 
             {
                 TLogStack::TLogGuard guard2;
                 TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
-                UPDATE_STACK_TOP({"v2", 2});
+                YDBLOG_UPDATE_CONTEXT({"v2", 2});
                 TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1, v2:int32=2");
             }
 

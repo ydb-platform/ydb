@@ -83,13 +83,13 @@ public:
 
     virtual ~IWmQueryClassifier() = default;
 
+    /// Get a state of a pre compile classification
     virtual TPreClassifyResult GetPreClassifyResult() const = 0;
 
     /// Refines classification once the query plan is available
     [[nodiscard]]
     virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const = 0;
 };
-
 
 class TWmQueryClassifier : public IWmQueryClassifier {
 public:
@@ -115,10 +115,9 @@ public:
         return MissedPoolIds;
     }
 
-    /// Runs classification before the query is compiled
-    [[nodiscard]]
     TPreClassifyResult GetPreClassifyResult() const override;
 
+    /// Runs classification before the query is compiled
     void PreCompileClassify();
 
     [[nodiscard]]

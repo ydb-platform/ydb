@@ -53,6 +53,11 @@ public:
         , Database(settings.GetDatabase())
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
+<<<<<<< HEAD
+=======
+        , MaxInFlightReads(MaxInFlightReadsStreamLookup())
+        , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
+>>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -654,6 +659,7 @@ private:
         auto guard = BindAllocator();
 
         NUdf::TUnboxedValue row;
+        auto allocState = &guard.GetMutex()->Ref();
 
         YQL_ENSURE(!Input.IsInvalid());
         if (Input.IsFinish() || !Input.HasValue()) {
@@ -661,8 +667,22 @@ private:
             return;
         }
 
+<<<<<<< HEAD
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
+=======
+        size_t fetchCount = 0;
+        i64 bytesBefore = allocState->GetAllocated();
+        while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
+            StreamLookupWorker->AddInputRow(std::move(row));
+            ++fetchCount;
+            // Avoid fetching too many rows at once: limit both the number of rows and
+            // the allocator growth since the start of this fetch loop. GetAllocated()
+            // is only a heuristic for memory pressure here, not a precise retained-memory metric.
+            if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
+                break;
+            }
+>>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
         }
     }
 
@@ -903,6 +923,11 @@ private:
     size_t TotalBytesQuota = 0;
     ui64 MaxTotalBytesQuota = 0;
     size_t MaxRowsProcessing = 0;
+<<<<<<< HEAD
+=======
+    ui64 MaxInFlightReads = 50;
+    ui64 MaxBytesPerFetch = 256_MB;
+>>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
     size_t MaxBytesDefaultQuota = 0;
     size_t MaxRowsDefaultQuota = 0;
 

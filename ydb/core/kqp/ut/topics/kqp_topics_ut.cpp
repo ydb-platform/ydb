@@ -257,13 +257,15 @@ Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck_TrackProducerId) 
 
 Y_UNIT_TEST(ShouldOmitPeerTopicPredicateExchange_WriteOnlySkipConflict) {
     const TString TOPIC = "topic";
+    constexpr ui32 SUPPORTIVE_PARTITION_ID_0 = 100'001;
+    constexpr ui32 SUPPORTIVE_PARTITION_ID_1 = 100'002;
     NTopic::TTopicOperations topicOps;
     topicOps.SetSkipConflictCheck(true);
     topicOps.SetTrackProducerId(false);
 
-    AddWriteOperation(topicOps, TOPIC, 0, {});
+    AddWriteOperation(topicOps, TOPIC, 0, SUPPORTIVE_PARTITION_ID_0);
     topicOps.SetTabletId(TOPIC, 0, 100);
-    AddWriteOperation(topicOps, TOPIC, 1, {});
+    AddWriteOperation(topicOps, TOPIC, 1, SUPPORTIVE_PARTITION_ID_1);
     topicOps.SetTabletId(TOPIC, 1, 200);
 
     UNIT_ASSERT(topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange());
@@ -271,13 +273,14 @@ Y_UNIT_TEST(ShouldOmitPeerTopicPredicateExchange_WriteOnlySkipConflict) {
 
 Y_UNIT_TEST(ShouldOmitPeerTopicPredicateExchange_FalseWhenConsumerReads) {
     const TString TOPIC = "topic";
+    constexpr ui32 SUPPORTIVE_PARTITION_ID = 100'001;
     NTopic::TTopicOperations topicOps;
     topicOps.SetSkipConflictCheck(true);
     topicOps.SetTrackProducerId(false);
 
     AddReadOperation(topicOps, TOPIC, 0, 1, 2, "c");
     topicOps.SetTabletId(TOPIC, 0, 100);
-    AddWriteOperation(topicOps, TOPIC, 1, {});
+    AddWriteOperation(topicOps, TOPIC, 1, SUPPORTIVE_PARTITION_ID);
     topicOps.SetTabletId(TOPIC, 1, 200);
 
     UNIT_ASSERT(!topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange());

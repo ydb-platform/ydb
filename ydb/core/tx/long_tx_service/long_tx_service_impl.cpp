@@ -1549,7 +1549,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev
 }
 
 
-void TLongTxServiceActor::RunDeadlockDetection(const TLockIsland& island) {
+void TLongTxServiceActor::RunDeadlockDetection(TLockIsland& island) {
     auto hashFunc = [](const TLockStateHandle& lh) { return lh.Hash(); };
 
     // The higher priority, the more likely we are to break the wait by this lock.
@@ -1561,18 +1561,18 @@ void TLongTxServiceActor::RunDeadlockDetection(const TLockIsland& island) {
         return left.LockId() > right.LockId();
     };
 
-    THashSet<TLockStateHandle, decltype(hashFunc)> awaitersWithLocalEdges;
-    for (const auto& lock : island.Locks) {
+    THashSet<TWaitNode*> awaitersWithLocalEdges;
+    for (auto& lock : island.Locks) {
         for (const auto& edge : lock.Blockers) {
             if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
-                awaitersWithLocalEdges.insert(edge.Awaiter);
+                awaitersWithLocalEdges.insert(&lock);
                 break;
             }
         }
     }
 
-    TVector<TLockStateHandle> current;
-    TVector<TLockStateHandle> next;
+    TVector<TWaitNode*> current;
+    TVector<TWaitNode*> next;
     THashMap<TLockStateHandle, TWaitEdge*, decltype(hashFunc)> prev;
     THashSet<TWaitEdge*> toBreak;
     for (const auto& start : awaitersWithLocalEdges) {
@@ -1584,8 +1584,8 @@ void TLongTxServiceActor::RunDeadlockDetection(const TLockIsland& island) {
         while (!current.empty()) {
             bool found = false;
             for (const auto& node : current) {
-                for (auto& edge : node.WaitNode().Blockers) {
-                    if (edge.Blocker == start) {
+                for (auto& edge : node->Blockers) {
+                    if (&edge.Blocker.WaitNode() == start) {
                         // Found a cycle, now find the best edge to break.
                         found = true;
                         TWaitEdge* bestEdge = nullptr;
@@ -1596,7 +1596,7 @@ void TLongTxServiceActor::RunDeadlockDetection(const TLockIsland& island) {
                                 bestEdge = curEdge;
                             }
 
-                            if (curEdge->Awaiter == start) {
+                            if (&curEdge->Awaiter.WaitNode() == start) {
                                 break;
                             } else {
                                 curEdge = prev.at(curEdge->Awaiter);
@@ -1609,7 +1609,7 @@ void TLongTxServiceActor::RunDeadlockDetection(const TLockIsland& island) {
                         }
                     } else {
                         if (prev.emplace(edge.Blocker, &edge).second) {
-                            next.push_back(edge.Blocker);
+                            next.push_back(&edge.Blocker.WaitNode());
                         }
                     }
                 }

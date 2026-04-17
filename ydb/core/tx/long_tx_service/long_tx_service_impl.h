@@ -525,7 +525,7 @@ namespace NLongTxService {
         void UnlinkWaitEdge(TWaitEdge&);
         void UnlinkWaitNode(TWaitNode&);
 
-        void RunDeadlockDetection(const TLockIsland&);
+        void RunDeadlockDetection(TLockIsland&);
 
     private:
         const TLongTxServiceSettings Settings;

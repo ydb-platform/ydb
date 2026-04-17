@@ -14,7 +14,6 @@
 #  pragma GCC system_header
 #endif
 
-#include <__concepts/arithmetic.h>
 #include <__concepts/same_as.h>
 #include <__config>
 #include <__cstddef/size_t.h>
@@ -22,6 +21,7 @@
 #include <__format/format_arg.h>
 #include <__type_traits/conditional.h>
 #include <__type_traits/extent.h>
+#include <__type_traits/integer_traits.h>
 #include <__type_traits/remove_const.h>
 #include <cstdint>
 #include <string>
@@ -65,7 +65,7 @@ consteval __arg_t __determine_arg_t() {
 #  endif
 
 // Signed integers
-template <class, __libcpp_signed_integer _Tp>
+template <class, __signed_integer _Tp>
 consteval __arg_t __determine_arg_t() {
   if constexpr (sizeof(_Tp) <= sizeof(int))
     return __arg_t::__int;
@@ -80,7 +80,7 @@ consteval __arg_t __determine_arg_t() {
 }
 
 // Unsigned integers
-template <class, __libcpp_unsigned_integer _Tp>
+template <class, __unsigned_integer _Tp>
 consteval __arg_t __determine_arg_t() {
   if constexpr (sizeof(_Tp) <= sizeof(unsigned))
     return __arg_t::__unsigned;
@@ -175,7 +175,7 @@ _LIBCPP_HIDE_FROM_ABI basic_format_arg<_Context> __create_format_arg(_Tp& __valu
   static_assert(__arg != __arg_t::__none, "the supplied type is not formattable");
   static_assert(__formattable_with<_Tp, _Context>);
 
-  using __context_char_type = typename _Context::char_type;
+  using __context_char_type = _Context::char_type;
   // Not all types can be used to directly initialize the
   // __basic_format_arg_value.  First handle all types needing adjustment, the
   // final else requires no adjustment.

@@ -4,11 +4,10 @@
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <typeinfo>
 
 namespace {
-using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
@@ -87,7 +86,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
             leftKeys,
             rightKeys,
             ConvertToJoinKind(join->JoinKind),
-            EJoinAlgoType::Undefined,
+            NKikimr::NKqp::EJoinAlgoType::Undefined,
             false,
             false,
             false);
@@ -152,6 +151,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
+    auto useBlockHashJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
 
     if (optLevel <= 1) {
         return input;
@@ -184,14 +184,15 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     }
 
     TCBOSettings settings{
-        .MaxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize),
+        .CBOTimeout = Config->CBOTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOTimeout),
+        .CBOHardTimeout = Config->CBOHardTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOHardTimeout),
         .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
     };
 
     // Shuffle elimination is currently disabled
     //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
 
-    auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel);
+    auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx.ExprCtx, false, nullptr, nullptr));
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

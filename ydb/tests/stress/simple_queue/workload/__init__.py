@@ -261,6 +261,8 @@ class YdbQueue(object):
         self.alter_column_ids = dict()
         # a dict with table_name -> set of column ids that currently have a DEFAULT expression
         self.columns_with_default = dict()
+        # guards concurrent reads/writes of alter_column_ids and columns_with_default
+        self._lock = threading.Lock()
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
@@ -280,7 +282,7 @@ class YdbQueue(object):
 
     def send_query(self, query, parameters, event_kind):
         try:
-            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops)
+            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops, operation_name=event_kind)
             self.update_stats(event_kind)
             return result_list
         except ydb.Error as e:
@@ -324,9 +326,10 @@ class YdbQueue(object):
 
     def generate_alter_column_id(self):
         val = random.randint(1, 100000)
-        while val in self.alter_column_ids.get(self.table_name, set()):
-            val = random.randint(1, 100000)
-        self.alter_column_ids.setdefault(self.table_name, set()).add(val)
+        with self._lock:
+            while val in self.alter_column_ids.get(self.table_name, set()):
+                val = random.randint(1, 100000)
+            self.alter_column_ids.setdefault(self.table_name, set()).add(val)
         return val
 
     def read_table(self):
@@ -401,9 +404,10 @@ class YdbQueue(object):
         self.send_query(query=query, event_kind=EventKind.WRITE, parameters=parameters)
 
     def add_column(self):
+        val = self.generate_alter_column_id()
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8".format(
             table_name=self.table_name,
-            val=self.generate_alter_column_id(),
+            val=val,
         )
         self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN)
 
@@ -416,27 +420,33 @@ class YdbQueue(object):
         )
         result = self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
         if result is not None:
-            self.columns_with_default.setdefault(self.table_name, set()).add(col_id)
+            with self._lock:
+                self.columns_with_default.setdefault(self.table_name, set()).add(col_id)
 
     def drop_column(self):
-        if len(self.alter_column_ids.get(self.table_name, set())) == 0:
+        with self._lock:
+            candidates = list(self.alter_column_ids.get(self.table_name, set()))
+        if not candidates:
             return
 
-        val = random.choice(list(self.alter_column_ids[self.table_name]))
-        self.alter_column_ids[self.table_name].remove(val)
-        self.columns_with_default.get(self.table_name, set()).discard(val)
-
+        val = random.choice(candidates)
         query = "ALTER TABLE `{table_name}` DROP COLUMN column_{val}".format(
             table_name=self.table_name,
             val=val,
         )
-        self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
+        result = self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
+        if result is not None:
+            with self._lock:
+                self.alter_column_ids.get(self.table_name, set()).discard(val)
+                self.columns_with_default.get(self.table_name, set()).discard(val)
 
     def set_default(self):
-        if len(self.alter_column_ids.get(self.table_name, set())) == 0:
+        with self._lock:
+            candidates = list(self.alter_column_ids.get(self.table_name, set()))
+        if not candidates:
             return
 
-        val = random.choice(list(self.alter_column_ids[self.table_name]))
+        val = random.choice(candidates)
         query = "ALTER TABLE `{table_name}` ALTER COLUMN column_{val} SET DEFAULT '{default_value}'".format(
             table_name=self.table_name,
             val=val,
@@ -444,20 +454,24 @@ class YdbQueue(object):
         )
         result = self.send_query(query, parameters=None, event_kind=EventKind.SET_DEFAULT)
         if result is not None:
-            self.columns_with_default.setdefault(self.table_name, set()).add(val)
+            with self._lock:
+                self.columns_with_default.setdefault(self.table_name, set()).add(val)
 
     def drop_default(self):
-        if len(self.columns_with_default.get(self.table_name, set())) == 0:
+        with self._lock:
+            candidates = list(self.columns_with_default.get(self.table_name, set()))
+        if not candidates:
             return
 
-        val = random.choice(list(self.columns_with_default[self.table_name]))
+        val = random.choice(candidates)
         query = "ALTER TABLE `{table_name}` ALTER COLUMN column_{val} DROP DEFAULT".format(
             table_name=self.table_name,
             val=val,
         )
         result = self.send_query(query, parameters=None, event_kind=EventKind.DROP_DEFAULT)
         if result is not None:
-            self.columns_with_default[self.table_name].discard(val)
+            with self._lock:
+                self.columns_with_default.get(self.table_name, set()).discard(val)
 
     def drop_table(self):
         duplicates = set()
@@ -495,7 +509,7 @@ class Workload:
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = InstrumentedQuerySessionPool(self.driver, size=200)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=10)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()
@@ -508,7 +522,7 @@ class Workload:
         ]
         if self.mode == "row":
             self.ydb_queues.append(YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True))
-        self.pool_semaphore = threading.BoundedSemaphore(value=100)
+        self.pool_semaphore = threading.BoundedSemaphore(value=1)
         self.worker_exception = []
 
     def random_points(self, size=1):

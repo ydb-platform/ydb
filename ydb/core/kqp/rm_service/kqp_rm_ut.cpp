@@ -199,7 +199,7 @@ public:
             std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
         Y_UNUSED(executionUnits);
         auto stats = rm->GetLocalResources();
-        UNIT_ASSERT_VALUES_EQUAL(scanQueryMemory, stats.Memory[NRm::EKqpMemoryPool::ScanQuery]);
+        UNIT_ASSERT_VALUES_EQUAL(scanQueryMemory, stats.Memory);
         // UNIT_ASSERT_VALUES_EQUAL(executionUnits, stats.ExecutionUnits);
     }
 
@@ -315,10 +315,9 @@ void KqpRm::SingleTask() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     auto stats = rm->GetLocalResources();
-    UNIT_ASSERT_VALUES_EQUAL(1000, stats.Memory[NRm::EKqpMemoryPool::ScanQuery]);
+    UNIT_ASSERT_VALUES_EQUAL(1000, stats.Memory);
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
     auto tx1 = MakeTx(1, rm);
     auto task2 = MakeTask(2, tx1);
@@ -341,7 +340,6 @@ void KqpRm::ManyTasks() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
 
     auto tx1 = MakeTx(1, rm);
@@ -384,7 +382,6 @@ void KqpRm::NotEnoughMemory() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 10'000;
 
     auto tx = MakeTx(1, rm);
@@ -404,7 +401,6 @@ void KqpRm::NotEnoughExecutionUnits() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
     request.ExecutionUnits = 1000;
 
@@ -428,7 +424,6 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 1'000;
 
     auto tx = MakeTx(1, rm);
@@ -437,7 +432,6 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     bool allocated = rm->AllocateResources(tx, task, request);
     UNIT_ASSERT(allocated);
 
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100'000;
     allocated = rm->AllocateResources(tx, task, request);
     UNIT_ASSERT(!allocated);
@@ -453,7 +447,6 @@ void KqpRm::Snapshot() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
     request.ExecutionUnits = 10;
     auto tx1 = MakeTx(1, rm);
@@ -497,7 +490,6 @@ void KqpRm::Reduce() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
     auto tx = MakeTx(1, rm);
     auto task = MakeTask(1, tx);
@@ -509,7 +501,6 @@ void KqpRm::Reduce() {
     AssertResourceBrokerSensors(0, 100, 0, 0, 1);
 
     NRm::TKqpResourcesRequest reduceRequest;
-    reduceRequest.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     reduceRequest.Memory = 70;
 
 /*
@@ -542,7 +533,6 @@ void KqpRm::SnapshotSharing() {
     CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_second);
 
     NRm::TKqpResourcesRequest request;
-    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
     request.Memory = 100;
     request.ExecutionUnits = 10;
 

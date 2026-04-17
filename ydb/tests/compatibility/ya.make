@@ -26,6 +26,7 @@ TEST_SRCS(
     test_kafka_topic.py
     test_transfer.py
     test_node_broker_delta_protocol.py
+    test_system_tablet_backup.py
     test_table_schema_compatibility.py
     test_user_management.py
     test_workload_manager.py
@@ -61,5 +62,4 @@ RECURSE(
     olap
     streaming
     result_set_format
-    distconf
 )

@@ -1,9 +1,10 @@
 import logging
 import re
+import warnings
 import pytz
 
 from io import IOBase
-from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator, BinaryIO
+from typing import Any, Literal, Tuple, Dict, Sequence, Optional, Union, Generator, BinaryIO, TYPE_CHECKING
 from datetime import tzinfo
 
 from pytz.exceptions import UnknownTimeZoneError
@@ -14,12 +15,138 @@ from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.types import Matrix, Closable
 from clickhouse_connect.driver.exceptions import StreamClosedError, ProgrammingError
-from clickhouse_connect.driver.options import check_arrow, pd_extended_dtypes
+from clickhouse_connect.driver import options
+from clickhouse_connect.driver.options import check_arrow
 from clickhouse_connect.driver.context import BaseQueryContext
 
+if TYPE_CHECKING:
+    from clickhouse_connect.datatypes.base import ClickHouseType
+
 logger = logging.getLogger(__name__)
+
+TzMode = Literal["naive_utc", "aware", "schema"]
+TzSource = Literal["auto", "server", "local"]
+
+_UTC_TZ_AWARE_TO_TZ_MODE: Dict[Union[bool, str], TzMode] = {
+    False: "naive_utc",
+    True: "aware",
+    "schema": "schema",
+}
+
+_VALID_TZ_MODES = {"naive_utc", "aware", "schema"}
+
+_TZ_MODE_TO_UTC_TZ_AWARE: Dict[str, Union[bool, Literal["schema"]]] = {
+    "naive_utc": False,
+    "aware": True,
+    "schema": "schema",
+}
+
+_APPLY_SERVER_TZ_TO_TZ_SOURCE: Dict[Union[bool, str, None], TzSource] = {
+    None: "auto",
+    True: "server",
+    False: "local",
+    "always": "server",
+}
+
+_TZ_SOURCE_TO_APPLY_SERVER_TZ: Dict[str, Optional[Union[bool, str]]] = {
+    "auto": None,
+    "server": True,
+    "local": False,
+}
+
+_VALID_TZ_SOURCES = {"auto", "server", "local"}
+
+# Mapping for string booleans that may arrive via URL params
+_STR_BOOL_MAP = {"true": True, "false": False, "1": True, "0": False}
+
+
+def _resolve_tz_mode(
+    tz_mode: Optional[TzMode] = None,
+    utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
+) -> TzMode:
+    """Resolve tz_mode from either the new ``tz_mode`` or deprecated ``utc_tz_aware`` parameter.
+
+    Returns the canonical TzMode string.  Raises ``ProgrammingError`` on conflicts or
+    invalid values.
+    """
+    if tz_mode is not None and utc_tz_aware is not None:
+        raise ProgrammingError(
+            "Cannot specify both 'tz_mode' and 'utc_tz_aware'. "
+            "Use 'tz_mode' only; 'utc_tz_aware' is deprecated."
+        )
+
+    if utc_tz_aware is not None:
+        # Coerce string booleans from URL params (e.g. "true" -> True)
+        if isinstance(utc_tz_aware, str) and utc_tz_aware.lower() in _STR_BOOL_MAP:
+            utc_tz_aware = _STR_BOOL_MAP[utc_tz_aware.lower()]
+
+        if utc_tz_aware not in _UTC_TZ_AWARE_TO_TZ_MODE:
+            raise ProgrammingError(
+                f'utc_tz_aware must be True, False, or "schema", got "{utc_tz_aware}"'
+            )
+        warnings.warn(
+            "utc_tz_aware is deprecated and will be removed in 1.0. "
+            "Use tz_mode='naive_utc' | 'aware' | 'schema' instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return _UTC_TZ_AWARE_TO_TZ_MODE[utc_tz_aware]
+
+    if tz_mode is not None:
+        if tz_mode not in _VALID_TZ_MODES:
+            raise ProgrammingError(
+                f'tz_mode must be "naive_utc", "aware", or "schema", got "{tz_mode}"'
+            )
+        return tz_mode
+
+    return "naive_utc"
+
+
+def _resolve_tz_source(
+    tz_source: Optional[TzSource] = None,
+    apply_server_timezone: Optional[Union[str, bool]] = None,
+) -> TzSource:
+    """Resolve tz_source from either the new ``tz_source`` or deprecated ``apply_server_timezone`` parameter.
+
+    Returns the canonical TzSource string.  Raises ``ProgrammingError`` on conflicts or
+    invalid values.
+    """
+    if tz_source is not None and apply_server_timezone is not None:
+        raise ProgrammingError(
+            "Cannot specify both 'tz_source' and 'apply_server_timezone'. "
+            "Use 'tz_source' only; 'apply_server_timezone' is deprecated."
+        )
+
+    if apply_server_timezone is not None:
+        # Coerce string booleans from URL params (e.g. "true" -> True)
+        if isinstance(apply_server_timezone, str) and apply_server_timezone.lower() in _STR_BOOL_MAP:
+            apply_server_timezone = _STR_BOOL_MAP[apply_server_timezone.lower()]
+
+        if apply_server_timezone not in _APPLY_SERVER_TZ_TO_TZ_SOURCE:
+            raise ProgrammingError(
+                f"apply_server_timezone must be None, True, False, or 'always', "
+                f'got "{apply_server_timezone}"'
+            )
+        warnings.warn(
+            "apply_server_timezone is deprecated and will be removed in 1.0. "
+            "Use tz_source='auto' | 'server' | 'local' instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return _APPLY_SERVER_TZ_TO_TZ_SOURCE[apply_server_timezone]
+
+    if tz_source is not None:
+        if tz_source not in _VALID_TZ_SOURCES:
+            raise ProgrammingError(
+                f'tz_source must be "auto", "server", or "local", got "{tz_source}"'
+            )
+        return tz_source
+
+    return "auto"
+
+
 commands = 'CREATE|ALTER|SYSTEM|GRANT|REVOKE|CHECK|DETACH|ATTACH|DROP|DELETE|KILL|' + \
-           'OPTIMIZE|SET|RENAME|TRUNCATE|USE'
+           'OPTIMIZE|SET|RENAME|TRUNCATE|USE|UPDATE'
 
 limit_re = re.compile(r'\s+LIMIT($|\s)', re.IGNORECASE)
 select_re = re.compile(r'(^|\s)SELECT\s', re.IGNORECASE)
@@ -48,14 +175,15 @@ class QueryContext(BaseQueryContext):
                  max_str_len: Optional[int] = 0,
                  query_tz: Optional[Union[str, tzinfo]] = None,
                  column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                 utc_tz_aware: bool = False,
+                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                  use_extended_dtypes: Optional[bool] = None,
                  as_pandas: bool = False,
                  streaming: bool = False,
                  apply_server_tz: bool = False,
                  external_data: Optional[ExternalData] = None,
                  transport_settings: Optional[Dict[str, str]] = None,
-                 rename_response_column: Optional[str] = None):
+                 rename_response_column: Optional[str] = None,
+                 tz_mode: Optional[TzMode] = None):
         """
         Initializes various configuration settings for the query context
 
@@ -82,8 +210,11 @@ class QueryContext(BaseQueryContext):
           objects with the selected timezone
         :param column_tzs A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
-        :param utc_tz_aware Force timezone-aware Python datetime objects even when the active timezone is UTC.
-          Defaults to False to preserve the legacy behavior of returning naive UTC timestamps.
+        :param tz_mode Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
+          naive UTC timestamps. "aware" forces timezone-aware UTC datetimes. "schema" returns datetimes that
+          match the server's column definition which means timezone-aware when the column schema defines a timezone
+          (e.g. DateTime('UTC')) and naive for bare DateTime columns.
+        :param utc_tz_aware Deprecated. Use tz_mode instead.
         """
         super().__init__(settings,
                          query_formats,
@@ -101,7 +232,7 @@ class QueryContext(BaseQueryContext):
         self.server_tz = server_tz
         self.apply_server_tz = apply_server_tz
         self.external_data = external_data
-        self.utc_tz_aware = utc_tz_aware
+        self.tz_mode = _resolve_tz_mode(tz_mode, utc_tz_aware)
         if isinstance(query_tz, str):
             try:
                 query_tz = pytz.timezone(query_tz)
@@ -121,7 +252,7 @@ class QueryContext(BaseQueryContext):
         self.response_tz = None
         self.block_info = False
         self.as_pandas = as_pandas
-        self.use_pandas_na = as_pandas and pd_extended_dtypes
+        self.use_pandas_na = as_pandas and options.pd_extended_dtypes
         self.streaming = streaming
         self._rename_response_column: Optional[str] = rename_response_column
         self.column_renamer = get_rename_method(rename_response_column)
@@ -152,6 +283,17 @@ class QueryContext(BaseQueryContext):
     def is_command(self) -> bool:
         return command_re.search(self.uncommented_query) is not None
 
+    @property
+    def utc_tz_aware(self) -> Union[bool, Literal["schema"]]:
+        """Deprecated: use tz_mode instead."""
+        warnings.warn(
+            "utc_tz_aware is deprecated and will be removed in 1.0. "
+            "Use tz_mode instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _TZ_MODE_TO_UTC_TZ_AWARE[self.tz_mode]
+
     def set_parameters(self, parameters: Dict[str, Any]):
         self.parameters = parameters
         self._update_query()
@@ -173,6 +315,8 @@ class QueryContext(BaseQueryContext):
             self.column_tz = None
 
     def active_tz(self, datatype_tz: Optional[tzinfo]):
+        if self.tz_mode == "schema":
+            return self.column_tz or datatype_tz
         if self.column_tz:
             active_tz = self.column_tz
         elif datatype_tz:
@@ -185,7 +329,7 @@ class QueryContext(BaseQueryContext):
             active_tz = self.server_tz
         else:
             active_tz = tzutil.local_tz
-        if tzutil.is_utc_timezone(active_tz) and not self.utc_tz_aware:
+        if tzutil.is_utc_timezone(active_tz) and self.tz_mode == "naive_utc":
             return None
         return active_tz
 
@@ -204,37 +348,44 @@ class QueryContext(BaseQueryContext):
                      max_str_len: Optional[int] = None,
                      query_tz: Optional[Union[str, tzinfo]] = None,
                      column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                     utc_tz_aware: Optional[bool] = None,
+                     utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                      use_extended_dtypes: Optional[bool] = None,
                      as_pandas: bool = False,
                      streaming: bool = False,
                      external_data: Optional[ExternalData] = None,
                      transport_settings: Optional[Dict[str, str]] = None,
-                     rename_response_column: Optional[str] = None) -> 'QueryContext':
+                     rename_response_column: Optional[str] = None,
+                     tz_mode: Optional[TzMode] = None) -> 'QueryContext':
         """
         Creates Query context copy with parameters overridden/updated as appropriate.
         """
-        return QueryContext(query or self.query,
-                            dict_copy(self.parameters, parameters),
-                            dict_copy(self.settings, settings),
-                            dict_copy(self.query_formats, query_formats),
-                            dict_copy(self.column_formats, column_formats),
-                            encoding if encoding else self.encoding,
-                            server_tz if server_tz else self.server_tz,
-                            self.use_none if use_none is None else use_none,
-                            self.column_oriented if column_oriented is None else column_oriented,
-                            self.use_numpy if use_numpy is None else use_numpy,
-                            self.max_str_len if max_str_len is None else max_str_len,
-                            self.query_tz if query_tz is None else query_tz,
-                            self.column_tzs if column_tzs is None else column_tzs,
-                            self.utc_tz_aware if utc_tz_aware is None else utc_tz_aware,
-                            self.use_extended_dtypes if use_extended_dtypes is None else use_extended_dtypes,
-                            as_pandas,
-                            streaming,
-                            self.apply_server_tz,
-                            self.external_data if external_data is None else external_data,
-                            self.transport_settings if transport_settings is None else transport_settings,
-                            self.rename_response_column if rename_response_column is None else rename_response_column)
+        if tz_mode is not None or utc_tz_aware is not None:
+            resolved_tz_mode = _resolve_tz_mode(tz_mode, utc_tz_aware)
+        else:
+            resolved_tz_mode = self.tz_mode
+        return QueryContext(
+            query=query or self.query,
+            parameters=dict_copy(self.parameters, parameters),
+            settings=dict_copy(self.settings, settings),
+            query_formats=dict_copy(self.query_formats, query_formats),
+            column_formats=dict_copy(self.column_formats, column_formats),
+            encoding=encoding if encoding else self.encoding,
+            server_tz=server_tz if server_tz else self.server_tz,
+            use_none=self.use_none if use_none is None else use_none,
+            column_oriented=self.column_oriented if column_oriented is None else column_oriented,
+            use_numpy=self.use_numpy if use_numpy is None else use_numpy,
+            max_str_len=self.max_str_len if max_str_len is None else max_str_len,
+            query_tz=self.query_tz if query_tz is None else query_tz,
+            column_tzs=self.column_tzs if column_tzs is None else column_tzs,
+            tz_mode=resolved_tz_mode,
+            use_extended_dtypes=self.use_extended_dtypes if use_extended_dtypes is None else use_extended_dtypes,
+            as_pandas=as_pandas,
+            streaming=streaming,
+            apply_server_tz=self.apply_server_tz,
+            external_data=self.external_data if external_data is None else external_data,
+            transport_settings=self.transport_settings if transport_settings is None else transport_settings,
+            rename_response_column=self.rename_response_column if rename_response_column is None else rename_response_column,
+        )
 
     def _update_query(self):
         self.final_query, self.bind_params = bind_query(self.query, self.parameters, self.server_tz)
@@ -254,8 +405,8 @@ class QueryResult(Closable):
     def __init__(self,
                  result_set: Matrix = None,
                  block_gen: Generator[Matrix, None, None] = None,
-                 column_names: Tuple = (),
-                 column_types: Tuple = (),
+                 column_names: Tuple[str, ...] = (),
+                 column_types: Tuple['ClickHouseType', ...] = (),
                  column_oriented: bool = False,
                  source: Closable = None,
                  query_id: str = None,
@@ -321,7 +472,7 @@ class QueryResult(Closable):
         return StreamContext(self, self._column_block_stream())
 
     @property
-    def row_block_stream(self):
+    def row_block_stream(self) -> StreamContext:
         return StreamContext(self, self._row_block_stream())
 
     @property
@@ -343,18 +494,18 @@ class QueryResult(Closable):
         return len(self.result_set)
 
     @property
-    def first_item(self):
+    def first_item(self) -> Dict[str, Any]:
         if self.column_oriented:
             return {name: col[0] for name, col in zip(self.column_names, self.result_set)}
         return dict(zip(self.column_names, self.result_set[0]))
 
     @property
-    def first_row(self):
+    def first_row(self) -> Sequence[Any]:
         if self.column_oriented:
             return [col[0] for col in self.result_set]
         return self.result_set[0]
 
-    def close(self):
+    def close(self) -> None:
         if self.source:
             self.source.close()
             self.source = None
@@ -400,10 +551,10 @@ def to_arrow_batches(buffer: IOBase) -> StreamContext:
 
 def arrow_buffer(table, compression: Optional[str] = None) -> Tuple[Sequence[str], Union[bytes, BinaryIO]]:
     pyarrow = check_arrow()
-    options = None
+    write_options = None
     if compression in ('zstd', 'lz4'):
-        options = pyarrow.ipc.IpcWriteOptions(compression=pyarrow.Codec(compression=compression))
+        write_options = pyarrow.ipc.IpcWriteOptions(compression=pyarrow.Codec(compression=compression))
     sink = pyarrow.BufferOutputStream()
-    with pyarrow.RecordBatchFileWriter(sink, table.schema, options=options) as writer:
+    with pyarrow.RecordBatchFileWriter(sink, table.schema, options=write_options) as writer:
         writer.write(table)
     return table.schema.names, sink.getvalue()

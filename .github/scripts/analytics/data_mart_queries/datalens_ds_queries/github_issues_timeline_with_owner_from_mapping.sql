@@ -41,7 +41,12 @@ SELECT
     t.env AS env,
     t.priority AS priority,
     t.branch AS branch,
-    t.area AS area,
+    t.area AS area_full,
+    Cast(CASE
+        WHEN ListLength(String::SplitToList(Cast(t.area AS String), '/')) >= 2
+        THEN String::SplitToList(Cast(t.area AS String), '/')[0] || '/' || String::SplitToList(Cast(t.area AS String), '/')[1]
+        ELSE Cast(t.area AS String)
+    END AS Utf8) AS area,
     CASE
         WHEN t.area = 'area/-' THEN 'unknown'
         WHEN o.owner_team IS NOT NULL THEN o.owner_team

@@ -514,6 +514,8 @@ namespace {
     const char PATH_DELIM2 = 0;
 #endif
 
+} // namespace
+
 bool IsAbsolutePath(const std::string& path)
 {
     if (path.empty())
@@ -528,8 +530,6 @@ bool IsAbsolutePath(const std::string& path)
 #endif
     return false;
 }
-
-} // namespace
 
 std::string CombinePaths(const std::string& path1, const std::string& path2)
 {
@@ -957,163 +957,6 @@ void SendfileChunkedCopy(
 #endif
 }
 
-TFuture<void> ReadBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize)
-{
-    YT_VERIFY(bufferSize);
-
-    auto readSize = read(fromFd, buffer.data(), bufferSize);
-
-    if (readSize == -1) {
-        THROW_ERROR_EXCEPTION("Error while doing read")
-            << TError::FromSystem();
-    }
-
-    if (readSize == 0) {
-        return OKFuture;
-    }
-
-    return BIND(&WriteBuffer)
-        .AsyncVia(GetCurrentInvoker())
-        .Run(fromFd, toFd, std::move(buffer), bufferSize, readSize);
-}
-
-TFuture<void> WriteBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize,
-    int readSize)
-{
-    YT_VERIFY(readSize);
-    YT_VERIFY(bufferSize);
-
-    auto size = write(toFd, buffer.data(), readSize);
-
-    if (size == -1) {
-        THROW_ERROR_EXCEPTION("Error while doing write")
-            << TError::FromSystem();
-    }
-
-    return BIND(&ReadBuffer)
-        .AsyncVia(GetCurrentInvoker())
-        .Run(fromFd, toFd, std::move(buffer), bufferSize);
-}
-
-TFuture<void> ReadWriteCopyAsync(
-    const std::string& existingPath,
-    const std::string& newPath,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    try {
-        TFile src(TString(existingPath), OpenExisting | RdOnly | Seq | CloseOnExec);
-        TFile dst(TString(newPath), CreateAlways | WrOnly | Seq | CloseOnExec);
-        dst.Flock(LOCK_EX);
-        return ReadWriteCopyAsync(src, dst, chunkSize);
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Failed to copy %v to %v",
-            existingPath,
-            newPath)
-            << ex;
-    }
-#else
-    Y_UNUSED(existingPath, newPath, chunkSize);
-    ThrowNotSupported();
-#endif
-}
-
-TFuture<void> ReadWriteCopyAsync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    int srcFd = source.GetHandle();
-    int dstFd = destination.GetHandle();
-    std::vector<ui8> buffer(chunkSize);
-
-    return ReadBuffer(srcFd, dstFd, std::move(buffer), chunkSize)
-        .Apply(BIND([=] (const TErrorOr<void>& result) {
-            THROW_ERROR_EXCEPTION_IF_FAILED(result,
-                TError("Failed to copy %v to %v",
-                    source.GetName(),
-                    destination.GetName()));
-        }));
-#else
-    Y_UNUSED(source, destination, chunkSize);
-    ThrowNotSupported();
-#endif
-}
-
-void ReadWriteCopySync(
-    const std::string& existingPath,
-    const std::string& newPath,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    try {
-        TFile src(TString(existingPath), OpenExisting | RdOnly | Seq | CloseOnExec);
-        TFile dst(TString(newPath), CreateAlways | WrOnly | Seq | CloseOnExec);
-        dst.Flock(LOCK_EX);
-        ReadWriteCopySync(src, dst, chunkSize);
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Failed to copy %v to %v",
-            existingPath,
-            newPath)
-            << ex;
-    }
-#else
-    Y_UNUSED(existingPath, newPath, chunkSize);
-    ThrowNotSupported();
-#endif
-}
-
-void ReadWriteCopySync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    int srcFd = source.GetHandle();
-    int dstFd = destination.GetHandle();
-    std::vector<ui8> buffer(chunkSize);
-
-    while (true) {
-        auto readByteCount = read(srcFd, buffer.data(), chunkSize);
-
-        if (readByteCount == -1) {
-            THROW_ERROR_EXCEPTION("Error while doing read")
-                << TError::FromSystem();
-        }
-
-        if (readByteCount == 0) {
-            return;
-        }
-
-        for (int writtenByteCount = 0; writtenByteCount < readByteCount;) {
-            auto byteCount = write(
-                dstFd,
-                buffer.data() + writtenByteCount,
-                readByteCount - writtenByteCount);
-
-            if (byteCount == -1) {
-                THROW_ERROR_EXCEPTION("Error while doing write")
-                    << TError::FromSystem();
-            }
-
-            writtenByteCount += byteCount;
-        }
-    }
-#else
-    Y_UNUSED(source, destination, chunkSize);
-    ThrowNotSupported();
-#endif
-}
-
 void Splice(
     const TFile& source,
     const TFile& destination,
@@ -1159,7 +1002,7 @@ void Splice(
 #endif
 }
 
-TFuture<void> SpliceAsync(
+TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
     bool pipeIsSrc,
@@ -1196,6 +1039,7 @@ TFuture<void> SpliceAsync(
             : NConcurrency::EPollControl::Write);
 
     auto completionPromise = NewPromise<void>();
+    auto bytesSpliced = std::make_shared<i64>();
 
     // NB: it is important that src and dst are captured by value here (instead of,
     // say, simply their handles) so that they don't get destroyed prematurely.
@@ -1214,6 +1058,7 @@ TFuture<void> SpliceAsync(
                 SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
 
             if (result > 0) {
+                *bytesSpliced += result;
                 continue;
             } else if (result == 0) {
                 completionPromise.TrySet();
@@ -1245,9 +1090,12 @@ TFuture<void> SpliceAsync(
 
     return completionPromise.ToFuture().Apply(BIND([=] (const TError& result) {
         poller->Unarm(fdPipe, pollable);
-        return poller->Unregister(pollable).ToUncancelable().Apply(BIND([result](const TError& inner) {
+        return poller->Unregister(pollable).ToUncancelable().Apply(BIND([=] (const TError& inner) {
             YT_VERIFY(inner.IsOK());
-            return result;
+            return TSpliceResult{
+                .BytesSpliced = *bytesSpliced,
+                .Error = result,
+            };
         }));
     }));
 #else

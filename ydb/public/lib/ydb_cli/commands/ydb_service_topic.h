@@ -116,6 +116,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> DlqMaxProcessingAttempts_;
         TMaybe<bool> DlqEnabled_;
         TMaybe<TString> DlqQueueName_;
+        bool ContentBasedDeduplication_ = false;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
@@ -157,6 +158,8 @@ namespace NYdb::NConsoleClient {
         TMaybe<TDuration> DefaultProcessingTimeout_;
         TMaybe<ui32> MaxProcessingAttempts_;
         TMaybe<TString> DlqQueueName_;
+        TMaybe<TDuration> ReceiveMessageWaitTime_;
+        TMaybe<TDuration> ReceiveMessageDelay_;
     };
 
     class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {

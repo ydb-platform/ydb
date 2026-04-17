@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: int16('-1000'), b: 1, sum: int16('-1500'), count: 5|>,
@@ -32,8 +31,8 @@ $str = ($x) -> {
 };
 
 SELECT
-    Ensure(sum, sum IS NOT DISTINCT FROM actual_sum, $str(actual_sum)),
-    Ensure(count, count IS NOT DISTINCT FROM actual_count, $str(actual_count))
+    Ensure(actual_sum, sum IS NOT DISTINCT FROM actual_sum, $str(actual_sum)),
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count, $str(actual_count))
 FROM
     $win_result
 ;

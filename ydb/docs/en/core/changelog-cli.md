@@ -1,5 +1,21 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.30.0 {#2-30-0}
+
+Released on April 7, 2026. To update to version **2.30.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the `{{ ydb-cli }} config completion` command to generate shell completion scripts for bash and zsh.
+* Added the `{{ ydb-cli }} export nfs` and `{{ ydb-cli }} import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
+* Added the `--compact` option to the `{{ ydb-cli }} workload tpcc import` [command](./reference/ydb-cli/workload-tpcc.md).
+* Added the `--tx-mode` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), allowing to set the transaction mode (e.g., `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Added support for the new [compaction](./concepts/glossary.md#compaction) operation in the `{{ ydb-cli }} operation` [subcommands](./reference/ydb-cli/operation-list.md).
+
+### Improvements
+
+* When a [profile](./reference/ydb-cli/profile/index.md) is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
+
 ## Version 2.29.0 {#2-29-0}
 
 Released on February 11, 2026. To update to version **2.29.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -90,7 +106,7 @@ Released on September 1, 2025. To update to version **2.25.0**, select the [Down
 * Added the `--start-offset` option to the `{{ ydb-cli }} topic read` [command](./reference/ydb-cli/topic-read.md), which specifies a starting position for reading from the selected partition.
 * **_(Requires server v25.3+)_** Added a new paths approach in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md) with the new `--include` option instead of the `--item` option.
 * **_(Requires server v25.3+)_** Added support for encryption features in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md).
-* **_(Requires server v25.3+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster bridge` commands to manage a cluster in the bridge mode: `list`, `switchover`, `failover`, `takedown`, `rejoin`.
+* **_(Requires server v25.3+)_** **_(Experimental)_** Added the [`{{ ydb-cli }} admin cluster bridge`](./reference/ydb-cli/commands/bridge/index.md) commands to manage a cluster in [bridge mode](./concepts/bridge.md): `list`, `switchover`, `failover`, `takedown`, `rejoin`.
 
 ### Improvements
 
@@ -374,7 +390,7 @@ Released on April 25, 2024. To update to version **2.9.0**, select the [Download
 
 * Improved query logical plan tables: added colors, more information, fixed some bugs.
 * The verbose option `-v` is supported for the `{{ ydb-cli }} workload` commands to provide debug information.
-* Added an option to run the `{{ ydb-cli }} workload tpch` command with an S3 source to measure [federated queries](concepts/federated_query/index.md) performance.
+* Added an option to run the `{{ ydb-cli }} workload tpch` command with an S3 source to measure [federated queries](concepts/query_execution/federated_query/index.md) performance.
 * Added the `--rate` option for `{{ ydb-cli }} workload` commands to control the transactions (or requests) per second limit.
 * Added the `--use-virtual-addressing` option for S3 import/export, allowing the switch to [virtual hosting of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) for the S3 path layout.
 * Improved the `{{ ydb-cli }} scheme ls` command performance due to listing directories in parallel.
@@ -399,14 +415,14 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 * Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
 * In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, which allows to specify which type of queries to use.
 * Added a column with median benchmark execution time in the statistics table of the [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md) command.
-* **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, return with arbitrarily-sized results and support for [MVCC](concepts/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
+* **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, return with arbitrarily-sized results and support for [MVCC](concepts/query_execution/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
 * **_(Experimental)_** In the `{{ ydb-cli }} table query explain` command, the `--collect-diagnostics` option has been added to collect query diagnostics and save it to a file. The command uses an experimental API, compatibility is not guaranteed.
 
 ### Bug fixes
 
 * Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
 
-* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/import.md#pg-convert).
+* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](./postgresql/import.md#pg-convert).
 
 ## Version 2.7.0 {#2-7-0}
 
@@ -414,7 +430,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 ### Features
 
-* Added the [ydb tools pg-convert](postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+* Added the [ydb tools pg-convert](./postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 * Added the `{{ ydb-cli }} workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 * Added new `{{ ydb-cli }} scheme permissions list` command to list permissions.
 * In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.

@@ -386,6 +386,10 @@ Y_UNIT_TEST(CreateTable) {
         {"create table user(user int32 (default 0, not null, family f))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL, FAMILY f)\n);\n"},
         {"create table user(user int32 (default 0, family f, not null))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, FAMILY f, NOT NULL)\n);\n"},
         {"create  table\tuser(key int32, val int64 compression(algorithm=lz4))", "CREATE TABLE user (\n\tkey int32,\n\tval int64 COMPRESSION (algorithm = lz4)\n);\n"},
+        {"create  table\tuser(key int32, val String encoding(dict))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (dict)\n);\n"},
+        {"create  table\tuser(key int32, val String encoding(off))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (off)\n);\n"},
+        {"create  table\tuser(key int32, val String encoding())", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING ()\n);\n"},
+        {"create table user(key int32, val String encoding(dict(max_size=100)))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (dict (max_size = 100))\n);\n"},
     };
 
     TSetup setup;
@@ -609,6 +613,14 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE t\n\tALTER COLUMN c SET DEFAULT 42\n;\n"},
         {"alter table t alter column c drop default",
          "ALTER TABLE t\n\tALTER COLUMN c DROP DEFAULT\n;\n"},
+        {"alter table t alter column c set encoding(dict)",
+         "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (dict)\n;\n"},
+        {"alter table t alter column c set encoding(off)",
+         "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (off)\n;\n"},
+        {"alter table t alter column c set encoding()",
+         "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING ()\n;\n"},
+        {"alter table t alter column c set encoding(dict(max_size=100))",
+         "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (dict (max_size = 100))\n;\n"},
     };
 
     TSetup setup;
@@ -1019,6 +1031,52 @@ Y_UNIT_TEST(Select) {
          "SELECT\n\t1\nFROM\n\tuser\nGROUP COMPACT BY\n\tkey,\n\tvalue AS v\n;\n"},
         {"select 1 from user group by key with combine",
          "SELECT\n\t1\nFROM\n\tuser\nGROUP BY\n\tkey\n\tWITH combine\n;\n"},
+        {R"sql(select 1 from user group by grouping sets ((a, b), (b), ()))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    (a, b),
+                    (b),
+                    ()
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets ((a, b), (b), (),))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    (a, b),
+                    (b),
+                    (),
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets ((a, b), (b), (),), c)sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    (a, b),
+                    (b),
+                    (),
+                ),
+                c
+            ;
+
+        )sql")},
         {"select 1 from user order by key asc",
          "SELECT\n\t1\nFROM\n\tuser\nORDER BY\n\tkey ASC\n;\n"},
         {"select 1 from user order by key, value desc",
@@ -1689,6 +1747,34 @@ Y_UNIT_TEST(Comment) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(CommentAfterListItem) {
+    TSetup().Run(TCases{
+        {
+            TrimIndent(R"sql(
+                SELECT
+                    AsList(
+                        1
+                        /*a*/
+                        /*b*/
+                        /*c*/
+                    )
+                ;
+
+            )sql"),
+            TrimIndent(R"sql(
+                SELECT
+                    AsList(
+                        1 /*a*/
+                        /*b*/
+                        /*c*/
+                    )
+                ;
+
+            )sql"),
+        },
+    });
+}
+
 Y_UNIT_TEST(CommentAfterLastSelect) {
     TCases cases = {
         {"SELECT 1--comment\n",
@@ -1701,6 +1787,34 @@ Y_UNIT_TEST(CommentAfterLastSelect) {
          "SELECT\n\t*\nFROM\n\tInput /* comment */\n;\n"},
         {"SELECT * FROM Input\n\n\n\n/* comment */\n\n\n",
          "SELECT\n\t*\nFROM\n\tInput\n\n/* comment */;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(CommentAfterLastStatement) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                SELECT
+                    1
+                ;
+
+                -- x
+
+                -- y
+            )sql"),
+            TrimIndent(R"sql(
+                SELECT
+                    1
+                ;
+                -- x
+
+                -- y
+
+            )sql"),
+        },
     };
 
     TSetup setup;
@@ -2125,7 +2239,8 @@ Y_UNIT_TEST(NamedNodeCommentAndBraces) {
             )sql"),
             TrimIndent(R"sql(
                 $x = /*a
-                */ (
+                */
+                (
                     SELECT
                         1
                 );
@@ -2189,6 +2304,34 @@ Y_UNIT_TEST(InlineSubquery) {
 
     TCases cases = {
         {input, expected},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(PgSyntax) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                --!syntax_pg
+                SELECT
+                    convert_from(a, 'UTF8')
+                FROM
+                    plato.x
+                WHERE
+                    convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+            TrimIndent(R"sql(
+                --!syntax_pg
+                SELECT
+                    convert_from(a, 'UTF8')
+                FROM
+                    plato.x
+                WHERE
+                    convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+        },
     };
 
     TSetup setup;

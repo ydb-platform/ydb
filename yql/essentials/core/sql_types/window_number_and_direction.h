@@ -17,7 +17,8 @@ namespace NYql::NWindow {
 template <typename T>
 class TNumberAndDirection {
 public:
-    static inline constexpr bool IsArithmetic = std::is_arithmetic_v<T>;
+    static inline constexpr bool IsInt128 = std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, NYql::NDecimal::TUint128>;
+    static inline constexpr bool IsArithmetic = std::is_arithmetic_v<T> || IsInt128;
 
     struct TUnbounded {
         bool operator==(const TUnbounded&) const = default;
@@ -34,7 +35,7 @@ public:
     using TValueType = std::conditional_t<!IsArithmetic, std::variant<TNumberType, TUnbounded, TZero>, std::variant<TNumberType, TUnbounded>>;
 
     TNumberAndDirection(TNumberType value, EDirection direction)
-        : TNumberAndDirection(TValueType(value), direction, TPrivateTag{})
+        : TNumberAndDirection(TValueType(std::move(value)), direction, TPrivateTag{})
     {
     }
 
@@ -130,8 +131,12 @@ private:
     {
         if constexpr (std::is_floating_point_v<TNumberType>) {
             if (!IsInf()) {
-                Y_ABORT_UNLESS(!std::isnan(GetUnderlyingValue()), "Nan is not allowed to be a directioned value.");
+                Y_DEBUG_ABORT_UNLESS(!std::isnan(GetUnderlyingValue()), "Nan is not allowed to be a directioned value.");
+                Y_DEBUG_ABORT_UNLESS(!std::isinf(GetUnderlyingValue()), "Inf is not allowed to be a directioned value.");
             }
+        }
+        if constexpr (IsInt128) {
+            Y_DEBUG_ABORT_UNLESS(NYql::NDecimal::IsNormal(GetUnderlyingValue()), "Only normal values are allowed.");
         }
         if constexpr (IsArithmetic) {
             YQL_ENSURE(IsInf() || GetUnderlyingValue() >= 0, "Only positive values are allowed.");
@@ -166,23 +171,65 @@ private:
     EDirection Direction_;
 };
 
-template <typename T>
-struct TNumberAndDirectionHash {
+template <typename T, typename TValueHasher = THash<typename TNumberAndDirection<T>::TNumberType>>
+class TNumberAndDirectionHash {
+public:
+    explicit TNumberAndDirectionHash(TValueHasher hasher = TValueHasher{})
+        : Hasher_(std::move(hasher))
+    {
+    }
+
     size_t operator()(const TNumberAndDirection<T>& value) const {
         size_t hash = THash<int>{}(static_cast<int>(value.GetDirection()));
         hash = CombineHashes(hash, std::visit(
                                        TOverloaded{
-                                           [](TNumberAndDirection<T>::TUnbounded) {
+                                           [&](TNumberAndDirection<T>::TUnbounded) {
                                                return THash<size_t>{}(1);
                                            },
-                                           [](TNumberAndDirection<T>::TZero) {
+                                           [&](TNumberAndDirection<T>::TZero) {
                                                return THash<size_t>{}(2);
                                            },
-                                           [](const TNumberAndDirection<T>::TNumberType& number) {
-                                               return THash<typename TNumberAndDirection<T>::TNumberType>{}(number);
+                                           [&](const TNumberAndDirection<T>::TNumberType& number) {
+                                               return Hasher_(number);
                                            }}, value.GetValue()));
         return hash;
     }
+
+private:
+    TValueHasher Hasher_;
+};
+
+template <typename T, typename TComparator = TEqualTo<typename TNumberAndDirection<T>::TNumberType>>
+class TNumberAndDirectionComparator {
+public:
+    explicit TNumberAndDirectionComparator(TComparator comparator = TComparator{})
+        : Comparator_(comparator)
+    {
+    }
+
+    bool operator()(const TNumberAndDirection<T>& left, const TNumberAndDirection<T>& right) const {
+        if (left.GetDirection() != right.GetDirection()) {
+            return false;
+        }
+        return std::visit(
+            TOverloaded{
+                [&](const typename TNumberAndDirection<T>::TNumberType& l, const typename TNumberAndDirection<T>::TNumberType& r) {
+                    return Comparator_(l, r);
+                },
+                [](typename TNumberAndDirection<T>::TUnbounded, typename TNumberAndDirection<T>::TUnbounded) {
+                    return true;
+                },
+                [](typename TNumberAndDirection<T>::TZero, typename TNumberAndDirection<T>::TZero) {
+                    return true;
+                },
+                [](const auto&, const auto&) {
+                    return false;
+                }},
+            left.GetValue(), right.GetValue());
+    }
+
+private:
+    TComparator Comparator_;
 };
 
 } // namespace NYql::NWindow

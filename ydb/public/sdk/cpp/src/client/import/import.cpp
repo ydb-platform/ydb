@@ -99,7 +99,7 @@ TImportFromFsResponse::TImportFromFsResponse(TStatus&& status, Ydb::Operations::
     Metadata_.Settings.BasePath(metadata.settings().base_path());
 
     for (const auto& item : metadata.settings().items()) {
-        Metadata_.Settings.AppendItem({item.source_path(), item.destination_path()});
+        Metadata_.Settings.AppendItem({item.source_path(), item.destination_path(), item.source_path_db()});
     }
 
     Metadata_.Settings.Description(metadata.settings().description());
@@ -333,8 +333,18 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
     settingsProto.set_base_path(TStringType{settings.BasePath_});
 
     for (const auto& item : settings.Item_) {
+        if (!item.Src.empty() && !item.SrcPathDb.empty()) {
+            throw TContractViolation(
+                TStringBuilder() << "Invalid item: both Src and SrcPathDb are set: \"" << item.Src << "\" and \"" << item.SrcPathDb << "\"");
+        }
+
         auto& protoItem = *settingsProto.mutable_items()->Add();
-        protoItem.set_source_path(item.Src);
+        if (!item.Src.empty()) {
+            protoItem.set_source_path(item.Src);
+        }
+        if (!item.SrcPathDb.empty()) {
+            protoItem.set_source_path_db(item.SrcPathDb);
+        }
         protoItem.set_destination_path(item.Dst);
     }
 
@@ -352,6 +362,14 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
 
     if (settings.SkipChecksumValidation_) {
         settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
+    }
+
+    if (settings.DestinationPath_) {
+        settingsProto.set_destination_path(TStringType{settings.DestinationPath_.value()});
+    }
+
+    if (settings.SymmetricKey_) {
+        settingsProto.mutable_encryption_settings()->mutable_symmetric_key()->set_key(*settings.SymmetricKey_);
     }
 
     settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));

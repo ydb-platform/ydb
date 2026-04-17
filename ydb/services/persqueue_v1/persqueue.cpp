@@ -3,7 +3,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
-#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
@@ -58,6 +57,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                                 \
         YDB_API_DEFAULT_COUNTER_BLOCK(persistent_queue, methodName), \
         auditMode,                                                   \
+        EEmptyDatabaseMode::EmptyDatabaseAllowed,                    \
         COMMON,                                                      \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,          \
         GRpcRequestProxyId_,                                         \
@@ -76,6 +76,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             requestType,                                                        \
             YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(persistent_queue, methodName), \
             auditMode,                                                          \
+            EEmptyDatabaseMode::EmptyDatabaseAllowed,                           \
             operationCallClass,                                                 \
             GRpcRequestProxyId_,                                                \
             CQ_,                                                                \

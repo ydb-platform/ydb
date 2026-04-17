@@ -16,7 +16,7 @@ constexpr size_t YQL_JOB_CODEC_BLOCK_SIZE = 1_MB;
 
 constexpr size_t YQL_JOB_CODEC_MEM = YQL_JOB_CODEC_BLOCK_COUNT * YQL_JOB_CODEC_BLOCK_SIZE + (30_MB);
 
-constexpr size_t YQL_ARROW_MEMORY_POOL_RESERVE = 640_MB;
+constexpr size_t YQL_ARROW_MEMORY_POOL_RESERVE = 1_GB;
 
 constexpr ui64 DEFAULT_TOP_SORT_LIMIT = 1000ULL;
 
@@ -156,5 +156,11 @@ constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_COUNT_PER_CLUSTER_LIMIT = 5;
 constexpr ui64 DEFAULT_QUERY_DUMP_FILE_COUNT_PER_OPERATION_LIMIT = 5;
 
 constexpr bool DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP = false;
+
+constexpr bool DEFAULT_ENABLE_RLS_TABLES_SUPPORT = false;
+
+constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disable;
+
+constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
 
 } // NYql

@@ -7,12 +7,20 @@
 #include <yt/yt/core/misc/proc.h>
 
 #include <library/cpp/yt/misc/tls.h>
+
 #include <library/cpp/yt/system/exit.h>
+
+#include <library/cpp/yt/threading/execution_stack.h>
 
 #include <util/generic/size_literals.h>
 
 #ifdef _linux_
     #include <sched.h>
+#endif
+
+#if defined(__linux__) && defined(__x86_64__)
+    #include <sys/syscall.h>
+    #include <asm/prctl.h>
 #endif
 
 #if defined(_unix_)
@@ -25,7 +33,7 @@ namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId) ;
+YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId);
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
 constinit const auto Logger = ThreadingLogger;
@@ -202,6 +210,19 @@ void* TThread::StaticThreadMainTrampoline(void* opaque)
 
 YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
 {
+#if defined(__linux__) && defined(__x86_64__)
+    ::syscall(SYS_arch_prctl, ARCH_GET_FS, &FSBase_);
+
+    if (auto* logFile = TryGetShutdownLogFile()) {
+        ::fprintf(logFile, "%s\t*** Entered thread trampoline (ThreadName: %s, ThreadId: %d, FSBase: %lx)\n",
+            GetInstant().ToString().c_str(),
+            ThreadName_.c_str(),
+            GetCurrentThreadId(),
+            FSBase_
+        );
+    }
+#endif
+
     auto this_ = MakeStrong(this);
 
     ::TThread::SetCurrentThreadName(ThreadName_.c_str());
@@ -287,77 +308,6 @@ void TThread::SetThreadPriority()
 #endif
 }
 
-#if defined(_unix_)
-TThread::TSignalHandlerStack::TSignalHandlerStack(size_t size)
-    : Size_(RoundUpToPage(size))
-{
-    const size_t guardSize = GuardPageCount * GetPageSize();
-
-    int flags =
-#if defined(_darwin_)
-        MAP_ANON | MAP_PRIVATE;
-#else
-        MAP_ANONYMOUS | MAP_PRIVATE;
-#endif
-
-    Base_ = reinterpret_cast<char*>(::mmap(
-        0,
-        guardSize * 2 + Size_,
-        PROT_READ | PROT_WRITE,
-        flags,
-        -1,
-        0));
-
-    auto checkOom = [] {
-        if (LastSystemError() == ENOMEM) {
-            AbortProcessDramatically(
-                EProcessExitCode::OutOfMemory,
-                "Out-of-memory on signal handler stack allocation");
-        }
-    };
-
-    if (Base_ == MAP_FAILED) {
-        checkOom();
-        YT_LOG_FATAL(TError::FromSystem(), "Failed to allocate signal handler stack (Size: %v)",
-            Size_);
-    }
-
-    if (::mprotect(Base_, guardSize, PROT_NONE) == -1) {
-        checkOom();
-        YT_LOG_FATAL(TError::FromSystem(), "Failed to protect signal handler stack from below (GuardSize: %v, AddrToProtect: %v)",
-            guardSize,
-            Base_);
-    }
-
-    if (::mprotect(Base_ + guardSize + Size_, guardSize, PROT_NONE) == -1) {
-        checkOom();
-        YT_LOG_FATAL(TError::FromSystem(), "Failed to protect signal handler stack from above (GuardSize: %v, AddrToProtect: %v)",
-            guardSize,
-            Base_ + guardSize + Size_);
-    }
-
-#if !defined(_asan_enabled_) && !defined(_msan_enabled_) && defined(_unix_) && \
-    (_XOPEN_SOURCE >= 500 || \
-    /* Since glibc 2.12: */ _POSIX_C_SOURCE >= 200809L || \
-    /* glibc <= 2.19: */ _BSD_SOURCE)
-    auto* stackStart = Base_ + guardSize;
-    stack_t stack{
-        .ss_sp = stackStart,
-        .ss_flags = 0,
-        .ss_size = Size_,
-    };
-
-    YT_VERIFY(sigaltstack(&stack, nullptr) == 0);
-#endif
-}
-
-TThread::TSignalHandlerStack::~TSignalHandlerStack()
-{
-    const size_t guardSize = GuardPageCount * GetPageSize();
-    ::munmap(Base_, guardSize * 2 + Size_);
-}
-#endif
-
 YT_PREVENT_TLS_CACHING void TThread::ConfigureSignalHandlerStack()
 {
 #if !defined(_asan_enabled_) && !defined(_msan_enabled_) && defined(_unix_) && \
@@ -371,8 +321,14 @@ YT_PREVENT_TLS_CACHING void TThread::ConfigureSignalHandlerStack()
 
     // The size of of the custom stack to be provided for signal handlers.
     constexpr size_t SignalHandlerStackSize = 32_KB;
+    SignalHandlerStack_ = std::make_unique<TExecutionStack>(SignalHandlerStackSize);
 
-    SignalHandlerStack_ = std::make_unique<TSignalHandlerStack>(SignalHandlerStackSize);
+    stack_t stack{
+        .ss_sp = SignalHandlerStack_->GetStack(),
+        .ss_flags = 0,
+        .ss_size = SignalHandlerStack_->GetSize(),
+    };
+    YT_VERIFY(sigaltstack(&stack, nullptr) == 0);
 #endif
 }
 

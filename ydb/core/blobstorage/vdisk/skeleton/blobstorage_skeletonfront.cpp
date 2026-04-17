@@ -807,7 +807,7 @@ namespace NKikimr {
             IntQueueLowGets = std::make_unique<TIntQueueClass>(
                     VCtx->VDiskLogPrefix,
                     NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead,
-                    "FastGets",
+                    "LowGets",
                     Config->SkeletonFrontGets_MaxInFlightCount,
                     Config->SkeletonFrontGets_MaxInFlightCost,
                     SkeletonFrontGroup);
@@ -1172,9 +1172,20 @@ namespace NKikimr {
                                IntQueueHugePutsBackground.get()}) {
                 light = Max(light, queue->GetCumulativeLight());
             }
+            NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E replicationStatus =
+                    NKikimrWhiteboard::TVDiskDetailedReplicationStatus::Replicated;
+            if (!replicated) {
+                if (!ReplMonGroup.ReplIsHoldingToken()) {
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::WaitingForToken;
+                } else if (!unreplicatedNonPhantoms && unreplicatedPhantoms) {
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
+                } else {
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::InProgress;
+                }
+            }
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
-                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, unsyncedVDisks, light, HasUnreadableBlobs);
+                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light, HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();
                 const i64 b = ReplMonGroup.ReplWorkUnitsRemaining();

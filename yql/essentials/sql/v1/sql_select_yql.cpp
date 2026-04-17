@@ -2,7 +2,6 @@
 
 #include "antlr_token.h"
 #include "sql_expression.h"
-#include "sql_group_by.h"
 #include "select_yql.h"
 #include "sql_select.h"
 
@@ -190,7 +189,7 @@ private:
             case TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
                 return true;
             case TRule_select_kind_parenthesis::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -262,7 +261,7 @@ private:
             case TRule_select_or_expr::kAltSelectOrExpr2:
                 return Unsupported("tuple_or_expr at UNION/EXCEPT/INTERSECT context");
             case TRule_select_or_expr::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -273,7 +272,7 @@ private:
             case TRule_exists_expr_TBlock3::kAlt2:
                 return Build(block.GetAlt2().GetRule_values_stmt1());
             case TRule_exists_expr_TBlock3::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -292,7 +291,7 @@ private:
                 return Build(alt, state, smartParenthesis);
             }
             case TRule_select_or_expr::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -341,7 +340,7 @@ private:
             case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt3:
                 return Build(block.GetAlt3().GetRule_select_core1(), std::move(select));
             case NSQLv1Generated::TRule_select_kind_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -500,7 +499,7 @@ private:
             case NSQLv1Generated::TRule_result_column::kAltResultColumn2:
                 return Build(rule.GetAlt_result_column2());
             case NSQLv1Generated::TRule_result_column::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -612,7 +611,7 @@ private:
             case TRule_join_op::kAltJoinOp2:
                 return Build(rule.GetAlt_join_op2());
             case TRule_join_op::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -634,7 +633,7 @@ private:
                 YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), CROSS));
                 return EYqlJoinKind::Cross;
             case TRule_join_op_TAlt2_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         const auto& alt1 = block.GetAlt1();
@@ -668,7 +667,7 @@ private:
                     YQL_ENSURE(IS_TOKEN(block.GetAlt4().GetToken1().GetId(), FULL));
                     return Unsupported("FULL");
                 case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
         }
 
@@ -687,7 +686,7 @@ private:
             case TRule_join_constraint::kAltJoinConstraint2:
                 return Unsupported("USING pure_column_or_named_list");
             case TRule_join_constraint::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -757,7 +756,7 @@ private:
             case NSQLv1Generated::TRule_single_source::kAltSingleSource3:
                 return Build(rule.GetAlt_single_source3().GetRule_values_stmt2());
             case NSQLv1Generated::TRule_single_source::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -810,7 +809,7 @@ private:
                     isAnonymous,
                     isClusterExplicit);
             case TRule_table_ref_TBlock3::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -885,28 +884,188 @@ private:
     }
 
     TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
-        TGroupByClause legacy(*this);
-        legacy.SetYqlSelectProduced(true);
-        if (!legacy.Build(rule)) {
+        TPosition position = Ctx_.TokenPosition(rule.GetToken1());
+        Token(rule.GetToken1());
+
+        if (rule.HasBlock2()) {
+            return Unsupported("GROUP COMPACT BY");
+        }
+
+        if (Ctx_.IsAnyUnusedHintForToken(position, [](const auto& hint) { return to_lower(hint.Name) == "compact"; })) {
+            return Unsupported("GROUP /*+ compact */ BY");
+        }
+
+        if (TPosition position; IsDistinctOptSet(rule.GetRule_opt_set_quantifier4(), position)) {
+            Ctx_.Error(position) << "DISTINCT is not supported in GROUP BY clause yet!";
             return std::unexpected(ESQLError::Basic);
         }
 
-        if (!legacy.Aliases().empty()) {
-            return Unsupported("GROUP BY aliases");
-        }
-        if (legacy.GetLegacyHoppingWindow() != nullptr) {
-            return Unsupported("GROUP BY HOP");
-        }
-        if (legacy.IsCompactGroupBy()) {
-            return Unsupported("GROUP COMPACT BY");
-        }
-        if (!legacy.GetSuffix().empty()) {
+        if (rule.HasBlock6()) {
             return Unsupported("GROUP BY ... WITH an_id");
         }
 
+        return Build(rule.GetRule_grouping_element_list5());
+    }
+
+    TSQLResult<TGroupBy> Build(const TRule_grouping_element_list& rule) {
+        TVector<TGroupBy::TElement> elements(Reserve(1 + rule.GetBlock2().size()));
+
+        if (auto result = Build(rule.GetRule_grouping_element1())) {
+            elements.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& block : rule.GetBlock2()) {
+            if (auto result = Build(block.GetRule_grouping_element2())) {
+                elements.emplace_back(std::move(*result));
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+
         return TGroupBy{
-            .Keys = std::move(legacy.Content()),
+            .Elements = std::move(elements),
         };
+    }
+
+    TSQLResult<TGroupBy::TElement> Build(const TRule_grouping_element& rule) {
+        switch (rule.GetAltCase()) {
+            case TRule_grouping_element::kAltGroupingElement1:
+                return Build(rule.GetAlt_grouping_element1().GetRule_ordinary_grouping_set1());
+            case TRule_grouping_element::kAltGroupingElement2:
+                return Build(rule.GetAlt_grouping_element2().GetRule_rollup_list1());
+            case TRule_grouping_element::kAltGroupingElement3:
+                return Build(rule.GetAlt_grouping_element3().GetRule_cube_list1());
+            case TRule_grouping_element::kAltGroupingElement4:
+                return Build(rule.GetAlt_grouping_element4().GetRule_grouping_sets_specification1());
+            case TRule_grouping_element::kAltGroupingElement5:
+                return Unsupported("hopping_window_specification");
+            case TRule_grouping_element::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
+    }
+
+    TNodeResult Build(const TRule_ordinary_grouping_set& rule) {
+        const auto& namedExpr = rule.GetRule_named_expr1();
+        if (namedExpr.HasBlock2()) {
+            return Unsupported("GROUP BY aliases");
+        }
+
+        TNodeResult result = Build(
+            namedExpr.GetRule_expr1(),
+            EColumnRefState::Allow,
+            ESmartParenthesis::GroupBy);
+
+        if (!result) {
+            return std::unexpected(result.error());
+        }
+
+        TNodePtr expr = std::move(*result);
+
+        const TString label = expr->GetLabel();
+        const bool isColumn = expr->GetColumnName();
+        const bool isGroupingSet = expr->ContentListPtr();
+
+        if (isGroupingSet) {
+            return TNonNull(std::move(expr));
+        }
+
+        if (!label && !isColumn && !Ctx_.YqlSelectAllowUnnamedGroupByExpr) {
+            Ctx_.Error()
+                << "Unnamed expressions are not supported here. "
+                << "Please use '<expr> AS <name>' or PRAGMA YqlSelectAllowUnnamedGroupByExpr";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        return TNonNull(std::move(expr));
+    }
+
+    TSQLResult<TGroupBy::TElement> Build(const TRule_rollup_list& rule) {
+        Token(rule.GetToken1());
+        return Build(rule.GetRule_ordinary_grouping_set_list3())
+            .transform([](TVector<TNodePtr> exprs) {
+                return TGroupingSets::TRollup{.Expressions = std::move(exprs)};
+            });
+    }
+
+    TSQLResult<TGroupBy::TElement> Build(const TRule_cube_list& rule) {
+        Token(rule.GetToken1());
+        return Build(rule.GetRule_ordinary_grouping_set_list3())
+            .transform([](TVector<TNodePtr> exprs) {
+                return TGroupingSets::TCube{.Expressions = std::move(exprs)};
+            });
+    }
+
+    TSQLResult<TGroupBy::TElement> Build(const TRule_grouping_sets_specification& rule) {
+        const auto build = [&](const TRule_grouping_element& rule) -> TSQLResult<TVector<TNodePtr>> {
+            if (rule.GetAltCase() != TRule_grouping_element::kAltGroupingElement1) {
+                return Unsupported("GROUPING SETS with nested ROLLUP/CUBE/GROUPING SETS");
+            }
+
+            const auto& set = rule.GetAlt_grouping_element1().GetRule_ordinary_grouping_set1();
+            return Build(set).transform([](TNonNull<TNodePtr> node) -> TVector<TNodePtr> {
+                if (auto* set = dynamic_cast<TListOfNamedNodes*>(node.Get())) {
+                    return *set->ContentListPtr();
+                }
+
+                return TVector<TNodePtr>{std::move(node)};
+            });
+        };
+
+        Token(rule.GetToken1());
+        const auto& list = rule.GetRule_grouping_element_list4();
+
+        TVector<TVector<TNodePtr>> sets(Reserve(1 + list.GetBlock2().size()));
+
+        if (auto result = build(list.GetRule_grouping_element1())) {
+            sets.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& block : list.GetBlock2()) {
+            if (auto result = build(block.GetRule_grouping_element2())) {
+                sets.emplace_back(std::move(*result));
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+
+        return TGroupingSets{.Sets = std::move(sets)};
+    }
+
+    TSQLResult<TVector<TNodePtr>> Build(const TRule_ordinary_grouping_set_list& list) {
+        const auto build = [&](const TRule_ordinary_grouping_set& rule) -> TNodeResult {
+            auto result = Build(rule);
+            if (!result) {
+                return std::unexpected(result.error());
+            }
+
+            if (dynamic_cast<const TListOfNamedNodes*>((*result).Get())) {
+                return Unsupported("ROLLUP/CUBE sublists of elements in parenthesis");
+            }
+
+            return result;
+        };
+
+        TVector<TNodePtr> exprs(Reserve(1 + list.GetBlock2().size()));
+
+        if (auto result = build(list.GetRule_ordinary_grouping_set1())) {
+            exprs.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& block : list.GetBlock2()) {
+            if (auto result = build(block.GetRule_ordinary_grouping_set2())) {
+                exprs.emplace_back(std::move(*result));
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+
+        return exprs;
     }
 
     TSQLResult<TOrderBy> Build(const TRule_ext_order_by_clause& rule) {
@@ -951,7 +1110,7 @@ private:
         }
 
         bool isAscending;
-        if (direction == "") {
+        if (direction.empty()) {
             isAscending = true;
         } else if (direction == "asc") {
             isAscending = true;
@@ -972,8 +1131,6 @@ private:
         EColumnRefState state,
         ESmartParenthesis smartParenthesis = ESmartParenthesis::Default)
     {
-        YQL_ENSURE(smartParenthesis != ESmartParenthesis::GroupBy);
-
         TColumnRefScope scope(Ctx_, state);
         TSqlExpression sqlExpr(*this);
         sqlExpr.SetSmartParenthesisMode(smartParenthesis);
@@ -1001,7 +1158,7 @@ private:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             }
             case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -1021,7 +1178,7 @@ private:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             }
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -1157,7 +1314,7 @@ NYql::TLangVersion YqlSelectLangVersion() {
 }
 
 std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf message) {
-    if (ctx.GetYqlSelectMode() == EYqlSelectMode::Force) {
+    if (ctx.GetYqlSelectMode() == EYqlSelect::Force) {
         ctx.Error() << "YqlSelect unsupported: " << message;
     }
 

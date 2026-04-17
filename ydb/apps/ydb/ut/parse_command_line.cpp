@@ -1,6 +1,6 @@
 #include "run_ydb.h"
 
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
@@ -245,7 +245,7 @@ public:
             return;
         }
 
-        using namespace NKikimr;
+        using namespace NKikimr::NCertTestUtils;
         const TCertAndKey ca = GenerateCA(TProps::AsCA());
         const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
         const TCertAndKey clientCert = GenerateSignedCert(ca, TProps::AsClient());
@@ -524,6 +524,36 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {
                 {"YDB_TOKEN", "42"}
             },
+            profile
+        );
+    }
+
+    // When explicit profile is set, active profile must be ignored (no fallback to active for missing options).
+    Y_UNIT_TEST_F(ExplicitProfileIgnoresActiveProfile, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_has_all:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: ydb-token
+                    data: token-from-active
+            explicit_no_database:
+                endpoint: {endpoint}
+        active_profile: active_has_all
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+        // Explicit profile has no database. We must NOT use database from active profile; command should fail.
+        ExpectFail();
+        RunCli(
+            {
+                "-v",
+                "-p", "explicit_no_database",
+                "scheme", "ls",
+            },
+            {},
             profile
         );
     }

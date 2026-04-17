@@ -179,9 +179,9 @@ void THttpParser::MaybeFlushHeader(bool trailer)
         if (!Trailers_) {
             Trailers_ = New<THeaders>();
         }
-        Trailers_->Set(NextField_.Flush(), NextValue_.Flush());
+        Trailers_->Add(NextField_.Flush(), NextValue_.Flush());
     } else {
-        Headers_->Set(NextField_.Flush(), NextValue_.Flush());
+        Headers_->Add(NextField_.Flush(), NextValue_.Flush());
     }
 }
 

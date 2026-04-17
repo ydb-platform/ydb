@@ -54,6 +54,7 @@ enum class ESchemeEntryType : i32 {
     Transfer = 23,
     StreamingQuery = 24,
     BackupCollection = 25,
+    Secret = 26,
 };
 
 struct TVirtualTimestamp {

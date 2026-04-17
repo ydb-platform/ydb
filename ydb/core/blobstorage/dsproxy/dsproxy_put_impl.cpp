@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
@@ -59,6 +60,55 @@ NLog::EPriority GetPriorityForReply(TAtomicLogPriorityMuteChecker<NLog::PRI_ERRO
     } else {
         checker.Unmute();
         return priority;
+    }
+}
+
+void TPutImpl::FillInterpilePut(TEvInterpilePut& ev) {
+    Info->GroupID.CopyToProto(&ev.Record, &NKikimrBlobStorage::TEvInterpilePut::SetGroupId);
+    ev.Record.SetGroupGeneration(Info->GroupGeneration);
+    ev.Record.SetHandleClass(Blackboard.PutHandleClass);
+    ev.Record.SetTactic(Tactic);
+
+    for (const auto& item : Blobs) {
+        auto *pb = ev.Record.AddItems();
+        LogoBlobIDFromLogoBlobID(item.BlobId, pb->MutableBlobId());
+        if (item.Deadline != TInstant::Max()) {
+            pb->SetDeadline(item.Deadline.GetValue());
+        }
+        if (item.IssueKeepFlag) {
+            pb->SetIssueKeepFlag(item.IssueKeepFlag);
+        }
+        if (item.IgnoreBlock) {
+            pb->SetIgnoreBlock(item.IgnoreBlock);
+        }
+        if (item.AlreadyEncrypted) {
+            pb->SetAlreadyEncrypted(item.AlreadyEncrypted);
+        }
+        if (item.IsZeroEntry) {
+            pb->SetIsZeroEntry(item.IsZeroEntry);
+        }
+        for (const auto& [tabletId, generation] : item.ExtraBlockChecks) {
+            auto *check = pb->AddExtraBlockChecks();
+            check->SetTabletId(tabletId);
+            check->SetGeneration(generation);
+        }
+        ev.AddPayload(TRope(item.Buffer));
+        if (item.Span) {
+            item.Span.GetTraceId().Serialize(pb->MutableTraceId());
+        }
+    }
+}
+
+void TPutImpl::ProcessInterpilePutResult(TEvInterpilePutResult& ev, TLogContext& logCtx,
+        TPutResultVec& outPutResults) {
+    Y_DEBUG_ABORT_UNLESS(ev.Record.ItemsSize() == Blobs.size());
+    if (ev.Record.ItemsSize() != Blobs.size()) {
+        return PrepareReply(NKikimrProto::ERROR, logCtx, "incorrect TEvInterpilePutResult", outPutResults);
+    }
+
+    for (size_t i = 0; i < Blobs.size(); ++i) {
+        auto& item = ev.Record.GetItems(i);
+        PrepareOneReply(item.GetStatus(), i, logCtx, item.GetErrorReason(), outPutResults);
     }
 }
 

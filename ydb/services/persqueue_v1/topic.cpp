@@ -5,7 +5,6 @@
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_table.h>
-#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
@@ -87,6 +86,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                                                                      \
         YDB_API_DEFAULT_COUNTER_BLOCK(topic, methodName),                                                 \
         auditMode,                                                                                        \
+        EEmptyDatabaseMode::EmptyDatabaseAllowed,                                                         \
         COMMON,                                                                                           \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                                               \
         GRpcRequestProxyId_,                                                                              \
@@ -102,6 +102,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             requestType,                                             \
             YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(topic, methodName), \
             auditMode,                                               \
+            EEmptyDatabaseMode::EmptyDatabaseAllowed,                \
             operationCallClass,                                      \
             GRpcRequestProxyId_,                                     \
             CQ_,                                                     \

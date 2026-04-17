@@ -181,6 +181,8 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+
+    TWriteSessionSettings& SetTrackProducerIdInTx(bool value);
 };
 
 template<class T>
@@ -203,6 +205,16 @@ public:
         : Data(data)
     {}
 
+    TWriteMessage(const std::string& key, std::string_view data)
+        : Data(data)
+        , Key(key)
+    {}
+
+    TWriteMessage(uint32_t partition, std::string_view data)
+        : Data(data)
+        , Partition(partition)
+    {}
+
     TWriteMessage(const TWriteMessage& other)
         : DataHolder(other.DataHolder)
         , Data(other.DataHolder ? std::string_view(*DataHolder) : other.Data)
@@ -211,9 +223,9 @@ public:
         , SeqNo_(other.SeqNo_)
         , CreateTimestamp_(other.CreateTimestamp_)
         , MessageMeta_(other.MessageMeta_)
-        , Key_(other.Key_)
-        , Partition_(other.Partition_)
         , Tx_(other.Tx_)
+        , Key(other.Key)
+        , Partition(other.Partition)
     {}
 
     TWriteMessage(TWriteMessage&& other) noexcept
@@ -224,9 +236,9 @@ public:
         , SeqNo_(std::move(other.SeqNo_))
         , CreateTimestamp_(std::move(other.CreateTimestamp_))
         , MessageMeta_(std::move(other.MessageMeta_))
-        , Key_(std::move(other.Key_))
-        , Partition_(std::move(other.Partition_))
         , Tx_(std::move(other.Tx_))
+        , Key(std::move(other.Key))
+        , Partition(std::move(other.Partition))
     {}
 
     TWriteMessage& operator=(const TWriteMessage& other) {
@@ -241,8 +253,8 @@ public:
         SeqNo_ = other.SeqNo_;
         CreateTimestamp_ = other.CreateTimestamp_;
         MessageMeta_ = other.MessageMeta_;
-        Key_ = other.Key_;
-        Partition_ = other.Partition_;
+        Key = other.Key;
+        Partition = other.Partition;
         Tx_ = other.Tx_;
 
         return *this;
@@ -260,8 +272,8 @@ public:
         SeqNo_ = std::move(other.SeqNo_);
         CreateTimestamp_ = std::move(other.CreateTimestamp_);
         MessageMeta_ = std::move(other.MessageMeta_);
-        Key_ = std::move(other.Key_);
-        Partition_ = std::move(other.Partition_);
+        Key = std::move(other.Key);
+        Partition = std::move(other.Partition);
         Tx_ = std::move(other.Tx_);
 
         return *this;
@@ -304,12 +316,6 @@ public:
     //! Message metadata. Limited to 4096 characters overall (all keys and values combined).
     FLUENT_SETTING(TMessageMeta, MessageMeta);
 
-    //! Message key. It will be used to route message to the partition.
-    FLUENT_SETTING_OPTIONAL(std::string, Key);
-
-    //! Partition to write to. It is not recommended to use this option, use Key instead.
-    FLUENT_SETTING_OPTIONAL(std::uint32_t, Partition);
-
     //! Transaction id
     FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
 
@@ -317,6 +323,18 @@ public:
     {
         return Tx_ ? &Tx_->get() : nullptr;
     }
+
+    const std::optional<std::string>& GetKey() const {
+        return Key;
+    }
+
+    const std::optional<uint32_t>& GetPartition() const {
+        return Partition;
+    }
+
+private:
+    std::optional<std::string> Key;
+    std::optional<uint32_t> Partition;
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.

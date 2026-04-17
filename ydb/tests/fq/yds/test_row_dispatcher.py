@@ -202,7 +202,7 @@ class TestPqRowDispatcher(TestYdsBase):
             PRAGMA config.flags("TimeOrderRecoverDelay", "-10");
             PRAGMA config.flags("TimeOrderRecoverAhead", "10");
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL))
                 MATCH_RECOGNIZE(
                     ORDER BY CAST(time as Timestamp)
@@ -780,6 +780,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(108, 110)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(110, 112)], "partition_key2")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(112, 114)], "partition_key3")
@@ -798,6 +801,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(116, 118)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(118, 120)], "partition_key2")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(120, 122)], "partition_key3")
@@ -815,6 +821,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(124, 126)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(126, 128)], "partition_key2")

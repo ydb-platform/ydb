@@ -399,11 +399,8 @@ Y_UNIT_TEST(StatsProfile) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
-
-    //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "ResultSet");
+    UNIT_ASSERT_GE(node1.GetMap().at("Nodes").GetArraySafe().size(), 1);
 }
 
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {

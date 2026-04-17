@@ -75,27 +75,13 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "Collect",
                                                         "PlanNodeId": 13,
                                                         "Plans": [
                                                             {
                                                                 "Columns": [
-                                                                    "even",
-                                                                    "fivethous",
-                                                                    "four",
-                                                                    "hundred",
-                                                                    "odd",
-                                                                    "string4",
-                                                                    "stringu1",
                                                                     "stringu2",
-                                                                    "ten",
-                                                                    "tenthous",
-                                                                    "thousand",
-                                                                    "twenty",
-                                                                    "two",
-                                                                    "twothousand",
-                                                                    "unique1",
-                                                                    "unique2"
+                                                                    "unique1"
                                                                 ],
                                                                 "E-Cost": "0",
                                                                 "E-Rows": "0",
@@ -375,22 +361,8 @@
                 },
                 {
                     "columns": [
-                        "even",
-                        "fivethous",
-                        "four",
-                        "hundred",
-                        "odd",
-                        "string4",
-                        "stringu1",
                         "stringu2",
-                        "ten",
-                        "tenthous",
-                        "thousand",
-                        "twenty",
-                        "two",
-                        "twothousand",
-                        "unique1",
-                        "unique2"
+                        "unique1"
                     ],
                     "lookup_by": [
                         "unique1"

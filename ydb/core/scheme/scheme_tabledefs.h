@@ -615,6 +615,8 @@ struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObje
     {}
 };
 
+class TPartitioning;
+
 // key description of one minikql operation
 class TKeyDesc : TNonCopyable {
 public:
@@ -711,39 +713,86 @@ public:
     // out
     EStatus Status;
     TVector<TColumnInfo> ColumnInfos;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    std::shared_ptr<const TPartitioning> Partitioning;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const { Y_ENSURE(Partitioning); return *Partitioning; }
-    bool IsSystemView() const { return GetPartitions().empty(); }
+    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const;
+    bool IsSystemView() const;
 
     template<typename TKeyColumnTypes, typename TColumns>
     TKeyDesc(const TTableId& tableId, const TTableRange& range, ERowOperation rowOperation,
             const TKeyColumnTypes &keyColumnTypes, const TColumns &columns,
-            ui64 itemsLimit = 0, ui64 bytesLimit = 0, bool reverse = false)
-        : TableId(tableId)
-        , Range(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point)
-        , RangeLimits(itemsLimit, bytesLimit)
-        , RowOperation(rowOperation)
-        , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
-        , Columns(columns.begin(), columns.end())
-        , Reverse(reverse)
-        , Status(EStatus::Unknown)
-        , Partitioning(std::make_shared<TVector<TKeyDesc::TPartitionInfo>>())
-    {}
+            ui64 itemsLimit = 0, ui64 bytesLimit = 0, bool reverse = false);
 
-    static THolder<TKeyDesc> CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes) {
-        return THolder<TKeyDesc>(new TKeyDesc(keyColumnTypes));
-    }
+    static THolder<TKeyDesc> CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes);
 private:
-    TKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes)
-        : RowOperation(ERowOperation::Unknown)
-        , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
-        , Reverse(false)
-        , Status(EStatus::Unknown)
-        , Partitioning(std::make_shared<TVector<TKeyDesc::TPartitionInfo>>())
-    {}
+    TKeyDesc(const TVector<NScheme::TTypeInfo>& keyColumnTypes);
 };
+
+class TPartitioning {
+public:
+    TPartitioning() = default;
+
+    using TCPtr = std::shared_ptr<const TPartitioning>;
+
+    explicit TPartitioning(TVector<TKeyDesc::TPartitionInfo>&& partitions)
+        : Partitions(std::move(partitions)) {}
+
+    explicit TPartitioning(const TVector<TKeyDesc::TPartitionInfo>& partitions)
+        : Partitions(partitions) {}
+
+    size_t Size() const { return Partitions.size(); }
+    bool Empty() const { return Partitions.empty(); }
+
+    using const_iterator = TVector<TKeyDesc::TPartitionInfo>::const_iterator;
+    const_iterator begin() const { return Partitions.begin(); }
+    const_iterator end() const { return Partitions.end(); }
+
+    struct TIntersection {
+        ui64 ShardId;
+        TOwnedTableRange TableRange;
+    };
+
+    // Escape hatch: returns raw sorted vector. Grep for this method name to find
+    // callers that need migration when the data structure changes.
+    const TVector<TKeyDesc::TPartitionInfo>& GetTablePartitioning() const {
+        return Partitions;
+    }
+
+    std::vector<TIntersection> GetIntersectionWithRange(const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TTableRange& range) const;
+
+private:
+    TVector<TKeyDesc::TPartitionInfo> Partitions;
+};
+
+
+TTableRange Intersect(TConstArrayRef<NScheme::TTypeInfo> types, const TTableRange& first, const TTableRange& second);
+
+// Deferred inline definitions for TKeyDesc (require complete TPartitioning type)
+
+inline const TVector<TKeyDesc::TPartitionInfo>& TKeyDesc::GetPartitions() const {
+    Y_ENSURE(Partitioning);
+    return Partitioning->GetTablePartitioning();
+}
+
+inline bool TKeyDesc::IsSystemView() const {
+    return GetPartitions().empty();
+}
+
+template<typename TKeyColumnTypes, typename TColumns>
+TKeyDesc::TKeyDesc(const TTableId& tableId, const TTableRange& range, ERowOperation rowOperation,
+        const TKeyColumnTypes &keyColumnTypes, const TColumns &columns,
+        ui64 itemsLimit, ui64 bytesLimit, bool reverse)
+    : TableId(tableId)
+    , Range(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point)
+    , RangeLimits(itemsLimit, bytesLimit)
+    , RowOperation(rowOperation)
+    , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
+    , Columns(columns.begin(), columns.end())
+    , Reverse(reverse)
+    , Status(EStatus::Unknown)
+    , Partitioning(std::make_shared<TPartitioning>())
+{}
 
 struct TSystemColumnInfo {
     TKeyDesc::ESystemColumnIds ColumnId;

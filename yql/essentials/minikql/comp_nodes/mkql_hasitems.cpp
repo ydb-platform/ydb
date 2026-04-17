@@ -1,4 +1,5 @@
 #include "mkql_hasitems.h"
+#include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -76,21 +77,7 @@ IComputationNode* WrapHasItems(TCallable& callable, const TComputationNodeFactor
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
     bool isOptional;
     const auto type = UnpackOptional(callable.GetInput(0).GetStaticType(), isOptional);
-    if (type->IsDict()) {
-        if (isOptional) {
-            return new THasItemsWrapper<true, true>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-        } else {
-            return new THasItemsWrapper<true, false>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-        }
-    } else {
-        if (isOptional) {
-            return new THasItemsWrapper<false, true>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-        } else {
-            return new THasItemsWrapper<false, false>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-        }
-    }
-
-    THROW yexception() << "Expected list or dict.";
+    return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, THasItemsWrapper, 2, type->IsDict(), isOptional, ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 
 } // namespace NMiniKQL

@@ -577,8 +577,8 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
-                              TActiveTransaction::TPtr tx, 
-                              const TString& userSID)
+                              TActiveTransaction::TPtr tx,
+                              NACLib::TUserContext::TPtr userCtx)
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
@@ -597,7 +597,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
     } else if (tx->HasVolatilePrepareFlag()) {
         // Since transaction is volatile it was never stored on disk, and it
         // shouldn't have any artifacts yet.
-        tx->FillVolatileTxData(Self, txc, ctx, userSID);
+        tx->FillVolatileTxData(Self, txc, ctx, userCtx);
 
         ui32 keysCount = 0;
         keysCount = tx->ExtractKeys();
@@ -623,7 +623,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
             return false;
 
         tx->FillTxData(Self, txc, ctx, target, txBody,
-                       std::move(locks), artifactFlags, userSID);
+                       std::move(locks), artifactFlags, userCtx);
 
         ui32 keysCount = 0;
         //if (Config.LimitActiveTx > 1)
@@ -1211,9 +1211,11 @@ ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
     return 0;
 }
 
-ui64 TPipeline::GetDataTxCompleteLag(ui64 timecastStep) const
+ui64 TPipeline::GetTxCompleteLag(ui64 timecastStep) const
 {
-    return GetTxCompleteLag(EOperationKind::DataTx, timecastStep);
+    return Max(
+        GetTxCompleteLag(EOperationKind::DataTx, timecastStep),
+        GetTxCompleteLag(EOperationKind::WriteTx, timecastStep));
 }
 
 ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const
@@ -1453,7 +1455,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
                                            const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                           const TString& userSID)
+                                           NACLib::TUserContext::TPtr userCtx)
 {
     auto &rec = ev->Get()->Record;
     Y_ENSURE(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1570,8 +1572,8 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         tx->SetGlobalWriterFlag();
     } else {
         Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
-        auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID, true);
-        if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
+        auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx, true);
+        if (dataTx->Ready() && (dataTx->ProgramSize()))
             dataTx->ExtractKeys(true);
 
         if (!dataTx->Ready() && !dataTx->RequirePrepare()) {
@@ -1595,13 +1597,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->SetReadOnlyFlag();
         if (dataTx->NeedDiagnostics())
             tx->SetNeedDiagnosticsFlag();
-        if (dataTx->IsKqpDataTx())
-            tx->SetKqpDataTransactionFlag();
-        if (dataTx->IsKqpScanTx()) {
-            tx->SetKqpScanTransactionFlag();
-            // TODO: support for extracting keys in kqp scan transaction
-            tx->SetGlobalReaderFlag();
-        }
 
         // Additional checks for volatile transactions
         if (tx->HasVolatilePrepareFlag()) {
@@ -1610,22 +1605,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                     << "Volatile distributed tx " << tx->GetTxId()
                     << " at tablet " << Self->TabletID()
                     << " cannot be immediate");
-                return tx;
-            }
-
-            if (!dataTx->IsKqpDataTx()) {
-                badRequest(TStringBuilder()
-                    << "Volatile distributed tx " << tx->GetTxId()
-                    << " at tablet " << Self->TabletID()
-                    << " must be a kqp data tx");
-                return tx;
-            }
-
-            if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
-                badRequest(TStringBuilder()
-                    << "Volatile distributed tx " << tx->GetTxId()
-                    << " at tablet " << Self->TabletID()
-                    << " cannot have persistent channels");
                 return tx;
             }
 
@@ -1657,9 +1636,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         } else if (tx->IsReadTable() && dataTx->GetReadTableTransaction().HasSnapshotStep() && dataTx->GetReadTableTransaction().HasSnapshotTxId()) {
             badRequest("Ambiguous snapshot info. Cannot use both MVCC and read table snapshots in one transaction");
             return tx;
-        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
-            badRequest("Ambiguous snapshot info. Cannot use both MVCC and kqp scan snapshots in one transaction");
-            return tx;
         }
 
         auto allowSnapshot = [&]() -> bool {
@@ -1682,14 +1658,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             badRequest("Snapshot read must be an immediate read-only or locked-write transaction");
             return tx;
         }
-
-        if (!tx->IsImmediate()) {
-            // No op
-        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
-            // to be consistent while dependencies calculation
-            auto snapshot = dataTx->GetKqpSnapshot();
-            tx->SetMvccSnapshot(TRowVersion(snapshot.GetStep(), snapshot.GetTxId()));
-        }
     }
 
     return tx;
@@ -1707,7 +1675,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()),
             rec.GetMvccSnapshot().GetRepeatableRead());
     }
-    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self);
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self, operationSpan.GetTraceId());
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
     Y_ENSURE(writeTx);
@@ -1768,13 +1736,13 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     return writeOp;
 }
 
-void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, const TString& userSID)
+void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, NACLib::TUserContext::TPtr userCtx)
 {
-    auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID);
+    auto dataTx = tx->BuildDataTx(Self, txc, ctx, userCtx);
     Y_ENSURE(dataTx->Ready());
     // TODO: we should have no requirement to have keys
     // for restarted immediate tx.
-    if (dataTx->ProgramSize() || dataTx->IsKqpDataTx())
+    if (dataTx->ProgramSize())
         dataTx->ExtractKeys(false);
 }
 

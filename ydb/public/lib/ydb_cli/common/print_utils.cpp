@@ -212,6 +212,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "streaming-query";
     case NScheme::ESchemeEntryType::BackupCollection:
         return "backup-collection";
+    case NScheme::ESchemeEntryType::Secret:
+        return "secret";
     case NScheme::ESchemeEntryType::Unknown:
     case NScheme::ESchemeEntryType::Sequence:
         return "unknown";

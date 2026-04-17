@@ -782,6 +782,7 @@ struct TEvBlobStorage {
         EvChunkReadRaw,                                         // 268 636 350
         EvChunkWriteRaw,
         EvStartCompactionFromDefrag,
+        EvSyncerFullSyncFinished,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -850,6 +851,9 @@ struct TEvBlobStorage {
         EvChunkKeeperGetOwnedChunks,
         EvGetSkeletonState,         // for test purposes
         EvGetSkeletonStateResult,   // for test purposes
+        EvCompactionTokenRequest,
+        EvCompactionTokenResult,
+        EvReleaseCompactionToken,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -964,6 +968,10 @@ struct TEvBlobStorage {
         EvNodeWardenNotifyConfigMismatch,
         EvNodeWardenUpdateConfigFromPeer,
         EvNodeWardenNotifySyncerFinished,
+        EvInterpilePut,
+        EvInterpilePutResult,
+        EvNodeWardenListLocalDDisks,
+        EvNodeWardenListLocalDDisksResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1087,6 +1095,9 @@ struct TEvBlobStorage {
         const ETactic Tactic;
         const bool IssueKeepFlag = false;
         const bool IgnoreBlock = false;
+        const bool AlreadyEncrypted = false; // when set to true, no encryption is required
+        const bool ReduceInterpileTraffic = false;
+        const bool IsZeroEntry = false;
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
@@ -1099,6 +1110,9 @@ struct TEvBlobStorage {
             ETactic Tactic = TacticDefault;
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
+            bool AlreadyEncrypted = false;
+            bool ReduceInterpileTraffic = false;
+            bool IsZeroEntry = false;
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
@@ -1110,6 +1124,9 @@ struct TEvBlobStorage {
             , Tactic(origin.Tactic)
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
+            , AlreadyEncrypted(origin.AlreadyEncrypted)
+            , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
+            , IsZeroEntry(origin.IsZeroEntry)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
             , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}
@@ -1122,6 +1139,9 @@ struct TEvBlobStorage {
             , Tactic(parameters.Tactic)
             , IssueKeepFlag(parameters.IssueKeepFlag)
             , IgnoreBlock(parameters.IgnoreBlock)
+            , AlreadyEncrypted(parameters.AlreadyEncrypted)
+            , ReduceInterpileTraffic(parameters.ReduceInterpileTraffic)
+            , IsZeroEntry(parameters.IsZeroEntry)
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
@@ -1138,11 +1158,11 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&Tactic, sizeof(Tactic));
         }
 
-
-        TEvPut(const TLogoBlobID &id, TRope &&buffer, TInstant deadline,
+        TEvPut(TLogoBlobID id, TRope&& buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false, bool ignoreBlock = false)
-            : TEvPut(TParameters{
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false, bool ignoreBlock = false,
+               bool alreadyEncrypted = false, bool reduceInterpileTraffic = false)
+            : TEvPut{{
                 .BlobId = id,
                 .Buffer = std::move(buffer),
                 .Deadline = deadline,
@@ -1150,48 +1170,23 @@ struct TEvBlobStorage {
                 .Tactic = tactic,
                 .IssueKeepFlag = issueKeepFlag,
                 .IgnoreBlock = ignoreBlock,
-            })
-        {}
-
-        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
-               NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(TParameters{
-                .BlobId = id,
-                .Buffer = TRope(std::move(buffer)),
-                .Deadline = deadline,
-                .HandleClass = handleClass,
-                .Tactic = tactic,
-                .IssueKeepFlag = issueKeepFlag,
-            })
+                .AlreadyEncrypted = alreadyEncrypted,
+                .ReduceInterpileTraffic = reduceInterpileTraffic,
+            }}
         {}
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(TParameters{
-                .BlobId = id,
-                .Buffer = TRope(buffer),
-                .Deadline = deadline,
-                .HandleClass = handleClass,
-                .Tactic = tactic,
-                .IssueKeepFlag = issueKeepFlag,
-            })
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
-
 
         TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(TParameters{
-                .BlobId = id,
-                .Buffer = TRope(buffer),
-                .Deadline = deadline,
-                .HandleClass = handleClass,
-                .Tactic = tactic,
-                .IssueKeepFlag = issueKeepFlag,
-            })
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
+
         TString Print(bool isFull) const {
             TStringStream str;
             str << "TEvPut {Id# " << Id.ToString();
@@ -1207,6 +1202,12 @@ struct TEvBlobStorage {
             }
             if (IgnoreBlock) {
                 str << " IgnoreBlock# " << IgnoreBlock;
+            }
+            if (AlreadyEncrypted) {
+                str << " AlreadyEncrypted# " << AlreadyEncrypted;
+            }
+            if (ReduceInterpileTraffic) {
+                str << " ReduceInterpileTraffic# " << ReduceInterpileTraffic;
             }
             str << "}";
             return str.Str();

@@ -54,6 +54,7 @@ SRCS(
     counters_columnshard.proto
     counters_coordinator.proto
     counters_datashard.proto
+    counters_detailed_datashard.proto
     counters_hive.proto
     counters_info.proto
     counters_kesus.proto
@@ -105,6 +106,7 @@ SRCS(
     labeled_counters.proto
     load_test.proto
     local.proto
+    long_tx_service_config.proto
     long_tx_service.proto
     maintenance.proto
     memory_controller_config.proto
@@ -123,6 +125,9 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_mlp.proto
+    pqdata_transaction.proto
+    pqevents_global.proto
     profiler.proto
     query_stats.proto
     recoveryshard_config.proto

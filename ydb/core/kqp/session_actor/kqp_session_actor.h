@@ -5,7 +5,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -32,9 +31,16 @@ struct TKqpWorkerSettings {
     bool LongSession = false;
 
     TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
-    NKikimrConfig::TTableServiceConfig TableService;
-    NKikimrConfig::TQueryServiceConfig QueryService;
-    NKikimrConfig::TTliConfig TliConfig;
+
+private:
+    std::shared_ptr<const NKikimrConfig::TTableServiceConfig> TableServicePtr;
+    std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> QueryServicePtr;
+    std::shared_ptr<const NKikimrConfig::TTliConfig> TliConfigPtr;
+
+public:
+    const NKikimrConfig::TTableServiceConfig& TableService;
+    const NKikimrConfig::TQueryServiceConfig& QueryService;
+    const NKikimrConfig::TTliConfig& TliConfig;
 
     TControlWrapper MkqlInitialMemoryLimit;
     TControlWrapper MkqlMaxMemoryLimit;
@@ -42,26 +48,47 @@ struct TKqpWorkerSettings {
     TKqpDbCountersPtr DbCounters;
 
     explicit TKqpWorkerSettings(const TString& cluster, const TString& database,
-            const TMaybe<TString>& applicationName, const TMaybe<TString>& userName, const TIntrusivePtr<TExecuterMutableConfig> mutableExecuterConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-            const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const NKikimrConfig::TTliConfig& tliConfig, TKqpDbCountersPtr dbCounters)
+            const TMaybe<TString>& applicationName, const TMaybe<TString>& userName,
+            const TIntrusivePtr<TExecuterMutableConfig> mutableExecuterConfig,
+            std::shared_ptr<const NKikimrConfig::TTableServiceConfig> tableServiceConfig,
+            std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> queryServiceConfig,
+            std::shared_ptr<const NKikimrConfig::TTliConfig> tliConfig,
+            TControlWrapper mkqlInitialMemoryLimit,
+            TControlWrapper mkqlMaxMemoryLimit,
+            TKqpDbCountersPtr dbCounters)
         : Cluster(cluster)
         , Database(database)
         , ApplicationName(applicationName)
         , UserName(userName)
         , MutableExecuterConfig(mutableExecuterConfig)
-        , TableService(tableServiceConfig)
-        , QueryService(queryServiceConfig)
-        , TliConfig(tliConfig)
-        , MkqlInitialMemoryLimit(2097152, 1, Max<i64>())
-        , MkqlMaxMemoryLimit(1073741824, 1, Max<i64>())
+        , TableServicePtr(std::move(tableServiceConfig))
+        , QueryServicePtr(std::move(queryServiceConfig))
+        , TliConfigPtr(std::move(tliConfig))
+        , TableService(*TableServicePtr)
+        , QueryService(*QueryServicePtr)
+        , TliConfig(*TliConfigPtr)
+        , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
+        , MkqlMaxMemoryLimit(mkqlMaxMemoryLimit)
         , DbCounters(dbCounters)
-    {
-        auto& icb = *AppData()->Icb;
-        TControlBoard::RegisterSharedControl(
-            MkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
-        TControlBoard::RegisterSharedControl(
-            MkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
-    }
+    {}
+
+    TKqpWorkerSettings(const TKqpWorkerSettings& other)
+        : Cluster(other.Cluster)
+        , Database(other.Database)
+        , ApplicationName(other.ApplicationName)
+        , UserName(other.UserName)
+        , LongSession(other.LongSession)
+        , MutableExecuterConfig(other.MutableExecuterConfig)
+        , TableServicePtr(other.TableServicePtr)
+        , QueryServicePtr(other.QueryServicePtr)
+        , TliConfigPtr(other.TliConfigPtr)
+        , TableService(*TableServicePtr)
+        , QueryService(*QueryServicePtr)
+        , TliConfig(*TliConfigPtr)
+        , MkqlInitialMemoryLimit(other.MkqlInitialMemoryLimit)
+        , MkqlMaxMemoryLimit(other.MkqlMaxMemoryLimit)
+        , DbCounters(other.DbCounters)
+    {}
 };
 
 class TKqpQueryCache;
@@ -71,14 +98,14 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager_,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory_,
     const TString& sessionId,
+    TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const TString& userSID);
+    NACLib::TUserContext::TPtr userCtx);
 
 IActor* CreateKqpTempTablesManager(
     TKqpTempTablesState tempTablesState, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TActorId& target, const TString& database);

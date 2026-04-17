@@ -18,7 +18,6 @@ class TJsonCluster : public TViewerPipeClient {
     using TPDiskId = std::pair<TNodeId, ui32>;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
-    bool NodeWardenStorageConfigResponseProcessed = false;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
@@ -373,40 +372,6 @@ private:
                 AddProblem("no-tenants-info");
             }
             ListTenantsResponse.reset();
-        }
-
-        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone() && !NodeWardenStorageConfigResponseProcessed) {
-            if (NodeWardenStorageConfigResponse->IsOk()) {
-                if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
-                    const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
-                    auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
-                    std::unordered_map<ui32, ui32> pileNodes;
-                    for (const auto& pile : srcBridgeInfo.Piles) {
-                        auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
-                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
-                        pbBridgePileInfo.SetName(pile.Name);
-                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
-                    }
-                    for (const auto& node : NodeData) {
-                        if (node.PileNum) {
-                            pileNodes[*node.PileNum]++;
-                        }
-                    }
-                    ui32 pileNum = 0;
-                    for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        auto it = pileNodes.find(pileNum);
-                        if (it != pileNodes.end()) {
-                            pile.SetNodes(it->second);
-                        }
-                        ++pileNum;
-                    }
-                } else {
-                    AddProblem("empty-node-warden-bridge-info");
-                }
-            } else {
-                AddProblem("no-node-warden-storage-config");
-            }
-            NodeWardenStorageConfigResponseProcessed = true;
         }
 
         if (TimeToAskWhiteboard()) {
@@ -1024,18 +989,68 @@ private:
         }
 
         std::unordered_map<ui32, TString> groupToErasure;
+        std::unordered_set<ui32> proxyGroups;
+        std::unordered_map<ui32, std::unordered_map<TString, ui32>> pileToGroupStatus;
 
         if (GroupsResponse && GroupsResponse->IsOk()) {
             for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
+                const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
+                if (info.HasProxyGroupId()) {
+                    proxyGroups.insert(info.GetProxyGroupId());
+                }
+            }
+            for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
                 const NKikimrSysView::TGroupKey& key = entry.GetKey();
                 const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
-                if (key.GetGroupId() < 0x80000000) { // ignore static groups
-                    continue;
+                if (TGroupID(key.GetGroupId()).ConfigurationType() == EGroupConfigurationType::Static) {
+                    continue; // ignore static groups
+                }
+                if (proxyGroups.count(key.GetGroupId())) {
+                    continue; // ignore proxy groups
+                }
+                if (info.HasBridgePileId()) {
+                    pileToGroupStatus[info.GetBridgePileId()][info.GetOperatingStatus()]++;
                 }
                 groupToErasure.emplace(key.GetGroupId(), info.GetErasureSpeciesV2());
             }
         } else {
             AddProblem("no-group-info");
+        }
+
+        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone()) {
+            if (NodeWardenStorageConfigResponse->IsOk()) {
+                if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
+                    const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
+                    auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
+                    std::unordered_map<ui32, ui32> pileNodes;
+                    for (const auto& pile : srcBridgeInfo.Piles) {
+                        auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
+                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
+                        pbBridgePileInfo.SetName(pile.Name);
+                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
+                        for (const auto& [status, count] : pileToGroupStatus[pbBridgePileInfo.GetPileId()]) {
+                            (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
+                        }
+                    }
+                    for (const auto& node : NodeData) {
+                        if (node.PileNum) {
+                            pileNodes[*node.PileNum]++;
+                        }
+                    }
+                    ui32 pileNum = 0;
+                    for (auto& pile : *pbBridgeInfo.MutablePiles()) {
+                        auto it = pileNodes.find(pileNum);
+                        if (it != pileNodes.end()) {
+                            pile.SetNodes(it->second);
+                        }
+                        ++pileNum;
+                    }
+                } else {
+                    AddProblem("empty-node-warden-bridge-info");
+                }
+            } else {
+                AddProblem("no-node-warden-storage-config");
+            }
         }
 
         if (VSlotsResponse && VSlotsResponse->IsOk()) {

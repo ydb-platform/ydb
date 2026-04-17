@@ -14,25 +14,22 @@ using namespace NTable;
 using namespace NUdf;
 
 typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, const TString& userSID);
+    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, NACLib::TUserContext::TPtr);
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
-        Map["KqpUpsertRows"] = &WrapKqpUpsertRows;
-        Map["KqpDeleteRows"] = &WrapKqpDeleteRows;
-        Map["KqpEffects"] = &WrapKqpEffects;
     }
 
     THashMap<TString, TCallableDatashardBuilderFunc> Map;
 };
 
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, const TString& userSID) {
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, NACLib::TUserContext::TPtr userCtx) {
     MKQL_ENSURE_S(computeCtx);
     MKQL_ENSURE_S(computeCtx->Database);
 
     auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
 
-    return [computeFactory, computeCtx, userSID]
+    return [computeFactory, computeCtx, userCtx]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (auto compute = computeFactory(callable, ctx)) {
                 return compute;
@@ -41,7 +38,7 @@ TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContex
             const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map;
             auto it = datashardMap.find(callable.GetType()->GetName());
             if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx, userSID);
+                return it->second(callable, ctx, *computeCtx, userCtx);
             }
 
             return nullptr;

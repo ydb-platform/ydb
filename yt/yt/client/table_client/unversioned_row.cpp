@@ -437,7 +437,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         }
     }
 
-    if (Y_UNLIKELY(lhs.Type != rhs.Type)) {
+    if (lhs.Type != rhs.Type) [[unlikely]] {
         return TernaryCompare(lhs.Type, rhs.Type);
     }
 
@@ -1340,9 +1340,10 @@ void ValidateClientKey(
     TLegacyKey key,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr& nameTable)
+    const TNameTablePtr& nameTable,
+    bool allowMissingKeyColumns)
 {
-    ValidateClientRow(key, schema, idMapping, nameTable, true);
+    ValidateClientRow(key, schema, idMapping, nameTable, true, allowMissingKeyColumns);
 }
 
 void ValidateReadTimestamp(TTimestamp timestamp)

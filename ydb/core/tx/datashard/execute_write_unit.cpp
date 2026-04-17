@@ -41,7 +41,10 @@ public:
         return !op->HasRuntimeConflicts();
     }
 
-    void FillDeferredBreakerInfo(ui64 lockTxId, NKikimrQueryStats::TTxStats* txStats) {
+    void FillDeferredFields(ui64 lockTxId, NKikimrQueryStats::TTxStats* txStats) {
+        if (auto victimSpanId = DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId)) {
+            txStats->SetDeferredVictimQuerySpanId(*victimSpanId);
+        }
         auto lockInfo = DataShard.SysLocksTable().GetRawLock(lockTxId);
         if (!lockInfo || !lockInfo->GetBreakVersion()) {
             return;
@@ -251,7 +254,7 @@ public:
                                               lockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId) : Nothing(),
                                               querySpanId ? TMaybe<ui64>(querySpanId) : Nothing());
             if (lockTxId) {
-                FillDeferredBreakerInfo(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
+                FillDeferredFields(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
             }
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
@@ -272,7 +275,10 @@ public:
 
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto operationType = validatedOperation.GetOperationType();
-        const auto userSID = validatedOperation.GetUserSID();
+        auto userCtx = validatedOperation.GetUserCtx();
+        if (userCtx == nullptr) {
+            userCtx = NACLib::TUserContextBuilder().Build();
+        }
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
@@ -287,36 +293,36 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount, userSID);
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.ReplaceRow(fullTableId, key, ops, userSID);
+                    userDb.ReplaceRow(fullTableId, key, ops, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
-                    userDb.EraseRow(fullTableId, key, userSID);
+                    userDb.EraseRow(fullTableId, key, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.InsertRow(fullTableId, key, ops, userSID);
+                    userDb.InsertRow(fullTableId, key, ops, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpdateRow(fullTableId, key, ops, userSID);
+                    userDb.UpdateRow(fullTableId, key, ops, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/, userSID);
+                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/, userSID);
+                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/, userCtx);
                     break;
                 }
                 default:
@@ -477,7 +483,7 @@ public:
                     NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
                                                       DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId),
                                                       guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
-                    FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+                    FillDeferredFields(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
                     return EExecutionStatus::Executed;
                 };
 
@@ -540,7 +546,7 @@ public:
                 {
                     auto* txStats = writeOp->GetWriteResult()->Record.MutableTxStats();
                     for (const auto& brokenLock : brokenLocks) {
-                        FillDeferredBreakerInfo(brokenLock.GetLockId(), txStats);
+                        FillDeferredFields(brokenLock.GetLockId(), txStats);
                     }
                 }
 
@@ -740,7 +746,7 @@ public:
                                               guardLocks.LockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId) : Nothing(),
                                               guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
             if (guardLocks.LockTxId) {
-                FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+                FillDeferredFields(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
             }
 
             ResetChanges(userDb, txc);

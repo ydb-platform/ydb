@@ -166,17 +166,18 @@ namespace NActors {
         std::atomic<float> SharedCpuQuota = 0.0;
         TMutex ChangeThreadsLock;
 
-        float MinThreadCount;
-        i16 MinFullThreadCount;
-        float MaxThreadCount;
-        i16 MaxFullThreadCount;
-        float DefaultThreadCount;
-        i16 DefaultFullThreadCount;
-        IHarmonizer *Harmonizer;
+        float MinThreadCount = 0.0;
+        i16 MinFullThreadCount = 0;
+        float MaxThreadCount = 0.0;
+        i16 MaxFullThreadCount = 0;
+        float DefaultThreadCount = 0.0;
+        i16 DefaultFullThreadCount = 0;
+        IHarmonizer *Harmonizer = nullptr;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
         ui16 MaxLocalQueueSize = 0;
         ui16 MinLocalQueueSize = 0;
+        bool SharedOnly = false;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
@@ -289,6 +290,8 @@ namespace NActors {
 
         ui64 TimePerMailboxTs() const final;
         ui32 EventsPerMailbox() const final;
+
+        bool IsSharedOnly() const;
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 

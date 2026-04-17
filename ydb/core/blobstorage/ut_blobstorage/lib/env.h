@@ -442,6 +442,7 @@ struct TEnvironmentSetup {
                         auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
+                        drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
                         auto& ns = config->NameserviceConfig;
@@ -568,6 +569,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
+                ADD_ICB_CONTROL(PDiskControls.MaxActiveCompactionsPerPDisk, 0, 0, 1'000'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
@@ -1267,5 +1269,11 @@ config:
             Y_ABORT_UNLESS(it != IcbControls.end());
             it->second = value;
         }
+    }
+
+    void SetPDiskStatusFlags(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        auto it = PDiskMockStates.find({nodeId, pdiskId});
+        UNIT_ASSERT_C(it != PDiskMockStates.end(), "PDisk not found: nodeId# " << nodeId << " pdiskId# " << pdiskId);
+        it->second->SetStatusFlags(color);
     }
 };

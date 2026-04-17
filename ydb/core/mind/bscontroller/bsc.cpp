@@ -754,6 +754,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                 expectedStorageYamlConfigVersion.emplace(record.GetExpectedStorageConfigVersion());
             }
 
+            // in dry run mode, skip the actual commit and return success
+            if (record.GetDryRun()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+                break;
+            }
+
             // commit it
             Execute(CreateTxCommitConfig(std::move(yamlConfig), std::make_optional(std::move(storageYaml)), std::nullopt,
                 expectedStorageYamlConfigVersion, std::exchange(h, {}), std::nullopt,
@@ -994,7 +1000,6 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
-        cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);

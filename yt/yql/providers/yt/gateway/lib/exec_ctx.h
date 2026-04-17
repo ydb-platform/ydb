@@ -25,6 +25,7 @@ struct TYtBaseServices: public TThrRefBase {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TYtGatewayConfigPtr Config;
     bool NeedToTransformTmpTablePaths = true;
+    bool CheckSpecDoesntUseNativeYtTypes = true;
     TFileStoragePtr FileStorage;
 };
 
@@ -37,6 +38,7 @@ struct TInputInfo {
     TString Cluster;
     bool Temp = false;
     bool Dynamic = false;
+    bool RLS = false;
     bool Strict = true;
     ui64 Records = 0;
     ui64 DataSize = 0;
@@ -136,6 +138,7 @@ public:
     TMaybe<TSampleParams> Sampling;
     const TSessionBase::TPtr BaseSession_;
     const bool NeedToTransformTmpTablePaths_;
+    const bool CheckSpecDoesntUseNativeYtTypes_;
 };
 
 

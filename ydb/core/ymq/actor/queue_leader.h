@@ -82,6 +82,10 @@ private:
     void HandleDeadLetterQueueNotification(TSqsEvents::TEvDeadLetterQueueNotification::TPtr& ev);
     void HandleForceReloadState(TSqsEvents::TEvForceReloadState::TPtr& ev);
     void HandleReloadStateRequest(TSqsEvents::TEvReloadStateRequest::TPtr& ev);
+    void HandleDeduplicateMessageBatchWhileIniting(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev);
+    void HandleDeduplicateMessageBatchWhileWorking(TSqsEvents::TEvDeduplicateMessageBatch::TPtr& ev);
+    void HandleGetMessageGroupsWhileIniting(TSqsEvents::TEvGetMessageGroups::TPtr& ev);
+    void HandleGetMessageGroupsWhileWorking(TSqsEvents::TEvGetMessageGroups::TPtr& ev);
 
     void CheckStillDLQ();
     void ForceReloadState();
@@ -131,6 +135,9 @@ private:
     void OnMessageSent(const TString& requestId, size_t index, const TSqsEvents::TEvExecuted::TRecord& reply, const NKikimr::NClient::TValue* messageRecord);
     // batching
     void OnSendBatchExecuted(ui64 shard, ui64 batchId, const TSqsEvents::TEvExecuted::TRecord& reply);
+
+    void ProcessDeduplicateMessageBatch(TSqsEvents::TEvDeduplicateMessageBatch::TPtr&& reqInfo);
+    void ProcessGetMessageGroups(TSqsEvents::TEvGetMessageGroups::TPtr&& reqInfo);
 
     // receive
     void ProcessReceiveMessageBatch(TReceiveMessageBatchRequestProcessing& reqInfo);
@@ -183,6 +190,7 @@ private:
     ui64 ShardsCount_ = 0;
     ui64 PartitionsCount_ = 0;
     bool IsFifoQueue_ = false;
+    bool TopicCreated_ = false;
     TString QueueId_;
     ui64 QueueVersion_ = 0;
     ui32 TablesFormat_ = 0;
@@ -531,6 +539,8 @@ private:
     THashMap<std::pair<TString, ui64>, TDeleteMessageBatchRequestProcessing> DeleteMessageRequests_; // (request id, shard) -> request
     THashMap<std::pair<TString, ui64>, TChangeMessageVisibilityBatchRequestProcessing> ChangeMessageVisibilityRequests_; // (request id, shard) -> request
     THashMap<TString, TGetRuntimeQueueAttributesRequestProcessing> GetRuntimeQueueAttributesRequests_; // request id -> request
+    THashMap<TString, TSqsEvents::TEvDeduplicateMessageBatch::TPtr> DeduplicateMessageRequests_; // request id -> request
+    THashMap<TString, TSqsEvents::TEvGetMessageGroups::TPtr> GetMessageGroupsRequests_; // request id -> request
 };
 
 } // namespace NKikimr::NSQS

@@ -83,6 +83,7 @@ struct TYtTableMetaInfo: public TThrRefBase {
     bool YqlCompatibleScheme = false;
     bool InferredScheme = false;
     bool IsDynamic = false;
+    bool HasRLS = false;
     TString SqlView;
     ui16 SqlViewSyntaxVersion = 1;
 

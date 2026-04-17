@@ -17,6 +17,7 @@ enum EEv : ui32 {
     EvWriteResponse,
     EvChangeResponse,
     EvPurgeResponse,
+    EvDescribeResponse,
     EvEnd
 };
 
@@ -53,9 +54,12 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         TMessageId MessageId;
         Ydb::Topic::Codec Codec;
         TString Data;
-        THashMap<TString, TString> MessageMetaAttributes;
         TInstant SentTimestamp;
         TString MessageGroupId;
+        TString MessageDeduplicationId;
+        std::optional<ui32> ApproximateReceiveCount;
+        std::optional<TInstant> ApproximateFirstReceiveTimestamp;
+        std::unordered_multimap<TString, TString> Attributes;
     };
     std::vector<TMessage> Messages;
 };
@@ -91,6 +95,22 @@ struct TEvPurgeResponse : public NActors::TEventLocal<TEvPurgeResponse, EEv::EvP
     TString ErrorDescription;
 };
 
+struct TEvDescribeResponse : public NActors::TEventLocal<TEvDescribeResponse, EEv::EvDescribeResponse> {
+    TEvDescribeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
+        : Status(status)
+        , ErrorDescription(std::move(errorDescription))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorDescription;
+
+    TInstant TopicCreated;
+    ui64 ApproximateMessageCount;
+    ui64 ApproximateDelayedMessageCount;
+    ui64 ApproximateLockedMessageCount;
+};
+
 
 struct TWriterSettings {
     TString DatabasePath;
@@ -101,7 +121,7 @@ struct TWriterSettings {
         TString MessageBody;
         std::optional<TString> MessageGroupId;
         std::optional<TString> MessageDeduplicationId;
-        std::optional<TString> SerializedMessageAttributes;
+        std::unordered_multimap<TString, TString> Attributes;
         TDuration Delay;
     };
     std::vector<TMessage> Messages;
@@ -121,6 +141,7 @@ struct TReaderSettings {
     std::optional<TDuration> ProcessingTimeout;
     ui32 MaxNumberOfMessage = 1;
     bool UncompressMessages = false;
+    std::vector<TString> SkipMessageGroups; // TODO remove after SQS migration was finished
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
@@ -177,5 +198,16 @@ struct TPurgerSettings {
 // Return TEvPurgeResponse
 IActor* CreatePurger(const NActors::TActorId& parentId, TPurgerSettings&& settings);
 
+// Return TEvDescribeResponse
+struct TDescribeSettings {
+    TString DatabasePath;
+    TString TopicName;
+    TString Consumer;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+};
+
+// Return TEvDescribeResponse
+IActor* CreateDescriber(const NActors::TActorId& parentId, TDescribeSettings&& settings);
 
 } // NKikimr::NPQ::NMLP

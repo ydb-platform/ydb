@@ -23,6 +23,7 @@
 #include "incr_restore_scan.h"
 #include "datashard_integrity_trails.h"
 #include "datashard_tli.h"
+#include "multi_txids.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "reject_reason.h"
@@ -61,6 +62,8 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <ydb/library/actors/async/async.h>
+#include <ydb/library/actors/async/continuation.h>
 #include <ydb/library/actors/async/event.h>
 #include <ydb/library/actors/async/low_priority.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -256,6 +259,7 @@ class TDataShard
     class TTxLockRows;
     class TLockRowsTxObserver;
     class TLockRowsNotifyWaitGuard;
+    class TTxMultiTxIdCleanup;
 
     void HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev);
     void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev);
@@ -291,6 +295,7 @@ class TDataShard
     friend class TCdcStreamHeartbeatManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
+    friend class TMultiTxIdManager;
 
     friend class TTableStatsCoroBuilder;
     friend class TReadTableScan;
@@ -846,9 +851,10 @@ class TDataShard
             struct Body :  Column<3, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :  Column<4, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :  Column<5, NScheme::NTypeIds::Utf8> { using Type = TString; };
+            struct UserTraceId :  Column<6, NScheme::NTypeIds::String> { using Type = TString; };
 
             using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Kind, Body, Source, UserSID>;
+            using TColumns = TableColumns<Order, Kind, Body, Source, UserSID, UserTraceId>;
         };
 
         struct ChangeSenders : Table<19> {
@@ -995,9 +1001,10 @@ class TDataShard
             struct Body :       Column<4, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :     Column<5, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :    Column<6, NScheme::NTypeIds::Utf8> { using Type = TString; };
+            struct UserTraceId :  Column<7, NScheme::NTypeIds::String> { using Type = TString; };
             
             using TKey = TableKey<LockId, LockOffset>;
-            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID>;
+            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID, UserTraceId>;
         };
 
         // Maps [Order ... Order+N-1] change records in the shard order
@@ -1103,6 +1110,25 @@ class TDataShard
             >;
         };
 
+        struct MultiTxIds : Table<37> {
+            struct MultiTxId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct LockedRowsCount : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Flags : Column<3, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<MultiTxId>;
+            using TColumns = TableColumns<MultiTxId, LockedRowsCount, Flags>;
+        };
+
+        struct MultiTxIdGraph : Table<38> {
+            struct EdgeId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct MultiTxId : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct NestedTxId : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct NestedLockMode : Column<4, NScheme::NTypeIds::Uint8> { using Type = NTable::ELockMode; };
+
+            using TKey = TableKey<EdgeId>;
+            using TColumns = TableColumns<EdgeId, MultiTxId, NestedTxId, NestedLockMode>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1111,7 +1137,7 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies, CdcStreamHeartbeats>;
+            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1275,6 +1301,7 @@ class TDataShard
     void ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TActorContext& ctx);
     void CheckLockRowsRejectAll();
     bool CheckLockRowsReject(TLockRowsRequestState& state);
+    TLockInfo::TPtr FindValidLockOwner(ui64 lockId);
     void HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev);
     void HandleLockRowsCancel(NEvents::TDataEvents::TEvLockRowsCancel::TPtr& ev);
     void HandleLockRowsDeadlock(TEvLongTxService::TEvWaitingLockDeadlock::TPtr& ev);
@@ -1443,10 +1470,10 @@ class TDataShard
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
 
-    TDuration GetDataTxCompleteLag()
+    TDuration GetTxCompleteLag()
     {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
-        return TDuration::MilliSeconds(Pipeline.GetDataTxCompleteLag(mediatorTime));
+        return TDuration::MilliSeconds(Pipeline.GetTxCompleteLag(mediatorTime));
     }
     TDuration GetScanTxCompleteLag()
     {
@@ -2024,6 +2051,7 @@ public:
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count = 1);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     ui64 GetNextChangeRecordLockOffset(ui64 lockId);
+    void FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
     bool HasLockChangeRecords(ui64 lockId) const;
     void CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected);
@@ -2078,6 +2106,9 @@ public:
     TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() { return CdcStreamHeartbeatManager; }
     const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
     void EmitHeartbeats();
+
+    TMultiTxIdManager& GetMultiTxIdManager() { return MultiTxIdManager; }
+    const TMultiTxIdManager& GetMultiTxIdManager() const { return MultiTxIdManager; }
 
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
@@ -2231,6 +2262,9 @@ public:
         Y_ENSURE(type != ELogThrottlerType::LAST);
         return LogThrottlers[type];
     };
+
+    async<ui64> AllocateGlobalTxId();
+    void RecycleGlobalTxId(ui64 txId);
 
     void OnTableCreated(TTransactionContext& txc, const TActorContext& ctx);
 
@@ -2783,6 +2817,7 @@ private:
     TConflictsCache ConflictsCache;
     TCdcStreamScanManager CdcStreamScanManager;
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
+    TMultiTxIdManager MultiTxIdManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -3130,6 +3165,12 @@ private:
     TDeque<TRecentWriteForTli> RecentWritesForTli;
 
     TAsyncLowPriorityQueue LowPriorityQueue;
+
+    struct TGlobalTxIdAwaiter : public TIntrusiveListItem<TGlobalTxIdAwaiter> {
+        TAsyncContinuation<ui64> Continuation;
+    };
+    TIntrusiveList<TGlobalTxIdAwaiter> GlobalTxIdAwaiters;
+    TVector<ui64> GlobalTxIdCache;
 
 public:
     struct TBreakerInfo {

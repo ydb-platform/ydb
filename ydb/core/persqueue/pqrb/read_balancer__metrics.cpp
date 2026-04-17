@@ -1,13 +1,10 @@
 #include "read_balancer.h"
 #include "read_balancer__metrics.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 namespace NKikimr::NPQ {
 

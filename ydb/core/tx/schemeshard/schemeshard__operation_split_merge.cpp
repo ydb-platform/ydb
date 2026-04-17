@@ -1032,19 +1032,13 @@ public:
         /// Accept operation
         ///
 
-        auto guard = context.DbGuard();
-        context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabDomain(context.SS, path.GetPathIdForDomain());
-        context.MemChanges.GrabPath(context.SS, path->PathId);
-        context.MemChanges.GrabTable(context.SS, path->PathId);
-
+        //NOTE: No MemChanges.Grab* calls are made here: TSplitMerge::Propose() has no
+        // failure paths after this point, so AbortOperationPropose / UnDo() will
+        // never be triggered for these objects.
+        // AbortUnsafe() (triggered by TDropForceUnsafe) handles its own rollback
+        // by performing the inverse in-memory operations directly.
         context.DbChanges.PersistTxState(OperationId);
         for (const auto& shard : op.Shards) {
-            if (shard.Operation == TTxState::CreateParts) {
-                context.MemChanges.GrabNewShard(context.SS, shard.Idx);
-            } else {
-                context.MemChanges.GrabShard(context.SS, shard.Idx);
-            }
             context.DbChanges.PersistShard(shard.Idx);
         }
 
@@ -1100,13 +1094,29 @@ public:
         Y_ABORT_UNLESS(txState);
 
         TPathId pathId = txState->TargetPathId;
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
-        TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_ABORT_UNLESS(path);
-
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
         Y_ABORT_UNLESS(tableInfo);
+
+        // Undo the in-memory changes made by Propose() using inverse operations.
+        //
+        // Dst shards are left in ShardInfos (with their InternalShards / ShardsInside
+        // tracking intact) so that:
+        //   1. TDropForceUnsafe::CollectAllShards() can find and schedule them for
+        //      tablet deletion via Hive.
+        //   2. TTxDeleteTabletReply will call RemoveInternalShard / DecShardsInside
+        //      when the deletion completes, keeping the counters consistent.
+        for (const auto& shard : txState->Shards) {
+            if (shard.Operation == TTxState::TransferData) {
+                // Src shard: restore CurrentTxId to InvalidTxId so the shard is
+                // no longer considered "under operation".
+                Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
+                context.SS->ShardInfos[shard.Idx].CurrentTxId = InvalidTxId;
+            }
+            // Dst shards (CreateParts): leave everything as-is; TTxDeleteTabletReply
+            // will clean up InternalShards, ShardsInside, and ShardInfos entries.
+        }
+
         tableInfo->AbortSplitMergeOp(OperationId);
 
         context.OnComplete.DoneOperation(OperationId);

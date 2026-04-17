@@ -6,6 +6,7 @@ import sys
 
 from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
+    NODE_MODULES_DIRNAME,
     VIRTUAL_STORE_DIRNAME,
     NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     NPM_REGISTRY_URL,
@@ -321,9 +322,13 @@ class PackageManager(object):
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
         store_dir = self._get_pnpm_store()
-        virtual_store_dir = (
-            self._nm_path(VIRTUAL_STORE_DIRNAME) if self.inject_peers or use_legacy_pnpm_virtual_store else None
-        )
+        if self.inject_peers or use_legacy_pnpm_virtual_store:
+            virtual_store_dir = os.path.join(
+                self.build_path, NODE_MODULES_DIRNAME if nm_bundle else '', VIRTUAL_STORE_DIRNAME
+            )
+        else:
+            virtual_store_dir = None
+
         global_virtual_store_dir = os.path.join(store_dir, "v10", "links")
 
         self._run_pnpm_install(store_dir, self.build_path, local_cli, virtual_store_dir, self.inject_peers)
@@ -424,7 +429,6 @@ class PackageManager(object):
         ]
         outs = [
             b_rooted(build_ws_config_path(self.module_path)),
-            b_rooted(build_pre_lockfile_path(self.module_path)),
         ]
         resources = []
 

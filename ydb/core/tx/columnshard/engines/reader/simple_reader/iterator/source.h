@@ -105,10 +105,7 @@ public:
         }
     }
 
-    void ClearMemoryGuards() {
-        ResourceGuards.clear();
-        SourceGroupGuard.reset();
-    }
+    void ClearMemoryGuards();
 
     ui32 GetPurposeSyncPointIndex() const {
         AFL_VERIFY(PurposeSyncPointIndex);
@@ -141,6 +138,10 @@ public:
         return *UsedRawBytes;
     }
 
+    virtual ui64 GetUsedRawBytesOptional() const override {
+        return UsedRawBytes.value_or(0);
+    }
+
     void SetUsedRawBytes(const ui64 value) {
         AFL_VERIFY(!UsedRawBytes);
         UsedRawBytes = value;
@@ -171,8 +172,7 @@ public:
         ClearStageData();
         MutableExecutionContext().Stop();
         StageResult.reset();
-        ResourceGuards.clear();
-        SourceGroupGuard = nullptr;
+        ClearMemoryGuards();
     }
 
     void SetIsStartedByCursor() {
@@ -196,7 +196,7 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual TInternalPathId GetPathId() const = 0;
+    virtual TInternalPathId GetPathId() const override = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
@@ -328,6 +328,10 @@ public:
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return Schema;
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
         return Schema;
     }
 

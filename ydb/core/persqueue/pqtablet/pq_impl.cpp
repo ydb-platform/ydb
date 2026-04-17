@@ -30,7 +30,6 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <library/cpp/json/json_writer.h>
@@ -1240,6 +1239,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
 
     if (!partitionId.IsSupportivePartition()) {
         ProcessCheckPartitionStatusRequests(partitionId);
+        ProcessCheckMessageDeduplicationRequests(partitionId);
     }
 
     if (allInitialized) {
@@ -1605,6 +1605,37 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvPartitionUpdateReadMetrics::TPtr& ev, const TActorContext& ctx)
+{
+    if (!ConfigInited || TabletState == NKikimrPQ::EDropped) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    if (!record.HasUpdateReadMetrics() || !record.HasPartition()) {
+        return;
+    }
+
+    const auto& metrics = record.GetUpdateReadMetrics();
+    if (!metrics.HasClientId()) {
+        return;
+    }
+
+    auto it = Partitions.find(TPartitionId(record.GetPartition()));
+    if (it == Partitions.end() || !it->second.InitDone) {
+        return;
+    }
+
+    TDuration inFlightLimitReachedDuration = TDuration::Zero();
+    if (metrics.HasInFlightLimitReachedDurationMs()) {
+        inFlightLimitReachedDuration = TDuration::MilliSeconds(metrics.GetInFlightLimitReachedDurationMs());
+    }
+
+    ctx.Send(it->second.Actor,
+        new TEvPQ::TEvUpdateReadMetrics(metrics.GetClientId(), inFlightLimitReachedDuration),
+        0, 0, NWilson::TTraceId(ev->TraceId));
+}
+
 
 void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
     for (auto partition : ev->Get()->Record.GetPartitions()) {
@@ -1900,7 +1931,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         }
 
         ui64 createTimestampMs = 0, writeTimestampMs = 0;
-        NKikimrPQClient::TDataChunk proto;
         std::optional<TString> deduplicationId;
 
         TString errorStr = "";
@@ -1954,13 +1984,22 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             return;
         }
 
-        if (proto.ParseFromString(cmd.GetData())) {
-            for (auto& attr : *proto.MutableMessageMeta()) {
-                if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
-                    deduplicationId = attr.value();
-                    break;
+        if (cmd.HasMessageDeduplicationId()) {
+            deduplicationId = cmd.GetMessageDeduplicationId();
+
+            auto deduplicationIdFromMetadata = [&cmd] () -> TString {
+                NKikimrPQClient::TDataChunk proto;
+                if (proto.ParseFromString(cmd.GetData())) {
+                    for (auto& attr : *proto.MutableMessageMeta()) {
+                        if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                            return attr.value();
+                        }
+                    }
                 }
-            }
+                return TString();
+            };
+
+            Y_ASSERT(deduplicationId.value() == deduplicationIdFromMetadata());
         }
 
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this
@@ -2012,6 +2051,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .UncompressedSize = uncompressedSize,
                     .PartitionKey = cmd.GetPartitionKey(),
                     .ExplicitHashKey = cmd.GetExplicitHash(),
+                    .ChoosePartitionKey = cmd.GetChoosePartitionKey(),
                     .External = cmd.GetExternalOperation(),
                     .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                     .HeartbeatVersion = heartbeatVersion,
@@ -2061,6 +2101,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .UncompressedSize = cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u,
                 .PartitionKey = cmd.GetPartitionKey(),
                 .ExplicitHashKey = cmd.GetExplicitHash(),
+                .ChoosePartitionKey = cmd.GetChoosePartitionKey(),
                 .External = cmd.GetExternalOperation(),
                 .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                 .HeartbeatVersion = heartbeatVersion,
@@ -2082,10 +2123,16 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         initialSeqNo = req.GetInitialSeqNo();
     }
     THolder<TEvPQ::TEvWrite> event =
-        MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
-                                    req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
-                                    req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
-                                    std::move(msgs), req.GetIsDirectWrite(), initialSeqNo);
+        MakeHolder<TEvPQ::TEvWrite>(
+            responseCookie,
+            req.GetMessageNo(),
+            req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
+            req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
+            std::move(msgs),
+            req.GetIsDirectWrite(),
+            initialSeqNo,
+            TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked
+        );
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2796,7 +2843,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 }
 
-
 void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&)
 {
     PQ_LOG_T("Handle TEvTabletPipe::TEvServerConnected");
@@ -3255,11 +3301,6 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
     }
     PQ_LOG_TX_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);
-}
-
-static bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation) {
-    bool isRead = operation.HasCommitOffsetsBegin() || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
-    return !isRead;
 }
 
 bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const
@@ -4179,6 +4220,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                 const TPartitionInfo& partition = Partitions.at(partitionId);
 
                 event->SupportivePartitionActor = partition.Actor;
+                event->SetSkipSrcIdInfo(tx.GetSkipSrcIdInfo());
             }
         } else {
             PQ_LOG_TX_W("Unknown WriteId " << writeId << " for TxId " << tx.TxId);
@@ -4791,7 +4833,7 @@ void TPersQueue::InitMediatorTimeCast(const TActorContext& ctx)
     }
 }
 
-bool TPersQueue::ReadyForDroppedReply() const 
+bool TPersQueue::ReadyForDroppedReply() const
 {
     if (TabletState != NKikimrPQ::EDropped) {
         return false;
@@ -5200,6 +5242,20 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
+void TPersQueue::ProcessCheckMessageDeduplicationRequests(const TPartitionId& partitionId)
+{
+    PQ_ENSURE(!partitionId.WriteId.Defined());
+    ui32 originalPartitionId = partitionId.OriginalPartitionId;
+    auto sit = CheckMessageDeduplicationRequests.find(originalPartitionId);
+    if (sit != CheckMessageDeduplicationRequests.end()) {
+        auto it = Partitions.find(partitionId);
+        for (auto& r : sit->second) {
+            Forward(r, it->second.Actor);
+        }
+        CheckMessageDeduplicationRequests.erase(sit);
+    }
+}
+
 void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev)
 {
     PQ_LOG_TX_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
@@ -5449,6 +5505,33 @@ void TPersQueue::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     Forward(ev, ReadBalancerActorId);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    auto partitionId = record.GetPartitionId();
+    auto* p = Partitions.FindPtr(TPartitionId{partitionId});
+    if (p == nullptr) [[unlikely]] {
+        PQ_LOG_I("TEvCheckMessageDeduplicationRequest: unknown partition " << partitionId);
+        auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+        response->Record.SetPartitionId(partitionId);
+        response->Record.SetGeneration(record.GetGeneration());
+        response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);
+        for (const auto& messageId : record.GetMessageDeduplicationId()) {
+            response->Record.MutableResult()->try_emplace(messageId);
+        }
+        Send(ev->Sender, response.Release());
+        return;
+    }
+    if (!p->InitDone) [[unlikely]] {
+        CheckMessageDeduplicationRequests[partitionId].push_back(std::move(ev));
+        return;
+    }
+    Forward(ev, p->Actor);
+}
+
 template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
@@ -5486,6 +5569,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
     {
         HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
         HFuncTraced(TEvPersQueue::TEvRequest, Handle);
+        HFuncTraced(TEvPersQueue::TEvPartitionUpdateReadMetrics, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
@@ -5534,6 +5618,8 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
         hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
+        hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+        hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             return false;
     }

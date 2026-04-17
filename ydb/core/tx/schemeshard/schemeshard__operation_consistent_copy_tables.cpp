@@ -325,12 +325,13 @@ bool CreateConsistentCopyTables(
 
                 indexDescr.SetOmitIndexes(true);
 
-                auto itCreate = descr.GetIndexImplTableCdcStreams().find(name);
+                const TString key = TStringBuilder() << name << '/' << srcImplTableName;
+                auto itCreate = descr.GetIndexImplTableCdcStreams().find(key);
                 if (itCreate != descr.GetIndexImplTableCdcStreams().end()) {
                     indexDescr.MutableCreateSrcCdcStream()->CopyFrom(itCreate->second);
                 }
 
-                auto itDrop = descr.GetIndexImplTableDropCdcStreams().find(name);
+                auto itDrop = descr.GetIndexImplTableDropCdcStreams().find(key);
                 if (itDrop != descr.GetIndexImplTableDropCdcStreams().end()) {
                     indexDescr.MutableDropSrcCdcStream()->CopyFrom(itDrop->second);
                 }

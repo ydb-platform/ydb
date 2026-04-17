@@ -79,6 +79,8 @@ public:                                                                         
                 COUNTER_INIT(LsmCompactionWriteRequests, true);
                 COUNTER_INIT(LsmHugeBytesWritten, true);
                 COUNTER_INIT(LsmLogBytesWritten, true);
+                COUNTER_INIT(LsmCompactionWaitingTimeSeconds, false);
+                COUNTER_INIT(LsmCompactionWorkingTimeSeconds, false);
             }
 
             COUNTER_DEF(LsmCompactionBytesRead)
@@ -87,6 +89,8 @@ public:                                                                         
             COUNTER_DEF(LsmCompactionWriteRequests)
             COUNTER_DEF(LsmHugeBytesWritten)
             COUNTER_DEF(LsmLogBytesWritten)
+            COUNTER_DEF(LsmCompactionWaitingTimeSeconds)
+            COUNTER_DEF(LsmCompactionWorkingTimeSeconds)
         };
 
 
@@ -318,6 +322,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(ReplNodeRequestThrottledMicroseconds, false);
                 COUNTER_INIT_IF_EXTENDED(ReplNodeResponseThrottledMicroseconds, false);
                 COUNTER_INIT_IF_EXTENDED(ReplPDiskReadThrottledMicroseconds, false);
+                COUNTER_INIT(ReplIsHoldingToken, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -347,6 +352,7 @@ public:                                                                         
             COUNTER_DEF(ReplNodeRequestThrottledMicroseconds);
             COUNTER_DEF(ReplNodeResponseThrottledMicroseconds);
             COUNTER_DEF(ReplPDiskReadThrottledMicroseconds);
+            COUNTER_DEF(ReplIsHoldingToken);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -864,6 +870,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
+                COUNTER_INIT_IF_EXTENDED(DiskTimeFairShareNs, false);
             }
 
             COUNTER_DEF(UserDiskCost);
@@ -872,6 +879,7 @@ public:                                                                         
             COUNTER_DEF(DefragDiskCost);
             COUNTER_DEF(InternalDiskCost);
             COUNTER_DEF(DiskTimeAvailableCtr);
+            COUNTER_DEF(DiskTimeFairShareNs);
         };
 
         class TScrubGroup : public TBase {
@@ -934,6 +942,8 @@ public:                                                                         
                 COUNTER_INIT(BlobsPromoteSsts, true);
                 COUNTER_INIT(BlobsExplicit, true);
                 COUNTER_INIT(BlobsBalance, true);
+                COUNTER_INIT(BlobsBalanceLevel, true);
+                COUNTER_INIT(BlobsBalanceFull, true);
                 COUNTER_INIT(BlobsFreeSpace, true);
                 COUNTER_INIT(BlobsSqueeze, true);
 
@@ -950,6 +960,8 @@ public:                                                                         
             COUNTER_DEF(BlobsPromoteSsts);
             COUNTER_DEF(BlobsExplicit);
             COUNTER_DEF(BlobsBalance);
+            COUNTER_DEF(BlobsBalanceLevel);
+            COUNTER_DEF(BlobsBalanceFull);
             COUNTER_DEF(BlobsFreeSpace);
             COUNTER_DEF(BlobsSqueeze);
 

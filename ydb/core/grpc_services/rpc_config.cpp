@@ -168,11 +168,6 @@ public:
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
-        if (request.dry_run()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            issues.AddIssue("DryRun is not supported yet.");
-            return false;
-        }
 
         auto* csk = AppData()->ConfigSwissKnife;
 
@@ -190,7 +185,8 @@ public:
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
 
-        auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+        auto *protoRequest = GetProtoRequest();
+        auto shim = ConvertConfigReplaceRequest(*protoRequest);
 
         if (shim.MainConfig) {
             cmd->SetYAML(*shim.MainConfig);
@@ -204,6 +200,7 @@ public:
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
         cmd->SetUserToken(Request_->GetSerializedToken());
         cmd->SetPeerName(Request_->GetPeerName());
+        cmd->SetDryRun(protoRequest->dry_run());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -232,16 +229,20 @@ public:
         const auto& ff = AppData()->FeatureFlags;
 
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
-            shim.MainConfig,
-            shim.StorageConfig,
-            shim.SwitchDedicatedStorageSection,
-            shim.DedicatedConfigMode,
-            request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks(),
-            /*enableConfigV2=*/ ff.GetSwitchToConfigV2(),
-            /*disableConfigV2=*/ ff.GetSwitchToConfigV1(),
-            Request_->GetPeerName(),
-            Request_->GetSerializedToken());
+            TEvBlobStorage::TEvControllerReplaceConfigRequest::TArgs {
+                .ClusterYaml = shim.MainConfig,
+                .StorageYaml = shim.StorageConfig,
+                .SwitchDedicatedStorageSection = shim.SwitchDedicatedStorageSection,
+                .DedicatedConfigMode = shim.DedicatedConfigMode,
+                .AllowUnknownFields = request->allow_unknown_fields() || request->bypass_checks(),
+                .BypassMetadataChecks = request->bypass_checks(),
+                .DryRun = request->dry_run(),
+                .EnableConfigV2 = ff.GetSwitchToConfigV2(),
+                .DisableConfigV2 = ff.GetSwitchToConfigV1(),
+                .PeerName = Request_->GetPeerName(),
+                .UserToken = Request_->GetSerializedToken()
+            }
+        );
     }
 
 private:
@@ -604,12 +605,8 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
         }
 
         bool CheckAccess() {
-            if (Request().GetInternalToken()
-            && !(IsAdministrator(AppData(), Request().GetInternalToken().Get()) || IsTokenAllowed(Request().GetInternalToken().Get(), AppData()->BootstrapAllowedSIDs))) {
-                return false;
-            }
-
-            return true;
+            return IsAdministrator(AppData(), Request().GetInternalToken().Get())
+                || IsTokenAllowed(Request().GetInternalToken().Get(), AppData()->BootstrapAllowedSIDs);
         }
     };
 

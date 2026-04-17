@@ -773,7 +773,7 @@ public:
                 }
             } else {
                 try {
-                    if (Y_LIKELY(field->StructIndex != Max<ui32>())) {
+                    if (field->StructIndex != Max<ui32>()) [[likely]] {
                         items[field->StructIndex] = ReadField(field->Type);
                     } else {
                         SkipField(field->Type);
@@ -909,7 +909,7 @@ protected:
             auto val = ReadYsonValueInTableFormat((decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? type : uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_);
             return (decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? val : val.Release().MakeOptional();
         } else {
-            if (Y_LIKELY(cmd != EntitySymbol)) {
+            if (cmd != EntitySymbol) [[likely]] {
                 auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
                 return ReadYsonValueInTableFormat(type, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_);
             }
@@ -1231,7 +1231,7 @@ public:
             }
         }
 
-        if (decoder.Dynamic) {
+        if (decoder.Dynamic || decoder.RLS) {
             RowIndex_.Clear();
         } else if (spec.SystemFields_.HasFlags(TMkqlIOSpecs::ESystemField::RowIndex)) {
             auto cmd = Buf_.Read();
@@ -1339,7 +1339,7 @@ protected:
             }
 
             try {
-                if (Y_UNLIKELY(decoder.FieldsVec[i].StructIndex == Max<ui32>())) {
+                if (decoder.FieldsVec[i].StructIndex == Max<ui32>()) [[unlikely]] {
                     SkipSkiffField(decoder.FieldsVec[i].Type, decoder.NativeYtTypeFlags);
                 } else if (decoder.NativeYtTypeFlags && !decoder.FieldsVec[i].ExplicitYson) {
                     items[i] = ReadSkiffFieldNativeYt(decoder.FieldsVec[i].Type, decoder.NativeYtTypeFlags);

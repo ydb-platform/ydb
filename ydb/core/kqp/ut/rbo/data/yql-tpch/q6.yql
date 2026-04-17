@@ -1,6 +1,3 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
-/* custom error: CheckExpectedTypeAndColumnOrder(): requirement IsSameAnnotation(*node.GetTypeAnn(), *it->second) failed */
 PRAGMA YqlSelect = 'force';
 
 SELECT
@@ -10,6 +7,6 @@ FROM
 WHERE
     l_shipdate >= Date('1994-01-01')
     AND l_shipdate < DateTime::MakeDate(DateTime::ShiftYears(Date('1994-01-01'), 1))
-    AND l_discount BETWEEN (0.06 - 0.01) AND (0.06 + 0.01)
-    AND l_quantity < 24
+    AND l_discount BETWEEN (Decimal("0.06", 12, 2) - Decimal("0.01", 12, 2)) AND (Decimal("0.06", 12, 2) + Decimal("0.01", 12, 2))
+    AND l_quantity < $to_decimal(24)
 ;

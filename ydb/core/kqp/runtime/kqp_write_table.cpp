@@ -1524,13 +1524,13 @@ public:
     }
 
     void OnPartitioningChanged(
-        const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
+        const TPartitioning::TCPtr& partitioning) override {
         IsOlap = false;
         Partitioning = partitioning;
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
-                *Partitioning,
+                Partitioning->GetTablePartitioning(),
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1598,7 +1598,7 @@ public:
 
         if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
-                *Partitioning,
+                Partitioning->GetTablePartitioning(),
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1926,7 +1926,7 @@ private:
     std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     std::optional<bool> IsOlap;
 };
 

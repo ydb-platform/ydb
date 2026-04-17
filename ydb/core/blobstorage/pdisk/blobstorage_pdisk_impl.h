@@ -112,6 +112,7 @@ public:
     TControlWrapper ChunkBaseLimitPerMille;
     TControlWrapper SemiStrictSpaceIsolation;
     i64 SemiStrictSpaceIsolationCached = 0;
+    TControlWrapper ForcedPDiskSpaceColor;
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         switch (SemiStrictSpaceIsolation) {
@@ -144,7 +145,7 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    alignas(16) TDiskFormat Format;
+    alignas(16) TDiskFormat Format = {};
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;
     TNonceJumpLogPageHeader2 LastNonceJumpLogPageHeader2;

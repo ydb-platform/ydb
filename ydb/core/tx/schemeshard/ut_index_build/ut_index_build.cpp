@@ -383,13 +383,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], true);
         UNIT_ASSERT_VALUES_EQUAL(shadowData[1], false);
+        UNIT_ASSERT(shadowData.size() < 3 || shadowData[2] == false);
 
-        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[0], true);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[1], false);
+        UNIT_ASSERT(keepEraseMarkers.size() < 3 || keepEraseMarkers[2] == false);
     }
 
     Y_UNIT_TEST(BaseCase) {
@@ -1546,6 +1548,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
+
+        // Build a non-unique index to check that the table is correctly unlocked
+        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{"test_index", NKikimrSchemeOp::EIndexTypeGlobal, {"index1", "index2"}, {}, globalIndexSettings});
+        auto buildIndexId2 = txId;
+
+        env.TestWaitNotification(runtime, buildIndexId2, tenantSchemeShard);
+
+        descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId2);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
     }
 
     Y_UNIT_TEST(RejectsOnDuplicatesUniq) {

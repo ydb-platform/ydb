@@ -46,7 +46,7 @@ class TSessionInfo {
         {
             StartTime = Now();
             EnsureCounters(countersRoot);
-            if (WorkerCounters) {
+            if (HasCounters()) {
                 WorkerCounters->Uptime->Set(0);
                 WorkerCounters->Restarts->Add(1);
             }
@@ -56,8 +56,12 @@ class TSessionInfo {
             return ActorId;
         }
 
+        bool HasCounters() const {
+            return MetricsLevel == TMetricsConfig::LEVEL_DETAILED && !Location.GetPath().empty();
+        }
+
         void EnsureCounters(NMonitoring::TDynamicCounterPtr& countersRoot) {
-            if (MetricsLevel != TMetricsConfig::LEVEL_DETAILED || Location.GetPath().empty()) {
+            if (!HasCounters()) {
                 return;
             }
 
@@ -67,16 +71,15 @@ class TSessionInfo {
                 ->GetSubgroup("cloud_id", Location.GetYcCloudId())
                 ->GetSubgroup("monitoring_project_id", Location.GetMonitoringProjectId());
 
-            if (!WorkerCounters) {
-                WorkerCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"), WorkerId);
-            }
-
-            if (!HostCounters) {
-                HostCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"));
-            }
+            WorkerCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"), WorkerId);
+            HostCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"));
         }
 
         void ApplyStats(const TWorkerDetailedStats& stats) {
+            if (!HasCounters()) {
+                return;
+            }
+
             if (stats.ReaderStats) {
                 HostCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
                 WorkerCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
@@ -568,7 +571,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
-                ? CreateLocalYdbProxy(std::move(database))
+                ? CreateLocalYdbProxy(database)
                 : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), params.CaCert(), std::forward<Args>(args)...);
             auto ydbProxy = Register(actor);
             auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));

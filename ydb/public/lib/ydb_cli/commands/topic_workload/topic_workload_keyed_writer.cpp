@@ -5,6 +5,8 @@
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 
+#include <string>
+
 namespace NYdb::NConsoleClient {
 
 TTopicWorkloadKeyedWriterWorker::TTopicWorkloadKeyedWriterWorker(const TTopicWorkloadKeyedWriterParams& params)
@@ -125,13 +127,12 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     NYdb::NTopic::TProducerSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
-    settings.SessionId(SessionId);
     settings.ProducerIdPrefix(producerId);
-    settings.MaxBlock(TDuration::Max());
+    settings.MaxBlockTimeout(TDuration::Max());
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?
         NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound :
-        NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Hash);
+        NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::KafkaHash);
     if (Params.MaxMemoryUsageBytes.has_value()) {
         settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes.value());
     }
@@ -144,6 +145,10 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     settings.EventHandlers(eventHandlers);
 
     settings.DirectWriteToPartition(Params.Direct);
+
+    if (Params.UseTransactions) {
+        settings.SetTrackProducerIdInTx(Params.TrackProducerIdInTx);
+    }
 
     producer->SetProducer(topicClient.CreateProducer(settings));
     return producer;

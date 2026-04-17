@@ -143,7 +143,7 @@ public:
     virtual void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
+        const TPartitioning::TCPtr& partitioning) = 0;
 
     using TWriteToken = ui64;
 

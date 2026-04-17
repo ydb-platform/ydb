@@ -253,7 +253,8 @@ public:
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         const NUdf::ILogProvider* logProvider,
         TFunctionTypeInfo* funcInfo) const override {
-        TStringBuf moduleName, funcName;
+        TStringBuf moduleName;
+        TStringBuf funcName;
         if (name.TrySplit(MODULE_NAME_DELIMITER, moduleName, funcName)) {
             auto it = UdfModules_.find(moduleName);
             if (it != UdfModules_.end()) {
@@ -343,6 +344,10 @@ public:
             private:
                 void SetTypeAwareness() final {
                     Properties_.IsTypeAwareness = true;
+                }
+
+                void SetPolyArgs(const NUdf::TStringRef& config) final {
+                    Properties_.PolyArgs = config;
                 }
 
                 TFunctionProperties& Properties_;

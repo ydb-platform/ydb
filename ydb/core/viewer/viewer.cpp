@@ -127,12 +127,11 @@ public:
                 .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
                 .AllowedSIDs = requireCountersAuth ? viewerAllowedSIDs : TVector<TString>(),
             });
-            // For healthcheck, always extract token if enforce_user_token_requirement is enabled, so access can be checked in handler.
-            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            // For healthcheck, always extract token so access can be checked in handler.
             mon->RegisterActorHandler({
                 .Path = "/healthcheck",
                 .Handler = ctx.SelfID,
-                .AuthMode = enforceUserToken ? TMon::EAuthMode::ExtractOnly : TMon::EAuthMode::Disabled,
+                .AuthMode = TMon::EAuthMode::ExtractOnly,
                 // No need to set AllowedSIDs since the SIDs will be checked in handler if required.
             });
             mon->RegisterActorPage({
@@ -213,7 +212,7 @@ public:
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    if (name == "/viewer/capabilities") {
+                    if (name == "/viewer/capabilities" || name == "/viewer/json/capabilities") {
                         // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
                         mon->RegisterActorHandler({
                             .Path = name,
@@ -250,36 +249,21 @@ public:
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) override;
 
     bool CheckAccessAdministration(const TRequestState& request) override {
-        auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
-                return true;
-            }
-        }
-        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        const auto userTokenObject = request.GetUserTokenObject();
+        return IsAdministrator(AppData(), userTokenObject);
     }
 
     bool CheckAccessMonitoring(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
-                return true;
-            }
-        }
-        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
-            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        return IsAdministrator(AppData(), userTokenObject)
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
     }
 
     bool CheckAccessViewer(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
-                return true;
-            }
-        }
-        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs())
+        return IsAdministrator(AppData(), userTokenObject)
             || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
-            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {
@@ -577,10 +561,24 @@ private:
         return instantTime;
     }
 
+    static bool IsPathSafe(const TString& path) {
+        TStringBuf remaining(path);
+        while (remaining) {
+            TStringBuf component = remaining.NextTok('/');
+            if (component == "..") {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool ReplyWithFile(NMon::TEvHttpInfo::TPtr& ev, const TString& name) {
         if (name == "/api/viewer.yaml") {
             Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPOKYAML(ev->Get(), Dump(GetSwaggerYaml()), GetCompileTime()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return true;
+        }
+        if (!IsPathSafe(name)) {
+            return false;
         }
         TString filename("content" + name);
         TString blob;

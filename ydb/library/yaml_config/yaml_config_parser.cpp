@@ -182,30 +182,33 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, COMBINED_DISK_INFO_PATH);
 
-        Iterate(json, POOL_CONFIG_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
-            Y_ENSURE_BT(ids.size() == 2);
-
-            TPoolConfigKey key{
-                .Domain = ids[0],
-                .StoragePoolType = ids[1],
-            };
-
-            bool currentHasErasureSpecies = false;
-            bool currentHasPoolConfigKind = false;
-            bool currentHasVDiskKind = false;
+        auto collectPoolConfigInfo = [&ctx](TPoolConfigKey key, const NJson::TJsonValue& node) {
+            bool hasErasureSpecies = false;
+            bool hasPoolConfigKind = false;
+            bool hasVDiskKind = false;
 
             const NJson::TJsonValue* poolConfigObject = nullptr;
             if (node.IsMap() && node.GetValuePointer("pool_config", &poolConfigObject) && poolConfigObject->IsMap()) {
-                currentHasErasureSpecies = poolConfigObject->Has("erasure_species");
-                currentHasPoolConfigKind = poolConfigObject->Has("kind");
-                currentHasVDiskKind = poolConfigObject->Has("vdisk_kind");
+                hasErasureSpecies = poolConfigObject->Has("erasure_species");
+                hasPoolConfigKind = poolConfigObject->Has("kind");
+                hasVDiskKind = poolConfigObject->Has("vdisk_kind");
             }
 
             ctx.PoolConfigInfo[key] = TPoolConfigInfo{
-                .HasErasureSpecies = currentHasErasureSpecies,
-                .HasKind = currentHasPoolConfigKind,
-                .HasVDiskKind = currentHasVDiskKind,
+                .HasErasureSpecies = hasErasureSpecies,
+                .HasKind = hasPoolConfigKind,
+                .HasVDiskKind = hasVDiskKind,
             };
+        };
+
+        Iterate(json, POOL_CONFIG_PATH, [&collectPoolConfigInfo](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 2);
+            collectPoolConfigInfo({ids[0], ids[1]}, node);
+        });
+
+        Iterate(json, EPHEMERAL_POOL_CONFIG_PATH, [&collectPoolConfigInfo](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 1);
+            collectPoolConfigInfo({0, ids[0]}, node);
         });
 
         Iterate(json, GROUP_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
@@ -1634,35 +1637,57 @@ endDiskTypeCheck:   ;
         return replaceRequest;
     }
 
-    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {
+    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
+               bool transform, EParsePhase* phase, bool relaxed) {
+        auto runPhase = [phase](EParsePhase value, auto&& func) {
+            try {
+                func();
+            } catch (const yexception&) {
+                if (phase) {
+                    *phase = value;
+                }
+                throw;
+            }
+        };
+
         auto jsonNode = json;
         TTransformContext ctx;
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
 
-        if (json.Has("metadata")) {
-            ValidateMetadata(json["metadata"]);
+        runPhase(EParsePhase::Preprocess, [&] {
+            if (json.Has("metadata")) {
+                ValidateMetadata(json["metadata"]);
 
-            Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
-                       "'config' must be an object when 'metadata' is present");
+                Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
+                           "'config' must be an object when 'metadata' is present");
 
-            config.SetYamlConfigEnabled(true);
+                config.SetYamlConfigEnabled(true);
 
-            jsonNode = json["config"];
-        }
+                jsonNode = json["config"];
+            }
+
+            if (transform) {
+                ExtractExtraFields(jsonNode, ctx);
+            }
+        });
 
         if (transform) {
-            ExtractExtraFields(jsonNode, ctx);
-
             NJson::TJsonValue ephemeralJsonNode = jsonNode;
             ClearNonEphemeralFields(ephemeralJsonNode);
-            NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, convertConfig);
+            runPhase(EParsePhase::JsonToProto, [&] {
+                NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, convertConfig);
+            });
             ClearEphemeralFields(jsonNode);
         }
 
-        NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
+        runPhase(EParsePhase::JsonToProto, [&] {
+            NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
+        });
 
         if (transform) {
-            TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);
+            runPhase(EParsePhase::Transform, [&] {
+                TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);
+            });
         }
     }
 
@@ -1678,7 +1703,8 @@ endDiskTypeCheck:   ;
     }
 
     void ValidateMetadata(const NJson::TJsonValue& metadata) {
-        Y_ENSURE_BT(metadata.Has("cluster") && metadata["cluster"].IsString(), "Metadata must contain a string 'cluster' field");
+        Y_ENSURE_BT(metadata.Has("cluster") && (metadata["cluster"].IsString() || metadata["cluster"].IsUInteger()),
+                    "Metadata must contain a string or numeric 'cluster' field");
         Y_ENSURE_BT(metadata.Has("version") && metadata["version"].IsUInteger(), "Metadata must contain an unsigned int 'version' field");
     }
 

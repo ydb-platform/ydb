@@ -23,7 +23,8 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     }
 
     auto scalarIU = scalarIUs[0];
-    auto subplan = CastOperator<IOperator>(props.Subplans.PlanMap.at(scalarIU).Plan);
+    auto subplanEntry = props.Subplans.PlanMap.at(scalarIU);
+    auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
     auto subplanResIU = subplan->GetOutputIUs()[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
 
@@ -88,6 +89,11 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         unaryOp->SetInput(rename);
     }
 
+    // If its a correlated subplan where filter pull up didn't succeed, throw an exception
+    else if (subplanEntry.DependentIUs.size()) {
+        Y_ENSURE(false, "Decorrelation via filter pull up didn't succeed");
+    }
+
     // Otherwise we assume an uncorrelated supbplan
     // Here we don't assume at most one tuple from the subplan
     else {
@@ -107,7 +113,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         auto unionAll = MakeIntrusive<TOpUnionAll>(rename, map, subplan->Pos, true);
 
-        auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx));
+        auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
     
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         auto cross = MakeIntrusive<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);

@@ -172,12 +172,18 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             CQ_,
             &Draft::Dummy::DummyService::AsyncService::RequestBiStreamPing,
             [this](TIntrusivePtr<TBiStreamGRpcRequest::IContext> context) {
-                ActorSystem_->Send(GRpcRequestProxyId_, new TEvBiStreamPingRequest(context));
+                ActorSystem_->Send(
+                    GRpcRequestProxyId_,
+                    new TEvBiStreamPingRequest(
+                        context,
+                        NGRpcService::TRequestAuxSettings{
+                            .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseAllowed
+                        }
+                    )
+                );
             },
-            *ActorSystem_,
-            "BiStreamPing",
-            getCounterBlock("dummy", "biStreamPing", true),
-            nullptr);
+            *ActorSystem_, "BiStreamPing",
+            getCounterBlock("dummy", "biStreamPing", true), nullptr);
     }
 }
 

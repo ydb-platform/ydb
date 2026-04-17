@@ -3,8 +3,9 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
-
+#include <library/cpp/json/writer/json.h>
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 bool TSourceData::DoStartFetchingAccessor(
@@ -170,7 +171,11 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             const ui32 entityId = it->GetEntityId();
             if (!accessor) {
                 while (it != records.end() && it->GetEntityId() == entityId) {
-                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+                    TString data;
+                    if (it->GetMeta().HasAdditionalAccessorData()) {
+                        data = it->GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust();
+                    }
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
                     ++it;
                 }
             } else {
@@ -203,8 +208,22 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             }
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            Y_UNUSED(i);
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+            TString data;
+            if (i.HasBlobData()) {
+                const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
+                if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
+                    const auto json = indexMeta->SerializeDataToJson(i, Schema->GetIndexInfo());
+                    if (json.Has("data")) {
+                        NJsonWriter::TBuf buf;
+                        buf.BeginObject();
+                        buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
+                        buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
+                        buf.EndObject();
+                        data = buf.Str();
+                    }
+                }
+            }
+            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

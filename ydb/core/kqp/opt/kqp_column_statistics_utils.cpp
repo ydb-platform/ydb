@@ -8,7 +8,7 @@ using namespace NYql::NNodes;
 // This functions is moved from kqp_op_statistics_requester to be able to use it in other transformers.
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
-                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const TColumnStatistics&)> alreadyHasStatistics) {
+                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics) {
     struct TTableMeta {
         TString TableName;
         THashMap<ui32, TString> ColumnNameByTag;
@@ -64,7 +64,7 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
             return;
         }
 
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+        THashMap<TString, NYql::TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
 
         for (auto&& stat : response.StatResponses) {
             auto meta = tableMetaByPathId[stat.Req.PathId];

@@ -262,12 +262,14 @@ public:
 
     void StartLookupTask(ui64 cookie, TLookupState& state, bool isUnique, bool uniqueFailOnRead) {
         auto& worker = state.Worker;
-        auto reads = worker->BuildRequests(Partitioning, ReadId);
+        worker->BuildRequests(Partitioning, ReadId);
 
-        // lookup can't be overloaded
-        AFL_ENSURE(!worker->IsOverloaded(std::numeric_limits<size_t>::max()));
+        while(true) {
+            auto [shardId, read] = worker->PopNextRequest();
+            if (!read) {
+                break;
+            }
 
-        for (auto& [shardId, read] : reads) {
             ++state.ReadsInflight;
             StartTableRead(cookie, shardId, isUnique, uniqueFailOnRead, std::move(read));
         }
@@ -559,9 +561,9 @@ public:
 
         {
             const auto guard = Settings.TypeEnv.BindAllocator();
-            lookupState.Worker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
-            });
+            lookupState.Worker->AddResult(TStreamLookupShardReadResult(
+                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), &guard.GetMutex()->Ref()
+            ));
         }
 
         Settings.Callbacks->OnLookupTaskFinished();
@@ -637,8 +639,13 @@ public:
         AFL_ENSURE(failedRead.Blocked);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
-        auto requests = lookupState.Worker->RebuildRequest(failedReadId, ReadId);
-        for (auto& request : requests) {
+        lookupState.Worker->RebuildRequest(failedRead.ShardId, failedReadId, ReadId);
+        while(true) {
+            auto [shardId, request] = lookupState.Worker->PopNextRequest();
+            if (!request)  {
+                break;
+            }
+
             const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
             StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.IsUniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
@@ -692,7 +699,7 @@ public:
 
 private:
     TKqpBufferTableLookupSettings Settings;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

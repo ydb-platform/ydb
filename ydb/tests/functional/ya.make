@@ -1,6 +1,7 @@
 RECURSE(
     api
     audit
+    topic
     autoconfig
     backup
     backup_collection
@@ -18,6 +19,7 @@ RECURSE(
     large_serializable
     limits
     minidumps
+    mvp
     nbs
     postgresql
     query_cache

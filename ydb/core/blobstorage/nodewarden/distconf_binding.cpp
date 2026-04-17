@@ -144,6 +144,11 @@ namespace NKikimr::NStorage {
             return; // we are either doing something, or binding is already in progress
         }
 
+        Y_ABORT_UNLESS(QuorumValid);
+        if (MajorityOfNodesConnected) {
+            return;
+        }
+
         const TMonotonic now = TActivationContext::Monotonic();
 
         // try to bind to node from the same pile
@@ -223,7 +228,7 @@ namespace NKikimr::NStorage {
             (SubscriptionExists, SubscribedSessions.contains(nodeId)));
 
         if (!IsSelfStatic) {
-            return OnStaticNodeConnected(nodeId, sessionId);
+            return OnStaticNodeConnected(nodeId, sessionId, cookie);
         }
 
         // check subscription map, do we really have this subscription in flight
@@ -269,7 +274,7 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC07, "TEvNodeDisconnected", (NodeId, nodeId), (SessionId, sessionId), (Cookie, cookie));
 
         if (!IsSelfStatic) {
-            return OnStaticNodeDisconnected(nodeId, sessionId);
+            return OnStaticNodeDisconnected(nodeId, sessionId, cookie);
         }
 
         const auto it = SubscribedSessions.find(nodeId);
@@ -696,13 +701,14 @@ namespace NKikimr::NStorage {
             const bool configUpdated = UpdateBound(senderNodeId, nodeId, item.GetMeta(), getPushEv());
             info.BoundNodeIds.insert(nodeId);
 
-            if (Scepter && configUpdated && item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
+            if (Scepter && configUpdated && CommittedStorageConfig &&
+                    item.GetMeta().GetGeneration() < CommittedStorageConfig->GetGeneration()) {
                 // a new node has arrived with stale configuration: we have to update it
                 fanOutCommittedStorageConfig = true;
             }
         }
         if (fanOutCommittedStorageConfig) {
-            FanOutReversePush(StorageConfig.get());
+            FanOutReversePush(CommittedStorageConfig.get());
         }
 
         // process deleted items

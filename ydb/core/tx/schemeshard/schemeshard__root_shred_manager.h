@@ -59,7 +59,7 @@ private:
     TTabletId BSC;
     bool IsManualStartup = false;
     ::NMonitoring::TDynamicCounters::TCounterPtr WaitingTenantsCounter;
-    ::NMonitoring::TDynamicCounters::TCounterPtr RunungTenantsCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RunningTenantsCounter;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletedTenantsCounter;
 
 public:

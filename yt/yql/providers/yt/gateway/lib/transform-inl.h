@@ -99,7 +99,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 };
 
                 const TString cluster = ExecCtx_->Cluster_;
-                const TString tmpFolder = GetTablesTmpFolder(*Settings_, cluster);
+                const TString tmpFolder = GetTablesTmpFolder(*Settings_, cluster, ExecCtx_->BaseSession_->UseSecureTmp_, ExecCtx_->BaseSession_->OperationOptions_);
 
 
                 TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(0));
@@ -123,7 +123,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 }
 
                 auto deliveryMode = ForceLocalTableContent_ ? ETableContentDeliveryMode::File : Settings_->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
-                bool useSkiff = !useBlocks && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
+                bool useSkiff = !useBlocks && !ForceDisableSkiff_ && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
                 const bool ensureOldTypesOnly = !useSkiff;
                 const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
                 const ui64 localDataSizeLimit = Settings_->_LocalTableContentLimit.Get().GetOrElse(DEFAULT_LOCAL_TABLE_CONTENT_LIMIT);
@@ -193,7 +193,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                     } else if (useSkiff) {
                         tables[i].Format = SingleTableSpecToInputSkiff(specNode, structColumns, false, false, false);
                     } else {
-                        if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute)) {
+                        if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute) && ExecCtx_->CheckSpecDoesntUseNativeYtTypes_) {
                             EnsureSpecDoesntUseNativeYtTypes(specNode, tablePath, true);
                         }
                         NYT::TNode formatNode("yson");

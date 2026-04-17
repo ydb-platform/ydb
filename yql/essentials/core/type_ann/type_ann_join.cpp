@@ -19,22 +19,45 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureListType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureListType(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto status = ConvertToLambda(input->ChildRef(2), ctx.Expr, 1);
-        status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, 1));
+        bool isUniversal1;
+        bool isUniversal2;
+        auto status = ConvertToLambda(input->ChildRef(2), ctx.Expr, isUniversal1, 1);
+        status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, isUniversal2, 1));
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
-        if (!EnsureAtom(*input->Child(4), ctx.Expr)) {
+        if (isUniversal1 || isUniversal2) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*input->Child(4), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         auto joinKind = input->Child(4)->Content();
@@ -94,12 +117,10 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        bool isUniversal1;
         if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda1, ctx.Expr, isUniversal1)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isUniversal2;
         if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda2, ctx.Expr, isUniversal2)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -115,6 +136,11 @@ namespace NYql::NTypeAnnImpl {
 
         if (!EnsureComparableKey(lambda2->Pos(), lambda2->GetTypeAnn(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (lambda1->GetTypeAnn()->HasUniversal() || lambda2->GetTypeAnn()->HasUniversal()) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!IsSameAnnotation(*lambda1->GetTypeAnn(), *lambda2->GetTypeAnn())) {
@@ -158,7 +184,8 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool leftUnique = false, rightUnique = false;
+        bool leftUnique = false;
+        bool rightUnique = false;
         if (input->ChildrenSize() > 3U) {
             if (!EnsureTupleOfAtoms(input->Tail(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -253,6 +280,11 @@ namespace NYql::NTypeAnnImpl {
         const size_t numLists = input->ChildrenSize() - 2;
 
         auto optionsNode = input->Child(input->ChildrenSize() - 1);
+        if (optionsNode->GetTypeAnn() && optionsNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(optionsNode->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         TJoinOptions options;
         auto status = ValidateEquiJoinOptions(input->Pos(), *optionsNode, options, ctx.Expr);
         if (status != IGraphTransformer::TStatus::Ok) {
@@ -263,6 +295,11 @@ namespace NYql::NTypeAnnImpl {
         TExprNode::TListType updatedChildren;
         for (ui32 idx = 0; idx < numLists; ++idx) {
             auto& listPair = *input->Child(idx);
+            if (listPair.GetTypeAnn() && listPair.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(listPair.GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureTupleSize(listPair, 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -308,6 +345,11 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto joins = input->Child(input->ChildrenSize() - 2);
+        if (joins->GetTypeAnn() && joins->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(joins->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         const TStructExprType* resultType = nullptr;
         status = EquiJoinAnnotation(input->Pos(), resultType, labels, *joins, options, ctx.Expr);
         if (status != IGraphTransformer::TStatus::Ok) {
@@ -336,8 +378,14 @@ namespace NYql::NTypeAnnImpl {
         const auto dictType = input->Child(1)->GetTypeAnn()->Cast<TDictExprType>();
         const auto dictPayloadType = dictType->GetPayloadType();
 
-        if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         const auto joinKind = input->Child(2)->Content();
@@ -347,8 +395,13 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureTupleOfAtoms(*input->Child(3), ctx.Expr)) {
+        if (!EnsureTupleOfAtomsOrUniversal(*input->Child(3), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         for (const auto& child : input->Child(3)->Children()) {
@@ -358,8 +411,13 @@ namespace NYql::NTypeAnnImpl {
             }
         }
 
-        if (!EnsureTupleOfAtoms(*input->Child(4), ctx.Expr)) {
+        if (!EnsureTupleOfAtomsOrUniversal(*input->Child(4), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         const TStructExprType* rightStructType = nullptr;
@@ -386,8 +444,22 @@ namespace NYql::NTypeAnnImpl {
 
         auto& leftRenames = *input->Child(5);
         auto& rightRenames = *input->Child(6);
-        if (!EnsureTupleOfAtoms(leftRenames, ctx.Expr)) {
+        if (!EnsureTupleOfAtomsOrUniversal(leftRenames, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!EnsureTupleOfAtomsOrUniversal(rightRenames, ctx.Expr, isUniversal)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (leftRenames.ChildrenSize() % 2 != 0) {
@@ -439,10 +511,6 @@ namespace NYql::NTypeAnnImpl {
         }
 
         if (rightStructType || rightTupleType) {
-            if (!EnsureTupleOfAtoms(rightRenames, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
             if (rightRenames.ChildrenSize() % 2 != 0) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(rightRenames.Pos()), TStringBuilder() << "Expected even count of atoms"));
                 return IGraphTransformer::TStatus::Error;
@@ -503,9 +571,19 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         const TTypeAnnotationNode* leftItemType = nullptr;
         if (!EnsureNewSeqType<false, false>(input->Head(), ctx.Expr, &leftItemType)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureDictType(*input->Child(1), ctx.Expr)) {
@@ -743,7 +821,16 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        THashSet<TStringBuf> leftColumns, rightColumns, fullColumns, requiredColumns, keyColumns;
+        if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        THashSet<TStringBuf> leftColumns;
+        THashSet<TStringBuf> rightColumns;
+        THashSet<TStringBuf> fullColumns;
+        THashSet<TStringBuf> requiredColumns;
+        THashSet<TStringBuf> keyColumns;
         if (joinKind == "RightOnly" || joinKind == "RightSemi") {
             if (!EnsureTupleSize(*input->Child(2), 0, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -774,6 +861,11 @@ namespace NYql::NTypeAnnImpl {
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (input->Child(3)->GetTypeAnn() && input->Child(3)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(3)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (joinKind == "LeftOnly" || joinKind == "LeftSemi") {
@@ -808,6 +900,11 @@ namespace NYql::NTypeAnnImpl {
             }
         }
 
+        if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(4)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -840,6 +937,11 @@ namespace NYql::NTypeAnnImpl {
             }
         }
 
+        if (input->Child(5)->GetTypeAnn() && input->Child(5)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(5)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTuple(*input->Child(5), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -853,6 +955,11 @@ namespace NYql::NTypeAnnImpl {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
+        }
+
+        if (input->Child(6)->GetTypeAnn() && input->Child(6)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(6)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureTuple(*input->Child(6), ctx.Expr)) {
@@ -1003,17 +1110,29 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         const TTypeAnnotationNode* inputItemType = nullptr;
         if (!EnsureNewSeqType<false, false>(input->Head(), ctx.Expr, &inputItemType)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        bool isUniversal1;
+        bool isUniversal2;
+        if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isUniversal1)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+        if (!EnsureAtomOrUniversal(input->Tail(), ctx.Expr, isUniversal2)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal1 || isUniversal2) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         switch (inputItemType->GetKind()) {
@@ -1034,6 +1153,11 @@ namespace NYql::NTypeAnnImpl {
 
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         TVector<const TItemExprType*> structItems;
@@ -1089,12 +1213,22 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         const TStructExprType* expectedListItemType = nullptr;
         if (!EnsureBlockStorageResource(input->Child(0), expectedListItemType, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         TVector<const TItemExprType*> structItems;
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureType(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1111,8 +1245,14 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureTupleOfAtoms(*input->Child(2), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureTupleOfAtomsOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         TVector<TStringBuf> keyColumns;
@@ -1146,6 +1286,12 @@ namespace NYql::NTypeAnnImpl {
             }
             return true;
         };
+
+        if (input->Tail().GetTypeAnn() && input->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Tail().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureValidSettings(input->Tail(), {"any", "rowCount"}, settingsValidator, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1170,7 +1316,8 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto resourceIdentifier = TStringBuf(resourceTag.data() + BlockMapJoinIndexResourcePrefix.size(), resourceTag.size() - BlockMapJoinIndexResourcePrefix.size());
-        TStringBuf typeString, keyColumnsString;
+        TStringBuf typeString;
+        TStringBuf keyColumnsString;
         Split(resourceIdentifier, BlockMapJoinIndexResourceSeparator, typeString, keyColumnsString);
         Split(keyColumnsString, ",", keyColumns);
 
@@ -1199,14 +1346,26 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*input->Child(3), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
         }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         const auto joinKind = input->Child(3)->Content();
         if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly" && joinKind != "Cross") {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
                 << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         TTypeAnnotationNode::TListType leftItemTypes;
@@ -1215,6 +1374,11 @@ namespace NYql::NTypeAnnImpl {
         }
         leftItemTypes.pop_back();
         auto leftStreamItemType = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
 
         const TStructExprType* expectedRightListItemType = nullptr;
         TVector<TStringBuf> expectedRightKeyColumns;
@@ -1229,6 +1393,11 @@ namespace NYql::NTypeAnnImpl {
         }
 
         TVector<const TItemExprType*> rightStructItems;
+        if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureType(*input->Child(2), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1245,15 +1414,21 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        for (size_t childIdx = 4; childIdx <= 7; childIdx++) {
+            bool isUniversal;
+            if (!EnsureTupleOfAtomsOrUniversal(*input->Child(childIdx), ctx.Expr, isUniversal)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+        }
+
         if (input->Child(4)->ChildrenSize() != input->Child(6)->ChildrenSize()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(6)->Pos()), TStringBuilder() << "Mismatch of key column count"));
             return IGraphTransformer::TStatus::Error;
-        }
-
-        for (size_t childIdx = 4; childIdx <= 7; childIdx++) {
-            if (!EnsureTupleOfAtoms(*input->Child(childIdx), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
         }
 
         const auto& leftKeyColumnsNode = *input->Child(4);

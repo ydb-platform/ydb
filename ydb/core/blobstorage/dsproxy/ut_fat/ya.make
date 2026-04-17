@@ -4,12 +4,8 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(30)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
 
 PEERDIR(
     ydb/library/actors/protos

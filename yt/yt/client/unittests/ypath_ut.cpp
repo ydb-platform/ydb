@@ -1117,6 +1117,61 @@ TEST(TConstraintRichYPathTest, ModifyAttributesAfterCopy)
     CopyPathModifyAttributes<TWhiteListedAttributePath>(TWhiteListedAttributePath("//home/path"));
 }
 
+TEST(TConstraintRichYPathTest, HashRandom)
+{
+    std::vector<std::pair<TString, TString>> attributesPairs{};
+    for (int i = 0; i < 100; ++i) {
+        attributesPairs.emplace_back(Format("%v", rand()), Format("%v", rand()));
+    }
+
+    TRichYPath path("//home/path");
+    for (const auto& [key, value] : attributesPairs) {
+        path.SetAttribute(key, value);
+    }
+
+    TRichYPath otherPath("//home/path");
+    for (const auto& [key, value] : attributesPairs | std::views::reverse) {
+        otherPath.SetAttribute(key, value);
+    }
+
+    EXPECT_EQ(path, otherPath);
+    EXPECT_EQ(THash<TRichYPath>() (path), THash<TRichYPath>() (otherPath));
+}
+
+TEST(TConstraintRichYPathTest, HashAfterRemovedAttributes)
+{
+    std::vector<std::pair<TString, TString>> attributesPairs{
+        {"my_attribute_1", "b"},
+        {"my_attribute_2", "c"},
+        {"hello", "world"},
+        {"cluster", "primary"}
+    };
+
+    TRichYPath path("//home/path");
+    for (const auto& [key, value] : attributesPairs) {
+        path.SetAttribute(key, value);
+    }
+
+    std::vector<std::pair<TString, TString>> fakeAttributesPairs{};
+    for (int i = 0; i < 100; ++i) {
+        fakeAttributesPairs.emplace_back(Format("%v", rand()), Format("%v", rand()));
+    }
+
+    TRichYPath otherPath("//home/path");
+    for (const auto& [key, value] : fakeAttributesPairs) {
+        otherPath.SetAttribute(key, value);
+    }
+    for (const auto& [key, value] : attributesPairs) {
+        otherPath.SetAttribute(key, value);
+    }
+    for (const auto& [key, value] : fakeAttributesPairs) {
+        otherPath.RemoveAttribute(key);
+    }
+
+    EXPECT_EQ(path, otherPath);
+    EXPECT_EQ(THash<TRichYPath>() (path), THash<TRichYPath>() (otherPath));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

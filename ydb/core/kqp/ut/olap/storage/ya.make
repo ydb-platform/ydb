@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -13,6 +13,7 @@ ENDIF()
 SRCS(
     compaction_ut.cpp
     compression_ut.cpp
+    dictionary_ut.cpp
 )
 
 PEERDIR(

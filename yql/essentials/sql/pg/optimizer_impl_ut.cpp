@@ -50,7 +50,7 @@ Y_UNIT_TEST(MakeVar) {
 
 Y_UNIT_TEST(MakeRelOptInfo) {
     TArenaMemoryContext ctx;
-    IOptimizer::TRel rel1 = {10, 100, {{}}};
+    IOptimizer::TRel rel1 = {.Rows = 10, .TotalCost = 100, .TargetVars = {{}}};
     auto* r1 = MakeRelOptInfo(rel1, 1);
     UNIT_ASSERT(r1);
     UNIT_ASSERT_EQUAL(r1->reltarget->exprs->length, 1);
@@ -63,7 +63,7 @@ Y_UNIT_TEST(MakeRelOptInfo) {
     UNIT_ASSERT_EQUAL(
         ((Path*)r1->pathlist->elements[0].ptr_value)->total_cost, 100);
 
-    IOptimizer::TRel rel2 = {100, 99, {{}, {}}};
+    IOptimizer::TRel rel2 = {.Rows = 100, .TotalCost = 99, .TargetVars = {{}, {}}};
     auto* r2 = MakeRelOptInfo(rel2, 2);
     UNIT_ASSERT(r2);
     UNIT_ASSERT_EQUAL(r2->reltarget->exprs->length, 2);
@@ -77,8 +77,8 @@ Y_UNIT_TEST(MakeRelOptInfoListNull) {
 
 Y_UNIT_TEST(MakeRelOptInfoList) {
     TArenaMemoryContext ctx;
-    IOptimizer::TRel rel1 = {10, 100, {{}}};
-    IOptimizer::TRel rel2 = {100, 99, {{}}};
+    IOptimizer::TRel rel1 = {.Rows = 10, .TotalCost = 100, .TargetVars = {{}}};
+    IOptimizer::TRel rel2 = {.Rows = 100, .TotalCost = 99, .TargetVars = {{}}};
     IOptimizer::TInput input = {.Rels = {rel1, rel2}};
     auto* l = MakeRelOptInfoList(input);
     UNIT_ASSERT(l);

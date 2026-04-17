@@ -57,6 +57,27 @@ DEFINE_REFCOUNTED_TYPE(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Delegates all methods to the underlying tracker. Additionally keeps track
+//! of memory usage and peak usage for acquire/release operations performed
+//! via this tracker.
+//! Does not support reference tracking (|Track| and similar) and setting the
+//! limits.
+struct IScopedMemoryUsageTracker
+    : public IMemoryUsageTracker
+{
+    //! Returns the amount of memory currently acquired via this tracker.
+    virtual i64 GetSelfUsed() const = 0;
+
+    //! Returns the peak amount of memory ever acquired via this tracker.
+    virtual i64 GetSelfPeakUsed() const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IScopedMemoryUsageTracker)
+
+IScopedMemoryUsageTrackerPtr CreateScopedMemoryTracker(IMemoryUsageTrackerPtr underlying);
+
+////////////////////////////////////////////////////////////////////////////////
+
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker();
 
 ////////////////////////////////////////////////////////////////////////////////

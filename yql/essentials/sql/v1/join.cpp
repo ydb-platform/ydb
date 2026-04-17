@@ -340,8 +340,8 @@ protected:
             JoinDescrs_.push_back(std::move(newDescr));
         }
 
-        JoinDescrs_.back().Keys.push_back({{leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
-                                           {rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr}});
+        JoinDescrs_.back().Keys.push_back({{.Source = leftSourceIdx, .Column = op ? op->GetArgs()[leftArg] : nullptr},
+                                           {.Source = rightSourceIdx, .Column = op ? op->GetArgs()[rightArg] : nullptr}});
         KeysInitializing_ = false;
         return true;
     }

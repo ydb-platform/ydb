@@ -89,6 +89,8 @@ protected:
         NYPath::TYPath path,
         bool mutating);
 
+    TYPathRequest(const TYPathRequest& other);
+
     NRpc::NProto::TRequestHeader Header_;
 
     virtual TSharedRef SerializeBody() const = 0;
@@ -121,6 +123,16 @@ public:
             path,
             mutating)
     { }
+
+    TTypedYPathRequest(const TTypedYPathRequest& other)
+        : TYPathRequest(other)
+        , TRequestMessage(other)
+    { }
+
+    NRpc::IClientRequestPtr Clone() const override
+    {
+        return New<TTypedYPathRequest>(*this);
+    }
 
 protected:
     TSharedRef SerializeBody() const override

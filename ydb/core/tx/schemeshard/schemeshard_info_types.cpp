@@ -761,6 +761,17 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         return nullptr;
     }
 
+    if (op.GetUniqueIndexKeySize()) {
+        if (op.GetUniqueIndexKeySize() >= keyColIds.size()) {
+            errStr = TStringBuilder()
+                << "Too many unique key prefix columns"
+                << ": " << op.GetUniqueIndexKeySize()
+                << ", max: " << (keyColIds.size()-1);
+            return nullptr;
+        }
+        alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
+    }
+
     if (source) {
         // key columns reorder or deletion is not supported
         const TVector<ui32>& oldColIds = source->KeyColumnIds;
@@ -1062,8 +1073,37 @@ bool TPartitionConfigMerger::ApplyChanges(
         result.MutablePipelineConfig()->CopyFrom(changes.GetPipelineConfig());
     }
 
+    if (changes.HasEnableFilterByKey() && !changes.GetEnableFilterByKey() &&
+        changes.ByKeyFilterPrefixesSize() > 0) {
+        errDescr = "Cannot disable KEY_BLOOM_FILTER and add bloom filter prefixes in the same operation";
+        return false;
+    }
+
     if (changes.HasEnableFilterByKey()) {
         result.SetEnableFilterByKey(changes.GetEnableFilterByKey());
+        if (!changes.GetEnableFilterByKey()) {
+            // Disabling KEY_BLOOM_FILTER clears all bloom filter state including prefixed filters
+            result.ClearByKeyFilterPrefixes();
+        }
+    }
+
+    if (changes.ByKeyFilterPrefixesSize() > 0) {
+        TVector<ui32> prefixes;
+        for (auto p : result.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
+        for (auto p : changes.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
+        SortUnique(prefixes);
+        result.ClearByKeyFilterPrefixes();
+        for (auto p : prefixes) {
+            result.AddByKeyFilterPrefixes(p);
+        }
     }
 
     if (changes.HasExecutorFastLogPolicy()) {

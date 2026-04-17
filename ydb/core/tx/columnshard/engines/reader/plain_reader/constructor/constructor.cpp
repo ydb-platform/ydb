@@ -26,9 +26,9 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
         return std::shared_ptr<TReadMetadataBase>();
     }
 
-    if (read.GetSnapshot().GetPlanInstant() < self->GetMinShapshotForNewReads().GetPlanInstant()) {
+    if (!self->MayStartScanAt(read.GetSnapshot())) {
         return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
-                                                        << self->GetMinShapshotForNewReads() << ". now: " << TInstant::Now());
+                                                        << self->GetMinSnapshotForNewReads() << ". now: " << TInstant::Now());
     }
 
     auto readCopy = read;

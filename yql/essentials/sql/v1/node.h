@@ -3,6 +3,7 @@
 #include "aggregation.h"
 #include "result.h"
 
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <yql/essentials/parser/proto_ast/common.h>
@@ -196,7 +197,7 @@ public:
     virtual TVector<INode::TPtr>* ContentListPtr();
     virtual TAstNode* Translate(TContext& ctx) const = 0;
     virtual TAggregationPtr GetAggregation() const;
-    virtual void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs);
+    virtual bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs);
     virtual TPtr WindowSpecFunc(const TPtr& type) const;
     virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
     virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
@@ -342,7 +343,7 @@ protected:
     ISource* GetSource() override;
     TVector<INode::TPtr>* ContentListPtr() override;
     TAggregationPtr GetAggregation() const override;
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     TPtr WindowSpecFunc(const TPtr& type) const override;
     bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override;
     bool SetPrimaryView(TContext& ctx, TPosition pos) override;
@@ -484,7 +485,7 @@ class TAstListNodeImpl final: public TAstListNode {
 public:
     explicit TAstListNodeImpl(TPosition pos);
     TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
 protected:
@@ -510,7 +511,7 @@ protected:
     bool DoInit(TContext& ctx, ISource* src) override;
     bool ValidateArguments(TContext& ctx) const;
     TString GetCallExplain() const;
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
 
 protected:
     TString OpName_;
@@ -743,11 +744,17 @@ struct TCompression {
     TMap<TString, TNodePtr> Entries;
 };
 
+struct TEncoding {
+    TString Name;
+    TMap<TString, TNodePtr> Entries;
+};
+
 struct TColumnOptions {
     TNodePtr DefaultExpr;
     TVector<TIdentifier> Families;
     TMaybe<TCompression> Compression;
     bool Nullable = true;
+    TMaybe<TVector<TEncoding>> ColumnEncoding;
 };
 
 struct TColumnSchema {
@@ -759,6 +766,7 @@ struct TColumnSchema {
         SetCompression,
         SetDefault,
         DropDefault,
+        SetEncoding,
     };
 
     TPosition Pos;
@@ -770,6 +778,7 @@ struct TColumnSchema {
     const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
     bool Nullable = false;
     bool Serial = false;
+    TMaybe<TVector<TEncoding>> ColumnEncoding;
 };
 
 struct TColumns: public TSimpleRefCount<TColumns> {
@@ -963,7 +972,7 @@ public:
     TNodePtr DoClone() const final;
 
 private:
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
     const TVector<TNodePtr> Exprs_;
@@ -982,7 +991,7 @@ public:
     const TStructNode* GetStructNode() const override;
 
 private:
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
     const TVector<TNodePtr> Exprs_;
@@ -996,7 +1005,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) final;
     TNodePtr DoClone() const final;
     TAstNode* Translate(TContext& ctx) const override;
-    const TNodePtr GetExternalTypes() const;
+    TNodePtr GetExternalTypes() const;
     const TString& GetFunction() const;
     const TString& GetModule() const;
     TNodePtr GetRunConfig() const;
@@ -1421,11 +1430,12 @@ public:
         Alter,
     };
 
-    TMaybe<TDeferredAtom> Value;
+    TMaybe<std::variant<TDeferredAtom, TNodePtr>> Value;
+
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:
-    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode);
+    bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
 
 struct TTopicConsumerSettings {
@@ -1768,7 +1778,7 @@ TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) 
     return {};
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback);
+void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback);
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);

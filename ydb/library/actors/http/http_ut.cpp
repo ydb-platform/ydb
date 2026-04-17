@@ -1,7 +1,7 @@
 #include "http.h"
 #include "http_proxy.h"
 
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -138,6 +138,83 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n12345678901234567890\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Error);
         UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::ChunkLength);
+    }
+
+    Y_UNIT_TEST(BinaryDataInMethod) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryMethod = "G\x01T";
+        EatPartialString(request, binaryMethod + " /test HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http method");
+    }
+
+    Y_UNIT_TEST(BinaryDataInURL) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryUrl = "/test\x80path";
+        EatPartialString(request, "GET " + binaryUrl + " HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid url");
+    }
+
+    Y_UNIT_TEST(BinaryDataInProtocol) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test HT\x01P/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http protocol");
+    }
+
+    Y_UNIT_TEST(BinaryDataInVersion) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test HTTP/1\x02" "\x03" "1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http version");
+    }
+
+    Y_UNIT_TEST(BinaryDataInHeader) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryHeader = "X-Bad\x01Header: value";
+        EatPartialString(request, "GET /test HTTP/1.1\r\n" + binaryHeader + "\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http header");
+    }
+
+    Y_UNIT_TEST(BinaryDataInHeaderValue) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryHeader = "X-Header: val\x80ue";
+        EatPartialString(request, "GET /test HTTP/1.1\r\n" + binaryHeader + "\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http header");
+    }
+
+    Y_UNIT_TEST(ValidURLWithSpecialChars) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test?key=value&foo=bar%20baz#fragment HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "GET");
+        UNIT_ASSERT_EQUAL(request->URL, "/test?key=value&foo=bar%20baz#fragment");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseProtocol) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        EatPartialString(response, "HT\x01P/1.1 200 OK\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http protocol");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseStatus) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        TString binaryStatus = "2\x80" "0";
+        EatPartialString(response, "HTTP/1.1 " + binaryStatus + " OK\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http status");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseMessage) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        TString binaryMessage = "O\x01K";
+        EatPartialString(response, "HTTP/1.1 200 " + binaryMessage + "\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http message");
     }
 
     Y_UNIT_TEST(BasicPost) {
@@ -1520,11 +1597,11 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
 
     struct TMtlsTestSetup {
         TAutoPtr<TLogBackend> LogBackend;
-        NKikimr::TCertAndKey CaCertAndKey;
-        NKikimr::TCertAndKey ServerCertAndKey;
-        NKikimr::TCertAndKey ClientCertAndKey;
-        NKikimr::TCertAndKey UntrustedCaCertAndKey;
-        NKikimr::TCertAndKey UntrustedClientCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey CaCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey ServerCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey ClientCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey UntrustedCaCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey UntrustedClientCertAndKey;
         TTempFileHandle CaCertFile;
         TTempFileHandle ServerCertFile;
         TTempFileHandle ServerKeyFile;
@@ -1550,17 +1627,17 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
                 LogBackend = std::move(customLogBackend);
             }
             // Generate certificates
-            CaCertAndKey = NKikimr::GenerateCA(NKikimr::TProps::AsCA());
-            ServerCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsServer());
-            ClientCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsClient());
+            CaCertAndKey = NKikimr::NCertTestUtils::GenerateCA(NKikimr::NCertTestUtils::TProps::AsCA());
+            ServerCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(CaCertAndKey, NKikimr::NCertTestUtils::TProps::AsServer());
+            ClientCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(CaCertAndKey, NKikimr::NCertTestUtils::TProps::AsClient());
 
-            NKikimr::TProps untrustedCaProps = NKikimr::TProps::AsCA();
+            NKikimr::NCertTestUtils::TProps untrustedCaProps = NKikimr::NCertTestUtils::TProps::AsCA();
             untrustedCaProps.CommonName = "Untrusted " + untrustedCaProps.CommonName;
-            UntrustedCaCertAndKey = NKikimr::GenerateCA(untrustedCaProps);
+            UntrustedCaCertAndKey = NKikimr::NCertTestUtils::GenerateCA(untrustedCaProps);
 
-            NKikimr::TProps untrustedClientProps = NKikimr::TProps::AsClient();
+            NKikimr::NCertTestUtils::TProps untrustedClientProps = NKikimr::NCertTestUtils::TProps::AsClient();
             untrustedClientProps.CommonName = "Untrusted " + untrustedClientProps.CommonName;
-            UntrustedClientCertAndKey = NKikimr::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
+            UntrustedClientCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
 
             // Write certificates to files
             CaCertFile.Write(CaCertAndKey.Certificate.c_str(), CaCertAndKey.Certificate.size());

@@ -458,8 +458,8 @@ DEFINE_REFCOUNTED_TYPE(TChunkWriterOptions)
 struct TMinHashDigestConfig
     : public NYTree::TYsonStruct
 {
-    int WriteCount;
-    int DeleteTombstoneCount;
+    int WriteTimestampCount;
+    int DeleteTimestampCount;
 
     REGISTER_YSON_STRUCT(TMinHashDigestConfig);
 

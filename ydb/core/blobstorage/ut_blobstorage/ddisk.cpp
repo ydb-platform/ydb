@@ -1,14 +1,13 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/protos/config.pb.h>
 
 Y_UNIT_TEST_SUITE(DDisk) {
 
     struct TDDiskTestContext {
-        TEnvironmentSetup Env{{
-                .NodeCount = 8,
-                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            }};
+        TEnvironmentSetup Env;
 
         const ui32 BlockSize = 4096;
         ui32 SurfaceSize;
@@ -28,7 +27,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
         int LetterIndex = 0;
         const TString Letters = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        TDDiskTestContext(ui32 surfaceSize = 64_KB) {
+        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB)
+            : Env({
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+                .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
+                    NYdb::NBS::NProto::TPBufferConfig pbCfg;
+                    pbCfg.SetMaxInMemoryCache(inMemCache);
+                    cfg.PBufferConfig = pbCfg;
+                }
+            }) {
             SurfaceSize = surfaceSize;
             SurfaceBlocks = SurfaceSize / BlockSize;
             Env.CreateBoxAndPool();
@@ -83,7 +91,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
             }
-
             PBCreds = Creds;
             {
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds)), Edge.NodeId());
@@ -100,7 +107,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             ServiceId = MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
 
             PersId = node.GetPersistentBufferDDiskId();
-            PBServiceId = MakeBlobStorageDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
+            PBServiceId = MakeBlobStoragePersistentBufferId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
 
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
@@ -116,17 +123,17 @@ Y_UNIT_TEST_SUITE(DDisk) {
             const ui32 size = numBlocks * BlockSize;
             UNIT_ASSERT(offset < Surface.size() && offset + size <= Surface.size());
 
-            TString update = TString::Uninitialized(size);
+            auto buf = TRcBuf::UninitializedPageAligned(size);
             char letter = Letters[LetterIndex++ % Letters.size()];
-            memset(update.Detach(), letter, update.size());
+            memset(buf.GetDataMut(), letter, buf.size());
 
-            memcpy(Surface.Detach() + offset, update.data(), update.size());
+            memcpy(Surface.Detach() + offset, buf.data(), buf.size());
 
             Cerr << "write offset# " << offset << " size# " << size << " letter# " << letter << "\n";
 
             std::unique_ptr<NDDisk::TEvWrite> ev(new NDDisk::TEvWrite(Creds,
                 {VChunkIndex, offset, size}, {0}));
-            ev->AddPayload(TRope(std::move(update)));
+            ev->AddPayload(TRope(std::move(buf)));
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWriteResult>(Edge, false);
 
@@ -179,7 +186,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const auto& [offsetInBytes, size, buffer] = item;
                 ourLsns.emplace(lsn, offsetInBytes, size);
             }
-
             UNIT_ASSERT_EQUAL(returnedLsns, ourLsns);
         }
 
@@ -209,7 +215,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return res->Get()->Record.GetFreeSpace();
         }
 
-        void ReadPB() {
+        ui32 GetPBInMemoryCacheSize() {
+            Cerr << "get persistent buffer info \n";
+
+            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo());
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvPersistentBufferInfo>(Edge, false);
+            return res->Get()->InMemoryCacheSize;
+        }
+
+        void ReadPB(ui32 repeat = 1) {
             std::vector<ui64> lsns;
             lsns.reserve(PersistentBuffers.size());
             for (ui64 lsn : PersistentBuffers | std::views::keys) {
@@ -224,18 +239,19 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             Cerr << "read persistent buffer offset# " << offsetInBytes << " size# " << size
                 << " lsn# " << lsn << "\n";
-
-            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvReadPersistentBuffer(
-                PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, {true})), Edge.NodeId());
-            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvReadPersistentBufferResult>(Edge, false);
-            const auto& rr = res->Get()->Record;
-            UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            UNIT_ASSERT(rr.HasReadResult());
-            const auto& rr2 = rr.GetReadResult();
-            UNIT_ASSERT(rr2.HasPayloadId());
-            UNIT_ASSERT_VALUES_EQUAL(rr2.GetPayloadId(), 0);
-            TRope rope = res->Get()->GetPayload(0);
-            UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), buffer);
+            for (ui32 _ : xrange(repeat)) {
+                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvReadPersistentBuffer(
+                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, PBCreds.Generation, {true})), Edge.NodeId());
+                auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvReadPersistentBufferResult>(Edge, false);
+                const auto& rr = res->Get()->Record;
+                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                UNIT_ASSERT(rr.HasReadResult());
+                const auto& rr2 = rr.GetReadResult();
+                UNIT_ASSERT(rr2.HasPayloadId());
+                UNIT_ASSERT_VALUES_EQUAL(rr2.GetPayloadId(), 0);
+                TRope rope = res->Get()->GetPayload(0);
+                UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), buffer);
+            }
         }
 
         double ErasePB(ui64 lsn = 0) {
@@ -251,14 +267,12 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const size_t index = RandomNumber(lsns.size());
                 lsn = lsns[index];
             }
-            const auto& [offsetInBytes, size, buffer] = PersistentBuffers.at(lsn);
 
             auto testErase = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
-                Cerr << "erase persistent buffer offset# " << offsetInBytes << " size# " << size
-                    << " lsn# " << lsn << "\n";
+                Cerr << "erase persistent buffer lsn# " << lsn << "\n";
 
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
-                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn)),
+                    PBCreds, lsn, PBCreds.Generation)),
                     Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
@@ -266,13 +280,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
             };
 
             auto res = testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD) == -1);
-            PersistentBuffers.erase(lsn);
+            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK) == res);
+            for (auto it = PersistentBuffers.begin(); it != PersistentBuffers.end() && it->first <= lsn; ) {
+                auto current = it++;
+                PersistentBuffers.erase(current);
+            }
             return res;
         }
 
         double BatchErasePB() {
-            std::vector<std::tuple<NDDisk::TBlockSelector, ui64>> erases;
+            std::vector<std::tuple<ui64, ui32>> erases;
             std::set<ui64> lsns;
             for (ui64 lsn : PersistentBuffers | std::views::keys) {
                 lsns.emplace(lsn);
@@ -286,8 +303,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 }
                 auto lsn = lsns.begin();
                 std::advance(lsn, RandomNumber(lsns.size()));
-                const auto& [offsetInBytes, size, buffer] = PersistentBuffers.at(*lsn);
-                erases.push_back({{VChunkIndex, offsetInBytes, size}, *lsn});
+                erases.push_back({*lsn, PBCreds.Generation});
                 lsns.erase(lsn);
             }
 
@@ -302,8 +318,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
             };
 
             auto res = testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD) == -1);
-            for (auto [_, lsn] : erases) {
+            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK) == res);
+            for (auto [lsn, _] : erases) {
                 PersistentBuffers.erase(lsn);
             }
             return res;
@@ -363,7 +379,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const ui32 size = std::get<1>(record);
                 Cerr << "sync persistent buffer offset# " << offsetInBytes << " size# " << size
                     << " lsn# " << lsn << "\n";
-                sync->AddSegment({VChunkIndex, offsetInBytes, size}, lsn);
+                sync->AddSegment({VChunkIndex, offsetInBytes, size}, lsn, PBCreds.Generation);
             }
 
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, sync.release()), Edge.NodeId());
@@ -397,11 +413,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
 
             for (ui64 lsn : selectedLsns) {
-                const auto& record = PersistentBuffers.at(lsn);
-                const ui32 offsetInBytes = std::get<0>(record);
-                const ui32 size = std::get<1>(record);
-                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
-                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn)),
+                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvBatchErasePersistentBuffer(
+                    PBCreds, {{lsn, PBCreds.Generation}})),
                     Edge.NodeId());
                 auto eraseRes = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(eraseRes->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
@@ -550,4 +563,39 @@ Y_UNIT_TEST_SUITE(DDisk) {
         UNIT_ASSERT(freeSpace == 1);
     }
 
+    Y_UNIT_TEST(PersistentBufferFillAndRead) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 i = 1; i < 2000; ++i) {
+            f.WritePB(0, 128); // Max size records to overfill in memory buffer
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
+        }
+        for (ui32 i = 1; i < 1000; ++i) {
+            f.ReadPB(2);
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
+        }
+        f.RestartNode();
+        f.ListPB();
+        for (ui32 i = 1; i < 1000; ++i) {
+            f.ReadPB(2);
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferCustomConfig) {
+        TDDiskTestContext f(1_MB, 1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 _ : xrange(100)) {
+            f.WritePB(0, 128);
+        }
+        ui32 cacheSize = f.GetPBInMemoryCacheSize();
+        UNIT_ASSERT(cacheSize == 1_MB);
+    }
 }

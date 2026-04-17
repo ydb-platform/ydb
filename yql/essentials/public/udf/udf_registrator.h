@@ -79,14 +79,35 @@ inline TStaticSymbols GetStaticSymbols();
 //////////////////////////////////////////////////////////////////////////////
 // IFunctionNamesSink
 //////////////////////////////////////////////////////////////////////////////
-class IFunctionDescriptor {
+class IFunctionDescriptor1 {
 public:
-    using TPtr = TUniquePtr<IFunctionDescriptor>;
-
-    virtual ~IFunctionDescriptor() = default;
+    virtual ~IFunctionDescriptor1() = default;
 
     virtual void SetTypeAwareness() = 0;
 };
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
+class IFunctionDescriptor2: public IFunctionDescriptor1 {
+public:
+    virtual void SetPolyArgs(const TStringRef& config) = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
+class IFunctionDescriptor: public IFunctionDescriptor2 {
+public:
+    using TPtr = TUniquePtr<IFunctionDescriptor>;
+
+    IFunctionDescriptor();
+};
+#else
+class IFunctionDescriptor: public IFunctionDescriptor1 {
+public:
+    using TPtr = TUniquePtr<IFunctionDescriptor>;
+
+    IFunctionDescriptor();
+};
+#endif
 
 UDF_ASSERT_TYPE_SIZE(IFunctionDescriptor, 8);
 
@@ -211,14 +232,17 @@ Y_PRAGMA_DIAGNOSTIC_PUSH
 Y_PRAGMA_NO_DEPRECATED
 
 inline TStaticSymbols GetStaticSymbols() {
-    return {&UdfAllocate, &UdfFree, &UdfTerminate, &UdfRegisterObject, &UdfUnregisterObject
+    return {.UdfAllocateFunc = &UdfAllocate, .UdfFreeFunc = &UdfFree, .UdfTerminate = &UdfTerminate, .UdfRegisterObject = &UdfRegisterObject, .UdfUnregisterObject = &UdfUnregisterObject
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
             ,
-            &UdfAllocateWithSize, &UdfFreeWithSize
+            .UdfAllocateWithSizeFunc = &UdfAllocateWithSize,
+            .UdfFreeWithSizeFunc = &UdfFreeWithSize
     #endif
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
             ,
-            &UdfArrowAllocate, &UdfArrowReallocate, &UdfArrowFree
+            .UdfArrowAllocateFunc = &UdfArrowAllocate,
+            .UdfArrowReallocateFunc = &UdfArrowReallocate,
+            .UdfArrowFreeFunc = &UdfArrowFree
     #endif
     };
 }

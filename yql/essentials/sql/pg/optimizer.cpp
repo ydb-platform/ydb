@@ -186,7 +186,7 @@ void TPgOptimizer::LogNode(const TString& prefix, void* node)
 }
 
 IOptimizer::TOutput TPgOptimizer::MakeOutput(Path* path) {
-    TOutput output = {{}, &Input_};
+    TOutput output = {.Nodes = {}, .Input = &Input_};
     output.Rows = path->rows;
     output.TotalCost = path->total_cost;
     MakeOutputJoin(output, path);
@@ -565,7 +565,8 @@ struct TPgOptimizerImpl {
         } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
             CHECK(op->LeftJoinKeys.size() == 1 && op->RightJoinKeys.size() == 1, "Only 1 var per join supported");
 
-            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars, rightVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> rightVars;
             ExtractVars(leftVars, rightVars, op);
 
             IOptimizer::TEq leftEqClass = MakeEqClass(leftVars);

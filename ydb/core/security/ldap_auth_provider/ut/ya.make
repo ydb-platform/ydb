@@ -3,6 +3,11 @@ UNITTEST_FOR(ydb/core/security/ldap_auth_provider)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     ydb/core/testlib/default

@@ -338,4 +338,53 @@ hosts:
         UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetStoragePoolTypes(1).GetKind(), "hdd");
         UNIT_ASSERT_VALUES_EQUAL(cfg.GetDomainsConfig().GetDomain(0).GetStoragePoolTypes(2).GetKind(), "nvme");
     }
+
+    Y_UNIT_TEST(StoragePoolTypesWithMixedDiskTypesInHostConfigs) {
+        TString config = R"(
+domain_name: MyCluster
+erasure: mirror-3-dc
+storage_pool_types:
+  - kind: rot
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: rot
+      pdisk_filter:
+        - property:
+          - type: ROT
+      vdisk_kind: Default
+  - kind: ssd
+    pool_config:
+      box_id: 1
+      erasure_species: mirror-3-dc
+      kind: ssd
+      pdisk_filter:
+        - property:
+          - type: SSD
+      vdisk_kind: Default
+host_configs:
+  - host_config_id: 1
+    drive:
+      - path: /dev/disk/by-partlabel/ydb_disk_1
+        type: ROT
+  - host_config_id: 2
+    drive:
+      - path: /dev/disk/by-partlabel/ydb_disk_2
+        type: SSD
+hosts:
+  - host: node1
+    host_config_id: 1
+  - host: node2
+    host_config_id: 2
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, true);
+        UNIT_ASSERT(cfg.HasDomainsConfig());
+        const auto& domain = cfg.GetDomainsConfig().GetDomain(0);
+        UNIT_ASSERT_VALUES_EQUAL(domain.GetName(), "MyCluster");
+        UNIT_ASSERT_VALUES_EQUAL(domain.StoragePoolTypesSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(domain.GetStoragePoolTypes(0).GetKind(), "rot");
+        UNIT_ASSERT_VALUES_EQUAL(domain.GetStoragePoolTypes(0).GetPoolConfig().GetKind(), "rot");
+        UNIT_ASSERT_VALUES_EQUAL(domain.GetStoragePoolTypes(1).GetKind(), "ssd");
+        UNIT_ASSERT_VALUES_EQUAL(domain.GetStoragePoolTypes(1).GetPoolConfig().GetKind(), "ssd");
+    }
 }

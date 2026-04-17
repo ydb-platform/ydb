@@ -2,100 +2,139 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/kikimr/events.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
+#include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TEvICStorageTransportPrivate
+struct TEvTransportPrivate
 {
-    struct TConnect
+    struct TConnect: TDisableCopyMove
     {
+        using TResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
+
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvConnectResult>
-            Promise;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
 
         TConnect(
-            const NActors::TActorId serviceId,
-            const NKikimr::NDDisk::TQueryCredentials credentials,
-            NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvConnectResult>
-                promise)
+            const NActors::TActorId& serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , Promise(std::move(promise))
         {}
+
+        ~TConnect();
     };
 
-    struct TWritePersistentBuffer
+    struct TWriteToPBuffer: TDisableCopyMove
     {
+        using TResult =
+            NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult;
+
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const NKikimr::NDDisk::TBlockSelector Selector;
         const ui64 Lsn;
         const NKikimr::NDDisk::TWriteInstruction Instruction;
-        TGuardedSgList Data;
+        const TGuardedSgList Data;
         NWilson::TTraceId TraceId;
-        NThreading::TPromise<
-            NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>
-            Promise;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
 
-        TWritePersistentBuffer(
+        TWriteToPBuffer(
             const NActors::TActorId serviceId,
-            const NKikimr::NDDisk::TQueryCredentials credentials,
-            const NKikimr::NDDisk::TBlockSelector selector,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
             const ui64 lsn,
             const NKikimr::NDDisk::TWriteInstruction instruction,
-            TGuardedSgList data,
-            NWilson::TTraceId traceId,
-            NThreading::TPromise<
-                NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>
-                promise)
+            const TGuardedSgList& data,
+            NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
             , Lsn(lsn)
             , Instruction(instruction)
-            , Data(std::move(data))
+            , Data(data)
             , TraceId(std::move(traceId))
-            , Promise(std::move(promise))
+
         {}
+
+        ~TWriteToPBuffer();
     };
 
-    struct TErasePersistentBuffer
+    struct TWriteToDDisk: TDisableCopyMove
     {
+        using TResult = NKikimrBlobStorage::NDDisk::TEvWriteResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const NKikimr::NDDisk::TBlockSelector Selector;
+        const NKikimr::NDDisk::TWriteInstruction Instruction;
+        const TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TWriteToDDisk(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
+            const NKikimr::NDDisk::TWriteInstruction instruction,
+            const TGuardedSgList& data,
+            NWilson::TTraceId traceId)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , Selector(selector)
+            , Instruction(instruction)
+            , Data(data)
+            , TraceId(std::move(traceId))
+
+        {}
+
+        ~TWriteToDDisk();
+    };
+
+    struct TEraseFromPBuffer: TDisableCopyMove
+    {
+        using TResult =
+            NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
         const TVector<ui64> Lsns;
         NWilson::TTraceId TraceId;
-        NThreading::TPromise<
-            NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
-            Promise;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
 
-        TErasePersistentBuffer(
+        TEraseFromPBuffer(
             const NActors::TActorId serviceId,
-            const NKikimr::NDDisk::TQueryCredentials credentials,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
             TVector<NKikimr::NDDisk::TBlockSelector> selectors,
             TVector<ui64> lsns,
-            NWilson::TTraceId traceId,
-            NThreading::TPromise<
-                NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
-                promise)
+            NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selectors(std::move(selectors))
             , Lsns(std::move(lsns))
             , TraceId(std::move(traceId))
-            , Promise(std::move(promise))
         {}
+
+        ~TEraseFromPBuffer();
     };
 
-    struct TReadPersistentBuffer
+    struct TReadFromPBuffer: TDisableCopyMove
     {
+        using TResult =
+            NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult;
+
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const NKikimr::NDDisk::TBlockSelector Selector;
@@ -103,149 +142,202 @@ struct TEvICStorageTransportPrivate
         const NKikimr::NDDisk::TReadInstruction Instruction;
         TGuardedSgList Data;
         NWilson::TTraceId TraceId;
-        NThreading::TPromise<
-            NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
-            Promise;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
 
-        TReadPersistentBuffer(
+        TReadFromPBuffer(
             const NActors::TActorId serviceId,
-            const NKikimr::NDDisk::TQueryCredentials credentials,
-            const NKikimr::NDDisk::TBlockSelector selector,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
             const ui64 lsn,
             const NKikimr::NDDisk::TReadInstruction instruction,
-            TGuardedSgList data,
-            NWilson::TTraceId traceId,
-            NThreading::TPromise<
-                NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
-                promise)
+            const TGuardedSgList& data,
+            NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
             , Lsn(lsn)
             , Instruction(instruction)
-            , Data(std::move(data))
+            , Data(data)
             , TraceId(std::move(traceId))
-            , Promise(std::move(promise))
+
         {}
+
+        ~TReadFromPBuffer();
     };
 
-    struct TRead
+    struct TReadFromDDisk: TDisableCopyMove
     {
+        using TResult = NKikimrBlobStorage::NDDisk::TEvReadResult;
+
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const NKikimr::NDDisk::TBlockSelector Selector;
         const NKikimr::NDDisk::TReadInstruction Instruction;
         TGuardedSgList Data;
         NWilson::TTraceId TraceId;
-        NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvReadResult> Promise;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
 
-        TRead(
+        TReadFromDDisk(
             const NActors::TActorId serviceId,
-            const NKikimr::NDDisk::TQueryCredentials credentials,
-            const NKikimr::NDDisk::TBlockSelector selector,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
             const NKikimr::NDDisk::TReadInstruction instruction,
             TGuardedSgList data,
-            NWilson::TTraceId traceId,
-            NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvReadResult>
-                promise)
+            NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
             , Instruction(instruction)
             , Data(std::move(data))
             , TraceId(std::move(traceId))
-            , Promise(std::move(promise))
         {}
+
+        ~TReadFromDDisk();
     };
 
-    struct TSyncWithPersistentBuffer
+    struct TSyncWithPBuffer: TDisableCopyMove
     {
+        using TResult =
+            NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
         const TVector<ui64> Lsns;
-        const std::tuple<ui32, ui32, ui32> DDiskId;
-        const ui64 DDiskInstanceGuid;
+        const NKikimr::NBsController::TDDiskId PBufferId;
+        const NKikimr::NDDisk::TQueryCredentials PBufferCredentials;
         NWilson::TTraceId TraceId;
-        NThreading::TPromise<
-            NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
-            Promise;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
 
-        TSyncWithPersistentBuffer(
+        TSyncWithPBuffer(
             const NActors::TActorId serviceId,
-            const NKikimr::NDDisk::TQueryCredentials credentials,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
             TVector<NKikimr::NDDisk::TBlockSelector> selectors,
             TVector<ui64> lsns,
-            const std::tuple<ui32, ui32, ui32> ddiskId,
-            const ui64 ddiskInstanceGuid,
-            NWilson::TTraceId traceId,
-            NThreading::TPromise<
-                NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
-                promise)
+            const NKikimr::NBsController::TDDiskId& pBufferId,
+            const NKikimr::NDDisk::TQueryCredentials& pBufferCredentials,
+            NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selectors(std::move(selectors))
             , Lsns(std::move(lsns))
-            , DDiskId(ddiskId)
-            , DDiskInstanceGuid(ddiskInstanceGuid)
+            , PBufferId(pBufferId)
+            , PBufferCredentials(pBufferCredentials)
             , TraceId(std::move(traceId))
-            , Promise(std::move(promise))
         {}
+
+        ~TSyncWithPBuffer();
     };
 
-    struct TListPersistentBuffer
+    struct TListPBufferEntries: TDisableCopyMove
     {
+        using TResult =
+            NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult;
+
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        const ui64 RequestId;
-        NThreading::TPromise<
-            NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
-            Promise;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
 
-        TListPersistentBuffer(
+        TListPBufferEntries(
             const NActors::TActorId serviceId,
-            const NKikimr::NDDisk::TQueryCredentials credentials,
-            const ui64 requestId,
-            NThreading::TPromise<
-                NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
-                promise)
+            const NKikimr::NDDisk::TQueryCredentials& credentials)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , RequestId(requestId)
-            , Promise(std::move(promise))
         {}
+
+        ~TListPBufferEntries();
+    };
+
+    // TODO delete this 'using' after name's fix on the YDB's side.
+    using TProtoEvWriteToManyPersistentBuffersResult =
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
+    using TProtoEvWriteToManyPersistentBuffers =
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffers;
+
+    struct TWriteToManyPBuffers: TDisableCopyMove
+    {
+        using TResult = TProtoEvWriteToManyPersistentBuffersResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const NKikimr::NDDisk::TBlockSelector Selector;
+        const ui64 Lsn;
+        const NKikimr::NDDisk::TWriteInstruction Instruction;
+        const TVector<NKikimrBlobStorage::NDDisk::TDDiskId> PersistentBufferIds;
+        const TDuration ReplyTimeout;
+
+        const TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TWriteToManyPBuffers(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
+            const ui64 lsn,
+            const NKikimr::NDDisk::TWriteInstruction instruction,
+            TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
+            const TDuration replyTimeout,
+            const TGuardedSgList& data,
+            NWilson::TTraceId traceId)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , Selector(selector)
+            , Lsn(lsn)
+            , Instruction(instruction)
+            , PersistentBufferIds(std::move(persistentBufferIds))
+            , ReplyTimeout(replyTimeout)
+            , Data(data)
+            , TraceId(std::move(traceId))
+
+        {}
+
+        ~TWriteToManyPBuffers();
     };
 
     enum EEvents
     {
         EvConnect,
-        EvWritePersistentBuffer,
-        EvErasePersistentBuffer,
-        EvReadPersistentBuffer,
-        EvRead,
-        EvSyncWithPersistentBuffer,
-        EvListPersistentBuffer,
+        EvWriteToPBuffer,
+        EvWriteToDDisk,
+        EvEraseFromPBuffer,
+        EvReadFromPBuffer,
+        EvReadFromDDisk,
+        EvSyncWithPBuffer,
+        EvListPBufferEntries,
+        EvWriteToManyPBuffers,
     };
 
     using TEvConnect = TRequestEvent<TConnect, EEvents::EvConnect>;
 
-    using TEvWritePersistentBuffer =
-        TRequestEvent<TWritePersistentBuffer, EEvents::EvWritePersistentBuffer>;
+    using TEvReadFromPBuffer =
+        TRequestEvent<TReadFromPBuffer, EEvents::EvReadFromPBuffer>;
 
-    using TEvErasePersistentBuffer =
-        TRequestEvent<TErasePersistentBuffer, EEvents::EvErasePersistentBuffer>;
+    using TEvReadFromDDisk =
+        TRequestEvent<TReadFromDDisk, EEvents::EvReadFromDDisk>;
 
-    using TEvReadPersistentBuffer =
-        TRequestEvent<TReadPersistentBuffer, EEvents::EvReadPersistentBuffer>;
+    using TEvWriteToPBuffer =
+        TRequestEvent<TWriteToPBuffer, EEvents::EvWriteToPBuffer>;
 
-    using TEvRead = TRequestEvent<TRead, EEvents::EvRead>;
+    using TEvWriteToDDisk =
+        TRequestEvent<TWriteToDDisk, EEvents::EvWriteToDDisk>;
 
-    using TEvSyncWithPersistentBuffer = TRequestEvent<
-        TSyncWithPersistentBuffer,
-        EEvents::EvSyncWithPersistentBuffer>;
+    using TEvSyncWithPBuffer =
+        TRequestEvent<TSyncWithPBuffer, EEvents::EvSyncWithPBuffer>;
 
-    using TEvListPersistentBuffer =
-        TRequestEvent<TListPersistentBuffer, EEvents::EvListPersistentBuffer>;
+    using TEvEraseFromPBuffer =
+        TRequestEvent<TEraseFromPBuffer, EEvents::EvEraseFromPBuffer>;
+
+    using TEvListPBufferEntries =
+        TRequestEvent<TListPBufferEntries, EEvents::EvListPBufferEntries>;
+
+    using TEvWriteToManyPBuffers =
+        TRequestEvent<TWriteToManyPBuffers, EEvents::EvWriteToManyPBuffers>;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

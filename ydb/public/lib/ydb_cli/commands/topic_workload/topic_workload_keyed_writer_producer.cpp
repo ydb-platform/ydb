@@ -52,18 +52,17 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     InflightMessagesCreateTs_.Insert(MessageId_, enqueueTimestamp);
     InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
 
-    NYdb::NTopic::TWriteMessage writeMessage(data);
+    NYdb::NTopic::TWriteMessage writeMessage(key, data);
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
-    writeMessage.Key(key);
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());
     }
 
     auto result = Producer_->Write(std::move(writeMessage));
-    if (!result.IsSuccess()) {
+    if (!result.IsQueued()) {
         TStringBuilder errorMessage;
         errorMessage << "Failed to write message with id " << MessageId_
                      << " for producer " << ProducerId_
@@ -77,7 +76,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
         }
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR, errorMessage);
     }
-    Y_ASSERT(result.IsSuccess());
+    Y_ASSERT(result.IsQueued());
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent keyed message with id " << MessageId_
@@ -135,4 +134,9 @@ ui64 TTopicWorkloadKeyedWriterProducer::GetCurrentMessageId() const
 size_t TTopicWorkloadKeyedWriterProducer::InflightMessagesCnt() const
 {
     return InflightMessagesCount_.load(std::memory_order_relaxed);
+}
+
+void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration&)
+{
+    // IProducer doesn't use WriteSession/ContinuationToken - no-op for keyed writer
 }

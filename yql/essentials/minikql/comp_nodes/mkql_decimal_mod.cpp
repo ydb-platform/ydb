@@ -1,4 +1,5 @@
 #include "mkql_decimal_div.h"
+#include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h>     // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -243,15 +244,7 @@ IComputationNode* WrapDecimalMod(TCallable& callable, const TComputationNodeFact
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 
-            if (isOptionalLeft && isOptionalRight) {
-                return new TDecimalModWrapper<true, true>(ctx.Mutables, left, right);
-            } else if (isOptionalLeft) {
-                return new TDecimalModWrapper<true, false>(ctx.Mutables, left, right);
-            } else if (isOptionalRight) {
-                return new TDecimalModWrapper<false, true>(ctx.Mutables, left, right);
-            } else {
-                return new TDecimalModWrapper<false, false>(ctx.Mutables, left, right);
-            }
+            return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TDecimalModWrapper, 2, isOptionalLeft, isOptionalRight, ctx.Mutables, left, right);
 #define MAKE_PRIMITIVE_TYPE_MOD(type)                                                                                                                       \
     case NUdf::TDataType<type>::Id:                                                                                                                         \
         if (isOptionalLeft && isOptionalRight)                                                                                                              \

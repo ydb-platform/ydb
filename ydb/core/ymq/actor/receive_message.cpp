@@ -1,13 +1,17 @@
 #include "action.h"
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "executor.h"
 #include "log.h"
 #include "params.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/helpers.h>
+#include <ydb/core/ymq/base/utils.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 #include <ydb/public/lib/value/value.h>
 
@@ -125,16 +129,20 @@ private:
 
         InitParams();
 
-        auto receiveRequest = MakeHolder<TSqsEvents::TEvReceiveMessageBatch>();
-        receiveRequest->RequestId = RequestId_;
-        receiveRequest->MaxMessagesCount = MaxMessagesCount_;
-        receiveRequest->ReceiveAttemptId = ReceiveAttemptId_;
-        receiveRequest->VisibilityTimeout = GetVisibilityTimeout();
-        if (WaitTime_) {
-            receiveRequest->WaitDeadline = WaitDeadline();
-        }
+        if (!FeatureFlags_.EnableSQSMigrationFinished_ || !IsTopicCreated()) {
+            auto receiveRequest = MakeHolder<TSqsEvents::TEvReceiveMessageBatch>();
+            receiveRequest->RequestId = RequestId_;
+            receiveRequest->MaxMessagesCount = MaxMessagesCount_;
+            receiveRequest->ReceiveAttemptId = ReceiveAttemptId_;
+            receiveRequest->VisibilityTimeout = GetVisibilityTimeout();
+            if (WaitTime_ && !FeatureFlags_.EnableSQSMigrationCompatibility_) {
+                receiveRequest->WaitDeadline = WaitDeadline();
+            }
 
-        Send(QueueLeader_, std::move(receiveRequest));
+            Send(QueueLeader_, std::move(receiveRequest));
+        } else {
+            DoActionTopicImplementation();
+        }
     }
 
     TString DoGetQueueName() const override {
@@ -154,10 +162,26 @@ private:
         }
     }
 
+    void DoActionTopicImplementation() {
+        NPQ::NMLP::TReaderSettings settings = {
+            .DatabasePath = GetDatabaseName(),
+            .TopicName = GetTopicName(),
+            .Consumer = ConsumerName,
+            .WaitTime = WaitTime_,
+            .ProcessingTimeout = GetVisibilityTimeout(),
+            .MaxNumberOfMessage = static_cast<ui32>(MaxMessagesCount_),
+            .UncompressMessages = true,
+            .SkipMessageGroups = std::move(LockedMessageGroups_),
+        };
+        Register(NPQ::NMLP::CreateReader(SelfId(), std::move(settings)));
+    }
+
 private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
+            hFunc(NPQ::NMLP::TEvReadResponse, Handle);
+            hFunc(TSqsEvents::TEvGetMessageGroupsResponse, Handle);
             hFunc(TSqsEvents::TEvReceiveMessageBatchResponse, HandleReceiveMessageBatchResponse);
         }
     }
@@ -173,6 +197,14 @@ private:
             MakeError(Response_.MutableReceiveMessage(), NErrors::OVER_LIMIT);
         } else {
             if (ev->Get()->Messages.empty()) {
+                if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
+                    if (FeatureFlags_.EnableSQSMigrationFinished_ || !IsFifo_) {
+                        return DoActionTopicImplementation();
+                    } else {
+                        Send(QueueLeader_, new TSqsEvents::TEvGetMessageGroups(RequestId_));
+                        return;
+                    }
+                }
                 if (MaybeScheduleWait()) {
                     return;
                 } else {
@@ -223,6 +255,86 @@ private:
         SendReplyAndDie();
     }
 
+    void Handle(TSqsEvents::TEvGetMessageGroupsResponse::TPtr& ev) {
+        auto status = ev->Get()->StatusCode;
+        if (status == Ydb::StatusIds::SUCCESS) {
+            LockedMessageGroups_ = std::move(ev->Get()->MessageGroups);
+            DoActionTopicImplementation();
+        } else if (status == Ydb::StatusIds::OVERLOADED) {
+            // a lot of messages. do not fetch from topic
+            SendReplyAndDie();
+        } else {
+            MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE);
+            SendReplyAndDie();
+        }
+    }
+
+    void Handle(NPQ::NMLP::TEvReadResponse::TPtr& ev) {
+        const auto status = ev->Get()->Status;
+        if (status != Ydb::StatusIds::SUCCESS) {
+            MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+        } else {
+            auto&& messages = ev->Get()->Messages;
+            for (auto&& message : messages) {
+                auto* item = Response_.MutableReceiveMessage()->AddMessages();
+                if (message.ApproximateFirstReceiveTimestamp) {
+                    item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp->MilliSeconds());
+                }
+                if (message.ApproximateReceiveCount) {
+                    item->SetApproximateReceiveCount(message.ApproximateReceiveCount.value());
+                }
+                item->SetMessageId(ToMessageId(message.MessageId));
+                item->SetMD5OfMessageBody(MD5::Calc(message.Data));
+                item->SetData(std::move(message.Data));
+
+                TReceipt receipt;
+                receipt.SetSource(NSQS::TReceipt::Topic);
+                receipt.SetOffset(message.MessageId.Offset);
+                receipt.SetShard(message.MessageId.PartitionId);
+                item->SetReceiptHandle(EncodeReceiptHandle(receipt));
+
+                item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
+
+                if (auto it = message.Attributes.find("sender_id"); it != message.Attributes.end()) {
+                    item->SetSenderId(std::move(it->second));
+                }
+
+                Ydb::Ymq::V1::Message ymqMessage;
+                if (NSQS::DeserializeUserAttributes(ymqMessage, message.Attributes)) {
+                    if (ymqMessage.message_attributes_size() > 0) {
+                        item->SetMD5OfMessageAttributes(ymqMessage.m_d_5_of_message_attributes());
+                        for (auto&& [name, v] : ymqMessage.message_attributes()) {
+                            auto* value = item->AddMessageAttributes();
+                            value->SetName(std::move(name));
+                            if (auto&& d = v.string_value()) {
+                                value->SetStringValue(std::move(d));
+                            } else if (auto&& d = v.binary_value()) {
+                                value->SetBinaryValue(std::move(d));
+                            } else {
+                                continue;
+                            }
+                            value->SetDataType(std::move(v.data_type()));
+                        }
+                    }
+                } else {
+                    RLOG_SQS_WARN("Unable to deserialize message attributes");
+                }
+
+                if (!message.MessageGroupId.empty()) {
+                    item->SetMessageGroupId(message.MessageGroupId);
+                }
+
+                if (IsFifoQueue()) {
+                    if (!message.MessageDeduplicationId.empty()) {
+                        item->SetMessageDeduplicationId(message.MessageDeduplicationId);
+                    }
+                    item->SetSequenceNumber(message.MessageId.Offset);
+                }
+            }
+        }
+        SendReplyAndDie();
+    }
+
     bool HandleWakeup(TEvWakeup::TPtr& ev) override {
         if (!TActionActor::HandleWakeup(ev)) {
             DoAction();
@@ -257,6 +369,8 @@ private:
     bool ParamsAreInited_ = false;
     size_t MaxMessagesCount_ = 0;
     TDuration TotalWaitDuration_;
+
+    std::vector<TString> LockedMessageGroups_;
 };
 
 IActor* CreateReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

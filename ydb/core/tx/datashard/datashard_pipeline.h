@@ -118,7 +118,7 @@ public:
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
-    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, const TString& userSID);
+    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, NACLib::TUserContext::TPtr userCtx);
     bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
@@ -153,7 +153,7 @@ public:
     TStepOrder GetUtmostCompleteTx() const { return UtmostCompleteTx; }
 
     ui64 GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const;
-    ui64 GetDataTxCompleteLag(ui64 timecastStep) const;
+    ui64 GetTxCompleteLag(ui64 timecastStep) const;
     ui64 GetScanTxCompleteLag(ui64 timecastStep) const;
 
     // schema ops
@@ -168,6 +168,7 @@ public:
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }
     bool HasDropPersistentSnapshot() const { return SchemaTx && SchemaTx->IsDropPersistentSnapshot(); }
     bool HasInitiateBuilIndex() const { return SchemaTx && SchemaTx->IsInitiateBuildIndex(); }
+    bool HasPrepareIndexValidation() const { return SchemaTx && SchemaTx->IsPrepareIndexValidation(); }
     bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); }
     bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); }
     bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); }
@@ -271,7 +272,7 @@ public:
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                    const TString& userSID);
+                                    NACLib::TUserContext::TPtr userCtx);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
@@ -279,14 +280,14 @@ public:
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx,
-                     const TString& userSID);
+                     NACLib::TUserContext::TPtr userCtx);
     ERestoreDataStatus RestoreDataTx(
             TActiveTransaction *tx,
             TTransactionContext &txc,
             const TActorContext &ctx,
-            const TString& userSID)
+            NACLib::TUserContext::TPtr userCtx)
     {
-        return tx->RestoreTxData(Self, txc, ctx, userSID);
+        return tx->RestoreTxData(Self, txc, ctx, userCtx);
     }
 
     ERestoreDataStatus RestoreWriteTx(

@@ -322,7 +322,7 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
 TMaybe<std::pair<TCondenseInputResult, TMaybeNode<TDqPhyPrecompute>>>
 RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
     const THashSet<TString>& checkDefaults, const TKikimrTableDescription& table,
-    const TSecondaryIndexes& indexes, const bool useStreamIndexes, TPositionHandle pos, TExprContext& ctx)
+    const TSecondaryIndexes& indexes, const bool useStreamIndexes, TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     auto condenseResult = CondenseInput(inputRows, ctx);
     if (!condenseResult) {
@@ -508,7 +508,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         YQL_ENSURE(condenseResult);
     }
 
-    auto helper = CreateUpsertUniqBuildHelper(table, inputColumns, usedIndexes, pos, ctx);
+    auto helper = CreateUpsertUniqBuildHelper(table, inputColumns, usedIndexes, pos, ctx, kqpCtx);
     if (helper->GetChecksNum() == 0) {
         // Return result of read stage only in case of uniq index
         // We do not want to change plan for non uniq index for a while
@@ -648,9 +648,15 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     const bool needPrecompute = !useStreamIndex
         || !columnsWithDefaultsSet.empty()
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
-                || index.second->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || index.second->Type == TIndexDescription::EType::GlobalFulltextRelevance;
+            switch (index.second->Type) {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalFulltextRelevance:
+                case TIndexDescription::EType::GlobalJson:
+                    return true;
+                default:
+                    return false;
+            }
         });
 
     if (!needPrecompute) {
@@ -669,7 +675,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             .Done();
     }
 
-    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, useStreamIndex, pos, ctx);
+    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, useStreamIndex, pos, ctx, kqpCtx);
 
     if (!checkedInput) {
         return {};
@@ -781,158 +787,179 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             }
         }
 
-        // Need to calc is the updated row in index same
-        TVector<TExprBase> payloadTuples;
-        TVector<TExprBase> keyTuples;
-        auto payloadSelectorArg = TCoArgument(ctx.NewArgument(pos, "payload_selector_row_for_index"));
-        auto payload_table_row = TCoArgument(ctx.NewArgument(pos, "payload_table_row"));
-
-        TVector<TExprBase> inputRowsForIndex;
-        inputRowsForIndex.reserve(indexTableColumns.size());
-
-        TVector<TExprBase> lookupRow;
-        lookupRow.reserve(indexTableColumns.size());
-
-        auto inputItem = TCoArgument(ctx.NewArgument(pos, "input_item_" + indexDesc->Name));
-        for (const auto& column : indexTableColumns) {
-            if (table.GetKeyColumnIndex(TString(column))) {
+        // Index key columns (e.g. JSON source column) participate in AggrNotEquals the same way
+        // as data columns, but are listed only in KeyColumns - include them in equatability check.
+        for (const auto& column : indexDesc->KeyColumns) {
+            // If column is not in input columns, skip it
+            if (!inputColumnsSet.contains(column)) {
                 continue;
             }
-            auto columnAtom = ctx.NewAtom(pos, column);
 
-            if (inputColumnsSet.contains(column)) {
-                inputRowsForIndex.emplace_back(
-                   Build<TCoNameValueTuple>(ctx, pos)
-                       .Name(columnAtom)
-                       .Value<TCoMember>()
-                           .Struct(inputItem)
-                           .Name(columnAtom)
-                           .Build()
-                   .Done());
-
-                 lookupRow.emplace_back(
-                     Build<TCoNameValueTuple>(ctx, pos)
-                         .Name(columnAtom)
-                         .Value<TCoMember>()
-                             .Struct(payload_table_row)
-                             .Name(columnAtom)
-                             .Build()
-                     .Done());
+            // If column is a key column, skip it
+            if (table.GetKeyColumnIndex(column)) {
+                continue;
             }
 
-            payloadTuples.emplace_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name(columnAtom)
-                    .Value<TCoMember>()
-                        .Struct<TCoNth>()
-                            .Tuple(payloadSelectorArg)
-                            .Index().Build(1)
-                            .Build()
+            auto t = table.GetColumnType(TString(column));
+            YQL_ENSURE(t);
+            optUpsert &= t->IsEquatable();
+        }
+
+        TDqPhyPrecompute lookupDictRecomputed = lookupDict.Cast();
+        if (optUpsert) {
+            // Need to calc is the updated row in index same
+            TVector<TExprBase> payloadTuples;
+            TVector<TExprBase> keyTuples;
+            auto payloadSelectorArg = TCoArgument(ctx.NewArgument(pos, "payload_selector_row_for_index"));
+            auto payload_table_row = TCoArgument(ctx.NewArgument(pos, "payload_table_row"));
+
+            TVector<TExprBase> inputRowsForIndex;
+            inputRowsForIndex.reserve(indexTableColumns.size());
+
+            TVector<TExprBase> lookupRow;
+            lookupRow.reserve(indexTableColumns.size());
+
+            auto inputItem = TCoArgument(ctx.NewArgument(pos, "input_item_" + indexDesc->Name));
+            for (const auto& column : indexTableColumns) {
+                if (table.GetKeyColumnIndex(TString(column))) {
+                    continue;
+                }
+                auto columnAtom = ctx.NewAtom(pos, column);
+
+                if (inputColumnsSet.contains(column)) {
+                    inputRowsForIndex.emplace_back(
+                    Build<TCoNameValueTuple>(ctx, pos)
                         .Name(columnAtom)
-                        .Build()
-                    .Done());
-        }
-
-        auto inputArg = TCoArgument(ctx.NewArgument(pos, "recalc_input_arg_" + indexDesc->Name));
-
-        auto cmp = ctx.Builder(pos)
-            .Callable("AggrNotEquals")
-                .Add(0, Build<TCoAsStruct>(ctx, pos)
-                    .Add(inputRowsForIndex)
-                    .Done().Ptr())
-                .Add(1, Build<TCoAsStruct>(ctx, pos)
-                    .Add(lookupRow)
-                    .Done().Ptr())
-            .Seal().Build();
-
-        for (const auto& key : pk) {
-            auto tuple = Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build(key)
-                .Value<TCoMember>()
-                    .Struct(inputItem)
-                    .Name().Build(key)
-                    .Build()
-                .Done();
-
-            keyTuples.emplace_back(tuple);
-        }
-
-        auto lookupDictArg = TCoArgument(ctx.NewArgument(pos, "recalc_dict_arg_" + indexDesc->Name));
-        auto reComputeDictStage = Build<TDqStage>(ctx, pos)
-            .Inputs()
-                .Add(rowsPrecompute.Cast()) // input rows
-                .Add(lookupDict.Cast()) // dict contains rows looked up from the table
-                .Build()
-            .Program()
-                .Args({inputArg, lookupDictArg})
-                .Body<TCoIterator>()
-                    .List<TCoMap>()
-                    .Input<TCoToList>()
-                        .Optional<TCoJust>()
-                            .Input(lookupDictArg)
+                        .Value<TCoMember>()
+                            .Struct(inputItem)
+                            .Name(columnAtom)
                             .Build()
+                    .Done());
+
+                    lookupRow.emplace_back(
+                        Build<TCoNameValueTuple>(ctx, pos)
+                            .Name(columnAtom)
+                            .Value<TCoMember>()
+                                .Struct(payload_table_row)
+                                .Name(columnAtom)
+                                .Build()
+                        .Done());
+                }
+
+                payloadTuples.emplace_back(
+                    Build<TCoNameValueTuple>(ctx, pos)
+                        .Name(columnAtom)
+                        .Value<TCoMember>()
+                            .Struct<TCoNth>()
+                                .Tuple(payloadSelectorArg)
+                                .Index().Build(1)
+                                .Build()
+                            .Name(columnAtom)
+                            .Build()
+                        .Done());
+            }
+
+            auto inputArg = TCoArgument(ctx.NewArgument(pos, "recalc_input_arg_" + indexDesc->Name));
+
+            auto cmp = ctx.Builder(pos)
+                .Callable("AggrNotEquals")
+                    .Add(0, Build<TCoAsStruct>(ctx, pos)
+                        .Add(inputRowsForIndex)
+                        .Done().Ptr())
+                    .Add(1, Build<TCoAsStruct>(ctx, pos)
+                        .Add(lookupRow)
+                        .Done().Ptr())
+                .Seal().Build();
+
+            for (const auto& key : pk) {
+                auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build(key)
+                    .Value<TCoMember>()
+                        .Struct(inputItem)
+                        .Name().Build(key)
                         .Build()
-                    .Lambda()
-                        .Args({"collection"})
-                        .Body<TCoToDict>()
-                            .List<TCoFlatMap>()
-                                .Input(inputArg)
-                                .Lambda()
-                                    .Args({inputItem})
-                                    .Body<TCoMap>()
-                                        .Input<TCoLookup>()
-                                            .Collection("collection")
-                                            .Lookup<TCoAsStruct>()
-                                                .Add(keyTuples)
-                                                .Build()
-                                            .Build()
-                                        .Lambda<TCoLambda>()
-                                            .Args({payload_table_row})
-                                            .Body<TExprList>() // Key of tuple - key columns of index
-                                                .Add<TCoAsStruct>()
+                    .Done();
+
+                keyTuples.emplace_back(tuple);
+            }
+
+            auto lookupDictArg = TCoArgument(ctx.NewArgument(pos, "recalc_dict_arg_" + indexDesc->Name));
+            auto reComputeDictStage = Build<TDqStage>(ctx, pos)
+                .Inputs()
+                    .Add(rowsPrecompute.Cast()) // input rows
+                    .Add(lookupDict.Cast()) // dict contains rows looked up from the table
+                    .Build()
+                .Program()
+                    .Args({inputArg, lookupDictArg})
+                    .Body<TCoIterator>()
+                        .List<TCoMap>()
+                        .Input<TCoToList>()
+                            .Optional<TCoJust>()
+                                .Input(lookupDictArg)
+                                .Build()
+                            .Build()
+                        .Lambda()
+                            .Args({"collection"})
+                            .Body<TCoToDict>()
+                                .List<TCoFlatMap>()
+                                    .Input(inputArg)
+                                    .Lambda()
+                                        .Args({inputItem})
+                                        .Body<TCoMap>()
+                                            .Input<TCoLookup>()
+                                                .Collection("collection")
+                                                .Lookup<TCoAsStruct>()
                                                     .Add(keyTuples)
                                                     .Build()
-                                                .Add(payload_table_row) // rows read from main table
-                                                .Add(cmp) // comparation on rows from input and from index. true if not equal
+                                                .Build()
+                                            .Lambda<TCoLambda>()
+                                                .Args({payload_table_row})
+                                                .Body<TExprList>() // Key of tuple - key columns of index
+                                                    .Add<TCoAsStruct>()
+                                                        .Add(keyTuples)
+                                                        .Build()
+                                                    .Add(payload_table_row) // rows read from main table
+                                                    .Add(cmp) // comparation on rows from input and from index. true if not equal
+                                                    .Build()
                                                 .Build()
                                             .Build()
                                         .Build()
                                     .Build()
-                                .Build()
-                            .KeySelector(MakeTableKeySelector(table.Metadata, pos, ctx, 0))
-                            .PayloadSelector<TCoLambda>()
-                                .Args({payloadSelectorArg})
-                                .Body<TExprList>()
-                                    .Add<TCoNth>()
-                                        .Tuple(payloadSelectorArg)
-                                        .Index().Build(1)
-                                        .Build()
-                                    .Add<TCoNth>()
-                                        .Tuple(payloadSelectorArg)
-                                        .Index().Build(2)
+                                .KeySelector(MakeTableKeySelector(table.Metadata, pos, ctx, 0))
+                                .PayloadSelector<TCoLambda>()
+                                    .Args({payloadSelectorArg})
+                                    .Body<TExprList>()
+                                        .Add<TCoNth>()
+                                            .Tuple(payloadSelectorArg)
+                                            .Index().Build(1)
+                                            .Build()
+                                        .Add<TCoNth>()
+                                            .Tuple(payloadSelectorArg)
+                                            .Index().Build(2)
+                                            .Build()
                                         .Build()
                                     .Build()
-                                .Build()
-                            .Settings()
-                                .Add().Build("One")
-                                .Add().Build("Hashed")
+                                .Settings()
+                                    .Add().Build("One")
+                                    .Add().Build("Hashed")
+                                    .Build()
                                 .Build()
                             .Build()
                         .Build()
+                        .Build()
                     .Build()
-                    .Build()
-                .Build()
-            .Settings().Build()
-            .Done();
+                .Settings().Build()
+                .Done();
 
-        auto lookupDictRecomputed = Build<TDqPhyPrecompute>(ctx, pos)
-            .Connection<TDqCnValue>()
-                .Output()
-                    .Stage(reComputeDictStage)
-                    .Index().Build("0")
+            lookupDictRecomputed = Build<TDqPhyPrecompute>(ctx, pos)
+                .Connection<TDqCnValue>()
+                    .Output()
+                        .Stage(reComputeDictStage)
+                        .Index().Build("0")
+                        .Build()
                     .Build()
-                .Build()
-            .Done();
+                .Done();
+        }
 
         const TKikimrTableDescription *prefixTable = nullptr;
         if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree && indexDesc->KeyColumns.size() > 1) {
@@ -956,8 +983,6 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
             switch (indexDesc->Type) {
-                case TIndexDescription::EType::GlobalJson:
-                    YQL_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
@@ -972,8 +997,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltextPlain:
-                case TIndexDescription::EType::GlobalFulltextRelevance: {
-                    // For fulltext indexes, we need to tokenize the text and create deleted rows
+                case TIndexDescription::EType::GlobalFulltextRelevance:
+                case TIndexDescription::EType::GlobalJson: {
+                    // For fulltext and JSON indexes, we need to tokenize the text and create deleted rows
                     auto deleteKeysPrecompute = ReadInputToPrecompute(deleteIndexKeys, pos, ctx);
                     deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet,
                         indexTableColumnsWithoutData, true /*forDelete*/, pos, ctx);
@@ -1024,8 +1050,6 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
             switch (indexDesc->Type) {
-                case TIndexDescription::EType::GlobalJson:
-                    YQL_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
@@ -1048,8 +1072,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltextPlain:
-                case TIndexDescription::EType::GlobalFulltextRelevance: {
-                    // For fulltext indexes, we need to tokenize the text and create upserted rows
+                case TIndexDescription::EType::GlobalFulltextRelevance:
+                case TIndexDescription::EType::GlobalJson: {
+                    // For fulltext and JSON indexes, we need to tokenize the text and create upserted rows
                     auto upsertPrecompute = ReadInputToPrecompute(upsertIndexRows, pos, ctx);
                     upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertPrecompute, indexTableColumnsSet,
                         indexTableColumns, false /*forDelete*/, pos, ctx);

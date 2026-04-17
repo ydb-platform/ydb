@@ -14,6 +14,7 @@ message TReplyStatus {
         MISSING_RECORD = 7;
         OUTDATED = 8;
         OVERLOADED = 9;
+        OVERFILL = 10;
     }
 }
 
@@ -40,8 +41,8 @@ message TQueryCredentials {
 
 message TBlockSelector {
     uint64 VChunkIndex = 1;
-    uint32 OffsetInBytes = 2;
-    uint32 Size = 3;
+    uint32 OffsetInBytes = 2;  // 4 KiB alignment
+    uint32 Size = 3;           // 4 KiB alignment
 }
 
 // DDisk write instruction contains information about data being written. It can contain information about rope passing
@@ -130,6 +131,33 @@ message TEvWritePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     optional double FreeSpace = 3;
+    optional double PDiskNormalizedOccupancy = 4;
+}
+
+message TEvReadThenWritePersistentBuffers {
+    TQueryCredentials Credentials = 1;
+    uint64 Lsn = 2;
+    uint32 Generation = 3;
+    repeated TDDiskId PersistentBufferIds = 4;
+    uint32 ReplyTimeoutMicroseconds = 5;
+}
+
+message TEvWritePersistentBuffers {
+    TQueryCredentials Credentials = 1;
+    TBlockSelector Selector = 2;
+    uint64 Lsn = 3;
+    TWriteInstruction Instruction = 4;
+    repeated TDDiskId PersistentBufferIds = 5;
+    uint32 ReplyTimeoutMicroseconds = 6;
+}
+
+message TEvWritePersistentBuffersResult {
+    message TResult {
+        TDDiskId PersistentBufferId = 1;
+        TEvWritePersistentBufferResult Result = 2;
+    }
+
+    repeated TResult Result = 1;
 }
 
 message TEvReadPersistentBuffer {
@@ -137,12 +165,16 @@ message TEvReadPersistentBuffer {
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TReadInstruction Instruction = 4;
+    uint32 Generation = 5;
 }
 
 message TEvReadPersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     TReadResult ReadResult = 3;
+    uint64 VChunkIndex = 4;
+    uint32 OffsetInBytes = 5;
+    uint32 SizeInBytes = 6;
 }
 
 message TSegmentResult {
@@ -154,6 +186,7 @@ message TEvSyncWithPersistentBuffer {
     message TSegment {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
+        uint32 Generation = 3;
     }
 
     TQueryCredentials Credentials = 1;
@@ -189,15 +222,17 @@ message TEvSyncWithDDiskResult {
 
 message TEvErasePersistentBuffer {
     TQueryCredentials Credentials = 1;
-    TBlockSelector Selector = 2;
-    uint64 Lsn = 3;
+    reserved 2;
+    uint64 Lsn = 3; // Erase all lsns for tablet less than or equal to
+    uint32 Generation = 4;
 }
 
 
 message TEvBatchErasePersistentBuffer {
     message TEraseInfo {
-        TBlockSelector Selector = 1;
+        reserved 1;
         uint64 Lsn = 2;
+        uint32 Generation = 3;
     }
 
     TQueryCredentials Credentials = 1;
@@ -208,6 +243,7 @@ message TEvErasePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     optional double FreeSpace = 3;
+    optional double PDiskNormalizedOccupancy = 4;
 }
 
 message TEvListPersistentBuffer {
@@ -218,6 +254,7 @@ message TEvListPersistentBufferResult {
     message TPersistentBufferRecord {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
+        uint32 Generation = 3;
     }
 
     TReplyStatus.E Status = 1;

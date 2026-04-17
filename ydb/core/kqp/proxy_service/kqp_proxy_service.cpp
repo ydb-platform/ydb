@@ -50,7 +50,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>

@@ -1029,6 +1029,12 @@ TCheckFunc StreamUserSIDs(bool value) {
     };
 }
 
+TCheckFunc StreamTraceIds(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetTraceIds(), value);
+    };
+}
+
 TCheckFunc StreamResolvedTimestamps(const TDuration& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetResolvedTimestampsIntervalMs(), value.MilliSeconds());

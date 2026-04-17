@@ -12,6 +12,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/tablet/bootstrapper.h>
@@ -21,6 +22,7 @@
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -960,6 +962,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create LongTx services
     for (size_t i = 0; i< Config.Nodes.size(); ++i) {
+        GetAppData(i).LongTxServiceConfig = Extension.GetLongTxServiceConfig();
+        GetAppData(i).SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
         IActor* longTxService = NLongTxService::CreateLongTxService();
         TActorId longTxServiceId = Register(longTxService, i);
         EnableScheduleForActor(longTxServiceId, true);

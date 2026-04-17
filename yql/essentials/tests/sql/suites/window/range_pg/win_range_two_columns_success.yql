@@ -1,0 +1,30 @@
+PRAGMA WindowNewPipeline;
+
+$data = [
+    <|a: pgtext('apple'), c: 1p, b: 1, count: 1|>,
+    <|a: pgtext('apple'), c: 2p, b: 1, count: 2|>,
+    <|a: pgtext('banana'), c: 1p, b: 1, count: 3|>,
+    <|a: pgtext('banana'), c: 2p, b: 1, count: 4|>,
+];
+
+$win_result = (
+    SELECT
+        COUNT(*) OVER w1 AS actual_count,
+        count,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            PARTITION COMPACT BY
+                b
+            ORDER BY
+                a ASC, c ASC
+            RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        )
+);
+
+SELECT
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count)
+FROM
+    $win_result
+;

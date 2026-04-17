@@ -1164,6 +1164,16 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
     }
 
+    if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetNbsConfig().GetEnabled()) {
+        const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
+        if (storageConfig.HasGlobalDDiskConfig()) {
+            nodeWardenConfig->DDiskConfig = storageConfig.GetGlobalDDiskConfig();
+        }
+        if (storageConfig.HasGlobalPBufferConfig()) {
+            nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
+        }
+    }
+
     nodeWardenConfig->StartupConfigYaml = Config.GetStartupConfigYaml();
     nodeWardenConfig->StartupStorageYaml = Config.HasStartupStorageYaml()
         ? std::make_optional(Config.GetStartupStorageYaml())
@@ -3198,6 +3208,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         TString serverCert = readFile(settings.CertificateFile);
         TString serverPrivateKey = readFile(settings.PrivateKeyFile);
         TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+        serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
 
         {
             TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));

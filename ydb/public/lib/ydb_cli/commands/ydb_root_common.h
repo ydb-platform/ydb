@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/common/build_info.h>
 #include <ydb/public/lib/ydb_cli/common/profile_manager.h>
 #include <ydb/public/lib/ydb_cli/common/root.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
@@ -50,6 +51,9 @@ struct TClientSettings {
     std::optional<bool> EnableAiInteractive;
     std::vector<TAiPresetSetting> AiPredefinedProfiles;
     std::function<TAiTokenReq()> AiTokenGetter;
+
+    // Called lazily on first driver creation to get distribution name and version.
+    std::function<TYdbCliBuildInfo()> BuildInfoProvider;
 };
 
 class TClientCommandRootCommon : public TClientCommandRootBase {

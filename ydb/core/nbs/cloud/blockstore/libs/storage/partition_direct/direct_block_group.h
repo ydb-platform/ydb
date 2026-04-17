@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -32,7 +33,7 @@ struct TDBGWriteBlocksToManyPBuffersResponse
 {
     struct TSinglePersistentBufferResult
     {
-        ui8 HostId{};
+        ui8 HostIndex = 0;
         NProto::TError Error;
     };
 
@@ -94,9 +95,6 @@ struct TDDiskIdLess
     bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
 };
 
-using TDDiskIdToHostIndex =
-    TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 // Abstract base interface for DirectBlockGroup implementations
@@ -109,6 +107,10 @@ public:
 
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
 
+    virtual std::shared_ptr<NWilson::TSpan> CreateChildSpan(
+        const NWilson::TTraceId& traceId,
+        TStringBuf name) = 0;
+
     virtual void EstablishConnections() = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
@@ -116,7 +118,7 @@ public:
         ui8 hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) = 0;
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
@@ -124,14 +126,14 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) = 0;
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         ui8 hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) = 0;
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
@@ -139,7 +141,7 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) = 0;
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
@@ -149,7 +151,7 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) = 0;
+        const NWilson::TTraceId& traceId) = 0;
 
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when
@@ -161,14 +163,14 @@ public:
         ui8 pbufferHostIndex,   // source host
         ui8 ddiskHostIndex,     // destination host
         const TVector<TPBufferSegment>& segments,
-        NWilson::TTraceId traceId) = 0;
+        const NWilson::TTraceId& traceId) = 0;
 
     // Batch operation to erase a list of PBuffer entries.
     virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
-        NWilson::TTraceId traceId) = 0;
+        const NWilson::TTraceId& traceId) = 0;
 
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
@@ -206,6 +208,10 @@ public:
 
     void Schedule(TDuration delay, TCallback callback) override;
 
+    std::shared_ptr<NWilson::TSpan> CreateChildSpan(
+        const NWilson::TTraceId& traceId,
+        TStringBuf name) override;
+
     void EstablishConnections() override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
@@ -213,7 +219,7 @@ public:
         ui8 hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
@@ -221,14 +227,14 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         ui8 hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
@@ -236,7 +242,7 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
@@ -246,20 +252,20 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
         ui8 pbufferHostIndex,
         ui8 ddiskHostIndex,
         const TVector<TPBufferSegment>& segments,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
@@ -269,6 +275,8 @@ public:
 
 private:
     using EConnectionType = NTransport::THostConnection::EConnectionType;
+    using TDDiskIdToHostIndex =
+        TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
 
     struct TDDiskConnection
     {
@@ -297,11 +305,23 @@ private:
     void OnWriteBlocksToManyPBuffersResponse(
         const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
             response,
-        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise);
+        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
+        TDuration executionTime);
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,
         ui32 vChunkIndex);
+
+    void OnResponse(
+        ui8 hostIndex,
+        TDuration executionTime,
+        EOperation operation,
+        const NProto::TError& error);
+    void OnMultiFlushResponse(
+        ui8 pbufferHostIndex,
+        ui8 ddiskHostIndex,
+        TDuration executionTime,
+        const TVector<NProto::TError>& errors);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const ISchedulerPtr Scheduler;
@@ -313,6 +333,7 @@ private:
 
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
+    TVector<THostStat> HostStatistics;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
 
     bool Initialized = false;

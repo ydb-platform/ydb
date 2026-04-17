@@ -128,7 +128,7 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         return false;
     }
 
-    const auto tablePath = TExprBase(read->TableCallable).Cast<TKqpTable>().Path().StringValue();
+    const auto tablePath = TExprBase(read->GetTable()).Cast<TKqpTable>().Path().StringValue();
     auto& kqpCtx = ctx.KqpCtx;
     auto table = kqpCtx.Tables->EnsureTableExists(kqpCtx.Cluster, tablePath, read->Pos, ctx.ExprCtx);
     if (!table) {
@@ -187,7 +187,7 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
     } else if (CanPushSortToOlapRead(sort, sortInput, ctx, sortDirecion)) {
         auto read = CastOperator<TOpRead>(sortInput);
         const auto limitCond = sort->LimitCond->Node->ChildPtr(1);
-        return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
+        return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond, read->GetRanges(),
                                       static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
     }
 

@@ -272,7 +272,8 @@ template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteMap(const TUnboxedValuePod value, TJsonWriter& writer) {
     writer.OpenMap();
     if (value.IsBoxed()) {
-        TUnboxedValue key, payload;
+        TUnboxedValue key;
+        TUnboxedValue payload;
         for (const auto it = value.GetDictIterator(); it.NextPair(key, payload);) {
             if constexpr (SkipMapEntity) {
                 if (IsEntity(payload)) {

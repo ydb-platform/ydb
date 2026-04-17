@@ -32,6 +32,9 @@ public:
             })))
         , MaxBlockSize_(Codec_->GetMaxBlockSize())
         , File_(std::move(file))
+    { }
+
+    void InitializeRefCounted()
     {
         i64 fileSize = File_.GetLength();
         OutputPosition_ = Codec_->Repair(&File_);

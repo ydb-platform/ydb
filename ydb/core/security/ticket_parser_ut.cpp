@@ -12,7 +12,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <util/system/tempfile.h>
 
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include "ticket_parser_impl.h"
@@ -118,6 +118,10 @@ private:
 };
 
 } // namespace
+
+} // namespace NKikimr
+
+namespace NKikimr::NCertTestUtils {
 
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
@@ -2844,4 +2848,4 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
 
 } // Test suite AuthorizeRequestToAccessService
 
-}
+} // Nkikimr::NTesting

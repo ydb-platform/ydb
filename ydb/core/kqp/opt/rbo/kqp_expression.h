@@ -114,6 +114,9 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
 // from one of the conjuncts.
 TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax = false);
 
+// Negate a predicate
+TExpression MakeNegation(const TExpression& expr);
+
 // Make a binary predicate with an arbitrary callable, extract context and properties from one of the arguments
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right);
 

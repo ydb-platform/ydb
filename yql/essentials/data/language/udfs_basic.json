@@ -219,7 +219,9 @@
     },
     {
       "isTypeAwareness": true,
-      "name": "IntervalFromSeconds"
+      "name": "IntervalFromSeconds",
+      "polyArgs": "[[{\"cmd\"=\"ver\";\"value\"=\"2025.03\"};{\"ver\"=\"2025.03\"}];[[];{}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int64\"];1u]]];[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int32\"];1u]]]]"
     },
     {
       "argCount": 1,
@@ -2540,15 +2542,21 @@
     },
     {
       "isTypeAwareness": true,
-      "name": "Parse"
+      "name": "Parse",
+      "polyArgs": "[[{\"cmd\"=\"or\";\"value\"=[{\"arg\"=\"T0\";\"cmd\"=\"kind\";\"value\"=\"Resource\"};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"DataType\";\"Yson\"]};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"OptionalType\";[\"DataType\";\"Yson\"]]}]};{\"args\"=[[\"DataType\";\"Yson\"]]}];[[];{\"args\"=[[\"DataType\";\"String\"]]}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[1u];[[\"ResourceType\";\"Yson2.Node\"]];[[[\"DataType\";\"Yson\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]];[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]]"
     },
     {
       "isTypeAwareness": true,
-      "name": "ParseJson"
+      "name": "ParseJson",
+      "polyArgs": "[[{\"cmd\"=\"or\";\"value\"=[{\"arg\"=\"T0\";\"cmd\"=\"kind\";\"value\"=\"Resource\"};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"DataType\";\"Json\"]};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"OptionalType\";[\"DataType\";\"Json\"]]}]};{\"args\"=[[\"DataType\";\"Json\"]]}];[[];{\"args\"=[[\"DataType\";\"String\"]]}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[1u];[[\"ResourceType\";\"Yson2.Node\"]];[[[\"DataType\";\"Json\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]];[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]]"
     },
     {
       "isTypeAwareness": true,
-      "name": "ParseJsonDecodeUtf8"
+      "name": "ParseJsonDecodeUtf8",
+      "polyArgs": "[[{\"cmd\"=\"or\";\"value\"=[{\"arg\"=\"T0\";\"cmd\"=\"kind\";\"value\"=\"Resource\"};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"DataType\";\"Json\"]};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"OptionalType\";[\"DataType\";\"Json\"]]}]};{\"args\"=[[\"DataType\";\"Json\"]]}];[[];{\"args\"=[[\"DataType\";\"String\"]]}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[1u];[[\"ResourceType\";\"Yson2.Node\"]];[[[\"DataType\";\"Json\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]];[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]]"
     },
     {
       "argCount": 1,

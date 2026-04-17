@@ -2,8 +2,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/join.h>
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
 

@@ -132,6 +132,7 @@ public:
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;

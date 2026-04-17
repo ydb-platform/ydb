@@ -17,6 +17,8 @@ struct TMinMax {
 
     bool IsNull() const;
 
+    std::shared_ptr<arrow::DataType> ElementType() const;
+
     std::shared_ptr<arrow::Scalar>& Min() {
         return MinMax.value[0];
     }
@@ -41,19 +43,17 @@ struct TMinMax {
     static TMinMax Compute(std::shared_ptr<arrow::ChunkedArray> arr);
 
     TString ToBinaryString() const;
-
-    NJson::TJsonValue ToJson() const;
 };
 
 namespace NArrowCompare {
 
-bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+bool Less(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
 
-bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+bool Greater(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
 
-bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+bool LessOrEqual(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
 
-bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+bool GreaterOrEqual(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
 
 }   // namespace NArrowCompare
 

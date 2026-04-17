@@ -472,6 +472,8 @@ message Changefeed {
     bool schema_changes = 11;
     // Emit user security identifier (SID) or not.
     bool user_sids = 12;
+    // Emit user trace identifier (trace_id) or not.
+    bool trace_ids = 13;
 }
 
 message ChangefeedDescription {
@@ -517,6 +519,8 @@ message ChangefeedDescription {
     bool schema_changes = 10;
     // State of emitting of user security identifier (SID)
     bool user_sids = 11;
+    // State of emitting of user trace identifier (trace_id) or not.
+    bool trace_ids = 12;
 }
 
 message StoragePool {

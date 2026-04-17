@@ -23,6 +23,8 @@ TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf e
 bool TrySplitPathByDb(const TString& path, const TString& database,
     std::pair<TString, TString>& result, TString& error);
 
+TString NormalizePath(const TString& database, const TString& path);
+
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {
     auto path = JoinRange("/", begin, end);

@@ -27,6 +27,8 @@ private:
     virtual void DoAbort() = 0;
     bool AbortFlag = false;
 
+    void InitSourceTracingMetrics(const std::shared_ptr<NCommon::IDataSource>& source) const;
+
 protected:
     const std::shared_ptr<TSpecialReadContext> Context;
     const std::shared_ptr<ISourcesCollection> Collection;

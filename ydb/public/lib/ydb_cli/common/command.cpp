@@ -1,4 +1,5 @@
 #include "command.h"
+#include "build_info.h"
 #include "command_utils.h"
 #include "normalize_path.h"
 
@@ -118,6 +119,71 @@ std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSinglet
     return SingletonCredentialsProviderFactory;
 }
 
+TDriverConfig TClientCommand::TConfig::CreateDriverConfig() {
+    auto driverConfig = TDriverConfig()
+        .SetEndpoint(Address)
+        .SetDatabase(Database)
+        .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
+        .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
+
+    if (UseAllNodes) {
+        driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+    }
+
+    if (EnableSsl) {
+        driverConfig.UseSecureConnection(CaCerts);
+    }
+
+    if (IsNetworkIntensive) {
+        size_t networkThreadNum = GetNetworkThreadNum();
+        driverConfig.SetNetworkThreadsNum(networkThreadNum);
+    }
+
+    if (SkipDiscovery) {
+        driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+    }
+
+    driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
+
+    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), GetBuildInfoCommandTag());
+
+    return driverConfig;
+}
+
+const TYdbCliBuildInfo& TClientCommand::TConfig::GetBuildInfo() {
+    static const TYdbCliBuildInfo empty;
+    if (!CachedBuildInfo_ && BuildInfoProvider) {
+        CachedBuildInfo_ = BuildInfoProvider();
+    }
+    return CachedBuildInfo_ ? *CachedBuildInfo_ : empty;
+}
+
+TString TClientCommand::TConfig::GetBuildInfoCommandTag() const {
+    if (BuildInfoCommandTag) {
+        return BuildInfoCommandTag;
+    }
+    if (ActiveLeafCommand) {
+        TStringBuilder tag;
+        bool first = true;
+        for (const auto& parent : ParentCommands) {
+            if (first) {
+                first = false;
+                continue;
+            }
+            if (tag) {
+                tag << "-";
+            }
+            tag << parent.Name;
+        }
+        if (tag) {
+            tag << "-";
+        }
+        tag << ActiveLeafCommand->Name;
+        return tag;
+    }
+    return {};
+}
+
 std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(TConfig& config) {
     int _argc = 1;
     int levels = 1;
@@ -235,6 +301,13 @@ int TClientCommand::Process(TConfig& config) {
     try {
         Prepare(config);
         return ValidateAndRun(config);
+    } catch (const TInitializationException& e) {
+        Cerr << "Error";
+        if (e.HasErrorCode()) {
+            Cerr << " [" << *e.GetErrorCode() << "]";
+        }
+        Cerr << ": " << e.what() << Endl;
+        return e.GetCode();
     } catch (const TNeedToExitWithCode& e) {
         return e.GetCode();
     }
@@ -286,6 +359,7 @@ bool TClientCommand::Prompt(TConfig& config) {
 }
 
 int TClientCommand::ValidateAndRun(TConfig& config) {
+    config.ActiveLeafCommand = this;
     Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
     config.Opts = &Opts;
     config.ParseResult = ParseResult.get();

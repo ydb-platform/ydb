@@ -22,7 +22,7 @@ protected:
     }
 
     void SetCommonOptions(std::string_view& regex, TFsm::TOptions& options) {
-        if (regex.size() >= 4U && regex.substr(0U, 4U) == "(?i)") {
+        if (regex.size() >= 4U && regex.starts_with("(?i)")) {
             options.SetCaseInsensitive(true);
             regex.remove_prefix(4U);
         }

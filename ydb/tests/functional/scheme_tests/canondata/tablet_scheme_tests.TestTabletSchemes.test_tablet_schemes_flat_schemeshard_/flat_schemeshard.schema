@@ -7156,6 +7156,11 @@
                 "ColumnId": 11,
                 "ColumnName": "UserSIDs",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "TraceIds",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7172,7 +7177,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7255,6 +7261,11 @@
                 "ColumnId": 11,
                 "ColumnName": "UserSIDs",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "TraceIds",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7271,7 +7282,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,

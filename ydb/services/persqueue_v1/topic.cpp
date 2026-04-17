@@ -5,7 +5,6 @@
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_table.h>
-#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>

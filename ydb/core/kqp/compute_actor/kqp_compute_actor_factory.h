@@ -116,7 +116,6 @@ public:
         const TString& SerializedGUCSettings;
         const ui32 NumberOfTasks;
         const ui64 OutputChunkMaxSize;
-        const NKikimr::NKqp::NRm::EKqpMemoryPool MemoryPool;
         const bool WithSpilling;
         const NYql::NDqProto::EDqStatsMode StatsMode;
         const bool WithProgressStats;

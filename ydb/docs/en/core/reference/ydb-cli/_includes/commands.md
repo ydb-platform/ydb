@@ -129,14 +129,14 @@ Command / subcommand | Brief description
 || [workload kv clean](../workload-kv.md#clean) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Key-Value` workload initialization |
 || workload log init | Creating and initializing [tables](../../../concepts/glossary.md#table) for the `Log` workload |
 || workload log import generator | Random data generator in the `Log` workload |
-|| workload log run bulk_upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload |
+|| workload log run bulk-upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload |
 || workload log run delete | Deleting random rows from a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload |
 || workload log run insert | Inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload using `INSERT` |
 || workload log run upsert | Inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time in the `Log` workload using `UPSERT` |
 || workload log run select | Executing a set of analytical queries for log analysis: record counting, aggregation by levels, services, and components, metadata analysis, and time ranges in the `Log` workload |
 || workload log clean | Deleting [tables](../../../concepts/glossary.md#table) created during the `Log` workload initialization |
 || workload mixed init | Creating and initializing [tables](../../../concepts/glossary.md#table) for the `Mixed` workload |
-|| workload mixed run bulk_upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time using `BULK_UPSERT` in the `Mixed` workload |
+|| workload mixed run bulk-upsert | Bulk inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time using `BULK_UPSERT` in the `Mixed` workload |
 || workload mixed run insert | Inserting random rows into a [table](../../../concepts/glossary.md#table) near the current time using `INSERT` in the `Mixed` workload |
 || workload mixed run upsert | Updating random rows in a [table](../../../concepts/glossary.md#table) near the current time using `UPSERT` in the `Mixed` workload |
 || workload mixed run select | Selecting random rows from a [table](../../../concepts/glossary.md#table) in the `Mixed` workload |

@@ -1098,6 +1098,8 @@ public:
 
     static const TStringRef& Name();
 
+    static const TStringRef& BuildPolyArgs();
+
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
         if (Name() == name) {
             auto typeId = TDataType<TYJson>::Id;
@@ -1212,6 +1214,45 @@ template <>
 const TStringRef& TParse<TJson, true>::Name() {
     static auto Name = TStringRef::Of("ParseJsonDecodeUtf8");
     return Name;
+}
+
+template <>
+const TStringRef& TParse<TYson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Yson]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Yson]]}
+         ]};{args=[[DataType;Yson]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, true>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
 }
 
 class TIterate: public TBoxedValue {
@@ -1339,7 +1380,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1393,7 +1435,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1787,7 +1830,8 @@ struct TMutNode {
         Storage = TMutNodeMap();
         auto& map = std::get<TMutNodeMap>(Storage);
         map.reserve(originalValue.GetDictLength());
-        TUnboxedValue k, v;
+        TUnboxedValue k;
+        TUnboxedValue v;
         for (auto it = originalValue.GetDictIterator(); it.NextPair(k, v);) {
             map.emplace(k, v);
         }

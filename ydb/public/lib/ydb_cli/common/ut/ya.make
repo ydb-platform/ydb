@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/common)
 
 SRCS(
+    build_info_ut.cpp
     cert_format_converter_ut.cpp
     config_ut.cpp
     csv_parser_ut.cpp

@@ -21,6 +21,14 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
+    ui64 CachedSourceId = 0;
+    ui64 CachedBlobBytes = 0;
+    ui64 CachedRawBytes = 0;
+    ui32 CachedFilteredRows = 0;
+    ui32 CachedTotalRows = 0;
+    ui64 CachedTotalReservedBytes = 0;
+
+    void CacheSourceStats();
 
 protected:
     virtual bool DoApply(IDataReader& owner) override;
@@ -29,6 +37,30 @@ protected:
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "STEP_ACTION";
+    }
+
+    virtual ui64 GetSourceId() const override {
+        return CachedSourceId;
+    }
+
+    virtual ui64 GetBlobBytes() const override {
+        return CachedBlobBytes;
+    }
+
+    virtual ui64 GetRawBytes() const override {
+        return CachedRawBytes;
+    }
+
+    virtual ui32 GetFilteredRows() const override {
+        return CachedFilteredRows;
+    }
+
+    virtual ui32 GetTotalRows() const override {
+        return CachedTotalRows;
+    }
+
+    virtual ui64 GetTotalReservedBytes() const override {
+        return CachedTotalReservedBytes;
     }
 
     template <class T>
@@ -45,6 +77,7 @@ private:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;

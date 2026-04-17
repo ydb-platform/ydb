@@ -133,9 +133,9 @@ namespace NKikimr {
 
     TOutOfSpaceLogic::~TOutOfSpaceLogic() {}
 
-    template <typename TPutEventPtr>
-    bool AllowPut(const TOutOfSpaceLogic &logic, ESpaceColor color, TPutEventPtr &ev) {
-        auto &stat = logic.Stat->Lookup(TOutOfSpaceLogic::TStat::Put, color).HandleMsg(ev->Get()->GetCachedByteSize());
+    bool TOutOfSpaceLogic::AllowVPutLikeWrite(const TActorContext& /*ctx*/, bool ignoreBlock, bool isZeroEntry, ui32 size) const {
+        const ESpaceColor color = GetSpaceColor();
+        auto& stat = Stat->Lookup(TOutOfSpaceLogic::TStat::Put, color).HandleMsg(size);
         switch (color) {
             case TSpaceColor::GREEN:
             case TSpaceColor::CYAN:
@@ -143,24 +143,24 @@ namespace NKikimr {
             case TSpaceColor::YELLOW:
             case TSpaceColor::LIGHT_ORANGE:
                 return stat.Allow();
+
             case TSpaceColor::PRE_ORANGE:
             case TSpaceColor::ORANGE:
-                return stat.Pass(ev->Get()->Record.GetIgnoreBlock()); // allow restore-first reads to pass through
+                return stat.Pass(ignoreBlock || isZeroEntry); // allow restore-first reads to pass through and zero entries too
+
             case TSpaceColor::RED:
             case TSpaceColor::BLACK:
                 return stat.NotAllow();
+
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                 Y_ABORT();
         }
     }
 
-    bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVPut::TPtr &ev) const {
-        return AllowPut(*this, GetSpaceColor(), ev);
-    }
-
-    bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVMultiPut::TPtr &ev) const {
-        return AllowPut(*this, GetSpaceColor(), ev);
+    bool TOutOfSpaceLogic::Allow(const TActorContext& ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const {
+        auto& record = ev->Get()->Record;
+        return AllowVPutLikeWrite(ctx, record.GetIgnoreBlock(), record.GetIsZeroEntry(), ev->Get()->GetBufferBytes());
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVBlock::TPtr &ev) const {
@@ -172,15 +172,9 @@ namespace NKikimr {
             case TSpaceColor::LIGHT_YELLOW:
             case TSpaceColor::YELLOW:
             case TSpaceColor::LIGHT_ORANGE:
-                return stat.Allow();
             case TSpaceColor::PRE_ORANGE:
             case TSpaceColor::ORANGE:
-            {
-                NKikimrBlobStorage::TEvVBlock &record = ev->Get()->Record;
-                const ui64 tabletId = record.GetTabletId();
-                const bool allow = Hull->HasBlockRecordFor(tabletId);
-                return stat.Pass(allow);
-            }
+                return stat.Allow();
             case TSpaceColor::RED: {
                 // FIXME: handle complete removal only
                 return stat.NotAllow();

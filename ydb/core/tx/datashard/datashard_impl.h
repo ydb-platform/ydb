@@ -851,9 +851,10 @@ class TDataShard
             struct Body :  Column<3, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :  Column<4, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :  Column<5, NScheme::NTypeIds::Utf8> { using Type = TString; };
+            struct UserTraceId :  Column<6, NScheme::NTypeIds::String> { using Type = TString; };
 
             using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Kind, Body, Source, UserSID>;
+            using TColumns = TableColumns<Order, Kind, Body, Source, UserSID, UserTraceId>;
         };
 
         struct ChangeSenders : Table<19> {
@@ -1000,9 +1001,10 @@ class TDataShard
             struct Body :       Column<4, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :     Column<5, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :    Column<6, NScheme::NTypeIds::Utf8> { using Type = TString; };
+            struct UserTraceId :  Column<7, NScheme::NTypeIds::String> { using Type = TString; };
             
             using TKey = TableKey<LockId, LockOffset>;
-            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID>;
+            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID, UserTraceId>;
         };
 
         // Maps [Order ... Order+N-1] change records in the shard order
@@ -1468,10 +1470,10 @@ class TDataShard
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
 
-    TDuration GetDataTxCompleteLag()
+    TDuration GetTxCompleteLag()
     {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
-        return TDuration::MilliSeconds(Pipeline.GetDataTxCompleteLag(mediatorTime));
+        return TDuration::MilliSeconds(Pipeline.GetTxCompleteLag(mediatorTime));
     }
     TDuration GetScanTxCompleteLag()
     {
@@ -2049,6 +2051,7 @@ public:
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count = 1);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     ui64 GetNextChangeRecordLockOffset(ui64 lockId);
+    void FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
     bool HasLockChangeRecords(ui64 lockId) const;
     void CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected);

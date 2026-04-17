@@ -120,6 +120,10 @@ namespace NKikimr {
                     VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                         "PrepareToFullRecovery: fromVDisk# %s toVDisk# %s",
                         VDiskId.ToString().data(), Ctx->SelfVDiskId.ToString().data()));
+
+#ifdef USE_MERGE_FULL_SYNC_SCHEME
+            ReplyAndDie(TSyncStatusVal::FullRecover);
+#endif
         }
 
         TSjOutcome TSyncerJobTask::ContinueInFullRecoveryMode() {

@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/library/accessor/accessor.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -120,6 +121,7 @@ public:
 
     struct TKqpSnapshotHandle : public IKqpGateway::TGenericResult {
         TKqpSnapshot Snapshot;
+        NKqp::TSnapshotHandle Handle;
         NActors::TActorId ManagingActor;
         NKikimrIssues::TStatusIds::EStatusCode Status =  NKikimrIssues::TStatusIds::UNKNOWN;
     };

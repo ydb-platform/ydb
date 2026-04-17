@@ -11,7 +11,7 @@ import "yt_proto/yt/core/ytree/proto/attributes.proto";
 
 message TError
 {
-    optional int32 code = 1;
+    required int32 code = 1;
     optional string message = 2;
     optional NYT.NYTree.NProto.TAttributeDictionary attributes = 3;
     repeated TError inner_errors = 4;

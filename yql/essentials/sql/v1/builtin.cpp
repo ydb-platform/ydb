@@ -4275,7 +4275,8 @@ TNodeResult BuildBuiltinFunc(
         } else if (normalizedName == "visit" || normalizedName == "visitordefault") {
             bool withDefault = normalizedName == "visitordefault";
             TNodePtr variant;
-            TVector<TNodePtr> labels, handlers;
+            TVector<TNodePtr> labels;
+            TVector<TNodePtr> handlers;
             TMaybe<TNodePtr> dflt;
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;

@@ -48,7 +48,7 @@ public:
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
     ~TFastPathService() override = default;
 

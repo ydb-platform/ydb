@@ -893,7 +893,7 @@ TExprNode::TPtr ApplyRenames(const TExprNode::TPtr& input, const TMap<TStringBuf
         TStringBuf columnName;
         SplitTableName(memberName, tableName, columnName);
 
-        if (columnName.find(canaryBaseName, 0) == 0) {
+        if (columnName.starts_with(canaryBaseName)) {
             continue;
         }
 

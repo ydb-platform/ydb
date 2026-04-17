@@ -22,9 +22,9 @@ To deploy YDB EM, you need:
 
 1. **A host for Gateway and Control Plane components** — a single server (physical or virtual) where the YDB EM server components will be installed. This can be any of the {{ ydb-short-name }} cluster hosts or a separate machine.
 
-1. **[Ansible](https://www.ansible.com/)** on the control machine (from which the installation will be performed). ansible-core 2.14–2.18 is recommended; for more details, see [{#T}](../deployment-options/ansible/initial-deployment/index.md).
+2. **[Ansible](https://www.ansible.com/)** on the control machine (from which the installation will be performed). ansible-core 2.14–2.18 is recommended; for more details, see Deploying cluster with ansible.
 
-1. **SSH access** from the control machine to all servers where YDB EM components will be installed (the Gateway/CP host and cluster hosts for agents).
+3. **SSH access** from the control machine to all servers where YDB EM components will be installed (the Gateway/CP host and cluster hosts for agents).
 
 ### Network requirements {#network-requirements}
 
@@ -163,7 +163,7 @@ Parameter | Description
 
 {% note warning %}
 
-{{ ydb-short-name }} binaries must be installed on all hosts in the `ydbd_dynamic` group before deploying YDB EM. For more details, see [{#T}](../deployment-options/ansible/initial-deployment/index.md).
+{{ ydb-short-name }} binaries must be installed on all hosts in the `ydbd_dynamic` group before deploying YDB EM. For more details, see Deploying cluster with ansible.
 
 {% endnote %}
 

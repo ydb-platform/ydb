@@ -364,11 +364,7 @@ public:
     }
 
     bool CheckAccessGetNodeConfig() const {
-        if (TBase::IsTokenRequired()) {
-            return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
-        }
-        // if token is not required access is granted
-        return true;
+        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
     }
 
 private:

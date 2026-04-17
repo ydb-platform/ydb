@@ -46,6 +46,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
+    appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenCheckRequirement(true);
 
     auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
     securityConfig.SetHideAuthenticationFailureReasons(false);

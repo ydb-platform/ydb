@@ -584,7 +584,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1218,7 +1218,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), Fields.AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1414,7 +1414,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(AppData(), result.UserToken.Get(), AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
             ProcessRequest();
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

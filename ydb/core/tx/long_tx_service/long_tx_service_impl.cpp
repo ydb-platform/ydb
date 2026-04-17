@@ -1300,7 +1300,8 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             continue;
         }
 
-        auto blocker = it->second.Blocker;
+        auto blockerInfo = it->second.Blocker.LockInfo(SelfId());
+        UnlinkWaitEdge(it->second);
         WaitEdges.erase(it);
         actuallyRemoved.push_back(id);
 
@@ -1313,7 +1314,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
 
         TXLOG_DEBUG("Removed wait edge id: " << id
             << ", awaiter: " << awaiterInfo
-            << ", blocker: " << blocker.LockInfo(SelfId()));
+            << ", blocker: " << blockerInfo);
     }
 
     // 2. Send notifications
@@ -1415,22 +1416,45 @@ void TLongTxServiceActor::SyncLockWaitEdgesSubset(
     UpdateLockWaitEdges(awaiter, addedEdges, removedEdges);
 }
 
-void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
-    auto remove = [&](const TWaitEdgeId& id) {
-        const bool local = id.OwnerId.NodeId() == SelfId().NodeId();
-        const bool erased = WaitEdges.erase(id); // Unlinks the edge from the list.
-        if (Settings.Counters && erased) {
-            Settings.Counters->WaitGraphEdges->Dec();
-            if (local) {
-                Settings.Counters->LocalWaitGraphEdges->Dec();
+void TLongTxServiceActor::UnlinkWaitEdge(TWaitEdge& edge) {
+    static_cast<TIntrusiveListItem<TWaitEdge, TTagAwaiter>&>(edge).Unlink();
+    static_cast<TIntrusiveListItem<TWaitEdge, TTagBlocker>&>(edge).Unlink();
+
+    auto awaiter = edge.Awaiter;
+    auto blocker = edge.Blocker;
+    for (auto lock : {awaiter, blocker}) {
+        // We don't try to detect the case when the island is split into two
+        // (too expensive and not necessary for correctness), except the case
+        // when a lock becomes isolated.
+        auto& wn = lock.WaitNode();
+        if (wn.Island && wn.Awaiters.Empty() && wn.Blockers.Empty()) {
+            wn.Unlink();
+            --wn.Island->LocksCount;
+            if (!wn.Island->LocksCount) {
+                delete wn.Island;
             }
+            wn.Island = nullptr;
         }
+    }
+
+    if (Settings.Counters) {
+        Settings.Counters->WaitGraphEdges->Dec();
+        if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
+            Settings.Counters->LocalWaitGraphEdges->Dec();
+        }
+    }
+}
+
+void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
+    auto remove = [&](TWaitEdge& edge) {
+        UnlinkWaitEdge(edge);
+        WaitEdges.erase(edge.Id); // Unlinks the edge from the list.
     };
     while (!waitNode.Awaiters.Empty()) {
-        remove(waitNode.Awaiters.Back()->Id);
+        remove(*waitNode.Awaiters.Back());
     }
     while (!waitNode.Blockers.Empty()) {
-        remove(waitNode.Blockers.Back()->Id);
+        remove(*waitNode.Blockers.Back());
     }
     if (waitNode.Island) {
         --waitNode.Island->LocksCount;

@@ -521,7 +521,8 @@ namespace NLongTxService {
             const TProtoList& newEdges,
             TFilter edgeFilter);
 
-        void UnlinkWaitNode(TWaitNode& waitNode);
+        void UnlinkWaitEdge(TWaitEdge&);
+        void UnlinkWaitNode(TWaitNode&);
 
         void RunDeadlockDetection();
 

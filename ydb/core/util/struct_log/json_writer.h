@@ -16,8 +16,10 @@ namespace NKikimr::NStructLog {
 class TJsonAppender
 {
 public:
+    using TNameSet = std::unordered_set<TString>;
 
-    TJsonAppender(NJsonWriter::TBuf& jsonWriter) : JsonWriter(jsonWriter) {
+    TJsonAppender(NJsonWriter::TBuf& jsonWriter, const TJsonAppender::TNameSet& busyNames) :
+        JsonWriter(jsonWriter), BusyNames(busyNames) {
     }
 
     template <typename T>
@@ -71,14 +73,24 @@ public:
 
             // Open nested values
             while (index < requiredContext.size()) {
-                JsonWriter.WriteKey(requiredContext[index].ToString());
+                auto keyName = requiredContext[index].ToString();
+                if (index == 0 && BusyNames.contains(keyName)) {
+                    JsonWriter.WriteKey(TString("_") + keyName);
+                } else {
+                    JsonWriter.WriteKey(keyName);
+                }
                 JsonWriter.BeginObject();
                 index ++;
             }
         }
 
-        // Add key-value
-        JsonWriter.WriteKey(key.back().ToString());
+        // Add key-value pair
+        auto keyName = key.back().ToString();
+        if (key.size() == 1 && BusyNames.contains(keyName)) {
+            JsonWriter.WriteKey(TString("_") + keyName);
+        } else {
+            JsonWriter.WriteKey(keyName);
+        }
         AppendValue(value);
 
         LastAppendedKey = key;
@@ -99,6 +111,7 @@ public:
     }
 
     NJsonWriter::TBuf& JsonWriter;
+    const TJsonAppender::TNameSet& BusyNames;
     std::vector<TKeyName> LastAppendedKey;
     bool Started{false};
 
@@ -115,9 +128,11 @@ class TJsonWriter
 {
 public:
     TJsonAppender Appender;
+
     bool Valid{true};
 
-    TJsonWriter(NJsonWriter::TBuf& jsonWriter) : Appender(jsonWriter) {}
+    TJsonWriter(NJsonWriter::TBuf& jsonWriter, const TJsonAppender::TNameSet& busyNames = TJsonAppender::TNameSet()) :
+        Appender(jsonWriter, busyNames) {}
 
     class TJsonValueWriter {
         public:

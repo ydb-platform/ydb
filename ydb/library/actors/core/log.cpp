@@ -621,10 +621,10 @@ namespace NActors {
                 }
 
                 if (structMessage.Defined()) {
-                    j.WriteKey("structured");
-                    j.BeginObject();
-                    NKikimr::NStructLog::TJsonWriter(j).Write(structMessage.GetRef(), true);
-                    j.EndObject();
+                    static const NKikimr::NStructLog::TJsonAppender::TNameSet busy{
+                        "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
+                        "priority", "npriority", "component", "tag", "revision"};
+                    NKikimr::NStructLog::TJsonWriter(j, busy).Write(structMessage.GetRef(), true);
                 }
                 j.EndObject();
                 auto logRecord = j.Str();

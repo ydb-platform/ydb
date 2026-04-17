@@ -14,6 +14,7 @@
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/file_storage/storage.h>

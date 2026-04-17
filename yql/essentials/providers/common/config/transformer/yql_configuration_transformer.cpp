@@ -139,7 +139,9 @@ TSettingDispatcher::TPtr TProviderConfigurationTransformer::GetDispatcher() cons
     return Dispatcher;
 }
 
-bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias,
+bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos,
+                                                   const TString& cluster,
+                                                   const TString& alias,
                                                    TExprContext& ctx)
 {
     auto cred = Types_.Credentials->FindCredential(alias);

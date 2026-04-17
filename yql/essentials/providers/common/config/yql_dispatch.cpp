@@ -1,6 +1,5 @@
 #include "yql_dispatch.h"
 
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/log/log.h>
 

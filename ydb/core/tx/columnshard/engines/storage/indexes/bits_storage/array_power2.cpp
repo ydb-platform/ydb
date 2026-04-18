@@ -1,6 +1,22 @@
 #include "array_power2.h"
 
+#include <util/stream/output.h>
+#include <util/stream/str.h>
+#include <util/ysaveload.h>
+
 namespace NKikimr::NOlap::NIndexes {
+
+TString TArrayPower2BitsStorage::SerializeDynBitMapCompatible() const {
+    // TBitSetStorage requires serialization format of TDynBitMap, so reproduce it here
+    TString result;
+    result.reserve(DataSize * sizeof(ui64) + 2 * sizeof(ui64));
+    TStringOutput out(result);
+
+    ::Save(&out, ui8(sizeof(ui64)));
+    ::Save(&out, ui64(BitSize()));
+    ::SavePodArray(&out, Data.get(), DataSize);
+    return result;
+}
 
 TArrayPower2BitsStorage TArrayPower2BitsStorage::Fold(ui32 times) const {
     Y_ABORT_UNLESS(DataSize % times == 0);

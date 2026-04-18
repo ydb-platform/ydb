@@ -45,6 +45,8 @@ public:
         return TString(reinterpret_cast<char*>(Data.get()), DataSize * sizeof(ui64));
     }
 
+    TString SerializeDynBitMapCompatible() const;
+
     Y_FORCE_INLINE void operator()(const ui64 hash) {
         Data[(hash >> SizeShift) & SizeMask] |= (static_cast<ui64>(1) << (hash & ItemMask));
     }

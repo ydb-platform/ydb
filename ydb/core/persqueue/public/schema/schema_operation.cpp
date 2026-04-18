@@ -87,34 +87,23 @@ private:
         const auto ydbStatus = NKikimr::YdbStatusFromProxyStatus(ev->Get());
 
         SchemeShardTabletId = record.GetSchemeShardTabletId();
-        TxId = status == NTxProxy::TResultStatus::ExecInProgress ? record.GetTxId() : record.GetPathCreateTxId();
+        TxId = record.GetTxId();
 
         switch (status) {
             case NTxProxy::TResultStatus::ExecComplete:
-                [[fallthrough]];
-            case NTxProxy::TResultStatus::ExecAlready:
-                if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    ReplyOkAndDie();
-                } else {
-                    ReplyError(ydbStatus, ssStatus);
-                }
-                break;
-            case NTxProxy::TResultStatus::ProxyShardNotAvailable:
-                RetryPropose();
-                break;
-            case NTxProxy::TResultStatus::ExecError:
-                if (ssStatus == NKikimrScheme::EStatus::StatusMultipleModifications) {
-                    DoWaitCompletion();
-                } else {
-                    ReplyError(ydbStatus, ssStatus);
-                }
-                break;
+                return ReplyOkAndDie();
             case NTxProxy::TResultStatus::ExecInProgress:
-                DoWaitCompletion();
-                break;
+                return DoWaitCompletion();
+            case NTxProxy::TResultStatus::ProxyShardNotAvailable:
+                return RetryPropose();
+            case NTxProxy::TResultStatus::ExecAlready:
+                if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
+                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus);
+                } else {
+                    return ReplyError(ydbStatus, ssStatus);
+                }
             default:
-                ReplyError(ydbStatus, ssStatus);
-                break;
+                return ReplyError(ydbStatus, ssStatus);
         }
     }
 
@@ -189,7 +178,7 @@ private:
 private:
     const TActorId ParentId;
     const TString Path;
-    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> Operation;
+    const std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> Operation;
     const ui64 Cookie;
 
     ui64 SchemeShardTabletId = 0;

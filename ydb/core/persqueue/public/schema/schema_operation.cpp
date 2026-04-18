@@ -27,7 +27,7 @@ public:
         const TString& path,
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>&& operation,
         ui64 cookie)
-        : TBaseActor<TSchemaOperationActor>(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC)
+        : TBaseActor<TSchemaOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
         , TPipeCacheClient(this)
         , ParentId(parentId)
         , Path(path)

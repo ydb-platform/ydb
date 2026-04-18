@@ -16,7 +16,7 @@ class TDropTopicOperationActor: public TBaseActor<TDropTopicOperationActor>
                               , public TConstantLogPrefix {
 public:
     TDropTopicOperationActor(NActors::TActorId parentId, TDropTopicOperationSettings&& settings)
-        : TBaseActor<TDropTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC)
+        : TBaseActor<TDropTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
         , ParentId(parentId)
         , Settings(std::move(settings))
     {

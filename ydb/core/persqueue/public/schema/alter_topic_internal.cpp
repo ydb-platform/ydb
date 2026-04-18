@@ -16,7 +16,7 @@ public:
         NThreading::TPromise<TAlterTopicResponse>&& promise,
         TAlterTopicSettings&& settings
     )
-        : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_ALTER_TOPIC)
+        : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
         , Promise(std::move(promise))
         , Settings(std::move(settings))
     {

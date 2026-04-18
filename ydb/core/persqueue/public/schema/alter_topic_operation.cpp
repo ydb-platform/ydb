@@ -14,7 +14,7 @@ class TAlterTopicOperationActor: public TBaseActor<TAlterTopicOperationActor>
                                , public TConstantLogPrefix {
 public:
     TAlterTopicOperationActor(TActorId parentId, TAlterTopicOperationSettings&& settings)
-        : TBaseActor<TAlterTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC)
+        : TBaseActor<TAlterTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
         , ParentId(parentId)
         , Settings(std::move(settings))
     {

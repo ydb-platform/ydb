@@ -209,7 +209,7 @@ enum EServiceKikimr {
     PQ_PARTITION_CHOOSER = 462;
     PQ_TX = 2201;
     PQ_KV_OPS = 2202;
-    PQ_ALTER_TOPIC = 468;
+    PQ_SCHEMA = 468;
 
     TOKEN_BUILDER = 450;
     TICKET_PARSER = 455;

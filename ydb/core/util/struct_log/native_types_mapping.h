@@ -22,6 +22,9 @@ enum class TNativeTypeCode : std::uint8_t {
     UInt64,
     Bool,
     String,
+    Float,
+    Double,
+    LongDouble
 };
 
 using TInvoker = std::function<bool(const void* data, std::size_t length)>;
@@ -191,7 +194,10 @@ using TTypesMapping = TNativeTypeCodeMapping<
     TNativeTypeCodePair<ui64, TNativeTypeCode::UInt64>,
     TNativeTypeCodePair<i64, TNativeTypeCode::Int64>,
     TNativeTypeCodePair<bool, TNativeTypeCode::Bool>,
-    TNativeTypeCodePair<TString, TNativeTypeCode::String>
+    TNativeTypeCodePair<TString, TNativeTypeCode::String>,
+    TNativeTypeCodePair<float, TNativeTypeCode::Float>,
+    TNativeTypeCodePair<double, TNativeTypeCode::Double>,
+    TNativeTypeCodePair<long double, TNativeTypeCode::LongDouble>
 >;
 
 }

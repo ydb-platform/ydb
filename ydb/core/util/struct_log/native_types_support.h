@@ -42,7 +42,7 @@ struct TNativePlainTypeSupport : public std::true_type
     }
 
     static void AppendToString(const T& value, TStringBuilder& stringBuffer) {
-        static thread_local char buffer[64];
+        char buffer[64];
         auto result = std::to_chars(buffer, buffer + 64, value);
         stringBuffer.append(buffer, result.ptr - buffer);
     }
@@ -108,6 +108,21 @@ template<> struct TNativeTypeSupport<TString> : public std::true_type
     }
 };
 
+template <typename T, typename V = typename std::enable_if< std::is_floating_point_v<T> >::type>
+struct TFloatingTypeSupport : public TNativePlainTypeSupport<T>
+{
+    static TString ToString(const T& value) {
+        return std::to_string(value);
+    }
+
+    static void AppendToString(const T& value, TStringBuilder& stringBuffer) {
+        stringBuffer.append(ToString<T>(value));
+    }
+};
+
+template<> struct TNativeTypeSupport<float> : public TFloatingTypeSupport<float>{};
+template<> struct TNativeTypeSupport<double> : public TFloatingTypeSupport<double>{};
+template<> struct TNativeTypeSupport<long double> : public TFloatingTypeSupport<long double>{};
 
 //
 }

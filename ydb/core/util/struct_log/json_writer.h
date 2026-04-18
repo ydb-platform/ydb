@@ -38,6 +38,9 @@ public:
     template <> void AppendValue(const ui64& value) { JsonWriter.WriteULongLong(value); }
     template <> void AppendValue(const bool& value) { JsonWriter.WriteBool(value); }
     template <> void AppendValue(const TString& value) { JsonWriter.WriteString(value); }
+    template <> void AppendValue(const float& value) { JsonWriter.WriteFloat(value); }
+    template <> void AppendValue(const double& value) { JsonWriter.WriteDouble(value); }
+    template <> void AppendValue(const long double& value) { JsonWriter.WriteDouble(value); }
 
     template <typename T>
     bool Append(const std::vector<TKeyName>& key, const T& value) {

@@ -9,6 +9,7 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
+#include <unordered_set>
 #include <vector>
 
 namespace NKikimr::NStructLog {
@@ -22,28 +23,22 @@ public:
         JsonWriter(jsonWriter), BusyNames(busyNames) {
     }
 
-    template <typename T>
-    void AppendValue(const T& value) {
-        Y_UNUSED(value);
-        static_assert(false, "Unsupported type");
+    bool Started{false};
+    void Done() {
+        if (!Started) {
+            JsonWriter.BeginObject();
+            JsonWriter.EndObject();
+        }
+        else
+        {
+            for(std::size_t i = 0; i < LastAppendedKey.size(); i++) {
+                JsonWriter.EndObject();
+            }
+        }
     }
 
-    template <> void AppendValue(const i8& value) { JsonWriter.WriteLongLong(value); }
-    template <> void AppendValue(const ui8& value) { JsonWriter.WriteULongLong(value); }
-    template <> void AppendValue(const i16& value) { JsonWriter.WriteLongLong(value); }
-    template <> void AppendValue(const ui16& value) { JsonWriter.WriteULongLong(value); }
-    template <> void AppendValue(const i32& value) { JsonWriter.WriteLongLong(value); }
-    template <> void AppendValue(const ui32& value) { JsonWriter.WriteULongLong(value); }
-    template <> void AppendValue(const i64& value) { JsonWriter.WriteLongLong(value); }
-    template <> void AppendValue(const ui64& value) { JsonWriter.WriteULongLong(value); }
-    template <> void AppendValue(const bool& value) { JsonWriter.WriteBool(value); }
-    template <> void AppendValue(const TString& value) { JsonWriter.WriteString(value); }
-    template <> void AppendValue(const float& value) { JsonWriter.WriteFloat(value); }
-    template <> void AppendValue(const double& value) { JsonWriter.WriteDouble(value); }
-    template <> void AppendValue(const long double& value) { JsonWriter.WriteDouble(value); }
-
     template <typename T>
-    bool Append(const std::vector<TKeyName>& key, const T& value) {
+    bool AppendKeyValue(const std::vector<TKeyName>& key, const T& value) {
         if (!Started) {
             JsonWriter.BeginObject();
             Started = true;
@@ -100,23 +95,11 @@ public:
         return true;
     }
 
-    void Done() {
-        if (!Started) {
-            JsonWriter.BeginObject();
-            JsonWriter.EndObject();
-        }
-        else
-        {
-            for(std::size_t i = 0; i < LastAppendedKey.size(); i++) {
-                JsonWriter.EndObject();
-            }
-        }
-    }
+protected:
 
     NJsonWriter::TBuf& JsonWriter;
     const TJsonAppender::TNameSet& BusyNames;
     std::vector<TKeyName> LastAppendedKey;
-    bool Started{false};
 
     std::vector<TKeyName> GetContext(const std::vector<TKeyName>& key) {
         auto result = key;
@@ -125,32 +108,27 @@ public:
         }
         return result;
     }
+
+    void AppendValue(const i8& value) { JsonWriter.WriteLongLong(value); }
+    void AppendValue(const ui8& value) { JsonWriter.WriteULongLong(value); }
+    void AppendValue(const i16& value) { JsonWriter.WriteLongLong(value); }
+    void AppendValue(const ui16& value) { JsonWriter.WriteULongLong(value); }
+    void AppendValue(const i32& value) { JsonWriter.WriteLongLong(value); }
+    void AppendValue(const ui32& value) { JsonWriter.WriteULongLong(value); }
+    void AppendValue(const i64& value) { JsonWriter.WriteLongLong(value); }
+    void AppendValue(const ui64& value) { JsonWriter.WriteULongLong(value); }
+    void AppendValue(const bool& value) { JsonWriter.WriteBool(value); }
+    void AppendValue(const TString& value) { JsonWriter.WriteString(value); }
+    void AppendValue(const float& value) { JsonWriter.WriteFloat(value); }
+    void AppendValue(const double& value) { JsonWriter.WriteDouble(value); }
+    void AppendValue(const long double& value) { JsonWriter.WriteDouble(value); }
 };
 
 class TJsonWriter
 {
 public:
-    TJsonAppender Appender;
-
-    bool Valid{true};
-
     TJsonWriter(NJsonWriter::TBuf& jsonWriter, const TJsonAppender::TNameSet& busyNames = TJsonAppender::TNameSet()) :
         Appender(jsonWriter, busyNames) {}
-
-    class TJsonValueWriter {
-        public:
-            TJsonWriter& Writer;
-            const std::vector<TKeyName>* KeyName {nullptr};
-
-            TJsonValueWriter(TJsonWriter& writer) : Writer(writer) {}
-
-            template <typename T>
-            void operator()(const T& value) const {
-                Writer.Appender.Append(*KeyName, value);
-            }
-    };
-    TJsonValueWriter ValueWriter{*this};
-    TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
 
     bool Write(const TStructuredMessage& message, bool started = false)
     {
@@ -163,7 +141,7 @@ public:
             auto it = TypeValueWriterMap.find(typeCode);
             if (it != end(TypeValueWriterMap)) {
                 ValueWriter.KeyName = &name;
-                it->second(data, length);
+                Valid = it->second(data, length);
             } else {
                 Valid = false;
             }
@@ -174,6 +152,27 @@ public:
         }
         return Valid;
     }
+
+protected:
+
+    TJsonAppender Appender;
+    bool Valid{true};
+
+    class TJsonValueWriter {
+        public:
+            TJsonWriter& Writer;
+            const std::vector<TKeyName>* KeyName {nullptr};
+
+            TJsonValueWriter(TJsonWriter& writer) : Writer(writer) {}
+
+            template <typename T>
+            void operator()(const T& value) const {
+                Writer.Appender.AppendKeyValue(*KeyName, value);
+            }
+    };
+    TJsonValueWriter ValueWriter{*this};
+    TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
+
 };
 
 }

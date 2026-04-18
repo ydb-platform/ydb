@@ -194,7 +194,7 @@ namespace {
             Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvents::TEvWakeup});
         }
 
-        void StartAccumulteMessages(TSettings::ELogFormat format = TSettings::ELogFormat::PLAIN_FULL_FORMAT) {
+        void StartAccumulateMessages(TSettings::ELogFormat format = TSettings::ELogFormat::PLAIN_FULL_FORMAT) {
             Settings->Format = format;
             Settings->Append(1000, 1002,
             [](EComponent comp) ->TString {
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
     Y_UNIT_TEST(MemLogAdapter) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulteMessages();
+        env.StartAccumulateMessages();
 
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
         MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
     Y_UNIT_TEST(WriteSimple) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulteMessages();
+        env.StartAccumulateMessages();
 
         YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
         YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
     Y_UNIT_TEST(WritePriority) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulteMessages();
+        env.StartAccumulateMessages();
 
         YDBLOG_CTX_COMP_EMERG(env, 1, "Test message");
         YDBLOG_CTX_COMP_ALERT(env, 1, "Test message");
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
     Y_UNIT_TEST(WriteComponent) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulteMessages();
+        env.StartAccumulateMessages();
 
         YDBLOG_CTX_COMP_EMERG(env, 1000, "Test message");
         YDBLOG_CTX_COMP_EMERG(env, 1001, "Test message");
@@ -436,7 +436,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
     Y_UNIT_TEST(WriteWithoutComponent) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulteMessages();
+        env.StartAccumulateMessages();
 
 #define YDBLOG_THIS_FILE_COMPONTENT 1000
         YDBLOG_CTX_EMERG(env, "Test message");
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         using namespace NKikimr::NStructLog;
 
         TFixture env{NoBufferSettings()};
-        env.StartAccumulteMessages();
+        env.StartAccumulateMessages();
 
         {
             TLogStack::TLogGuard g;
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
 
     Y_UNIT_TEST(WriteJson) {
         TFixture env{NoBufferSettings()};
-        env.StartAccumulteMessages(TSettings::ELogFormat::JSON_FORMAT);
+        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
         YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json");
         YDBLOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1});

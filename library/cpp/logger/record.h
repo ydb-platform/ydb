@@ -28,10 +28,12 @@ struct TLogRecord {
     {
     }
 
-    inline TLogRecord(ELogPriority priority, const char* data, size_t len, const TMaybe<NKikimr::NStructLog::TStructuredMessage>& structMessage) noexcept
+    inline TLogRecord(ELogPriority priority, const char* data, size_t len,
+        const TMaybe<NKikimr::NStructLog::TStructuredMessage>& structMessage, TMetaFlags metaFlags = {}) noexcept
         : Data(data)
         , Len(len)
         , Priority(priority)
+        , MetaFlags(std::move(metaFlags))
         , StructMessage(structMessage)
     {
     }

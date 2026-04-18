@@ -753,7 +753,7 @@ namespace NActors {
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
         if (IS_CTX_LOG_PRIORITY_ENABLED(ctx, priority, component, 0ull)) { \
-            TStructuredMessage message = NKikimr::NStructLog::TLogStack::GetTop(); \
+            NKikimr::NStructLog::TStructuredMessage message = NKikimr::NStructLog::TLogStack::GetTop(); \
             YDBLOG_UPDATE_MESSAGE(message, __VA_ARGS__); \
             MemStructLogAdapter(ctx, priority, component, __FILE_NAME__, __LINE__, T, std::move(message) ); \
         } \
@@ -769,21 +769,21 @@ namespace NActors {
 #define YDBLOG_CTX_COMP_DEBUG(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_DEBUG, COMP, T, __VA_ARGS__)
 #define YDBLOG_CTX_COMP_TRACE(CTX, COMP, T, ...) YDBLOG_CTX_COMP(CTX, PRI_TRACE, COMP, T, __VA_ARGS__)
 
-#define YDBLOG_CTX(CTX, PRIO, T, ...) YDBLOG_CTX_COMP(CTX, PRIO, YDBLOG_THIS_FILE_COMPONTENT, __VA_ARGS__)
-#define YDBLOG_CTX_EMERG(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_EMERG, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_ALERT(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_ALERT, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_CRIT(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_CRIT, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_ERROR(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_ERROR, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_WARN(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_WARN, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_NOTICE(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_NOTICE, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_INFO(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_INFO, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_DEBUG(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_DEBUG, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
-#define YDBLOG_CTX_TRACE(CTX, T, ...) YDBLOG_CTX_COMP(CTX, PRI_TRACE, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX(CTX, PRIO, T, ...) YDBLOG_CTX_COMP(CTX, PRIO, YDBLOG_THIS_FILE_COMPONTENT, T, __VA_ARGS__)
+#define YDBLOG_CTX_EMERG(CTX, T, ...) YDBLOG_CTX(CTX, PRI_EMERG, T, __VA_ARGS__)
+#define YDBLOG_CTX_ALERT(CTX, T, ...) YDBLOG_CTX(CTX, PRI_ALERT, T, __VA_ARGS__)
+#define YDBLOG_CTX_CRIT(CTX, T, ...) YDBLOG_CTX(CTX, PRI_CRIT, T, __VA_ARGS__)
+#define YDBLOG_CTX_ERROR(CTX, T, ...) YDBLOG_CTX(CTX, PRI_ERROR, T, __VA_ARGS__)
+#define YDBLOG_CTX_WARN(CTX, T, ...) YDBLOG_CTX(CTX, PRI_WARN, T, __VA_ARGS__)
+#define YDBLOG_CTX_NOTICE(CTX, T, ...) YDBLOG_CTX(CTX, PRI_NOTICE, T, __VA_ARGS__)
+#define YDBLOG_CTX_INFO(CTX, T, ...) YDBLOG_CTX(CTX, PRI_INFO, T, __VA_ARGS__)
+#define YDBLOG_CTX_DEBUG(CTX, T, ...) YDBLOG_CTX(CTX, PRI_DEBUG, T, __VA_ARGS__)
+#define YDBLOG_CTX_TRACE(CTX, T, ...) YDBLOG_CTX(CTX, PRI_TRACE, T, __VA_ARGS__)
 
 #define YDBLOG_COMP(PRIO, COMP, T, ...) \
     do { \
         if (TActivationContext *ctxp = TlsActivationContext) { \
-            YDBLOG_CTX_COMP(*ctxp, PRIO, COMP, T, ...); \
+            YDBLOG_CTX_COMP(*ctxp, PRIO, COMP, T, __VA_ARGS__); \
         } \
     } while (false)
 

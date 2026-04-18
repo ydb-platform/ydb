@@ -623,7 +623,7 @@ namespace NActors {
                 if (structMessage.Defined()) {
                     static const NKikimr::NStructLog::TJsonAppender::TNameSet busy{
                         "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
-                        "priority", "npriority", "component", "tag", "revision"};
+                        "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
                     NKikimr::NStructLog::TJsonWriter(j, busy).Write(structMessage.GetRef(), true);
                 }
                 j.EndObject();

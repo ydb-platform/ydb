@@ -1,6 +1,8 @@
 #pragma once
 #include <util/generic/string.h>
 
+#include <algorithm>
+#include <cstring>
 #include <utility>
 
 namespace NKikimr::NStructLog {
@@ -55,10 +57,8 @@ public:
     }
 
     bool operator>(const TString& value) const {
-        if(CompileTime != nullptr) {
-            return strcmp(CompileTime, value.c_str()) > 0;
-        }
-        return RunTime > value;
+        auto cmp = Compare(CompileTime, CompileTimeLength, value.c_str(), value.size());
+        return cmp == TCompareResult::Great;
     }
 
     TKeyName& operator=(const TKeyName& value) = default;

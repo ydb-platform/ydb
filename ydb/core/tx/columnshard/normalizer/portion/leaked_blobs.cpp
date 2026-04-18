@@ -96,9 +96,11 @@ private:
     const ui64 TabletId;
     const bool Enabled;
     const NActors::NLog::EPriority LogLevel;
+    static constexpr ui32 MaxRedirects = 8;
     bool Finished = false;
     TActorId PipeClient;
     ui64 HiveTabletId = TDomainsInfo::BadTabletId;
+    ui32 RedirectsCount = 0;
 
     void FinishWithError(const TStringBuf reason) {
         if (Finished) {
@@ -106,6 +108,15 @@ private:
         }
         Finished = true;
         ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "hive_channel_history")("status", "failed")("reason", reason)("hive_tablet_id", HiveTabletId);
+    }
+
+    void SendRequestToHive(const TActorContext& ctx, const ui64 hiveTabletId) {
+        HiveTabletId = hiveTabletId;
+        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveTabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
+        auto request = std::make_unique<TEvHive::TEvRequestHiveInfo>();
+        request->Record.SetTabletID(TabletId);
+        request->Record.SetReturnChannelHistory(true);
+        NTabletPipe::SendData(ctx.SelfID, PipeClient, request.release());
     }
 
 public:
@@ -136,44 +147,69 @@ public:
             return;
         }
 
-        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveTabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
-        auto request = std::make_unique<TEvHive::TEvRequestHiveInfo>();
-        request->Record.SetTabletID(TabletId);
-        request->Record.SetReturnChannelHistory(true);
-        NTabletPipe::SendData(ctx.SelfID, PipeClient, request.release());
+        SendRequestToHive(ctx, HiveTabletId);
     }
 
-    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev, const TActorContext& ctx) {
         if (!Enabled || Finished) {
             return;
         }
         auto* msg = ev->Get();
+        if (msg->Record.HasForwardRequest()) {
+            const ui64 redirectedHiveTabletId = msg->Record.GetForwardRequest().GetHiveTabletId();
+            if (!redirectedHiveTabletId) {
+                FinishWithError("forward_request_hive_tablet_id_is_empty");
+                return;
+            }
+            if (redirectedHiveTabletId == HiveTabletId) {
+                FinishWithError("forward_request_loop");
+                return;
+            }
+            if (++RedirectsCount > MaxRedirects) {
+                FinishWithError("too_many_forward_redirects");
+                return;
+            }
+            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+                "tablet_id", TabletId)("event", "hive_channel_history_redirect")("from_hive_tablet_id", HiveTabletId)(
+                "to_hive_tablet_id", redirectedHiveTabletId)("redirects_count", RedirectsCount);
+            SendRequestToHive(ctx, redirectedHiveTabletId);
+            return;
+        }
         if (msg->Record.TabletsSize() == 0) {
             FinishWithError("empty_hive_response");
             return;
         }
 
-        TStringBuilder history;
-        history << "[";
-        bool first = true;
-        ui64 recordsCount = 0;
+        TVector<TString> historyEntries;
         for (const auto& tablet : msg->Record.GetTablets()) {
             for (ui32 channelIdx = 0; channelIdx < tablet.TabletChannelsSize(); ++channelIdx) {
                 const auto& channel = tablet.GetTabletChannels(channelIdx);
                 for (const auto& entry : channel.GetHistory()) {
-                    if (!first) {
-                        history << ";";
-                    }
-                    first = false;
-                    history << "{channel=" << channelIdx << ",from_generation=" << entry.GetGeneration() << ",group_id=" << entry.GetGroup()
-                            << ",timestamp_ms=" << entry.GetTimestamp() << "}";
-                    ++recordsCount;
+                    TStringBuilder historyEntry;
+                    historyEntry << "{channel=" << channelIdx << ",from_generation=" << entry.GetGeneration() << ",group_id=" << entry.GetGroup()
+                                 << ",timestamp_ms=" << entry.GetTimestamp() << "}";
+                    historyEntries.emplace_back(historyEntry);
                 }
             }
         }
-        history << "]";
-
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "hive_channel_history")("status", "ok")("hive_tablet_id", HiveTabletId)("records_count", recordsCount)("history", history);
+        const ui64 recordsCount = historyEntries.size();
+        static constexpr ui64 HistoryChunkSize = 50;
+        const ui64 chunksTotal = recordsCount ? (recordsCount + HistoryChunkSize - 1) / HistoryChunkSize : 1;
+        for (ui64 chunkIdx = 0; chunkIdx < chunksTotal; ++chunkIdx) {
+            const ui64 beginIdx = chunkIdx * HistoryChunkSize;
+            const ui64 endIdx = Min<ui64>(beginIdx + HistoryChunkSize, recordsCount);
+            TStringBuilder chunkHistory;
+            for (ui64 idx = beginIdx; idx < endIdx; ++idx) {
+                if (idx > beginIdx) {
+                    chunkHistory << ";";
+                }
+                chunkHistory << historyEntries[idx];
+            }
+            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)(
+                "analyze_leaked_blobs", 1)("event", "hive_channel_history")("status", "ok")("hive_tablet_id", HiveTabletId)(
+                "records_count", recordsCount)("chunk_idx", chunkIdx)("chunks_total", chunksTotal)(
+                "chunk_records_count", endIdx - beginIdx)("history_chunk", chunkHistory);
+        }
 
         Finished = true;
     }
@@ -213,6 +249,7 @@ private:
     THashSet<TLogoBlobID> CSBlobIds;
     THashSet<TLogoBlobID> BSBlobIds;
     ui64 TotalBlobsCount = 0;
+    ui64 TotalBlobsSize = 0;
     ui64 DoNotKeepCount = 0;
     ui64 KeepCount = 0;
     TActorId CSActorId;
@@ -224,6 +261,49 @@ private:
     NColumnShard::TBlobGroupSelector DsGroupSelector;
     THiveHistoryCollector HiveHistoryCollector;
 
+    static ui64 CalculateBlobsSize(const THashSet<TLogoBlobID>& blobs) {
+        ui64 size = 0;
+        for (const auto& blobId : blobs) {
+            size += blobId.BlobSize();
+        }
+        return size;
+    }
+
+    void PrintFoundLeakedBlobsStats() const {
+        const ui64 leakedBlobsSize = CalculateBlobsSize(BSBlobIds);
+        const ui64 csBlobsSize = CalculateBlobsSize(CSBlobIds);
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("event", "found_leaked_blobs_stats")("analyze_leaked_blobs", 1)("leaked_blobs_count", BSBlobIds.size())("leaked_blobs_size", leakedBlobsSize)("cs_blob_ids_count", CSBlobIds.size())("cs_blob_ids_size", csBlobsSize)("bs_total_blobs_count", TotalBlobsCount)("bs_total_blobs_size", TotalBlobsSize)("bs_do_not_keep_count", DoNotKeepCount)("bs_keep_count", KeepCount);
+    }
+
+    void PrintLeakedBlobIdsChunks() const {
+        if (!PrintLeakedBlobIds) {
+            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("analyze_leaked_blobs", 1)("tablet_id", CSTabletId)("event", "found_leaked_blob_ids")("status", "not_requested");
+            return;
+        }
+
+        static constexpr size_t ChunkSize = 100;
+        const ui64 chunksTotal = (BSBlobIds.size() + ChunkSize - 1) / ChunkSize;
+        ui64 chunkIdx = 0;
+        TVector<TString> currentChunk;
+        currentChunk.reserve(ChunkSize);
+
+        auto printChunk = [&](const TVector<TString>& chunk) {
+            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("event", "found_leaked_blob_ids_chunk")("analyze_leaked_blobs", 1)("chunk_idx", chunkIdx)("chunks_total", chunksTotal)("chunk_size", chunk.size())("blob_ids", JoinStrings(chunk.begin(), chunk.end(), ","));
+            ++chunkIdx;
+        };
+
+        for (const auto& blobId : BSBlobIds) {
+            currentChunk.emplace_back(blobId.ToString());
+            if (currentChunk.size() == ChunkSize) {
+                printChunk(currentChunk);
+                currentChunk.clear();
+            }
+        }
+        if (!currentChunk.empty()) {
+            printChunk(currentChunk);
+        }
+    }
+
     void CheckFinish() {
         if (WaitingCount || !HiveHistoryCollector.IsFinished()) {
             return;
@@ -232,7 +312,8 @@ private:
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
         }
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("event", "found leaked blobs")("leaked_blobs_count", BSBlobIds.size())("bs_total_blobs_count", TotalBlobsCount)("bs_do_not_keep_count", DoNotKeepCount)("bs_keep_count", KeepCount)("cs_blob_ids_count", CSBlobIds.size());
+        PrintFoundLeakedBlobsStats();
+        PrintLeakedBlobIdsChunks();
         TActorContext::AsActorContext().Send(
             CSActorId, 
             std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
@@ -290,18 +371,20 @@ public:
             AFL_VERIFY(!resp.Buffer);
             DoNotKeepCount += resp.DoNotKeep;
             KeepCount += resp.Keep;
-            TotalBlobsCount++;
             if (resp.DoNotKeep && !resp.Keep) {
                 continue;
-            } else {
-                BSBlobIds.emplace(resp.Id);
+            }
+            const bool inserted = BSBlobIds.emplace(resp.Id).second;
+            if (inserted) {
+                TotalBlobsCount++;
+                TotalBlobsSize += resp.Id.BlobSize();
             }
         }
         CheckFinish();
     }
 
-    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev, const TActorContext& /*ctx*/) {
-        HiveHistoryCollector.Handle(ev);
+    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev, const TActorContext& ctx) {
+        HiveHistoryCollector.Handle(ev, ctx);
         CheckFinish();
     }
 

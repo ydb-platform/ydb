@@ -15,7 +15,6 @@
 #include <util/generic/bitmap.h>
 
 #include <climits>
-#include <util/string/ascii.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -245,7 +244,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 
         auto foldedStorage = targetSize < MaxBitsSize ? maxStorage.Fold(MaxBitsSize / targetSize) : std::move(maxStorage);
 
-        TString indexData = foldedStorage.SerializeToString();
+        TString indexData = GetBitsStorageConstructor()->SerializeToString(foldedStorage);
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
     }
 
@@ -283,7 +282,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
     }
 
-    TString indexData = storage.SerializeToString();
+    TString indexData = GetBitsStorageConstructor()->SerializeToString(storage);
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 

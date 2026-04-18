@@ -34,7 +34,7 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
         const bool isCdcStream
     ) override {
         if (isCdcStream) {
-            return {Ydb::StatusIds::BAD_REQUEST, "Alter of CDC stream is forbidden"};
+            return {Ydb::StatusIds::SCHEME_ERROR, "Alter of CDC stream is forbidden"};
         }
         return ApplyAlter(
             modifyScheme,

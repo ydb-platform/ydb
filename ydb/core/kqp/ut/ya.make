@@ -20,6 +20,7 @@ RECURSE_FOR_TESTS(
     scan
     scheme
     service
+    stream_lookup
     runtime
     sysview
     tx

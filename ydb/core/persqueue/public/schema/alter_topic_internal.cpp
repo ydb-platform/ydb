@@ -28,7 +28,7 @@ public:
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
             .Database = Settings.Database,
             .Request = Settings.Request,
-            .UserToken = std::move(Settings.UserToken),
+            .UserToken = Settings.UserToken,
             .IfExists = Settings.IfExists
         }));
     }
@@ -39,7 +39,7 @@ public:
         TEvAlterTopicResponse response;
         response.Status = Ydb::StatusIds::INTERNAL_ERROR;
         response.ErrorMessage = exc.what();
-        
+
         Promise.SetValue(std::move(response));
     }
 
@@ -72,7 +72,7 @@ private:
 };
 
 } // namespace
-    
+
 NActors::IActor* CreateAlterTopicActor(
     NThreading::TPromise<TAlterTopicResponse>&& promise,
     TAlterTopicSettings&& settings

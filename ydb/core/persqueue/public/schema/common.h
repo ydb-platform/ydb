@@ -2,7 +2,7 @@
 
 #include "schema.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
 #include <expected>
@@ -37,7 +37,7 @@ struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
         return first;
     }
 
-    const TString& GetErrorMessage() const {
+    TString& GetErrorMessage() {
         return second;
     }
 
@@ -45,6 +45,9 @@ struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
         return GetStatus() == Ydb::StatusIds::SUCCESS;
     }
 };
+
+std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName);
+
 
 struct TClientServiceType {
     TString Name;
@@ -75,7 +78,7 @@ std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeri
 
 TResult FillMeteringMode(
     NKikimrPQ::TPQTabletConfig& config,
-    Ydb::Topic::MeteringMode mode, 
+    Ydb::Topic::MeteringMode mode,
     EOperation operation
 );
 

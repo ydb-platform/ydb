@@ -55,14 +55,13 @@ public:
     const double MemoryPoolPercent;
     const TString Database;
     const bool CollectBacktrace;
-    TMutex Lock;
     TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
     TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
 
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
-    ui64 TxResourceBrokerTaskId = 0;
+    std::atomic<ui64> TxResourceBrokerTaskId = 0;
     std::atomic<ui64> TxMaxAllocationSize = 0;
 
     // TODO(ilezhankin): it's better to use std::atomic<std::shared_ptr<>> which is not supported at the moment.
@@ -290,6 +289,7 @@ public:
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 
     virtual void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
+    virtual void FinishTx(TIntrusivePtr<TTxState>& tx) = 0;
     virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;

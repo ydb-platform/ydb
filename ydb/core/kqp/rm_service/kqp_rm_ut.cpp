@@ -328,6 +328,8 @@ void KqpRm::SingleTask() {
 
     rm->FreeResources(tx, task, request);
     AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 1);
+    rm->FinishTx(tx);
     AssertResourceBrokerSensors(0, 0, 0, 1, 0);
 }
 
@@ -350,7 +352,8 @@ void KqpRm::ManyTasks() {
         AssertResourceBrokerSensors(0, 100 * i, 0, i - 1, 1);
     }
 
-    rm->FreeResources(tx, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 9, .Memory = 900});
+    rm->FinishTx(tx);
+
     AssertResourceManagerStats(rm, 1000, 100);
     AssertResourceBrokerSensors(0, 0, 0, 9, 0);
 }
@@ -440,6 +443,11 @@ void KqpRm::Snapshot() {
     rm->FreeResources(tx2, task1, request);
 
     AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 2);
+
+    rm->FinishTx(tx1);
+    rm->FinishTx(tx2);
+
     AssertResourceBrokerSensors(0, 0, 0, 2, 0);
 
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
@@ -517,6 +525,10 @@ void KqpRm::ConcurrentTasks() {
 
     UNIT_ASSERT_GT(failedAllocations.load(), 0);
     AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 1);
+
+    rm->FinishTx(tx);
+
     AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
 }
 

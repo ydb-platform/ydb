@@ -123,6 +123,12 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     }
 }
 
+TKqpPlanner::~TKqpPlanner() {
+    if (TxInfo) {
+        ResourceManager_->FinishTx(TxInfo);
+    }
+}
+
 // ResourcesSnapshot, ResourceEstimations
 
 void TKqpPlanner::LogMemoryStatistics(const TLogFunc& logFunc) {

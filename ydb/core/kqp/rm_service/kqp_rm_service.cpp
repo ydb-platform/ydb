@@ -341,14 +341,12 @@ public:
             return result;
         }
 
-        with_lock(tx->Lock) {
-            tx->Allocated(resources);
-            if (!tx->TxResourceBrokerTaskId) {
-                tx->TxResourceBrokerTaskId = rbTaskId;
-            } else {
-                bool merged = ResourceBroker->MergeTasksInstant(tx->TxResourceBrokerTaskId, rbTaskId, SelfId);
-                Y_ABORT_UNLESS(merged);
-            }
+        tx->Allocated(resources);
+
+        ui64 currentRbTaskId = 0;
+        if (!tx->TxResourceBrokerTaskId.compare_exchange_strong(currentRbTaskId, rbTaskId)) {
+            bool merged = ResourceBroker->MergeTasksInstant(currentRbTaskId, rbTaskId, SelfId);
+            Y_ABORT_UNLESS(merged);
         }
 
         LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated " << resources.ToString());
@@ -356,24 +354,14 @@ public:
         return result;
     }
 
-    void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) override {
+    void FreeResourcesImpl(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources, bool reduceResourceBrokerTask) {
 
-        with_lock(tx->Lock) {
-            auto released = tx->Released(resources);
-            Y_ABORT_UNLESS(released);
+        auto released = tx->Released(resources);
+        Y_ABORT_UNLESS(released);
 
-            if (tx->TxResourceBrokerTaskId) {
-                if (tx->TxScanQueryMemory.load() == 0) {
-                    bool finished = ResourceBroker->FinishTaskInstant(
-                        TEvResourceBroker::TEvFinishTask(tx->TxResourceBrokerTaskId), SelfId);
-                    Y_DEBUG_ABORT_UNLESS(finished);
-                    tx->TxResourceBrokerTaskId = 0;
-                } else {
-                    bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
-                        tx->TxResourceBrokerTaskId, {0, resources.Memory}, SelfId);
-                    Y_DEBUG_ABORT_UNLESS(reduced);
-                }
-            }
+        if (reduceResourceBrokerTask) {
+            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(tx->TxResourceBrokerTaskId, {0, resources.Memory}, SelfId);
+            Y_DEBUG_ABORT_UNLESS(reduced);
         }
 
         if (resources.ExecutionUnits) {
@@ -406,6 +394,18 @@ public:
             << "ExecutionUnits: " << resources.ExecutionUnits << ".");
 
         FireResourcesPublishing();
+    }
+
+    void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) override {
+        FreeResourcesImpl(tx, taskId, resources, true);
+    }
+
+    void FinishTx(TIntrusivePtr<TTxState>& tx) override {
+        if (auto currentRbTaskId = tx->TxResourceBrokerTaskId.exchange(0); currentRbTaskId) {
+            bool finished = ResourceBroker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(currentRbTaskId), SelfId);
+            Y_DEBUG_ABORT_UNLESS(finished);
+        }
+        FreeResourcesImpl(tx, 0, tx->FreeResourcesRequest(), false);
     }
 
     TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {

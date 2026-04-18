@@ -127,7 +127,7 @@ namespace NKikimr {
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
-        double HullCompFreeSpaceThreshold;
+        TControlWrapper HullCompFreeSpaceThresholdPerMille;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;

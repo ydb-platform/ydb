@@ -31,7 +31,8 @@ namespace NKikimr {
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , Task(task)
-                , Candidate(HullCtx->ChunkSize, HullCtx->HullCompFreeSpaceThreshold)
+                , FreeSpaceThreshold(GetCurrentFreeSpaceThreshold(*HullCtx))
+                , Candidate(HullCtx->ChunkSize, FreeSpaceThreshold)
             {}
 
             EAction Select() {
@@ -46,9 +47,9 @@ namespace NKikimr {
                     LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
                             NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: FreeSpace: action# %s timeSpent# %s candidate# %s",
+                                "%s: FreeSpace: action# %s timeSpent# %s freeSpaceThreshold# %g candidate# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(),
+                                ActionToStr(action), (finishTime - startTime).ToString().data(), FreeSpaceThreshold,
                                 Candidate.ToString().data()));
                 }
 
@@ -56,6 +57,10 @@ namespace NKikimr {
             }
 
         private:
+            static double GetCurrentFreeSpaceThreshold(const THullCtx& hullCtx) {
+                return static_cast<double>(hullCtx.VCfg->HullCompFreeSpaceThresholdPerMille) / 1000.0;
+            }
+
             ////////////////////////////////////////////////////////////////////////
             // NHullComp::NPriv::TMostAbusingSst
             ////////////////////////////////////////////////////////////////////////
@@ -74,10 +79,15 @@ namespace NKikimr {
                 {}
 
                 void Add(TLevelSstPtr &&p) {
+                    if (FreeSpaceThreshold <= 0) {
+                        return;
+                    }
+
                     TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
                     if (ratio) {
                         const ui64 garbageHugeSize = ratio->HugeDataTotal - ratio->HugeDataKeep;
-                        const double rank = (double)garbageHugeSize / ChunkSize;
+                        // Normalize rank so that 1.0 means the configured free-space threshold is reached.
+                        const double rank = (double)garbageHugeSize / ChunkSize / FreeSpaceThreshold;
                         if (rank > Rank) {
                             LevelSstPtr = std::move(p);
                             Rank = rank;
@@ -87,7 +97,7 @@ namespace NKikimr {
                 }
 
                 bool CompactSstToFreeSpace() const {
-                    return Present && Rank > FreeSpaceThreshold;
+                    return FreeSpaceThreshold > 0 && Present && Rank >= 1.0;
                 }
 
                 TString ToString() const {
@@ -103,10 +113,21 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            const double FreeSpaceThreshold;
             TMostAbusingSst Candidate;
 
             EAction FreeSpace() {
                 EAction action = ActNothing;
+
+                if (FreeSpaceThreshold <= 0) {
+                    if (HullCtx->VCtx->ActorSystem) {
+                        LOG_DEBUG_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                HullCtx->VCtx->VDiskLogPrefix
+                                << " TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is "
+                                << FreeSpaceThreshold);
+                    }
+                    return ActNothing;
+                }
 
                 // find most abusing sst (which wastes space)
                 TLevelSliceSnapshot sliceSnap = LevelSnap.SliceSnap;
@@ -126,7 +147,7 @@ namespace NKikimr {
                     // free space by compacting this Sst
                     LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             HullCtx->VCtx->VDiskLogPrefix << " TStrategyFreeSpace decided to compact Ssts " << Task->CompactSsts.ToString()
-                            << " because of high garbage/data retio " << Candidate.ToString());
+                            << " because of high garbage/data ratio " << Candidate.ToString());
                     action = ActCompactSsts;
                     TUtils::SqueezeOneSst(LevelSnap.SliceSnap, Candidate.LevelSstPtr, Task->CompactSsts);
                 }

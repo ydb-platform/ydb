@@ -1488,7 +1488,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, /*15,*/ 16, 17, 18, 19, 20, /*21,*/ 22},
+        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, /*15,*/ 16, 17, 18, 19, 20, 21, 22},
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true);
     }
 
@@ -1626,12 +1626,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo` (
                 id	Int64	NOT NULL,
+                id2 Int64 NOT NULL,
                 name	String,
                 primary key(id)
             ) with (Store = Column);
 
             CREATE TABLE `/Root/bar` (
                 id	Int64	NOT NULL,
+                id2 Int64 NOT NULL,
                 lastname	String,
                 primary key(id)
             ) with (Store = Column);
@@ -1643,6 +1645,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rowsTableFoo.AddListItem()
                 .BeginStruct()
                 .AddMember("id").Int64(i)
+                .AddMember("id2").Int64(i)
                 .AddMember("name").String(std::to_string(i) + "_name")
                 .EndStruct();
         }
@@ -1657,6 +1660,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rowsTableBar.AddListItem()
                 .BeginStruct()
                 .AddMember("id").Int64(i)
+                .AddMember("id2").Int64(i)
                 .AddMember("lastname").String(std::to_string(i) + "_name")
                 .EndStruct();
         }
@@ -1678,10 +1682,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 SELECT bar.id FROM `/Root/bar` as bar where bar.lastname IN (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.id==1);
             )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where bar.lastname IN (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.id2 >= bar.id2 AND foo.id==1);
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
+            R"([[1]])",
             R"([[1]])",
             R"([[1]])",
             R"([[1]])",

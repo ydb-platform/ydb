@@ -332,9 +332,7 @@ TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& t
     return optionalTypes;
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
-    Y_ENSURE(join->JoinFilters.empty(), "Type inference for join filters not supported");
-    
+TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {    
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
 
@@ -342,8 +340,30 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
     auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
 
     TVector<const TItemExprType*> structItemTypes;
+    TVector<const TItemExprType*> crossProductTypes;
     TVector<const TItemExprType*> leftItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> rightItemTypes = rightItemType->Cast<TStructExprType>()->GetItems();
+
+    // Build a cross-product type to annotate join filters
+    crossProductTypes.insert(crossProductTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
+    crossProductTypes.insert(crossProductTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+    auto crossProductType = ctx.ExprCtx.MakeType<TStructExprType>(crossProductTypes);
+
+    for (auto& filterExpr : join->JoinFilters) {
+        auto& lambda = filterExpr.Node;
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {crossProductType}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+
+        } while (status == IGraphTransformer::TStatus::Repeat);
+    }
 
     if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
         rightItemTypes = {};

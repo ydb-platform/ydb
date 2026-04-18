@@ -46,7 +46,7 @@ struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
     }
 };
 
-TString GetWorkingDir(const NDescriber::TTopicInfo& topicInfo);
+std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName);
 
 
 struct TClientServiceType {

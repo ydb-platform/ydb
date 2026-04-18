@@ -3,6 +3,7 @@
 
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
+#include <ydb/core/persqueue/public/schema/common.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1 {
@@ -13,11 +14,11 @@ using namespace NPQ::NSchema;
 
 struct TAlterTopicStrategy: public IAlterTopicStrategy {
     TAlterTopicStrategy(
-        const TString& database,
+        TString&& database,
         TString&& localCluster,
         const Ydb::PersQueue::V1::AlterTopicRequest& request
     )
-        : Database(database)
+        : Database(std::move(database))
         , LocalCluster(std::move(localCluster))
         , Request(request)
     {
@@ -36,11 +37,12 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
         if (isCdcStream) {
             return {Ydb::StatusIds::SCHEME_ERROR, "Alter of CDC stream is forbidden"};
         }
+        auto [path, name] = GetWorkingDirAndName(GetTopicName());
         return ApplyAlter(
             modifyScheme,
             Request.settings(),
-            GetTopicName(),
-            GetTopicName(), // name,
+            path,
+            name,
             Database,
             LocalCluster);
     }
@@ -67,10 +69,10 @@ public:
         auto database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
 
         Register(NPQ::NSchema::CreateAlterTopicOperationActor(SelfId(), {
-            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
+            .Database = database,
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
-            .Strategy = std::make_unique<TAlterTopicStrategy>(database, std::move(LocalCluster), *GetProtoRequest()),
+            .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(database), std::move(LocalCluster), *GetProtoRequest()),
         }));
     }
 

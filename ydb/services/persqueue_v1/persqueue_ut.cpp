@@ -6573,7 +6573,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             CreateTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
         }
         checkDescribe({
             {.ConsumerName = "acc/consumer1", .ServiceType = "data-streams", .Important = true, .AvailabilityPeriod = TDuration::Zero()},

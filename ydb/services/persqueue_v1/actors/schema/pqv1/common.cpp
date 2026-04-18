@@ -27,7 +27,7 @@ TResult FillProposeRequestImpl( // create and alter
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription* pqDescr,
         const Ydb::PersQueue::V1::TopicSettings& settings,
-        const TString& path,
+        const TString& /*path*/,
         const TString& name,
         const TString& database,
         const TString& localDc,
@@ -41,6 +41,7 @@ TResult FillProposeRequestImpl( // create and alter
     auto* pqTabletConfig = pqDescr->MutablePQTabletConfig();
     auto partConfig = pqTabletConfig->MutablePartitionConfig();
 
+    const auto& path = modifyScheme.GetWorkingDir();
     auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
 
     switch (settings.retention_case()) {

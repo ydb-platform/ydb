@@ -29,7 +29,7 @@ public:
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << ParentId << "[DO]" << SelfId() << "[" << Settings.Path << "] ";
+        return TStringBuilder() << ParentId << "[" << Settings.Path << "] ";
     }
 
     void OnException(const std::exception& exc) override {
@@ -47,7 +47,8 @@ private:
             { Settings.Path },
             {
                 .UserToken = Settings.UserToken,
-                .AccessRights = NACLib::EAccessRights::RemoveSchema
+                .AccessRights = NACLib::EAccessRights::RemoveSchema,
+                .RequireSyncVersion = true
             }));
     }
 
@@ -103,7 +104,7 @@ private:
     
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
 
-        auto workingDir = GetWorkingDir(TopicInfo);
+        auto [workingDir, _] = GetWorkingDirAndName(TopicInfo.RealPath);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
         }

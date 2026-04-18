@@ -18,7 +18,7 @@ namespace {
 class TSchemaOperationActor: public TBaseActor<TSchemaOperationActor>
                            , public TPipeCacheClient
                            , public TConstantLogPrefix {
-    static constexpr size_t MaxWaitTxCompletionRetries = 3;
+    static constexpr size_t MaxWaitTxCompletionRetries = 10;
 
 public:
     TSchemaOperationActor(
@@ -47,7 +47,7 @@ public:
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << ParentId << "[SO]" << SelfId() << "[" << Path << "] ";
+        return TStringBuilder() << ParentId << "[" << Path << "] ";
     }
 
     void OnException(const std::exception& exc) override {
@@ -116,6 +116,7 @@ private:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
+        LOG_D("Handle TEvSchemeShard::TEvNotifyTxCompletionResult");
         ReplyOkAndDie();        
     }
 

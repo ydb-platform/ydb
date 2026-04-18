@@ -13,14 +13,12 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-TString GetWorkingDir(const NDescriber::TTopicInfo& topicInfo) {
-    std::pair <TString, TString> pathPair;
+std::pair <TString, TString> GetWorkingDirAndName(const TString& fullName) {
     try {
-        pathPair = NKikimr::NGRpcService::SplitPath(topicInfo.RealPath);
+        return NKikimr::NGRpcService::SplitPath(fullName);
     } catch (const std::exception &ex) {
         return {};
     }
-    return pathPair.first;
 }
     
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {

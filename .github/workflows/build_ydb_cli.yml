@@ -71,6 +71,7 @@ jobs:
           branch-prefix: "cli-release/"
           product-name: "YDB CLI"
           version-artifact-name: "cli-version"
+          version-artifact-file: "cli_version.txt"
 
   build:
     name: Build binaries

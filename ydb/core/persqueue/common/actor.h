@@ -65,7 +65,7 @@ public:
     }
 
     TStringBuilder LogBuilder() const {
-        return TStringBuilder() << "[" << TBase::SelfId() << "]";
+        return TStringBuilder() << TBase::SelfId();
     }
 
     void PassAway() override {

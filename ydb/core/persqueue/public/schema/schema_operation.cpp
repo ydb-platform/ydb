@@ -82,7 +82,9 @@ private:
 
         const auto status = ev->Get()->Status();
         const auto& record = ev->Get()->Record;
-        const auto ssStatus = record.GetSchemeShardStatus();
+
+        const auto ssStatus = static_cast<NKikimrScheme::EStatus>(record.GetSchemeShardStatus());
+        const auto ydbStatus = NKikimr::YdbStatusFromProxyStatus(ev->Get());
 
         SchemeShardTabletId = record.GetSchemeShardTabletId();
         TxId = status == NTxProxy::TResultStatus::ExecInProgress ? record.GetTxId() : record.GetPathCreateTxId();
@@ -94,7 +96,7 @@ private:
                 if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
                     ReplyOkAndDie();
                 } else {
-                    ReplyError(ssStatus);
+                    ReplyError(ydbStatus, ssStatus);
                 }
                 break;
             case NTxProxy::TResultStatus::ProxyShardNotAvailable:
@@ -104,14 +106,14 @@ private:
                 if (ssStatus == NKikimrScheme::EStatus::StatusMultipleModifications) {
                     DoWaitCompletion();
                 } else {
-                    ReplyError(ssStatus);
+                    ReplyError(ydbStatus, ssStatus);
                 }
                 break;
             case NTxProxy::TResultStatus::ExecInProgress:
                 DoWaitCompletion();
                 break;
             default:
-                ReplyError(ssStatus);
+                ReplyError(ydbStatus, ssStatus);
                 break;
         }
     }
@@ -167,8 +169,8 @@ private:
     }
 
 private:
-    void ReplyError(ui32 ssStatus) {
-        ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
+    void ReplyError(Ydb::StatusIds::StatusCode errorCode, NKikimrScheme::EStatus ssStatus) {
+        ReplyErrorAndDie(errorCode,
             TStringBuilder() << "Failed to execute operation: " << NKikimrScheme::EStatus_Name(ssStatus));
     }
 

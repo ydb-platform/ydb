@@ -44,12 +44,12 @@ public:
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << SelfId() << "[" << Settings.Database << "][" << Settings.Request.path() << "] ";
+        return TStringBuilder() << "[" << Settings.Database << "][" << Settings.Request.path() << "] ";
     }
 
 private:
     void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_E("Handle TEvAlterTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+        LOG_D("Handle TEvAlterTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
             .Status = ev->Get()->Status,

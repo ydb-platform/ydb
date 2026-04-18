@@ -18,8 +18,6 @@ TResult ApplyChangesInt(
     #define CHECK_CDC  if (isCdcStream) {\
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Full alter of cdc stream is forbidden #" << __LINE__};\
         }
-        ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
-            TStringBuilder() << "Failed to execute operation: " << NKikimrScheme::EStatus_Name(ssStatus));
 
     auto appData = AppData();
     TString error;

@@ -151,6 +151,9 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+        if (errorCode == Ydb::StatusIds::SUCCESS) {
+            ModifyScheme = {};
+        }
         Send(ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
         PassAway();
     }

@@ -46,8 +46,20 @@ using namespace NResourceBroker;
 #define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 #define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 
+TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+    const TString& database, bool collectBacktrace)
+    : ResourceManager(resourceManager)
+    , Counters(resourceManager->GetCounters())
+    , TxId(txId)
+    , CreatedAt(now)
+    , PoolId(poolId)
+    , MemoryPoolPercent(memoryPoolPercent)
+    , Database(database)
+    , CollectBacktrace(collectBacktrace)
+{}
+
 TTxState::~TTxState() {
-    ResourceManager->FinishTx(this);
+    ResourceManager->FinishTx(*this);
     delete TxMaxAllocationBacktrace.load();
 }
 
@@ -229,9 +241,9 @@ public:
         }
     }
 
-    TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) override
+    TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) override
     {
-        const ui64 txId = tx->TxId;
+        const ui64 txId = tx.TxId;
 
         TKqpRMAllocateResult result;
         if (resources.ExecutionUnits) {
@@ -248,7 +260,7 @@ public:
         }
 
         if (Y_UNLIKELY(resources.Memory == 0)) {
-            tx->Allocated(resources);
+            tx.Allocated(resources);
             return result;
         }
 
@@ -276,17 +288,17 @@ public:
             }
 
             hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
-            if (!tx->TotalMemoryCookie) {
-                tx->TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
+            if (!tx.TotalMemoryCookie) {
+                tx.TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
             }
 
-            if (hasScanQueryMemory && !tx->PoolId.empty() && tx->MemoryPoolPercent > 0) {
-                auto [it, success] = MemoryNamedPools.emplace(tx->MakePoolId(), nullptr);
+            if (hasScanQueryMemory && !tx.PoolId.empty() && tx.MemoryPoolPercent > 0) {
+                auto [it, success] = MemoryNamedPools.emplace(tx.MakePoolId(), nullptr);
 
                 if (success) {
-                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx->MemoryPoolPercent, SpillingPercent.load());
+                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
                 } else {
-                    it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx->MemoryPoolPercent, SpillingPercent.load());
+                    it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
                 }
 
                 auto& poolMemory = it->second;
@@ -295,18 +307,18 @@ public:
                     TotalMemoryResource->Release(resources.Memory);
                 }
 
-                if (!tx->PoolMemoryCookie) {
-                    tx->PoolMemoryCookie = poolMemory->GetSpillingCookie();
+                if (!tx.PoolMemoryCookie) {
+                    tx.PoolMemoryCookie = poolMemory->GetSpillingCookie();
                 }
             }
         }
 
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
-            tx->AckFailedMemoryAlloc(resources.Memory);
+            tx.AckFailedMemoryAlloc(resources.Memory);
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
-                << ". " << tx->ToString();
+                << ". " << tx.ToString();
             result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
             return result;
         }
@@ -317,11 +329,11 @@ public:
         Y_DEFER {
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
-                tx->AckFailedMemoryAlloc(resources.Memory);
+                tx.AckFailedMemoryAlloc(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
-                    if (!tx->PoolId.empty()) {
-                        auto it = MemoryNamedPools.find(tx->MakePoolId());
+                    if (!tx.PoolId.empty()) {
+                        auto it = MemoryNamedPools.find(tx.MakePoolId());
                         if (it != MemoryNamedPools.end()) {
                             it->second->Release(resources.Memory);
                             if (it->second->GetUsed() == 0) {
@@ -340,16 +352,16 @@ public:
         if (!allocated) {
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
-                << ". " << tx->ToString();
+                << ". " << tx.ToString();
             LOG_AS_N(reason);
             result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
             return result;
         }
 
-        tx->Allocated(resources);
+        tx.Allocated(resources);
 
         ui64 currentRbTaskId = 0;
-        if (!tx->TxResourceBrokerTaskId.compare_exchange_strong(currentRbTaskId, rbTaskId)) {
+        if (!tx.TxResourceBrokerTaskId.compare_exchange_strong(currentRbTaskId, rbTaskId)) {
             bool merged = ResourceBroker->MergeTasksInstant(currentRbTaskId, rbTaskId, SelfId);
             Y_ABORT_UNLESS(merged);
         }
@@ -359,13 +371,13 @@ public:
         return result;
     }
 
-    void FreeResourcesImpl(TTxState* tx, ui64 taskId, const TKqpResourcesRequest& resources, bool reduceResourceBrokerTask) {
+    void FreeResourcesImpl(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources, bool reduceResourceBrokerTask) {
 
-        auto released = tx->Released(resources);
+        auto released = tx.Released(resources);
         Y_ABORT_UNLESS(released);
 
         if (reduceResourceBrokerTask) {
-            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(tx->TxResourceBrokerTaskId, {0, resources.Memory}, SelfId);
+            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(tx.TxResourceBrokerTaskId, {0, resources.Memory}, SelfId);
             Y_DEBUG_ABORT_UNLESS(reduced);
         }
 
@@ -379,8 +391,8 @@ public:
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
-                if (!tx->PoolId.empty()) {
-                    auto it = MemoryNamedPools.find(tx->MakePoolId());
+                if (!tx.PoolId.empty()) {
+                    auto it = MemoryNamedPools.find(tx.MakePoolId());
                     if (it != MemoryNamedPools.end()) {
                         it->second->Release(resources.Memory);
 
@@ -392,7 +404,7 @@ public:
             }
         }
 
-        LOG_AS_D("TxId: " << tx->TxId << ", taskId: " << taskId
+        LOG_AS_D("TxId: " << tx.TxId << ", taskId: " << taskId
             << ". Released resources, "
             << "Memory: " << resources.Memory << ", "
             << "Free Tier: " << resources.ExternalMemory << ", "
@@ -401,16 +413,16 @@ public:
         FireResourcesPublishing();
     }
 
-    void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) override {
-        FreeResourcesImpl(tx.Get(), taskId, resources, true);
+    void FreeResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) override {
+        FreeResourcesImpl(tx, taskId, resources, true);
     }
 
-    void FinishTx(TTxState* tx) override {
-        if (auto currentRbTaskId = tx->TxResourceBrokerTaskId.exchange(0); currentRbTaskId) {
+    void FinishTx(TTxState& tx) override {
+        if (auto currentRbTaskId = tx.TxResourceBrokerTaskId.exchange(0); currentRbTaskId) {
             bool finished = ResourceBroker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(currentRbTaskId), SelfId);
             Y_DEBUG_ABORT_UNLESS(finished);
         }
-        FreeResourcesImpl(tx, 0, tx->FreeResourcesRequest(), false);
+        FreeResourcesImpl(tx, 0, tx.FreeResourcesRequest(), false);
     }
 
     TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {

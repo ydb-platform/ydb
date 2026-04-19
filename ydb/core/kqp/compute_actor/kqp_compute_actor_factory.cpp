@@ -21,7 +21,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     {}
 
     ~TMemoryQuotaManager() override {
-        ResourceManager->FreeResources(Tx, TaskId, NRm::TKqpResourcesRequest{
+        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{
             .ExecutionUnits = 1,
             .Memory = Limit - Guarantee,
             .ExternalMemory = Guarantee,
@@ -29,7 +29,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     bool AllocateExtraQuota(ui64 extraSize) override {
-        auto result = ResourceManager->AllocateResources(Tx, TaskId,
+        auto result = ResourceManager->AllocateResources(*Tx, TaskId,
             NRm::TKqpResourcesRequest{.Memory = extraSize});
 
         if (!result) {
@@ -46,7 +46,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     void FreeExtraQuota(ui64 extraSize) override {
-        ResourceManager->FreeResources(Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
+        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
     }
 
     bool IsReasonableToUseSpilling() const override {
@@ -154,7 +154,7 @@ public:
         };
 
         auto rmResult = ResourceManager_->AllocateResources(
-            args.TxInfo, args.Task->GetId(), resourcesRequest);
+            *args.TxInfo, args.Task->GetId(), resourcesRequest);
 
         if (!rmResult) {
             return NRm::TKqpRMAllocateResult{rmResult};

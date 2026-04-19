@@ -32,7 +32,6 @@ struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
     ui64 Memory = 0;
     ui64 ExternalMemory = 0;
-    bool ReleaseAllResources = false;
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory
@@ -51,9 +50,9 @@ class TTxState : public TAtomicRefCount<TTxState> {
 
 public:
     std::shared_ptr<IKqpResourceManager> ResourceManager;
+    TIntrusivePtr<TKqpCounters> Counters;
     const ui64 TxId;
     const TInstant CreatedAt;
-    TIntrusivePtr<TKqpCounters> Counters;
     const TString PoolId;
     const double MemoryPoolPercent;
     const TString Database;
@@ -78,18 +77,8 @@ public:
     std::atomic<bool> HasFailedAllocationBacktrace = false;
 
 public:
-    explicit TTxState(std::shared_ptr<IKqpResourceManager> resourceManager, ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
-        const TString& database, bool collectBacktrace)
-        : ResourceManager(resourceManager)
-        , TxId(txId)
-        , CreatedAt(now)
-        , Counters(std::move(counters))
-        , PoolId(poolId)
-        , MemoryPoolPercent(memoryPoolPercent)
-        , Database(database)
-        , CollectBacktrace(collectBacktrace)
-    {}
-
+    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+        const TString& database, bool collectBacktrace);
     ~TTxState();
 
     std::pair<TString, TString> MakePoolId() const {
@@ -283,14 +272,14 @@ public:
 
     virtual const TIntrusivePtr<TKqpCounters>& GetCounters() const = 0;
 
-    virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
+    virtual TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 
     virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
     virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 
-    virtual void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-    virtual void FinishTx(TTxState* tx) = 0;
+    virtual void FreeResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
+    virtual void FinishTx(TTxState& tx) = 0;
     virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;

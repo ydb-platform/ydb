@@ -156,7 +156,7 @@ public:
         }
 
         if (!TxInfo) {
-            TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(), ResourceManager_->GetCounters(),
+            TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
                 poolId, msg.GetMemoryPoolPercent(),
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
         }

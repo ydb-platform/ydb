@@ -7,6 +7,7 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
@@ -1224,6 +1225,26 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTargetTxId(), targetTxId);
 
         CheckExpectedResult(expectedResults, event->Record.GetStatus(), event->Record.GetResult());
+    }
+
+    void TestCreateRateLimiter(TTestActorRuntime& runtime, const TString& kesusPath, const TString& scheme) {
+        using namespace NKesus;
+
+        auto desc = TestDescribe(runtime, kesusPath);
+        NKikimrScheme::TEvDescribeSchemeResult descResult;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(desc, &descResult));
+
+        ui64 kesusTabletId = descResult.GetPathDescription().GetKesus().GetKesusTabletId();
+
+        THolder<TEvKesus::TEvAddQuoterResource> req = MakeHolder<TEvKesus::TEvAddQuoterResource>();
+        google::protobuf::TextFormat::ParseFromString(scheme, &req->Record);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        AsyncSend(runtime, kesusTabletId, req.Release(), 0, sender);
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvKesus::TEvAddQuoterResourceResult>(sender);
+        const auto& record = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS, JoinSeq(',', record.GetError().GetIssues()));
     }
 
     TVector<TString> GetExportTargetPaths(const TString& requestStr) {

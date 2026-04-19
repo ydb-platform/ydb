@@ -12,6 +12,8 @@
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
@@ -30,6 +32,33 @@
 #include <type_traits>
 
 namespace NKikimr::NSchemeShard {
+
+namespace {
+
+template <typename TSettings>
+TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
+    if (itemIdx < ui32(settings.items_size())) {
+        const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
+        if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+            return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
+        }
+        return itemDest;
+    }
+    return NBackup::NFieldsWrappers::GetCommonDestination(settings);
+}
+
+TMaybe<NBackup::TEncryptionIV> MakeIV(
+    const TMaybe<NBackup::TEncryptionIV>& IV,
+    NBackup::EBackupFileType fileType)
+{
+    TMaybe<NBackup::TEncryptionIV> iv;
+    if (IV) {
+        iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, 0 /* shardNumber */);
+    }
+    return iv;
+}
+
+}
 
 template <class TDerived, class TSettings>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
@@ -145,8 +174,12 @@ protected:
 
     void Retry(TFileUpload& upload) {
         Delay = Min(Delay * ++upload.Attempt, MaxDelay);
-        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+        ScheduleRetry(Delay);
+    }
+
+    void ScheduleRetry(TDuration delay) {
+        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % delay.MicroSeconds());
+        this->Schedule(delay + random, new TEvents::TEvWakeup());
     }
 
     STATEFN(UploadStateFunc) {
@@ -172,6 +205,10 @@ protected:
         IActor::PassAway();
     }
 
+    const TSettings& GetSettings() const {
+        return Settings;
+    }
+
 private:
     TSettings Settings;
     TString DestinationPrefix;
@@ -185,9 +222,221 @@ private:
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 };
 
+template <class TDerived, class TSettings>
+class TSchemeWithPipeUploader : public TExportFilesUploader<TDerived, TSettings> {
+    using TBase = TExportFilesUploader<TDerived, TSettings>;
+protected:
+    void CreatePipe() {
+        if (PipeClient) {
+            return; // Already open
+        }
+        NTabletPipe::TClientConfig cfg;
+        cfg.RetryPolicy = {
+            .RetryLimitCount = 3u
+        };
+        PipeClient = TBase::Register(NTabletPipe::CreateClient(this->SelfId(), PipeTabletId, cfg));
+    }
+
+    void ClosePipe() {
+        if (PipeClient) {
+            NTabletPipe::CloseClient(this->SelfId(), PipeClient);
+            PipeClient = {};
+        }
+    }
+
+    void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Finish(false, TStringBuilder() << "failed to connect to tablet " << ev->Get()->TabletId);
+        }
+    }
+
+    void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        Finish(false, TStringBuilder() << "connection lost to tablet " << ev->Get()->TabletId);
+    }
+
+    virtual void Finish(bool success = true, const TString& error = TString()) = 0;
+
+    void PassAway() override {
+        ClosePipe();
+        TBase::PassAway();
+    }
+
+public:
+    TSchemeWithPipeUploader(
+        ui64 pipeTabletId,
+        TActorId replyTo,
+        ui32 itemIdx,
+        const TSettings& settings
+    )
+        : TBase(settings, GetDestinationPrefix(settings, itemIdx))
+        , PipeTabletId(pipeTabletId)
+        , ReplyTo(replyTo)
+    {
+    }
+
+protected:
+    ui64 PipeTabletId = 0;
+    TActorId PipeClient;
+    TActorId ReplyTo;
+}; // TSchemeWithPipeUploader
+
+template <typename TSettings>
+class TKesusResourcesUploader : public TSchemeWithPipeUploader<TKesusResourcesUploader<TSettings>, TSettings> {
+    using TBase = TSchemeWithPipeUploader<TKesusResourcesUploader<TSettings>, TSettings>;
+    using TThis = TKesusResourcesUploader;
+
+    void GetAllResources() {
+        using namespace NKesus;
+        if (!this->PipeClient) {
+            this->CreatePipe();
+        }
+        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
+        req->Record.SetRecursive(true);
+
+        NTabletPipe::SendData(this->SelfId(), this->PipeClient, req.Release());
+        this->Become(&TThis::StateDescribeResources);
+    }
+
+    void HandleResourcesDescription(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult::TPtr ev) {
+        auto& record = ev->Get()->Record;
+        LOG_D("HandleResourcesDescription"
+            << ", self: " << this->SelfId()
+            << ", status: " << record.GetError().GetStatus());
+
+        if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
+            return Finish(false, "cannot get rate limiter resources describe");
+        }
+
+        Resources = std::move(*record.MutableResources());
+        ResourcesMetadata.reserve(Resources.size());
+
+        this->ClosePipe();
+        UploadBatch();
+    }
+
+    bool AddFiles(const TString& fileName, const TString& content) {
+        if (!this->AddFile(fileName, content, MakeIV(IV, NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter))) {
+            return false;
+        }
+
+        return !EnableChecksums
+            || this->AddFile(NBackup::ChecksumKey(fileName), NBackup::ComputeChecksum(content));
+    }
+
+    void UploadBatch() {
+        LOG_D("UploadBatch"
+            << ", self: " << this->SelfId()
+            << ", ExportId: " << ExportId
+            << ", ItemIdx: " << ItemIdx
+            << ", Offset: " << Offset);
+
+        i32 batchEnd = std::min(Offset + BatchSize, Resources.size());
+        for (i32 resourceIdx = Offset; resourceIdx < batchEnd; ++resourceIdx) {
+            auto& resource = Resources[resourceIdx];
+            TString scheme;
+            if (!BuildRateLimiterResourceScheme(resource, scheme)) {
+                return Finish(false, "failed to build rate limiter scheme");
+            }
+
+            std::stringstream prefix;
+            if (IV) {
+                prefix << std::setfill('0') << std::setw(3) << std::right << ++EncryptedIdx;
+            } else {
+                prefix << resource.GetResourcePath();
+            }
+            ResourcesMetadata.push_back({prefix.str(), resource.GetResourcePath()});
+            prefix << '/' << NYdb::NDump::NFiles::CreateRateLimiter().FileName;
+
+            if (!AddFiles(prefix.str(), scheme)) {
+                return;
+            }
+        }
+
+        Offset += BatchSize;
+
+        this->UploadFiles();
+    }
+
+    void OnFilesUploaded(bool success, const TString& error) override {
+        if (!success || Offset >= Resources.size()) {
+            return Finish(success, error);
+        }
+        UploadBatch();
+    }
+
+    void Finish(bool success = true, const TString& error = TString()) override {
+        LOG_I("Finish"
+            << ", self: " << this->SelfId()
+            << ", success: " << success
+            << ", error: " << error
+        );
+
+        this->Send(this->ReplyTo, new TEvPrivate::TEvExportUploadKesusResourcesResult(ExportId, ItemIdx, success, error, ResourcesMetadata));
+        this->PassAway();
+    }
+
+public:
+    TKesusResourcesUploader(
+        ui64 kesusTabletId,
+        TActorId replyTo,
+        ui64 exportId,
+        ui32 itemIdx,
+        const TSettings& settings,
+        TMaybe<NBackup::TEncryptionIV> iv,
+        const bool enableChecksums
+    )
+        : TBase(kesusTabletId, replyTo, itemIdx, settings)
+        , ExportId(exportId)
+        , ItemIdx(itemIdx)
+        , IV(iv)
+        , EnableChecksums(enableChecksums)
+    {
+    }
+
+    void Bootstrap() {
+        GetAllResources();
+    }
+
+    STATEFN(StateDescribeResources) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult, HandleResourcesDescription);
+            hFunc(TEvTabletPipe::TEvClientConnected, TBase::HandleConnected);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, TBase::HandleDestroyed);
+            sFunc(TEvents::TEvPoisonPill, TBase::PassAway);
+        }
+    }
+
+private:
+    ui64 ExportId;
+    ui32 ItemIdx;
+
+    TMaybe<NBackup::TEncryptionIV> IV;
+    ui32 EncryptedIdx = 0;
+
+    const bool EnableChecksums;
+
+    const i32 BatchSize = 100;
+    i32 Offset = 0;
+
+    google::protobuf::RepeatedPtrField<NKikimrKesus::TStreamingQuoterResource> Resources;
+    TVector<NBackup::TRateLimiterResourceMetadata> ResourcesMetadata;
+}; // TKesusResourcesUploader
+
+template <typename TSettings>
+IActor* CreateKesusResourcesUploader(
+    ui64 kesusTabletId, TActorId replyTo,
+    ui64 exportId, ui32 itemIdx,
+    const TSettings &settings,
+    TMaybe<NBackup::TEncryptionIV> iv,
+    const bool enableChecksums)
+{
+    return new TKesusResourcesUploader<TSettings>(kesusTabletId, replyTo, exportId, itemIdx, settings, iv, enableChecksums);
+}
+
 template <typename TSettings>
 class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, TSettings> {
     using TThis = TSchemeUploader;
+    using TBase = TExportFilesUploader<TSchemeUploader, TSettings>;
 
     void GetDescription() {
         this->Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
@@ -239,7 +488,65 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             return Finish(false, "cannot infer permissions");
         }
 
+        const auto& desc = describeResult.GetPathDescription();
+        if (desc.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeKesus) {
+            // Upload resources before to store them in metadata
+            Y_ABORT_UNLESS(desc.HasKesus());
+            StartUploadKesusResources(desc.GetKesus().GetKesusTabletId());
+        } else {
+            StartUploadFiles();
+        }
+    }
+
+    void StartUploadKesusResources(ui64 kesusTabletId) {
+        KesusResourcesUploader = this->Register(CreateKesusResourcesUploader(
+            kesusTabletId,
+            this->SelfId(),
+            ExportId,
+            ItemIdx,
+            this->GetSettings(),
+            IV,
+            EnableChecksums
+        ));
+        this->Become(&TThis::StateUploadKesusResources);
+    }
+
+    void HandleResourcesUploaded(TEvPrivate::TEvExportUploadKesusResourcesResult::TPtr ev) {
+        const auto& record = ev->Get();
+        LOG_D("HandleResourcesUploaded"
+            << ", self: " << this->SelfId()
+            << ", success: " << record->Success
+            << ", error: " << record->Error);
+
+        if (!record->Success) {
+            return RetryResourcesUploadOrFail(record->Error);
+        }
+
+        // Fill metadata with rate limiter resources
+        for (auto& rateLimiterMetadata : record->ResourcesMetadata) {
+            Metadata.AddRateLimiterResource(rateLimiterMetadata);
+        }
+
+        // Upload everything else
         StartUploadFiles();
+    }
+
+    void RetryResourcesUploadOrFail(const TString& error) {
+        LOG_D("RetryResourcesUploadOrFail"
+            << ", self: " << this->SelfId()
+            << ", attempts " << KesusResourcesUploadAttempts + 1
+            << ", max attempts" << MaxKesusResourcesUploadAttempts
+            << ", error " << error);
+
+        if (++KesusResourcesUploadAttempts >= MaxKesusResourcesUploadAttempts) {
+            return Finish(false, error);
+        }
+
+        if (auto uploader = std::exchange(KesusResourcesUploader, {})) {
+            this->Send(uploader, new TEvents::TEvPoisonPill());
+        }
+
+        this->ScheduleRetry(TDuration::Seconds(2));
     }
 
     void StartUploadFiles() {
@@ -247,7 +554,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             return Finish(false, "cannot infer scheme");
         }
 
-        if (!this->AddFile(FileName, Scheme, MakeIV(SchemeFileType))) {
+        if (!this->AddFile(FileName, Scheme, MakeIV(IV, SchemeFileType))) {
             return;
         }
 
@@ -262,7 +569,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
                 return Finish(false, "cannot infer permissions");
             }
 
-            if (!this->AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
+            if (!this->AddFile("permissions.pb", Permissions, MakeIV(IV, NBackup::EBackupFileType::Permissions))) {
                 return;
             }
 
@@ -273,28 +580,22 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             }
         }
 
-        if (!Metadata) {
+        const auto serializedMetadata = Metadata.Serialize();
+        if (!serializedMetadata) {
             return Finish(false, "empty metadata");
         }
-        if (!this->AddFile("metadata.json", Metadata, IV)) {
+
+        if (!this->AddFile("metadata.json", serializedMetadata, IV)) {
             return;
         }
 
         if (EnableChecksums) {
-            if (!this->AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(Metadata))) {
+            if (!this->AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(serializedMetadata))) {
                 return;
             }
         }
 
         this->UploadFiles();
-    }
-
-    TMaybe<NBackup::TEncryptionIV> MakeIV(NBackup::EBackupFileType fileType) {
-        TMaybe<NBackup::TEncryptionIV> iv;
-        if (IV) {
-            iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, 0 /* shardNumber */);
-        }
-        return iv;
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
@@ -312,15 +613,11 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         Finish(success, error);
     }
 
-    static TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
-        if (itemIdx < ui32(settings.items_size())) {
-            const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
-            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
-                return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
-            }
-            return itemDest;
+    void PassAway() override {
+        if (KesusResourcesUploader) {
+            this->Send(KesusResourcesUploader, new TEvents::TEvPoisonPill());
         }
-        return NBackup::NFieldsWrappers::GetCommonDestination(settings);
+        TBase::PassAway();
     }
 
 public:
@@ -331,7 +628,7 @@ public:
         TPathId sourcePathId,
         const TSettings& settings,
         const TString& databaseRoot,
-        const TString& metadata,
+        NBackup::TMetadata metadata,
         bool enablePermissions,
         bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
@@ -360,6 +657,14 @@ public:
         }
     }
 
+    STATEFN(StateUploadKesusResources) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvExportUploadKesusResourcesResult, HandleResourcesUploaded);
+            sFunc(TEvents::TEvWakeup, GetDescription)
+            sFunc(TEvents::TEvPoisonPill, this->PassAway);
+        }
+    }
+
 private:
     TActorId SchemeShard;
 
@@ -377,7 +682,11 @@ private:
     const bool EnablePermissions;
     const bool EnableChecksums;
     TString Permissions;
-    TString Metadata;
+    NBackup::TMetadata Metadata;
+
+    TActorId KesusResourcesUploader;
+    ui32 KesusResourcesUploadAttempts = 0;
+    const ui32 MaxKesusResourcesUploadAttempts = 10;
 }; // TSchemeUploader
 
 template <typename TSettings>
@@ -495,11 +804,11 @@ private:
 
 template <typename TSettings>
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const TSettings& settings, const TString& databaseRoot, const TString& metadata,
+    const TSettings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
-    return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
-        metadata, enablePermissions, enableChecksums, iv);
+    return new TSchemeUploader<TSettings>(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
+        std::move(metadata), enablePermissions, enableChecksums, iv);
 }
 
 template <typename TSettings>
@@ -507,18 +816,18 @@ NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui6
     const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums
 ) {
-    return new TExportMetadataUploader(schemeShard, exportId, settings, exportMetadata, enableChecksums);
+    return new TExportMetadataUploader<TSettings>(schemeShard, exportId, settings, exportMetadata, enableChecksums);
 }
 
 template IActor* CreateSchemeUploader<Ydb::Export::ExportToS3Settings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 

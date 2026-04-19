@@ -343,7 +343,19 @@ public:
         if (predicate.IsEmpty()) {
             return node;
         }
-    
+        auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
+
+         auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
+            .Args({"_yql_sys_partition_id"})
+            .Body<TExprApplier>()
+                .Apply(predicate.ExprNode.Cast())
+                .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
+                .Build()
+            .Done();
+
+         YQL_LOG(TRACE) << "Push filter lambda: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
+
+
         // TExprNode::TPtr filteredPathList = ctx.Builder(node.Pos())
         //     .Callable("EvaluateExpr")
         //         .Callable(0, "+")
@@ -383,34 +395,39 @@ public:
 
    TExprNode::TPtr filteredPathList = ctx.Builder(node.Pos())
             .Callable("EvaluateExpr")
-                .Callable(0, "Map")
-                    .Callable(0, "Enumerate")
-                        .Callable(0, "Replicate")
-                            .Callable(0, "Int32")
-                                .Atom(0, "1")
+                .Callable(0, "Filter")
+                    .Callable(0, "Map")
+                        .Callable(0, "Enumerate")
+                            .Callable(0, "Replicate")
+                                .Callable(0, "Int32")
+                                    .Atom(0, "1")
+                                .Seal()
+                                .Callable(1, "Int32")
+                                    .Atom(0, ToString(topicPartitionsCount))
+                                .Seal()
                             .Seal()
-                            .Callable(1, "Int32")
-                                .Atom(0, ToString(topicPartitionsCount))
+                        .Seal()
+                        .Lambda(1)
+                            .Param("item")
+                            .Callable("AsStruct")
+                                .List(0)
+                                    .Atom(0, "_yql_sys_partition_id")
+                                    .Callable(1, "Nth")
+                                        .Arg(0, "item")
+                                        .Atom(1, "0", TNodeFlags::Default)
+                                    .Seal()
+                                .Seal()
                             .Seal()
                         .Seal()
                     .Seal()
-                    .Lambda(1)
-                        .Param("item")
-
-                        .Callable("AsStruct")
-                            .List(0)
-                                // .Callable("Nth")
-                                //     .Arg(0, "item")
-                                //     .Atom(1, "0", TNodeFlags::Default)
-                                // .Seal()
-                           
-                                .Atom(0, "ass")
-                                .Arg(1, "item")
-                            .Seal()
-                            
-                        .Seal()
-                    
-                    .Seal()
+                //.Lambda(1)
+                .Lambda<TCoLambda>(ctx, node.Pos())
+                    .Args({"_yql_sys_partition_id"})
+                    .Body<TExprApplier>()
+                        .Apply(predicate.ExprNode.Cast())
+                        .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
+                        .Build()
+                    .Done();
                 .Seal()
             .Seal()
             .Build();

@@ -53,8 +53,23 @@ NPushdown::TPredicateNode MakePushdownNode(const NNodes::TCoLambda& lambda, TExp
     NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
     NPushdown::CollectPredicates(ctx, optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), settings);
     YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
+    Cerr << predicateTree.ToString() << Endl;
+    YQL_LOG(TRACE) << "Push filter2: " << NCommon::ExprToPrettyString(ctx, predicateTree.ExprNode.Ref());
 
-    return SplitForPartialPushdown(predicateTree, ctx, pos, settings);
+    auto predicateToPush =  SplitForPartialPushdown(predicateTree, ctx, pos, settings);
+
+     auto newFilterLambda = Build<TCoLambda>(ctx, pos)
+            .Args({"filter_row"})
+            .Body<TExprApplier>()
+                .Apply(predicateToPush.ExprNode.Cast())
+                .With(TExprBase(lambdaArg), "filter_row")
+                .Build()
+            .Done();
+
+    YQL_LOG(TRACE) << "Push filter2: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
+
+
+    return predicateToPush;
 }
 
 TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings) {

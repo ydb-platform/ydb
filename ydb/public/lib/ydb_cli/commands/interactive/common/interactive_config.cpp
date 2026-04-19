@@ -319,36 +319,49 @@ std::optional<TAiPresets::EApiType> TAiModelConfig::GetApiType() const {
     return std::nullopt;
 }
 
-std::optional<TString> TAiModelConfig::GetApiToken(bool allowEnv) const {
+std::optional<TString> TAiModelConfig::GetApiToken(bool allowEnv) {
     if (auto token = StringFromYaml(Config, TOKEN_PROPERTY)) {
         YDB_CLI_LOG(Debug, "Using token from config: " << BlurSecret(token));
         return token;
     }
 
     TString tokenProvider = StringFromYaml(Config, TOKEN_PROVIDER_PROPERTY);
-    if (const auto& preset = GetAiPresets().GetPreset(GetPresetId()); !tokenProvider && preset && preset->TokenProvider) {
+    if (const auto& preset = GetAiPresets().GetPreset(GetPresetId()); !tokenProvider && !Config[TOKEN_PROVIDER_PROPERTY] && preset && preset->TokenProvider) {
         tokenProvider = *preset->TokenProvider;
     }
 
+    std::optional<TAiPresets::TTokenProvider> provider;
     if (tokenProvider) {
-        YDB_CLI_LOG(Debug, "Using token from provider: " << tokenProvider);
-        if (const auto& provider = GetAiPresets().GetTokenProvider(tokenProvider)) {
-            const auto& token = provider->GetToken();
-            YDB_CLI_LOG(Debug, "Resolved token from provider: " << (token ? BlurSecret(*token) : "<null>"));
-            return token;
-        } else {
+        provider = GetAiPresets().GetTokenProvider(tokenProvider);
+        if (!provider) {
             YDB_CLI_LOG(Info, "No token provider configured with id: " << tokenProvider);
         }
     }
 
-    if (allowEnv) {
-        const auto& token = GetEnv(TOKEN_ENV);
-        YDB_CLI_LOG(Debug, "Fetched token from env: " << BlurSecret(token));
-        return token;
+    if (!provider) {
+        if (allowEnv) {
+            const auto& token = GetEnv(TOKEN_ENV);
+            YDB_CLI_LOG(Debug, "Fetched token from env: " << BlurSecret(token));
+            return token;
+        }
+    
+        YDB_CLI_LOG(Debug, "No token found");
+        return "";
     }
 
-    YDB_CLI_LOG(Debug, "No token found");
-    return "";
+    YDB_CLI_LOG(Debug, "Using token from provider: " << tokenProvider);
+
+    try {
+        const auto& token = provider->GetToken();
+        YDB_CLI_LOG(Debug, "Resolved token from provider \"" << tokenProvider << "\": " << (token ? BlurSecret(*token) : "<null>"));
+        return token;
+    } catch (const std::exception& e) {
+        YDB_CLI_LOG(Notice, "Failed to resolve token from provider \"" << tokenProvider << "\":\n" << e.what());
+        if (RequestApiToken()) {
+            return StringFromYaml(Config, TOKEN_PROPERTY);
+        }
+        return std::nullopt;
+    }
 }
 
 TString TAiModelConfig::GetModelName() const {
@@ -637,22 +650,7 @@ bool TAiModelConfig::SetupApiToken() {
         return true;
     }
 
-    std::vector title = {
-        ftxui::text("Please enter API token") | ftxui::bold,
-        ftxui::text(TStringBuilder() << "Leave empty to use $" << TOKEN_ENV)
-    };
-    if (const auto& docs = GetAiPresets().GetMetaInfo().TokenDocs) {
-        title.push_back(*docs);
-    }
-
-    const auto& result = RunFtxuiPasswordInput(ftxui::vbox(title));
-    if (!result) {
-        return false;
-    }
-
-    BaseConfig->SetString(Config, TOKEN_PROVIDER_PROPERTY, "");
-    BaseConfig->SetString(Config, TOKEN_PROPERTY, *result);
-    return true;
+    return RequestApiToken();
 }
 
 bool TAiModelConfig::SetupModelName() {
@@ -745,6 +743,25 @@ bool TAiModelConfig::SetupName() {
     }
 
     BaseConfig->SetString(Config, NAME_PROPERTY, result);
+    return true;
+}
+
+bool TAiModelConfig::RequestApiToken() {
+    std::vector title = {
+        ftxui::text("Please enter API token") | ftxui::bold,
+        ftxui::text(TStringBuilder() << "Leave empty to use $" << TOKEN_ENV)
+    };
+    if (const auto& docs = GetAiPresets().GetMetaInfo().TokenDocs) {
+        title.push_back(*docs);
+    }
+
+    const auto& result = RunFtxuiPasswordInput(ftxui::vbox(title));
+    if (!result) {
+        return false;
+    }
+
+    BaseConfig->SetString(Config, TOKEN_PROVIDER_PROPERTY, "");
+    BaseConfig->SetString(Config, TOKEN_PROPERTY, *result);
     return true;
 }
 

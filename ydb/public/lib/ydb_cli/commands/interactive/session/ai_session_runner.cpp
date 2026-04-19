@@ -49,6 +49,12 @@ public:
 
         TString validationError;
         Y_VALIDATE(AiModel->IsValid(validationError), "AI profile is not valid: " << validationError);
+
+        if (!AiModel->GetApiToken()) {
+            return nullptr;
+        }
+
+        ConfigurationManager->Flush();
         return TBase::Setup();
     }
 
@@ -209,6 +215,11 @@ private:
     void ChangeAiProfile(TAiModelConfig::TPtr profile) {
         Y_VALIDATE(profile, "Profile is not set");
         Y_VALIDATE(AiModel, "AI session is not initialized");
+
+        if (!profile->GetApiToken()) {
+            // Can not continue in AI mode
+            std::exit(EXIT_FAILURE);
+        }
 
         const auto& newProfileName = profile->GetName();
         if (ModelHandler) {

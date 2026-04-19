@@ -139,6 +139,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         }
     }
 
+    Cout << Endl;
     while (const auto inputOptional = lineReader->ReadLine()) {
         Y_DEFER { Cout << Endl; };
 
@@ -228,9 +229,9 @@ int TInteractiveCLI::PrintWelcomeMessage(const TClientCommand::TConfig& config, 
     }
 
     if (configManager->GetInteractiveMode() == TInteractiveConfigurationManager::EMode::YQL) {
-        Cout << "Type YQL query text or type " << TLogger::EntityNameQuoted("/help") << " for more info." << Endl << Endl;
+        Cout << "Type YQL query text or type " << TLogger::EntityNameQuoted("/help") << " for more info." << Endl;
     } else {
-        Cout << "Type " << TLogger::EntityNameQuoted("/help") << " for more info or " << TLogger::EntityNameQuoted("/model") << " to select another model." << Endl << Endl;
+        Cout << "Type " << TLogger::EntityNameQuoted("/help") << " for more info or " << TLogger::EntityNameQuoted("/model") << " to select another model." << Endl;
     }
 
     return EXIT_SUCCESS;

@@ -183,7 +183,7 @@ public:
 
     std::optional<TAiPresets::EApiType> GetApiType() const;
 
-    std::optional<TString> GetApiToken(bool allowEnv = true) const; // std::nullopt if request interrupted, empty token <=> do not pass token header
+    std::optional<TString> GetApiToken(bool allowEnv = true); // std::nullopt if request interrupted, empty token <=> do not pass token header
 
     TString GetModelName() const;
 
@@ -207,6 +207,8 @@ private:
     bool SetupModelName();
 
     bool SetupName();
+
+    bool RequestApiToken();
 
     const TYamlConfigBase::TPtr BaseConfig;
     const TString Id;

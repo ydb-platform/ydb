@@ -44,6 +44,7 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     case NKikimrSchemeOp::EPathTypeExternalDataSource:
     case NKikimrSchemeOp::EPathTypeExternalTable:
     case NKikimrSchemeOp::EPathTypeSysView:
+    case NKikimrSchemeOp::EPathTypeKesus:
         return true;
     default:
         return false;
@@ -528,7 +529,7 @@ private:
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(),
+                exportSettings, databaseRoot, std::move(metadata),
                 exportInfo.EnablePermissions, exportInfo.EnableChecksums,
                 iv
             ));

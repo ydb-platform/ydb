@@ -48,6 +48,10 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
         }
     }();
 
+    if (response.Interrupted) {
+        throw yexception() << "Request to model API was interrupted";
+    }
+
     if (!response.IsSuccess()) {
         throw yexception() << THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
     }

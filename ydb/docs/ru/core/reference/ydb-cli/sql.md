@@ -46,15 +46,25 @@
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Запрос создания строковой таблицы, заполнения её данными, и получения выборки из этой таблицы:
+#### Работа с объектами базы данных (DDL) {#working-with-database-objects}
+
+Создание таблицы и добавление в неё вторичного индекса: 
 
 ```bash
 {{ ydb-cli }} -p quickstart sql -s '
     CREATE TABLE series (series_id Uint64, title Utf8, series_info Utf8, release_date Date, PRIMARY KEY (series_id));
-    COMMIT;
-    UPSERT INTO series (series_id, title, series_info, release_date) values (1, "Title1", "Info1", Cast("2023-04-20" as Date));
-    COMMIT;
-    SELECT * from series;
+    ALTER TABLE series ADD INDEX `title_idx` GLOBAL ON (`title`);
+  '
+```
+
+#### Работа с данными (DML) {#working-with-data}
+
+Заполнение таблицы данными и получение выборки из неё:
+
+```bash
+{{ ydb-cli }} -p quickstart sql -s '
+    UPSERT INTO series (series_id, title, series_info, release_date) VALUES (1, "Title1", "Info1", Cast("2026-04-20" as Date));
+    SELECT * FROM series;
   '
 ```
 
@@ -64,9 +74,11 @@
 ┌──────────────┬───────────┬─────────────┬──────────┐
 | release_date | series_id | series_info | title    |
 ├──────────────┼───────────┼─────────────┼──────────┤
-| "2023-04-20" | 1         | "Info1"     | "Title1" |
+| "2026-04-20" | 1         | "Info1"     | "Title1" |
 └──────────────┴───────────┴─────────────┴──────────┘
 ```
+
+#### Работа с запросами из файла {#working-with-query-from-file}
 
 Выполнение запроса из примера выше, записанного в файле `script1.yql`, с выводом результатов в формате `JSON`:
 
@@ -77,7 +89,7 @@
 Вывод команды:
 
 ```text
-{"release_date":"2023-04-20","series_id":1,"series_info":"Info1","title":"Title1"}
+{"release_date":"2026-04-20","series_id":1,"series_info":"Info1","title":"Title1"}
 ```
 
 Примеры передачи параметров в скрипты приведены в [статье о передаче параметров в команды исполнения запросов](parameterized-query-execution.md).

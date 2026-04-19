@@ -39,7 +39,7 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
         << "Several parameter options can be specified. "
         << "To change binary strings encoding use --input-binary-strings option. "
         << "Escaping depends on operating system.";
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         descr << Endl << "Use -hh option to see usage examples and all other options to work with parameters.";
     }
     descr << Endl << "More information and examples in the documentation:" << Endl
@@ -49,12 +49,12 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
 
     TStringStream inputFileDescr;
     inputFileDescr << "File name with input parameter names and values. Format is configured with --input-format option.";
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         inputFileDescr << Endl << "Use -hh option to see all options to work with parameters.";
     }
     AddInputFileOption(config, false, inputFileDescr.Str());
 
-    if (config.HelpCommandVerbosiltyLevel > 1) {
+    if (config.HelpCommandVerbosityLevel > 1) {
         AddOptionExamples(
             "param",
             TExampleSetBuilder()
@@ -142,7 +142,7 @@ void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& 
         .RequiredArgument("INT").StoreResult(&BatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT);
     auto& inputBatchMaxDelay = config.Opts->AddLongOption("input-batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
             .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY);
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         inputParamName.Hidden();
         inputColumns.Hidden();
         inputSkipRows.Hidden();

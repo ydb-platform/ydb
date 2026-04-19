@@ -150,7 +150,7 @@ void TCommandTPCCImport::Config(TConfig& config) {
         "connections", TStringBuilder() << "Number of SDK driver/client instances (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->DriverCount).DefaultValue(0);
 
-    // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
+    // for now. Later might be "config.HelpCommandVerbosityLevel <= 1" or advanced section
     if (true) {
         logLevelOpt.Hidden();
         connectionsOpt.Hidden();
@@ -274,7 +274,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "simulate-select1", TStringBuilder() << "Instead of real queries, execute specified number of SELECT 1 queries")
             .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionSelect1Count).DefaultValue(0);
 
-    // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
+    // for now. Later might be "config.HelpCommandVerbosityLevel <= 1" or advanced section
     if (true) {
         highresHistOpt.Hidden();
         extendedStatsOpt.Hidden();

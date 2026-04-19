@@ -1,9 +1,8 @@
 #include "api_utils.h"
 #include "json_utils.h"
 
-#include <ydb/public/lib/ydb_cli/common/log.h>
-
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
@@ -18,14 +17,14 @@ namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
-NYql::THttpHeader CreateApiHeaders(const TString& authToken) {
-    TSmallVec<TString> headers = {"Content-Type: application/json"};
+TKeepAliveHttpClient::THeaders CreateApiHeaders(const TString& authToken) {
+    TKeepAliveHttpClient::THeaders headers = {{"Content-Type", "application/json"}};
 
     if (authToken) {
-        headers.emplace_back(TStringBuilder() << "Authorization: Bearer " << authToken);
+        headers.emplace("Authorization", TStringBuilder() << "Bearer " << authToken);
     }
 
-    return {.Fields = std::move(headers)};
+    return headers;
 }
 
 } // anonymous namespace
@@ -36,6 +35,7 @@ TProgressWaiterBase::TProgressWaiterBase(TDuration granularity)
     Worker = std::thread([this]() {
         const char* frames[] = {"🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"};
         int frameIndex = 0;
+        Cout << Endl;
         while (Running) {
             Cout << "\r" << frames[frameIndex] << PrintProgress(TInstant::Now() - StartTime) << Flush;
 
@@ -47,10 +47,25 @@ TProgressWaiterBase::TProgressWaiterBase(TDuration granularity)
 
 TProgressWaiterBase::~TProgressWaiterBase() {
     try {
-        Stop(false);
+        Stop(/* success */ false);
     } catch (...) {
         // ¯\_(ツ)_/¯
     }
+}
+
+TDuration TProgressWaiterBase::Success() {
+    return Stop(/* success */ true);
+}
+
+TDuration TProgressWaiterBase::Fail(const TString& message) {
+    auto result = Stop(/* success */ false);
+    const auto& colors = NConsoleClient::AutoColors(Cout);
+    Cout << ": " << colors.Red() << message << colors.OldColor() << Endl;
+    return result;
+}
+
+TDuration TProgressWaiterBase::Interrupted() {
+    return Fail("<INTERRUPTED>");
 }
 
 TDuration TProgressWaiterBase::Stop(bool success) {
@@ -67,11 +82,12 @@ TDuration TProgressWaiterBase::Stop(bool success) {
     Cerr << Flush;
 
     if (success) {
+        Cout << "\033[A" << Flush; // Move cursor up
         return TInstant::Now() - StartTime;
     } else {
         auto now = TInstant::Now();
         auto elapsed = (now - StartTime).SecondsFloat();
-        Cout << "Error after " << Sprintf("%.2fs", elapsed) << ": " << Flush;
+        Cout << "Error after " << Sprintf("%.2fs", elapsed) << Flush;
     }
 
     return TDuration::Zero();
@@ -85,6 +101,13 @@ TString TStaticProgressWaiter::PrintProgress(TDuration elapsed) {
     return TStringBuilder() << " " << Message << " " << Sprintf("%.1fs", elapsed.SecondsFloat());
 }
 
+THttpExecutor::TContext::TContext(const TString& host, ui32 port, const TString& uri, const TKeepAliveHttpClient::THeaders& apiHeaders)
+    : Host(host)
+    , Port(port)
+    , Uri(uri)
+    , ApiHeaders(apiHeaders)
+{}
+
 THttpExecutor::TResponse::TResponse(TString&& content, ui64 httpCode)
     : Content(std::move(content))
     , HttpCode(httpCode)
@@ -94,46 +117,55 @@ bool THttpExecutor::TResponse::IsSuccess() const {
     return HttpCode >= 200 && HttpCode < 300;
 }
 
-THttpExecutor::THttpExecutor(const TString& apiUrl, const TString& authToken)
-    : ApiUrl(apiUrl)
-    , ApiHeaders(CreateApiHeaders(authToken))
-    , HttpGateway(NYql::IHTTPGateway::Make())
-{}
-
-THttpExecutor::TResponse THttpExecutor::Post(TString&& body) {
-    Y_DEFER { ResetInterrupted(); };
-    YDB_CLI_LOG(Debug, "POST request to API '" << ApiUrl << "', body:\n" << FormatJsonValue(body));
-
-    auto responsePromise = NThreading::NewPromise<TResponse>();
-    HttpGateway->Upload(ApiUrl, ApiHeaders, std::move(body), GetHttpCallback(responsePromise));
-
-    auto responseFeature = responsePromise.GetFuture();
-    if (!WaitInterruptable(responseFeature)) {
-        throw yexception() << "API request interrupted";
-    }
-
-    auto response = responseFeature.ExtractValue();
-    YDB_CLI_LOG(Info, "API response http code: " << response.HttpCode);
-    YDB_CLI_LOG(Debug, "API response:" << Endl << FormatJsonValue(response.Content));
-    return response;
+THttpExecutor::THttpExecutor(const TString& apiUrl, const TString& authToken, TDuration timeout)
+    : Context(CreateContext(apiUrl, authToken))
+    , Timeout(timeout)
+{
+    YDB_CLI_LOG(Debug, "Setup http executor for API url '" << apiUrl << "'");
 }
 
-THttpExecutor::TResponse THttpExecutor::Get(size_t sizeLimit) {
-    Y_DEFER { ResetInterrupted(); };
-    YDB_CLI_LOG(Debug, "GET request to API '" << ApiUrl << "'");
+THttpExecutor::TResponse THttpExecutor::TestConnection() {
+    YDB_CLI_LOG(Debug, "Check API availability");
 
-    auto responsePromise = NThreading::NewPromise<TResponse>();
-    HttpGateway->Download(ApiUrl, ApiHeaders, 0, sizeLimit, GetHttpCallback(responsePromise));
-
-    auto responseFeature = responsePromise.GetFuture();
-    if (!WaitInterruptable(responseFeature)) {
-        throw yexception() << "API request interrupted";
+    try {
+        return ExecuteRequestAsync([context = Context](std::shared_ptr<TKeepAliveHttpClient> client, NThreading::TCancellationToken cancellationToken) {
+            cancellationToken.SetDeadline(TInstant::Now() + TDuration::Seconds(5));
+            client->DoRequest("HEAD", context->Uri, {}, nullptr, context->ApiHeaders, nullptr, cancellationToken);
+            return TResponse();
+        });
+    } catch (...) {
+        TString message = CurrentExceptionMessage();
+        YDB_CLI_LOG(Notice, "Check availability failed: " << message);
+        return TResponse(std::move(message), 0);
     }
+}
 
-    auto response = responseFeature.ExtractValue();
-    YDB_CLI_LOG(Info, "API response http code: " << response.HttpCode);
-    YDB_CLI_LOG(Debug, "API response:" << Endl << FormatJsonValue(response.Content));
-    return response;
+THttpExecutor::TResponse THttpExecutor::Post(TString&& body) {
+    YDB_CLI_LOG(Debug, "POST request to API, body:\n" << FormatJsonValue(body));
+
+    return ExecuteRequestAsync([context = Context, b = std::move(body)](std::shared_ptr<TKeepAliveHttpClient> client, NThreading::TCancellationToken cancellationToken) {
+        TString response;
+        TStringOutput responseOutput(response);
+        const auto code = client->DoPost(context->Uri, b, &responseOutput, context->ApiHeaders, nullptr, cancellationToken);
+
+        YDB_CLI_LOG(Info, "API response http code: " << code);
+        YDB_CLI_LOG(Debug, "API response:" << Endl << FormatJsonValue(response));
+        return TResponse(std::move(response), code);
+    });
+}
+
+THttpExecutor::TResponse THttpExecutor::Get() {
+    YDB_CLI_LOG(Debug, "GET request to API");
+
+    return ExecuteRequestAsync([context = Context](std::shared_ptr<TKeepAliveHttpClient> client, NThreading::TCancellationToken cancellationToken) {
+        TString response;
+        TStringOutput responseOutput(response);
+        const auto code = client->DoGet(context->Uri, &responseOutput, context->ApiHeaders, nullptr, cancellationToken);
+
+        YDB_CLI_LOG(Info, "API response http code: " << code);
+        YDB_CLI_LOG(Debug, "API response:" << Endl << FormatJsonValue(response));
+        return TResponse(std::move(response), code);
+    });
 }
 
 TString THttpExecutor::PrettifyModelApiError(ui64 httpCode, const TString& response) {
@@ -172,25 +204,51 @@ TString THttpExecutor::PrettifyModelApiError(ui64 httpCode, const TString& respo
     return error;
 }
 
-NYql::IHTTPGateway::TOnResult THttpExecutor::GetHttpCallback(NThreading::TPromise<TResponse> response) const {
-    return [response](NYql::IHTTPGateway::TResult result) mutable -> void {
-        const auto curlCode = result.CurlResponseCode;
-        if (curlCode == CURLE_OK) {
-            if (result.Issues) {
-                GetGlobalLogger().Warning() << "API response has issues:\n" << result.Issues.ToString();
-            }
+std::shared_ptr<THttpExecutor::TContext> THttpExecutor::CreateContext(const TString& apiUrl, const TString& authToken) {
+    TStringBuf schemeHostAndPort;
+    TStringBuf uri;
+    SplitUrlToHostAndPath(apiUrl, schemeHostAndPort, uri);
 
-            auto& content = result.Content;
-            response.SetValue(TResponse(content.Extract(), content.HttpResponseCode));
-            return;
-        }
+    TStringBuf scheme;
+    TStringBuf host;
+    ui16 port = 0;
+    GetSchemeHostAndPort(schemeHostAndPort, scheme, host, port);
 
-        auto error = TStringBuilder() << "Failed to connect to API server or process response, internal code: " << static_cast<ui64>(curlCode);
-        if (result.Issues) {
-            error << ". Reason:\n" << result.Issues.ToString();
+    return std::make_shared<TContext>(TStringBuilder() << scheme << host, port, TString(uri), CreateApiHeaders(authToken));
+}
+
+std::shared_ptr<TKeepAliveHttpClient> THttpExecutor::CreateHttpClient(const TContext& context, TDuration timeout) {
+    return std::make_shared<TKeepAliveHttpClient>(context.Host, context.Port, timeout, TDuration::Seconds(5));
+}
+
+THttpExecutor::TResponse THttpExecutor::ExecuteRequestAsync(std::function<TResponse(std::shared_ptr<TKeepAliveHttpClient>, NThreading::TCancellationToken)> request) {
+    if (!HttpClient) {
+        HttpClient = CreateHttpClient(*Context, Timeout);
+    }
+
+    NThreading::TCancellationTokenSource cancellationTokenSource;
+    auto promise = NThreading::NewPromise<TResponse>();
+
+    std::thread([promise, client = HttpClient, request, t = cancellationTokenSource.Token()]() mutable {
+        try {
+            promise.SetValue(request(client, t));
+        } catch (...) {
+            promise.SetException(CurrentExceptionMessage());
         }
-        response.SetException(error);
-    };
+    }).detach();
+
+    Y_DEFER { ResetInterrupted(); };
+
+    auto responseFeature = promise.GetFuture();
+    if (!WaitInterruptable(responseFeature)) {
+        HttpClient = nullptr; // Prevent concurrent access to HttpClient
+        cancellationTokenSource.Cancel();
+        TResponse response;
+        response.Interrupted = true;
+        return response;
+    }
+
+    return responseFeature.ExtractValue();
 }
 
 TString CreateApiUrl(const TString& baseUrl, const TString& uri) {
@@ -201,51 +259,75 @@ TString CreateApiUrl(const TString& baseUrl, const TString& uri) {
     TStringBuf fragment;
     SeparateUrlFromQueryAndFragment(baseUrl, sanitizedUrl, query, fragment);
 
-    if (query || fragment) {
-        auto error = yexception() << "Invalid model API base url: '" << baseUrl << "'";
-        if (query) {
-            error << ". Query part should be empty, but got: '" << query << "'";
-        }
-        if (fragment) {
-            error << ". Fragment part should be empty, but got: '" << fragment << "'";
-        }
-        throw error;
+    if (query) {
+        throw yexception() << "Endpoint query part should be empty, but got: '" << query << "'";
+    }
+    if (fragment) {
+        throw yexception() << "Endpoint fragment part should be empty, but got: '" << fragment << "'";
     }
 
     return TStringBuilder() << RemoveFinalSlash(sanitizedUrl) << uri;
 }
 
-std::vector<TString> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken) {
-    THttpExecutor::TResponse response;
-    {
-        const auto spinner = std::make_shared<TStaticProgressWaiter>("Listing models...");
-        response = NAi::THttpExecutor(NAi::CreateApiUrl(apiBaseEndpoint, "/models"), authToken).Get();
-    }
-
-    if (!response.IsSuccess()) {
-        throw yexception() << NAi::THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
-    }
-
-    NJson::TJsonValue responseJson;
-    try {
-        NJson::ReadJsonTree(response.Content, &responseJson, /* throwOnError */ true);
-    } catch (const std::exception& e) {
-        throw yexception() << "Model API response is not valid JSON, reason: " << e.what();
-    }
-
-    NAi::TJsonParser parser(responseJson);
-    if (auto child = parser.MaybeKey("response")) {
-        parser = std::move(*child);
-    }
-
+std::optional<std::vector<TString>> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken) {
+    const auto spinner = std::make_shared<TStaticProgressWaiter>("Listing models...");
     std::vector<TString> allowedModels;
-    parser.GetKey("data").Iterate([&](NAi::TJsonParser item) {
-        if (const auto id = item.MaybeKey("id")) {
-            allowedModels.emplace_back(id->GetString());
+
+    try {
+        auto response = NAi::THttpExecutor(NAi::CreateApiUrl(apiBaseEndpoint, "/models"), authToken, TDuration::Seconds(5)).Get();
+        if (response.Interrupted) {
+            spinner->Interrupted();
+            return std::nullopt;
         }
-    });
+
+        if (!response.IsSuccess()) {
+            spinner->Fail(NAi::THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content));
+            return allowedModels;
+        }
+
+        NJson::TJsonValue responseJson;
+        try {
+            NJson::ReadJsonTree(response.Content, &responseJson, /* throwOnError */ true);
+        } catch (const std::exception& e) {
+            throw yexception() << "Model API response is not valid JSON, reason: " << e.what();
+        }
+
+        NAi::TJsonParser parser(responseJson);
+        if (auto child = parser.MaybeKey("response")) {
+            parser = std::move(*child);
+        }
+
+        parser.GetKey("data").Iterate([&](NAi::TJsonParser item) {
+            if (const auto id = item.MaybeKey("id")) {
+                allowedModels.emplace_back(id->GetString());
+            }
+        });
+
+        spinner->Success();
+    } catch (const std::exception& e) {
+        spinner->Fail(TStringBuilder() << "Failed to list model names, maybe model API endpoint is not correct:\n" << e.what());
+    }
 
     return allowedModels;
+}
+
+std::optional<bool> TestConnection(const TString& apiBaseEndpoint) {
+    const auto spinner = std::make_shared<TStaticProgressWaiter>("Checking connection...");
+    auto result = NAi::THttpExecutor(apiBaseEndpoint, "", TDuration::Seconds(5)).TestConnection();
+
+    if (result.Interrupted) {
+        spinner->Interrupted();
+        return std::nullopt;
+    }
+
+    const bool success = result.Content.empty();
+    if (success) {
+        spinner->Success();
+    } else {
+        spinner->Fail(result.Content);
+    }
+
+    return success;
 }
 
 } // namespace NYdb::NConsoleClient::NAi

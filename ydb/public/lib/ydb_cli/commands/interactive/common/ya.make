@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    api_utils.cpp
     config_ui.cpp
     interactive_config.cpp
     interactive_settings.cpp
@@ -11,6 +12,7 @@ SRCS(
 PEERDIR(
     contrib/libs/ftxui
     contrib/restricted/patched/replxx
+    library/cpp/http/simple
     library/cpp/json
     library/cpp/json/writer
     library/cpp/string_utils/url
@@ -21,18 +23,11 @@ PEERDIR(
     yql/essentials/sql/v1/complete
 )
 
-# TODO: Use simpler HTTP library (e.g. curl wrapper) instead of http_gateway
-# to avoid heavy dependencies (actors/interconnect -> crc32c -> crcutil with SSE4)
-IF (NOT OS_WINDOWS OR USE_SSE4)
-    SRCS(
-        api_utils.cpp
-    )
-    PEERDIR(
-        ydb/library/yql/providers/common/http_gateway
-    )
-    CFLAGS(-DYDB_CLI_AI_ENABLED=1)
-ENDIF()
-
 GENERATE_ENUM_SERIALIZATION(interactive_config.h)
+GENERATE_ENUM_SERIALIZATION(json_utils.h)
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

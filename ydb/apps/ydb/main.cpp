@@ -3,21 +3,19 @@
 
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
     return TVector<NYdb::NTopic::ECodec>{
-            NYdb::NTopic::ECodec::RAW,
-            NYdb::NTopic::ECodec::ZSTD,
-            NYdb::NTopic::ECodec::GZIP,
+        NYdb::NTopic::ECodec::RAW,
+        NYdb::NTopic::ECodec::ZSTD,
+        NYdb::NTopic::ECodec::GZIP,
     };
 }
 
 int main(int argc, char **argv) {
     try {
         return NYdb::NConsoleClient::NewYdbClient(argc, argv);
-    }
-    catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
+    } catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
         Cerr << e;
         return EXIT_FAILURE;
-    }
-    catch (const yexception& e) {
+    } catch (const std::exception& e) {
         Cerr << e.what() << Endl;
         return EXIT_FAILURE;
     }

@@ -1,22 +1,13 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.oss.canonical import set_canondata_root
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
 import logging
 import pathlib
 
-import yatest
-
 logger = logging.getLogger(__name__)
-
-
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
 def upsert_simple(session, full_path):
@@ -47,52 +38,16 @@ def create_table_with_data(session, path):
     upsert_simple(session, path)
 
 
-class BaseTestFlameGraphService(object):
-    @classmethod
-    def execute_ydb_cli_command(cls, args, stdin=None):
-        try:
-            execution = yatest.common.execute([ydb_bin()] + args, stdin=stdin)
-            result = execution.std_out.decode('utf-8') + '\n' + execution.std_err.decode('utf-8')
-        except Exception as exc:
-            result = str(exc)
-        logger.debug("result:\n" + result)
-        return result
-
-    @staticmethod
-    def canonical_result(output_result):
-        output_file_name = "result.output"
-        with open(output_file_name, "w") as f:
-            f.write(output_result.decode('utf-8'))
-        return yatest.common.canonical_file(output_file_name, local=True, universal_lines=True)
-
-
-class BaseTestFlameGraphServiceWithDatabase(BaseTestFlameGraphService):
-    @classmethod
-    def setup_class(cls):
-        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
-
-        cls.cluster = KiKiMR()
-        cls.cluster.start()
-        cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
-
+class BaseTestFlameGraphServiceWithDatabase(BaseCliTestWithDatabase):
     @classmethod
     def execute_ydb_cli_command_with_db(cls, args, stdin=None):
-        return cls.execute_ydb_cli_command(
-            [
-                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
-                "--database", cls.root_dir
-            ] +
-            args, stdin
-        )
+        try:
+            result = cls.execute_ydb_cli_command(args, stdin=stdin)
+            return result.stdout + "\n" + result.stderr
+        except Exception as exc:
+            result = str(exc)
+            logger.debug("result:\n" + result)
+            return result
 
 
 class TestExecuteWithFlameGraph(BaseTestFlameGraphServiceWithDatabase):

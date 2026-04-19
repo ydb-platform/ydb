@@ -14,13 +14,12 @@ void TInterruptableCommand::SetInterruptHandlers() {
 }
 
 void TInterruptableCommand::ResetInterrupted() {
-    AtomicSet(Interrupted, false);
-
     for (const auto& [signal, handler] : SignalHandlers) {
         std::signal(signal, handler);
     }
 
     SignalHandlers.clear();
+    AtomicSet(Interrupted, false);
 }
 
 bool TInterruptableCommand::IsInterrupted() {

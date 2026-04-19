@@ -44,7 +44,7 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
             if (onFinishWaiting) {
                 onFinishWaiting();
             }
-            throw;
+            throw yexception() << "HTTP request to model API failed, reason:\n" << CurrentExceptionMessage();
         }
     }();
 

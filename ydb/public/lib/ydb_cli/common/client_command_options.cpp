@@ -329,7 +329,7 @@ void TClientCommandOption::RebuildHelpMessage() {
     NColorizer::TColors& colors = NConsoleClient::AutoColors(Cout);
     TStringBuilder helpMessage;
     helpMessage << Help;
-    const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosiltyLevel >= 2 && NeedPrintDefinitionsPriority();
+    const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosityLevel >= 2 && NeedPrintDefinitionsPriority();
 
     if (!needDefinitionsPriority && (DefaultOptionValue || ManualDefaultOptionValueDescription)) {
         helpMessage << " (default: " << colors.Cyan()
@@ -349,7 +349,7 @@ void TClientCommandOption::RebuildHelpMessage() {
         helpMessage << Endl;
     };
 
-    TString indent = ClientOptions->HelpCommandVerbosiltyLevel >= 2 ? "  " : "";
+    TString indent = ClientOptions->HelpCommandVerbosityLevel >= 2 ? "  " : "";
     if (Documentation) {
         makeMultiline();
         helpMessage << indent << "For more info go to: " << Documentation << Endl;

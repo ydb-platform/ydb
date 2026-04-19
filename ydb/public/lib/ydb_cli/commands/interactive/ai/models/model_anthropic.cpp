@@ -81,26 +81,41 @@ protected:
         }
 
         parser = parser.GetKey("content");
-        auto conversationPart = parser.GetValue();
+        NJson::TJsonValue conversationPart;
+        auto& conversationPartArray = conversationPart.SetType(NJson::JSON_ARRAY).GetArraySafe();
 
         parser.Iterate([&](TJsonParser item) {
             const auto& type = item.GetKey("type").GetString();
+            auto& conversationItem = conversationPartArray.emplace_back();
+            conversationItem["type"] = type;
+
             if (type == "text") {
                 if (result.Text) {
                     throw yexception() << "Multiple conversation items contains text";
                 }
                 result.Text = Strip(item.GetKey("text").GetString());
+                conversationItem["text"] = result.Text;
             } else if (type == "tool_use") {
                 auto name = item.GetKey("name").GetString();
+                conversationItem["name"] = name;
                 if (!ValidateToolName(name)) {
                     throw yexception() << "Invalid tool name requested: " << name;
                 }
 
+                auto id = item.GetKey("id").GetString();
+                conversationItem["id"] = id;
+                auto input = item.GetKey("input").GetValue();
+                conversationItem["input"] = input;
+
                 result.ToolCalls.push_back({
-                    .Id = item.GetKey("id").GetString(),
+                    .Id = std::move(id),
                     .Name = std::move(name),
-                    .Parameters = item.GetKey("input").GetValue(),
+                    .Parameters = std::move(input),
                 });
+
+                if (const auto& caller = item.MaybeKey("caller")) {
+                    conversationItem["caller"] = caller->GetValue();
+                }
             } else {
                 throw yexception() << "Unknown conversation item type: " << type << ", expected text or tool_use";
             }

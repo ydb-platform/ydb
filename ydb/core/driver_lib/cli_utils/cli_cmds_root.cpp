@@ -119,7 +119,7 @@ public:
 
         TClientCommandRootKikimrBase::Config(config);
 
-        if (config.HelpCommandVerbosiltyLevel <= 1) {
+        if (config.HelpCommandVerbosityLevel <= 1) {
             for (const auto& name : {"allocator-info", "compatibility-info", "time", "progress"}) {
                 if (auto* opt = nOpts.FindLongOption(name)) {
                     opt->Hidden_ = true;
@@ -136,7 +136,7 @@ public:
             << "  Manage YDB:    " << programName << " -s <host[:port]> <subcommand> [options]" << Endl
             << Endl
             << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-        RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
+        RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
         stream << Endl << Endl
             << colors.BoldColor() << "Detailed help" << colors.OldColor() << ":" << Endl
             << "  " << colors.Green() << "-hh" << colors.OldColor()

@@ -18,14 +18,12 @@
 #include "ydb_yql.h"
 #include "ydb_workload.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb/public/lib/ydb_cli/common/log.h>
-
-#if !defined(_win32_)
 #include <ydb/core/base/backtrace.h>
-#endif
+#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
@@ -240,6 +238,29 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     PropagateFlags(TCommandFlags{.Dangerous = false, .OnlyExplicitProfile = false});
 }
 
+TString TClientCommandRootCommon::GetUsageInfo(const std::vector<TString>& commands, TConfig config) {
+    TClientCommand* command = this;
+    for (const auto& commandName : commands) {
+        command = command->FindNextCommand(commandName);
+        Y_VALIDATE(command, "Command '" << commandName << "' not found");
+    }
+
+    config.ParentCommands.clear();
+    config.HelpCommandVerbosityLevel = std::numeric_limits<size_t>::max();
+    command->Opts = TClientCommandOptions();
+    command->PrepareOptions(config, /*validate=*/ false);
+
+    TString result;
+
+    {
+        TStringOutput stream(result);
+        Y_VALIDATE(config.ArgC > 0, "config.ArgC must be greater than 0");
+        config.Opts->GetOpts().PrintUsage(config.ArgV[0], stream);
+    }
+
+    return result;
+}
+
 void TClientCommandRootCommon::ValidateSettings() {
     if (!Settings.EnableSsl.Defined()) {
         Cerr << "Missing ssl enabling flag in client settings" << Endl;
@@ -272,19 +293,12 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     config.StorageUrl = Settings.StorageUrl;
+    config.UsageInfoGetter = [this, config](const std::vector<TString>& commands) {
+        return GetUsageInfo(commands, config);
+    };
 
     if (Settings.EnableAiInteractive) {
         config.EnableAiInteractive = *Settings.EnableAiInteractive;
-    }
-    config.AiTokenGetter = [getter = Settings.AiTokenGetter]() -> TAiTokenConfig {
-        if (getter) {
-            auto req = getter();
-            return {req.Token, req.WasUpdated};
-        }
-        return {};
-    };
-    for (const auto& profile : Settings.AiPredefinedProfiles) {
-        config.AiPredefinedProfiles.push_back({profile.Name, profile.ApiType, profile.ApiEndpoint, profile.ModelName});
     }
 
     config.BuildInfoProvider = Settings.BuildInfoProvider;
@@ -316,12 +330,13 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Config(TConfig& config) {
-#if !defined(_win32_)
-    NKikimr::EnableYDBBacktraceFormat();
-#endif
+    if (!Initialized) {
+        Initialized = true;
+        NKikimr::EnableYDBBacktraceFormat();
 #ifndef NDEBUG
-    SetupSignalActions();
+        SetupSignalActions();
 #endif
+    }
 
     FillConfig(config);
     TClientCommandOptions& opts = *config.Opts;
@@ -364,7 +379,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively")
         .Optional().StoreTrue(&config.AssumeYes);
 
-    if (config.HelpCommandVerbosiltyLevel >= 2) {
+    if (config.HelpCommandVerbosityLevel >= 2) {
         opts.AddLongOption("no-discovery", "Do not perform discovery (client balancing) for ydb cluster connection."
             " If this option is set the user provided endpoint (by -e option) will be used to setup a connections")
             .Optional().StoreTrue(&config.SkipDiscovery);
@@ -548,7 +563,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .StoreFilePath(&config.Oauth2KeyFile)
             .StoreResult(&config.Oauth2KeyParams);
 
-        if (config.HelpCommandVerbosiltyLevel >= 2) {
+        if (config.HelpCommandVerbosityLevel >= 2) {
             TStringBuilder additionalHelp;
             additionalHelp << "Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl << Endl;
 
@@ -616,6 +631,11 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
+    if (config.EnableAiInteractive) {
+        opts.AddLongOption("ai-profile-file", "Path to config file with AI profile data in yaml format")
+            .RequiredArgument("PATH").StoreResult(&AiProfileFile);
+    }
+
     opts.SetAuthMethodsEnvPriority(
         iamTokenAuth,
         ycTokenAuth,
@@ -632,7 +652,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         << "├─ Interactive:  " << programName << " [options...]" << Endl
         << "└─ Command line: " << programName << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
+    RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
     stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
 
     // detailed help
@@ -662,6 +682,16 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     }
     if (TFsPath(config.ProfileFile).Exists() && !TFsPath(config.ProfileFile).IsFile()) {
         throw TMisuseException() << "\'" << config.ProfileFile << "\' is not a file";
+    }
+
+    if (config.EnableAiInteractive) {
+        if (AiProfileFile) {
+            config.AiProfileFile = TFsPath(AiProfileFile).RealLocation().GetPath();
+        }
+
+        if (TFsPath(config.AiProfileFile).Exists() && !TFsPath(config.AiProfileFile).IsFile()) {
+            throw TMisuseException() << "\'" << config.AiProfileFile << "\' is not a file";
+        }
     }
 
     if (!config.NeedToConnect) {

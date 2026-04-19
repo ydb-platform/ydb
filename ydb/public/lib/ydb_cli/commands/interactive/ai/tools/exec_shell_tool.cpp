@@ -48,7 +48,6 @@ IMPORTANT:
 
     enum class EAction {
         Approve,
-        Reject,
         Edit,
         Abort,
     };
@@ -57,7 +56,6 @@ IMPORTANT:
         std::vector<TString> options = {
             "Approve execution",
             "Edit command",
-            "Skip command (don't execute, let agent retry)",
             "Abort operation",
         };
 
@@ -67,17 +65,20 @@ IMPORTANT:
         }
 
         switch (*result) {
-            case 0: return EAction::Approve;
-            case 1: return EAction::Edit;
-            case 2: return EAction::Reject;
-            case 3: return EAction::Abort;
-            default: return EAction::Abort;
+            case 0:
+                return EAction::Approve;
+            case 1:
+                return EAction::Edit;
+            case 2:
+            default:
+                return EAction::Abort;
         }
     }
 
 public:
     explicit TExecShellTool(const TExecShellToolSettings& settings)
         : TBase(CreateParametersSchema(), DESCRIPTION)
+        , Prompt(settings.Prompt)
         , Driver(settings.Driver)
     {}
 
@@ -86,7 +87,6 @@ protected:
         TJsonParser parser(parameters);
         Command = Strip(parser.GetKey(COMMAND_PROPERTY).GetString());
         UserMessage = "";
-        IsSkipped = false;
     }
 
     bool AskPermissions() final {
@@ -95,7 +95,7 @@ protected:
         const auto action = RunFtxuiActionDialog();
 
         if (action == EAction::Abort) {
-            Cout << "<Interrupted by user>" << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             throw yexception() << "Interrupted by user";
         }
 
@@ -103,28 +103,14 @@ protected:
             if (RequestCommandText()) {
                 return true;
             }
-            IsSkipped = true;
-            return true;
+            throw yexception() << "Interrupted by user";
         }
 
-        Cout << Endl;
-
-        if (action == EAction::Approve) {
-            return true;
-        }
-
-        IsSkipped = true;
         return true;
     }
 
     TResponse DoExecute() final {
-        if (IsSkipped) {
-            NJson::TJsonValue jsonResult;
-            jsonResult["status"] = "skipped";
-            return TResponse::Success(jsonResult, "User explicitly skipped execution of this command. The command was NOT executed.");
-        }
-
-        Cout << "Executing shell command..." << Endl;
+        Cout << Endl << Colors.Yellow() << "Executing shell command..." << Colors.OldColor() << Endl;
 
         // Combine stdout and stderr
         // Use subshell ( ... ) to capture stderr of the entire block, and ensure newline for heredoc safety
@@ -142,7 +128,6 @@ protected:
             Cout << chunk; // Show live to user
             resultBuilder << chunk; // Capture for agent
         }
-        Cout << Endl;
 
         int exitCode = pclose(pipe);
         // pclose returns wait4 status. To get exit code:
@@ -164,20 +149,19 @@ protected:
 
 private:
     bool RequestCommandText() {
-        Cout << Endl;
-
         const auto lineReader = CreateLineReader({
             .Driver = Driver,
             .Database = "",
-            .Prompt = "shell> ",
+            .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "shell" << Colors.OldColor() << "> ",
             .EnableSwitchMode = false,
             .ContinueAfterCancel = false,
         });
 
+        Cout << Endl;
         auto response = lineReader->ReadLine(Command);
         lineReader->Finish(!response.has_value());
         if (!response) {
-            Cout << "<Interrupted by user>" << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             return false;
         }
 
@@ -190,13 +174,11 @@ private:
             << "(Results correspond to this new command. IGNORE this change notification in your response and proceed directly to analyzing the results.)";
 
         Command = std::move(newText);
-        Cout << Endl;
         return true;
     }
 
     static NJson::TJsonValue CreateParametersSchema() {
         return TJsonSchemaBuilder()
-            .Type(TJsonSchemaBuilder::EType::Object)
             .Property(COMMAND_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Description("Shell command to execute")
@@ -205,10 +187,11 @@ private:
     }
 
 private:
-    TDriver Driver;
-    TString Command;
+    const TString Prompt;
+    const TDriver Driver;
+
     TString UserMessage;
-    bool IsSkipped = false;
+    TString Command;
 };
 
 } // anonymous namespace

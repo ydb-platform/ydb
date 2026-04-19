@@ -17,12 +17,12 @@ public:
     struct TInitializer {
         TString State;
         TString RequestedAddress;
-        bool AjaxRequest = false;
+        bool NavigationRequest = true;
     };
 
 private:
     TString State;
-    bool AjaxRequest = false;
+    bool NavigationRequest = true;
     TString RequestedAddress;
 
 public:
@@ -31,14 +31,14 @@ public:
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
     TString GetState(const TString& key) const;
-    bool IsAjaxRequest() const;
+    bool IsNavigationRequest() const;
     TString GetRequestedAddress() const;
 
     TString CreateYdbOidcCookie(const TString& secret) const;
 
 private:
-    static bool DetectAjaxRequest(const NHttp::THttpIncomingRequestPtr& request);
-    static TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isAjaxRequest);
+    static bool IsPageNavigationRequest(const NHttp::THttpIncomingRequestPtr& request);
+    static TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isNavigationRequest);
 
     TString GenerateCookie(const TString& key) const;
 };

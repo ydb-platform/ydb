@@ -434,8 +434,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         virtual void CheckLocationHeader(const TStringBuf& location, const TString& host, const TString& url) = 0;
         virtual TString GetUrlFromLocationHeader(const TStringBuf& location) = 0;
         virtual void CheckSpecificHeaders(const NHttp::THeaders&) {}
-        virtual bool IsAjaxRequest() const {
-            return false;
+        virtual bool IsNavigationRequest() const {
+            return true;
         }
     };
 
@@ -529,8 +529,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
             UNIT_ASSERT_STRINGS_EQUAL("OPTIONS,GET,POST,PUT,DELETE", headers.Get(accessControlAllowMethods));
         }
 
-        bool IsAjaxRequest() const override {
-            return true;
+        bool IsNavigationRequest() const override {
+            return false;
         }
     };
 
@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .NavigationRequest = redirectStrategy.IsNavigationRequest()});
         TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
@@ -717,7 +717,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = redirectStrategy.IsNavigationRequest()});
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -827,7 +827,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
         TStringBuilder request;
         request << "GET /callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -972,7 +972,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
@@ -1004,7 +1004,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
         TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
@@ -1593,6 +1593,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
 } // Y_UNIT_TEST_SUITE(Mvp)
 
+static bool IsNavigationRequestForRawHttpRequest(const TString& rawRequest) {
+    NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+    EatWholeString(incomingRequest, rawRequest);
+    return TContext(incomingRequest).IsNavigationRequest();
+}
+
 Y_UNIT_TEST_SUITE(Utils) {
     Y_UNIT_TEST(GenerateRandomBase64RandomUniqueness) {
         THashSet<TString> seen;
@@ -1600,6 +1606,48 @@ Y_UNIT_TEST_SUITE(Utils) {
             seen.insert(NMVP::NOIDC::GenerateRandomBase64(32));
         }
         UNIT_ASSERT(seen.size() > 95); // Soft uniqueness threshold: allow a few duplicates in this probabilistic test.
+    }
+
+    Y_UNIT_TEST(OpenIdConnectDetectsPageNavigationByFetchMetadata) {
+        UNIT_ASSERT(IsNavigationRequestForRawHttpRequest(
+            "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n"
+            "Accept: text/html,application/xhtml+xml\r\n"
+            "Sec-Fetch-Mode: navigate\r\n"
+            "Sec-Fetch-Dest: document\r\n\r\n"));
+    }
+
+    Y_UNIT_TEST(OpenIdConnectDetectsXmlHttpRequestAsProgrammaticRequest) {
+        UNIT_ASSERT(!IsNavigationRequestForRawHttpRequest(
+            "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n"
+            "Accept: */*\r\n"
+            "X-Requested-With: XMLHttpRequest\r\n"
+            "Sec-Fetch-Mode: cors\r\n"
+            "Sec-Fetch-Dest: empty\r\n\r\n"));
+    }
+
+    Y_UNIT_TEST(OpenIdConnectDetectsJsonRequestAsProgrammaticRequest) {
+        UNIT_ASSERT(!IsNavigationRequestForRawHttpRequest(
+            "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n"
+            "Accept: application/json\r\n\r\n"));
+    }
+
+    Y_UNIT_TEST(OpenIdConnectUsesHtmlAcceptAsLegacyNavigationFallback) {
+        UNIT_ASSERT(IsNavigationRequestForRawHttpRequest(
+            "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n"
+            "Accept: text/html,application/xhtml+xml\r\n\r\n"));
+    }
+
+    Y_UNIT_TEST(OpenIdConnectDoesNotTreatHtmlSubrequestAsPageNavigation) {
+        UNIT_ASSERT(!IsNavigationRequestForRawHttpRequest(
+            "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n"
+            "Accept: text/html,application/xhtml+xml\r\n"
+            "Sec-Fetch-Mode: cors\r\n"
+            "Sec-Fetch-Dest: empty\r\n\r\n"));
     }
 
 } // Y_UNIT_TEST_SUITE(Utils)

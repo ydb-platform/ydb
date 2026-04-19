@@ -19,7 +19,7 @@ namespace NMVP::NOIDC {
 
 namespace {
 
-NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
+NHttp::THttpOutgoingResponsePtr CreateResponseForProgrammaticRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
     headers.Set("Content-Type", "application/json; charset=utf-8");
     SetCORS(request, &headers);
     TString body {"{\"error\":\"Authorization Required\",\"authUrl\":\"" + redirectUrl + "\"}"};
@@ -101,8 +101,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
     responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
-    if (context.IsAjaxRequest()) {
-        return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
+    if (!context.IsNavigationRequest()) {
+        return CreateResponseForProgrammaticRequest(request, responseHeaders, redirectUrl);
     }
     responseHeaders.Set(LOCATION_HEADER, redirectUrl);
     return request->CreateResponse("302", "Authorization required", responseHeaders);

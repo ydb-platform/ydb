@@ -75,6 +75,7 @@ public:
         AddHandler(2, &TCoFlatMap::Match, HNDL(RewriteFlatMapOverIndexRead));
 
         AddHandler(3, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
+        AddHandler(3, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
         AddHandler(3, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
         AddHandler(3, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
         AddHandler(3, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));

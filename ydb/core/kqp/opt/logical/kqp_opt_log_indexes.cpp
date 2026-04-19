@@ -1271,9 +1271,9 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
     };
 
     if (!hasResidual) {
-        return DoRewriteIndexRead(read, ctx, tableDesc, implTable, extraColumns, filter);
+        return DoRewriteIndexRead(read, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), extraColumns, filter);
     } else {
-        auto newRead = DoRewriteIndexRead(read, ctx, tableDesc, implTable, extraColumns, filter);
+        auto newRead = DoRewriteIndexRead(read, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), extraColumns, filter);
         TNodeOnNodeOwnedMap replaces;
         YQL_ENSURE(flatMap.Lambda().Body().Maybe<TCoConditionalValueBase>());
         replaces.emplace(flatMap.Lambda().Body().Raw(), flatMap.Lambda().Body().Cast<TCoConditionalValueBase>().Value().Ptr());
@@ -1360,7 +1360,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
     };
 
     if (!hasResidual) {
-        return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, extraColumns, filter);
+        return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), extraColumns, filter);
     } else {
         auto flatMap = maybeFlatMap.Cast();
         auto newRead = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), extraColumns, filter);

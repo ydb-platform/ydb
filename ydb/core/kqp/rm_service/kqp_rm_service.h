@@ -242,7 +242,6 @@ struct TKqpRMAllocateResult {
     bool Success = true;
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
     TString FailReason;
-    TIntrusivePtr<TTxState> TxInfo;
 
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
         return Status;

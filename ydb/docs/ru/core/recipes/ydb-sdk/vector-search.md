@@ -986,7 +986,8 @@
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters}
+            clusters={clusters},
+            overlap_clusters=3
         );
         """
 
@@ -1007,109 +1008,109 @@
 
     {% endcut %}
 
-    {% list tabs %}
-    
-    - Native SDK
-    
-    ```python
-    def add_vector_index(
-        pool: ydb.QuerySessionPool,
-        driver: ydb.Driver,
-        table_name: str,
-        index_name: str,
-        strategy: str,
-        dimension: int,
-        levels: int = 2,
-        clusters: int = 128,
-    ):
-        temp_index_name = f"{index_name}__temp"
-        query = f"""
-        ALTER TABLE `{table_name}`
-        ADD INDEX {temp_index_name}
-        GLOBAL USING vector_kmeans_tree
-        ON (embedding)
-        WITH (
-            {strategy},
-            vector_type="Float",
-            vector_dimension={dimension},
-            levels={levels},
-            clusters={clusters}
-        );
-        """
+        {% list tabs %}
 
-        pool.execute_with_retries(query)
-        driver.table_client.alter_table(
-            f"{driver._driver_config.database}/{table_name}",
-            rename_indexes=[
-                ydb.RenameIndexItem(
-                    source_name=temp_index_name,
-                    destination_name=f"{index_name}",
-                    replace_destination=True,
-                ),
-            ],
-        )
+        - Native SDK
 
-          pool.execute_with_retries(query)
-          driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
+        ```python
+        def add_vector_index(
+            pool: ydb.QuerySessionPool,
+            driver: ydb.Driver,
+            table_name: str,
+            index_name: str,
+            strategy: str,
+            dimension: int,
+            levels: int = 2,
+            clusters: int = 128,
+        ):
+            temp_index_name = f"{index_name}__temp"
+            query = f"""
+            ALTER TABLE `{table_name}`
+            ADD INDEX {temp_index_name}
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {strategy},
+                vector_type="Float",
+                vector_dimension={dimension},
+                levels={levels},
+                clusters={clusters},
+                overlap_clusters=3
+            );
+            """
 
-          print(f"Table index {index_name} created.")
-      ```
+            pool.execute_with_retries(query)
+            driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
 
-    - Native SDK (Asyncio)
+            pool.execute_with_retries(query)
+            driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
 
-      ```python
-      import ydb
+            print(f"Table index {index_name} created.")
+        ```
 
-      async def add_vector_index(
-          pool: ydb.aio.QuerySessionPool,
-          driver: ydb.aio.Driver,
-          table_name: str,
-          index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
-      ):
-          temp_index_name = f"{index_name}__temp"
-          query = f"""
-          ALTER TABLE `{table_name}`
-          ADD INDEX {temp_index_name}
-          GLOBAL USING vector_kmeans_tree
-          ON (embedding)
-          WITH (
-              {strategy},
-              vector_type="Float",
-              vector_dimension={dimension},
-              levels={levels},
-              clusters={clusters}
-          );
-          """
+        - Native SDK (Asyncio)
 
-          await pool.execute_with_retries(query)
-          await driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
+        ```python
+        import ydb
 
-          print(f"Table index {index_name} created.")
-      ```
+        async def add_vector_index(
+            pool: ydb.aio.QuerySessionPool,
+            driver: ydb.aio.Driver,
+            table_name: str,
+            index_name: str,
+            strategy: str,
+            dimension: int,
+            levels: int = 2,
+            clusters: int = 128,
+        ):
+            temp_index_name = f"{index_name}__temp"
+            query = f"""
+            ALTER TABLE `{table_name}`
+            ADD INDEX {temp_index_name}
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {strategy},
+                vector_type="Float",
+                vector_dimension={dimension},
+                levels={levels},
+                clusters={clusters}
+            );
+            """
 
-    {% endlist %}
+            await pool.execute_with_retries(query)
+            await driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
+
+            print(f"Table index {index_name} created.")
+        ```
+        {% endlist %}
 
 - C++
 
@@ -1135,7 +1136,8 @@
                 vector_type="Float",
                 vector_dimension={3},
                 levels={4},
-                clusters={5}
+                clusters={5},
+                overlap_clusters=3
             );
         )", tableName, indexName, strategy, dim, levels, clusters);
 
@@ -1370,8 +1372,6 @@
           return items
       ```
 
-    ```
-
     - Native SDK (Asyncio)
 
       ```python
@@ -1437,12 +1437,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as String;
             SELECT
                 id,
@@ -1451,7 +1453,7 @@
             FROM {0} {1}
             ORDER BY score {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         auto params = NYdb::TParamsBuilder()
             .AddParam("$embedding")
@@ -1696,8 +1698,6 @@
           return items
       ```
 
-    ```
-
     - Native SDK (Asyncio)
 
       ```python
@@ -1763,12 +1763,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as List<Float>;
 
             $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
@@ -1781,7 +1783,7 @@
             ORDER BY score
             {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         NYdb::TParamsBuilder paramsBuilder;
         auto& valueBuilder = paramsBuilder.AddParam("$embedding");
@@ -2115,7 +2117,7 @@
             InsertItemsAsBytes(client, tableName, items);
             PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
             AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
-            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
+            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10, indexName));
         } catch (const std::exception& e) {
             std::cerr << "Execution failed: " << e.what() << std::endl;
         }

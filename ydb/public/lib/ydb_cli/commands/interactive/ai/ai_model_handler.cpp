@@ -5,10 +5,11 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_openai.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_query_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_shell_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/explain_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_shell_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
 #include <util/string/strip.h>
@@ -227,6 +228,7 @@ void TModelHandler::SetupTools(const TSettings& settings) {
     Tools = {
         {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver})},
         {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver})},
+        {"explain_query", CreateExplainQueryTool({.Driver = settings.Driver})},
         {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver})},
         {"ydb_help", CreateYdbHelpTool({.UsageInfoGetter = settings.UsageInfoGetter})},
         {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt, .Driver = settings.Driver})},

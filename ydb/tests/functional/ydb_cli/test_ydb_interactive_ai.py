@@ -370,7 +370,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             req = self.mock_server.last_request["body"]
             assert "tools" in req
             tool_names = {t["function"]["name"] for t in req["tools"]}
-            assert tool_names == {"list_directory", "exec_query", "describe", "ydb_help", "exec_shell"}
+            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell"}
             for tool in req["tools"]:
                 assert tool["type"] == "function"
                 assert "parameters" in tool["function"]
@@ -693,7 +693,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
 
             tools = self.mock_server.last_request["body"]["tools"]
             tool_names = {t["name"] for t in tools}
-            assert tool_names == {"list_directory", "exec_query", "describe", "ydb_help", "exec_shell"}
+            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell"}
             for tool in tools:
                 assert "input_schema" in tool
                 assert "description" in tool
@@ -2116,6 +2116,8 @@ class _ToolTestBase(BaseAiInteractiveTest):
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_ai_prompt(child)
             self._send_query(child, "run a query")
+            child.expect("Agent wants to execute query", timeout=15)
+            child.expect("SELECT.*1.*AS.*val", timeout=15)
 
             # The CLI shows an approval dialog before executing
             self._approve_tool_execution(child)
@@ -2183,6 +2185,31 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self.mock_server.clear()
             child.close()
 
+    def test_exec_query_tool_query_failed(self):
+        handler, _ = self._make_tool_handler(
+            "exec_query", {"query": "SELECT 1 FROM unknown_table"}, "Query executed."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "run a query")
+            child.expect("Agent wants to execute query", timeout=15)
+            child.expect("SELECT.*1.*FROM.*unknown_table", timeout=15)
+            self._approve_tool_execution(child)
+            child.expect("Query execution failed.*unknown_table", timeout=30)
+            child.expect("Query executed", timeout=30)
+            self._wait_for_ai_prompt(child)
+            tool_result = self._get_tool_result_content()
+            assert "unknown_table" in tool_result
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
     def test_exec_query_tool_schema_in_request(self):
         """exec_query tool definition has ``query`` parameter in its schema."""
         handler, _ = self._make_tool_handler(
@@ -2210,6 +2237,100 @@ class _ToolTestBase(BaseAiInteractiveTest):
             else:
                 tools = first_body["tools"]
                 eq = [t for t in tools if t["name"] == "exec_query"][0]
+                props = eq["input_schema"]["properties"]
+
+            assert "query" in props
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_explain_query_tool(self):
+        """explain_query tool: explains a query and returns the query plan and AST."""
+        handler, call_count = self._make_tool_handler(
+            "explain_query", {"query": "SELECT 1 AS val"}, "Query explained."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "explain a query")
+            child.expect("Explaining query", timeout=15)
+            child.expect("SELECT.*1.*AS.*val", timeout=15)
+            child.expect("Query explained", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            self._validate_tool_call_in_first_request("explain_query", {"query": "SELECT 1 AS val"})
+            tool_result = self._get_tool_result_content()
+            parsed = json.loads(tool_result)
+            assert isinstance(parsed, dict), "explain_query must return a JSON object"
+            assert "plan" in parsed
+            assert "ast" in parsed
+            assert len(parsed["plan"]) > 0
+            assert len(parsed["ast"]) > 0
+            assert "val" in parsed["ast"]
+            assert "val" in parsed["plan"]
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_explain_query_tool_query_failed(self):
+        """explain_query tool: returns an error if the query is invalid."""
+        handler, _ = self._make_tool_handler(
+            "explain_query", {"query": "SELECT 1 FROM unknown_table"}, "Query explained."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "explain a query")
+            child.expect("Explaining query", timeout=15)
+            child.expect("Query explain failed.*unknown_table", timeout=30)
+            child.expect("Query explained", timeout=30)
+            self._wait_for_ai_prompt(child)
+            tool_result = self._get_tool_result_content()
+            assert "unknown_table" in tool_result
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_explain_query_tool_schema_in_request(self):
+        """explain_query tool definition has ``query`` parameter in its schema."""
+        handler, _ = self._make_tool_handler(
+            "explain_query", {"query": "SELECT 1"}, "ok"
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "explain")
+            child.expect("ok", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            first_body = [
+                r for r in self.mock_server.requests
+                if r["path"].endswith("/chat/completions" if self.API_TYPE == "openai" else "/messages")
+            ][0]["body"]
+
+            if self.API_TYPE == "openai":
+                tools = first_body["tools"]
+                eq = [t for t in tools if t["function"]["name"] == "explain_query"][0]
+                props = eq["function"]["parameters"]["properties"]
+            else:
+                tools = first_body["tools"]
+                eq = [t for t in tools if t["name"] == "explain_query"][0]
                 props = eq["input_schema"]["properties"]
 
             assert "query" in props

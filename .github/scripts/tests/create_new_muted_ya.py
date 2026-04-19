@@ -44,6 +44,53 @@ _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
 )
 
 
+def load_quarantine_state(ydb_wrapper, branch, build_type):
+    """Load tests and issue numbers currently in quarantine for a profile."""
+    try:
+        table_path = ydb_wrapper.get_table_path("mute_quarantine")
+    except KeyError:
+        logging.warning("mute_quarantine table is not configured in ydb_qa_config.json")
+        return set(), set()
+
+    query = f"""
+    SELECT
+        full_name,
+        build_type,
+        github_issue_number
+    FROM `{table_path}`
+    WHERE branch = '{branch}'
+        AND build_type = '{build_type}'
+    """
+    try:
+        rows = ydb_wrapper.execute_scan_query(
+            query,
+            query_name=f"load_quarantine_state_{branch}_{build_type}",
+        )
+    except Exception as exc:
+        logging.warning("Failed to read mute_quarantine table: %s", exc)
+        return set(), set()
+
+    quarantine_tests = {
+        (row.get("full_name"), row.get("build_type") or DEFAULT_BUILD_TYPE)
+        for row in rows
+        if row.get("full_name")
+    }
+    quarantine_issue_numbers = {
+        int(row.get("github_issue_number"))
+        for row in rows
+        if row.get("github_issue_number") is not None
+    }
+    if quarantine_tests:
+        logging.info(
+            "Loaded %d quarantine tests and %d quarantine issues for %s/%s",
+            len(quarantine_tests),
+            len(quarantine_issue_numbers),
+            branch,
+            build_type,
+        )
+    return quarantine_tests, quarantine_issue_numbers
+
+
 def is_chunk_test(test):
     # First, check the is_test_chunk field if it exists.
     if 'is_test_chunk' in test:
@@ -666,9 +713,26 @@ def read_tests_from_file(file_path):
     return result
 
 
-def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', build_type=DEFAULT_BUILD_TYPE):
+def create_mute_issues(
+    all_tests,
+    file_path,
+    close_issues=True,
+    branch='main',
+    build_type=DEFAULT_BUILD_TYPE,
+    ydb_wrapper=None,
+):
     tests_from_file = read_tests_from_file(file_path)
-    muted_tests_in_issues = get_muted_tests_from_issues()
+    quarantine_tests = set()
+    quarantine_issue_numbers = set()
+    if ydb_wrapper is not None:
+        quarantine_tests, quarantine_issue_numbers = load_quarantine_state(
+            ydb_wrapper,
+            branch,
+            build_type,
+        )
+    muted_tests_in_issues = get_muted_tests_from_issues(
+        quarantine_issue_numbers=quarantine_issue_numbers
+    )
     prepared_tests_by_suite = {}
     temp_tests_by_suite = {}
     
@@ -700,6 +764,9 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
             logging.info(
                 f"test {full_name} ({build_type}) already have issue, {muted_tests_in_issues[issue_key][0]['url']}"
             )
+            continue
+        if (full_name, build_type) in quarantine_tests:
+            logging.info(f"test {full_name} is in quarantine, skipping issue creation")
             continue
 
         monitor = monitor_by_name.get((full_name, build_type))
@@ -1053,6 +1120,7 @@ def mute_worker(args):
                 close_issues=args.close_issues,
                 branch=args.branch,
                 build_type=build_type,
+                ydb_wrapper=ydb_wrapper,
             )
 
             try:

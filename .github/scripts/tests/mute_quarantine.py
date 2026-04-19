@@ -1,0 +1,622 @@
+#!/usr/bin/env python3
+
+import argparse
+import datetime
+import json
+import os
+import sys
+
+import ydb
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+from ydb_wrapper import YDBWrapper
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from update_mute_issues import (
+    add_issue_comment,
+    get_project_v2_fields,
+    run_query,
+    update_issue_status,
+    ORG_NAME,
+    PROJECT_ID,
+    REPO_NAME,
+)
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
+
+
+CONFIG_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_quarantine_config.json')
+)
+
+STATUS_MUTED = "Muted"
+STATUS_QUARANTINE = "Quarantine"
+
+COMMENT_QUARANTINE_ENTERED = """🔒 **Quarantine started**
+
+User **{closed_by_login}** closed this issue, marking the tests as fixed.
+The tests have been moved to quarantine automatically.
+
+**What happens next:**
+- Tests are hidden from the mute dashboard immediately
+- Tests remain muted in CI for up to {quarantine_window_days} days
+- If stable → they will be unmuted automatically, this issue will be closed
+- If any test fails again → issue will return to **Muted** status
+
+**No action needed from you.** Do not edit `muted_ya.txt` manually.
+
+⏱ Quarantine until: {quarantine_until_date}
+🔗 Workflow run: {workflow_run_url}
+"""
+
+COMMENT_QUARANTINE_FAILED = """⚠️ **Returned to Muted**
+
+One or more tests failed during the quarantine period — the fix did not hold.
+
+**Details:**
+- Failed tests: {failed_test_names}
+- Failures detected: {fail_count}
+- Quarantine started: {quarantine_since}
+
+**What to do:**
+1. Investigate the failures
+2. Apply a fix
+3. Close this issue again when ready
+
+🔗 Workflow run: {workflow_run_url}
+"""
+
+COMMENT_QUARANTINE_EXPIRED = """✅ **Quarantine complete**
+
+All tests were stable for {quarantine_window_days} days. Quarantine period is over.
+The tests will be unmuted automatically in the next automation run.
+
+This issue will be closed shortly.
+
+🔗 Workflow run: {workflow_run_url}
+"""
+
+
+def load_quarantine_window_days() -> int:
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as config_file:
+        config = json.load(config_file)
+    days = int(config["quarantine_window_days"])
+    if days <= 0:
+        raise ValueError("quarantine_window_days must be a positive integer")
+    return days
+
+
+def workflow_run_url() -> str:
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    if repository and run_id:
+        return f"{server}/{repository}/actions/runs/{run_id}"
+    return "N/A"
+
+
+def _timestamp_to_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=datetime.timezone.utc)
+        return value.astimezone(datetime.timezone.utc)
+    if isinstance(value, int):
+        return datetime.datetime.fromtimestamp(value / 1_000_000, tz=datetime.timezone.utc)
+    return None
+
+
+def get_status_option_ids():
+    _, project_fields = get_project_v2_fields(ORG_NAME, PROJECT_ID)
+    status_field_id = None
+    status_options = {}
+    for field in project_fields:
+        if field.get("name", "").lower() != "status":
+            continue
+        status_field_id = field["id"]
+        for option in field.get("options", []):
+            option_name = option.get("name")
+            if option_name:
+                status_options[option_name] = option["id"]
+        break
+    if not status_field_id:
+        raise RuntimeError("Status field was not found in project fields")
+    if STATUS_MUTED not in status_options or STATUS_QUARANTINE not in status_options:
+        raise RuntimeError("Required status options are missing in project fields")
+    return status_field_id, status_options
+
+
+def create_quarantine_table(ydb_wrapper, table_path):
+    create_sql = f"""
+    CREATE TABLE IF NOT EXISTS `{table_path}` (
+        `full_name`             Utf8      NOT NULL,
+        `branch`                Utf8      NOT NULL,
+        `build_type`            Utf8      NOT NULL,
+        `github_issue_number`   Uint64    NOT NULL,
+        `github_issue_id`       Utf8,
+        `quarantine_since`      Timestamp NOT NULL,
+        PRIMARY KEY (full_name, branch, build_type)
+    )
+    WITH (STORE = COLUMN)
+    """
+    ydb_wrapper.create_table(table_path, create_sql)
+
+
+def fetch_quarantine_rows(ydb_wrapper, table_path):
+    query = f"""
+    SELECT
+        full_name,
+        branch,
+        build_type,
+        github_issue_number,
+        github_issue_id,
+        quarantine_since
+    FROM `{table_path}`
+    """
+    return ydb_wrapper.execute_scan_query(query, query_name="mute_quarantine_fetch_rows")
+
+
+def fetch_candidate_closed_issues(ydb_wrapper, issues_table_path):
+    query = f"""
+    SELECT
+        issue_id,
+        issue_number,
+        body,
+        state,
+        state_reason
+    FROM `{issues_table_path}`
+    WHERE state = 'CLOSED'
+        AND state_reason = 'COMPLETED'
+    """
+    return ydb_wrapper.execute_scan_query(query, query_name="mute_quarantine_closed_issues")
+
+
+def fetch_project_issue_refs(issue_numbers=None):
+    refs = {}
+    required_numbers = set(issue_numbers or [])
+    has_next_page = True
+    end_cursor = "null"
+    while has_next_page:
+        query = """
+        {
+          organization(login: "%s") {
+            projectV2(number: %s) {
+              items(first: 100, after: %s) {
+                nodes {
+                  id
+                  content {
+                    ... on Issue {
+                      id
+                      number
+                      url
+                    }
+                  }
+                }
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+              }
+            }
+          }
+        }
+        """ % (ORG_NAME, PROJECT_ID, end_cursor)
+        result = run_query(query)
+        items = result.get("data", {}).get("organization", {}).get("projectV2", {}).get("items", {})
+        for item in items.get("nodes", []):
+            content = item.get("content") or {}
+            issue_number = content.get("number")
+            if issue_number is None:
+                continue
+            issue_number = int(issue_number)
+            if required_numbers and issue_number not in required_numbers:
+                continue
+            refs[issue_number] = {
+                "project_item_id": item.get("id"),
+                "issue_id": content.get("id"),
+                "issue_url": content.get("url"),
+            }
+        page_info = items.get("pageInfo") or {}
+        has_next_page = bool(page_info.get("hasNextPage"))
+        end_cursor = f"\"{page_info['endCursor']}\"" if page_info.get("endCursor") else "null"
+    return refs
+
+
+def fetch_issue_closer_types_and_logins(issue_numbers):
+    closers = {}
+    if not issue_numbers:
+        return closers
+
+    numbers = sorted(issue_numbers)
+    chunk_size = 50
+    for i in range(0, len(numbers), chunk_size):
+        chunk = numbers[i : i + chunk_size]
+        issue_nodes_query = []
+        for number in chunk:
+            issue_nodes_query.append(
+                f"""
+                n{number}: issue(number: {number}) {{
+                    number
+                    timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {{
+                        nodes {{
+                            __typename
+                            ... on ClosedEvent {{
+                                actor {{
+                                    __typename
+                                    login
+                                }}
+                                closer {{
+                                    __typename
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+                """
+            )
+        query = f"""
+        query {{
+            repository(owner: "{ORG_NAME}", name: "{REPO_NAME}") {{
+                {' '.join(issue_nodes_query)}
+            }}
+        }}
+        """
+        result = run_query(query)
+        repo_data = result.get("data", {}).get("repository", {})
+        for number in chunk:
+            node = repo_data.get(f"n{number}")
+            if not node:
+                continue
+            actor_login = None
+            actor_type = None
+            timeline_nodes = node.get("timelineItems", {}).get("nodes", [])
+            for event in reversed(timeline_nodes):
+                if event.get("__typename") != "ClosedEvent":
+                    continue
+                actor = event.get("actor") or {}
+                actor_login = actor.get("login")
+                actor_type = actor.get("__typename")
+                break
+            closers[number] = {
+                "closed_by_type": "User" if actor_type == "User" else "Bot",
+                "closed_by_login": actor_login or "",
+            }
+    return closers
+
+
+def reopen_issue(issue_id):
+    query = """
+    mutation ($issueId: ID!) {
+      reopenIssue(input: {issueId: $issueId}) {
+        issue {
+          id
+          url
+        }
+      }
+    }
+    """
+    run_query(query, {"issueId": issue_id})
+
+
+def upsert_quarantine_rows(ydb_wrapper, table_path, rows):
+    if not rows:
+        return
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("full_name", ydb.PrimitiveType.Utf8)
+        .add_column("branch", ydb.PrimitiveType.Utf8)
+        .add_column("build_type", ydb.PrimitiveType.Utf8)
+        .add_column("github_issue_number", ydb.PrimitiveType.Uint64)
+        .add_column("github_issue_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("quarantine_since", ydb.PrimitiveType.Timestamp)
+    )
+    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
+
+
+def delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type):
+    query = f"""
+    DECLARE $full_name AS Utf8;
+    DECLARE $branch AS Utf8;
+    DECLARE $build_type AS Utf8;
+
+    DELETE FROM `{table_path}`
+    WHERE full_name = $full_name
+        AND branch = $branch
+        AND build_type = $build_type;
+    """
+    ydb_wrapper.execute_dml(
+        query,
+        {
+            "$full_name": full_name,
+            "$branch": branch,
+            "$build_type": build_type,
+        },
+        query_name="mute_quarantine_delete_row",
+    )
+
+
+def fetch_monitor_failures(
+    ydb_wrapper,
+    tests_monitor_table,
+    full_name,
+    branch,
+    build_type,
+    days,
+    quarantine_since_date=None,
+):
+    query = f"""
+    SELECT
+        full_name,
+        fail_count,
+        date_window
+    FROM `{tests_monitor_table}`
+    WHERE full_name = '{full_name}'
+        AND branch = '{branch}'
+        AND build_type = '{build_type}'
+        AND date_window >= CurrentUtcDate() - {days} * Interval("P1D")
+    """
+    rows = ydb_wrapper.execute_scan_query(query, query_name="mute_quarantine_monitor_failures")
+    fail_count = 0
+    failed_tests = set()
+    for row in rows:
+        row_date = _scan_date_to_date(row.get("date_window"))
+        if quarantine_since_date and row_date and row_date < quarantine_since_date:
+            continue
+        row_fail = int(row.get("fail_count") or 0)
+        if row_fail > 0:
+            fail_count += row_fail
+            failed_tests.add(row.get("full_name") or full_name)
+    return fail_count, sorted(failed_tests)
+
+
+def process_enter_quarantine(
+    ydb_wrapper,
+    table_path,
+    issues_table_path,
+    quarantine_window_days,
+    status_field_id,
+    status_options,
+):
+    existing_rows = fetch_quarantine_rows(ydb_wrapper, table_path)
+    existing_issue_numbers = {
+        int(row["github_issue_number"])
+        for row in existing_rows
+        if row.get("github_issue_number") is not None
+    }
+
+    closed_issues = fetch_candidate_closed_issues(ydb_wrapper, issues_table_path)
+    candidate_numbers = {
+        int(row["issue_number"])
+        for row in closed_issues
+        if row.get("issue_number") is not None and int(row["issue_number"]) not in existing_issue_numbers
+    }
+    closer_info = fetch_issue_closer_types_and_logins(candidate_numbers)
+    issue_refs = fetch_project_issue_refs(candidate_numbers)
+    run_url = workflow_run_url()
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    quarantine_until = now + datetime.timedelta(days=quarantine_window_days)
+
+    new_rows = []
+    for issue in closed_issues:
+        issue_number_raw = issue.get("issue_number")
+        body = issue.get("body", "")
+        if issue_number_raw is None:
+            continue
+        issue_number = int(issue_number_raw)
+        issue_ref = issue_refs.get(issue_number) or {}
+        issue_id = issue_ref.get("issue_id") or issue.get("issue_id")
+        project_item_id = issue_ref.get("project_item_id")
+        issue_url = issue_ref.get("issue_url") or f"https://github.com/{ORG_NAME}/{REPO_NAME}/issues/{issue_number}"
+        if not issue_id or not project_item_id:
+            continue
+        if issue_number in existing_issue_numbers:
+            continue
+        closer = closer_info.get(issue_number, {})
+        if closer.get("closed_by_type") != "User":
+            continue
+
+        parsed = parse_body(body or "")
+        tests = parsed.tests
+        branches = parsed.branches or ["main"]
+        build_type = parsed.build_type or DEFAULT_BUILD_TYPE
+        if not tests:
+            continue
+
+        for full_name in tests:
+            for branch in branches:
+                new_rows.append(
+                    {
+                        "full_name": full_name,
+                        "branch": branch,
+                        "build_type": build_type,
+                        "github_issue_number": issue_number,
+                        "github_issue_id": issue_id,
+                        "quarantine_since": now,
+                    }
+                )
+
+        reopen_issue(issue_id)
+        update_issue_status(
+            project_item_id,
+            status_field_id,
+            status_options[STATUS_QUARANTINE],
+            issue_url,
+        )
+        comment = COMMENT_QUARANTINE_ENTERED.format(
+            closed_by_login=closer.get("closed_by_login") or "unknown",
+            quarantine_window_days=quarantine_window_days,
+            quarantine_until_date=quarantine_until.strftime("%Y-%m-%d"),
+            workflow_run_url=run_url,
+        )
+        add_issue_comment(issue_id, comment)
+    deduped_rows = {}
+    for row in new_rows:
+        row_key = (row["full_name"], row["branch"], row["build_type"])
+        deduped_rows[row_key] = row
+    upsert_quarantine_rows(ydb_wrapper, table_path, list(deduped_rows.values()))
+
+
+def _scan_date_to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, int):
+        if value < 100_000:
+            return datetime.date(1970, 1, 1) + datetime.timedelta(days=value)
+        if value < 10_000_000_000:
+            return datetime.datetime.fromtimestamp(value, tz=datetime.timezone.utc).date()
+        return datetime.datetime.fromtimestamp(value / 1_000_000, tz=datetime.timezone.utc).date()
+    return None
+
+
+def process_failed_quarantine(
+    ydb_wrapper,
+    table_path,
+    tests_monitor_table,
+    quarantine_window_days,
+    status_field_id,
+    status_options,
+):
+    rows = fetch_quarantine_rows(ydb_wrapper, table_path)
+    run_url = workflow_run_url()
+    issue_numbers = {
+        int(row["github_issue_number"])
+        for row in rows
+        if row.get("github_issue_number") is not None
+    }
+    issue_refs = fetch_project_issue_refs(issue_numbers)
+    processed_issue_numbers = set()
+
+    for row in rows:
+        full_name = row.get("full_name")
+        branch = row.get("branch")
+        build_type = row.get("build_type")
+        issue_id = row.get("github_issue_id")
+        issue_number_raw = row.get("github_issue_number")
+        if not full_name or not branch or not build_type or issue_number_raw is None:
+            continue
+        issue_number = int(issue_number_raw)
+        issue_ref = issue_refs.get(issue_number) or {}
+        issue_id = issue_ref.get("issue_id") or issue_id
+        project_item_id = issue_ref.get("project_item_id")
+        issue_url = issue_ref.get("issue_url") or f"https://github.com/{ORG_NAME}/{REPO_NAME}/issues/{issue_number}"
+        if not issue_id:
+            continue
+
+        quarantine_since = _timestamp_to_datetime(row.get("quarantine_since"))
+        quarantine_since_date = quarantine_since.date() if quarantine_since else None
+        fail_count, failed_tests = fetch_monitor_failures(
+            ydb_wrapper,
+            tests_monitor_table,
+            full_name,
+            branch,
+            build_type,
+            quarantine_window_days,
+            quarantine_since_date=quarantine_since_date,
+        )
+        if fail_count <= 0:
+            continue
+
+        delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type)
+        if issue_number in processed_issue_numbers:
+            continue
+        if not project_item_id:
+            continue
+        update_issue_status(
+            project_item_id,
+            status_field_id,
+            status_options[STATUS_MUTED],
+            issue_url,
+        )
+        comment = COMMENT_QUARANTINE_FAILED.format(
+            failed_test_names=", ".join(failed_tests) if failed_tests else full_name,
+            fail_count=fail_count,
+            quarantine_since=quarantine_since.strftime("%Y-%m-%d %H:%M:%S UTC")
+            if quarantine_since
+            else "unknown",
+            workflow_run_url=run_url,
+        )
+        add_issue_comment(issue_id, comment)
+        processed_issue_numbers.add(issue_number)
+
+
+def process_expired_quarantine(ydb_wrapper, table_path, quarantine_window_days):
+    rows = fetch_quarantine_rows(ydb_wrapper, table_path)
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    run_url = workflow_run_url()
+    issue_numbers = {
+        int(row["github_issue_number"])
+        for row in rows
+        if row.get("github_issue_number") is not None
+    }
+    issue_refs = fetch_project_issue_refs(issue_numbers)
+    commented_issue_numbers = set()
+
+    for row in rows:
+        full_name = row.get("full_name")
+        branch = row.get("branch")
+        build_type = row.get("build_type")
+        issue_number_raw = row.get("github_issue_number")
+        issue_number = int(issue_number_raw) if issue_number_raw is not None else None
+        quarantine_since = _timestamp_to_datetime(row.get("quarantine_since"))
+        if not full_name or not branch or not build_type or not quarantine_since:
+            continue
+        if quarantine_since > now - datetime.timedelta(days=quarantine_window_days):
+            continue
+
+        delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type)
+        issue_ref = issue_refs.get(issue_number) if issue_number is not None else {}
+        issue_id = (issue_ref or {}).get("issue_id") or row.get("github_issue_id")
+        if issue_id and issue_number not in commented_issue_numbers:
+            comment = COMMENT_QUARANTINE_EXPIRED.format(
+                quarantine_window_days=quarantine_window_days,
+                workflow_run_url=run_url,
+            )
+            add_issue_comment(issue_id, comment)
+            commented_issue_numbers.add(issue_number)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Mute quarantine state machine")
+    parser.parse_args()
+
+    quarantine_window_days = load_quarantine_window_days()
+
+    with YDBWrapper() as ydb_wrapper:
+        if not ydb_wrapper.check_credentials():
+            return 1
+
+        quarantine_table = ydb_wrapper.get_table_path("mute_quarantine")
+        issues_table = ydb_wrapper.get_table_path("issues")
+        tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
+
+        create_quarantine_table(ydb_wrapper, quarantine_table)
+        status_field_id, status_options = get_status_option_ids()
+
+        process_enter_quarantine(
+            ydb_wrapper,
+            quarantine_table,
+            issues_table,
+            quarantine_window_days,
+            status_field_id,
+            status_options,
+        )
+        process_failed_quarantine(
+            ydb_wrapper,
+            quarantine_table,
+            tests_monitor_table,
+            quarantine_window_days,
+            status_field_id,
+            status_options,
+        )
+        process_expired_quarantine(ydb_wrapper, quarantine_table, quarantine_window_days)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

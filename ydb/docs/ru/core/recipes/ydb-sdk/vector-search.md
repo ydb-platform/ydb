@@ -1007,6 +1007,10 @@
 
     {% endcut %}
 
+    {% list tabs %}
+    
+    - Native SDK
+    
     ```python
     def add_vector_index(
         pool: ydb.QuerySessionPool,

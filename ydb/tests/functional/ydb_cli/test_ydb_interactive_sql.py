@@ -97,7 +97,9 @@ class TestInteractiveWelcomeMessage(BaseSqlInteractiveTest):
         assert result.exit_code != 0
 
         combined = result.stdout + result.stderr
-        assert "connect" in combined.lower() or "unavailable" in combined.lower() or "transport" in combined.lower()
+        assert "Status: TRANSPORT_UNAVAILABLE" in combined
+        assert "Issues:" in combined
+        assert "Grpc error response on endpoint localhost:1" in combined
 
 
 # =============================================================================

@@ -907,6 +907,19 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         finally:
             child.close()
 
+    def test_welcome_on_empty_config(self):
+        profile_path = self._create_minimal_ai_config()
+        child = self.spawn_interactive(timeout=15, extra_args=["--ai-profile-file", profile_path])
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            child.expect("AI.*interactive mode", timeout=10)
+            child.expect("Using model.*Sample Open AI model", timeout=10)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            child.close()
+
     def test_welcome_shows_help_and_model_hints(self):
         child = self.spawn_ai_interactive("openai")
         try:
@@ -1781,6 +1794,28 @@ class _ToolTestBase(BaseAiInteractiveTest):
     # -----------------------------------------------------------------------
     # Tool tests
     # -----------------------------------------------------------------------
+
+    def test_request_interrupting(self):
+        def handler(request):
+            time.sleep(60)
+            return {"choices": [{"message": {"role": "assistant", "content": "Ping response."}}]}
+
+        self.mock_server.set_openai_handler(handler)
+        child = self.spawn_ai_interactive("openai")
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "ping")
+            child.expect("Agent is thinking...", timeout=15)
+            child.sendintr()
+            child.expect("<INTERRUPTED>", timeout=10)
+            child.expect("Request to model API was interrupted", timeout=10)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
 
     def test_list_directory_tool(self):
         """list_directory tool: lists database root directory, returns JSON

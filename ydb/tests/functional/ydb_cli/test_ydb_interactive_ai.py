@@ -270,7 +270,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
         child = self.spawn_ai_interactive("openai")
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
-            child.expect("AI profile:", timeout=10)
+            child.expect("Using model:", timeout=10)
             child.expect("/help", timeout=10)
             child.expect("/model", timeout=10)
             self._wait_for_ai_prompt(child)
@@ -594,7 +594,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
         child = self.spawn_ai_interactive("anthropic")
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
-            child.expect("AI profile:", timeout=10)
+            child.expect("Using model:", timeout=10)
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
@@ -900,7 +900,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             child.expect("AI.*interactive mode", timeout=10)
-            child.expect("AI profile.*Test OpenAI", timeout=10)
+            child.expect("Using model.*Test OpenAI", timeout=10)
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
@@ -930,7 +930,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._wait_for_yql_prompt(child)
             self._send_query(child, "/switch")
             child.expect("Welcome to YDB CLI .*AI.* interactive mode!", timeout=10)
-            child.expect("Using model: Sample Open AI model", timeout=10)
+            child.expect("Using model.*Sample Open AI model", timeout=10)
             self._wait_for_ai_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
@@ -1071,11 +1071,8 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
         p = profiles[profile_id]
         assert p["name"], "profile name must be non-empty"
-        assert "http://127.0.0.1:" in p["endpoint"]
-        assert p["api_type"] == 0
-        assert p["model"] == "sample-openai-model"
         assert p["preset_id"] == "sample_openai_model"
-        assert p.get("token_provider") == "test_token"
+        assert len(p.keys()) == 2, "only name and preset_id are expected"
 
     def test_model_switch_updates_profile_file(self):
         """Switching model via ``/model`` persists the new profile and
@@ -1111,9 +1108,9 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         assert active_id != "test_openai", "active profile must have changed"
 
         active = profiles[active_id]
-        assert active["api_type"] == 1
-        assert active["model"] == "sample-anthropic-model"
+        assert active["name"] == "Sample Anthropic model"
         assert active["preset_id"] == "sample_anthropic_model"
+        assert len(active.keys()) == 2, "only name and preset_id are expected"
 
         assert "test_openai" in profiles, "original profile must still exist"
 
@@ -1136,6 +1133,14 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self._send_enter(child)
 
             child.expect("choose setting to change.*API endpoint", timeout=10)
+            for _ in range(2):
+                self._send_down(child)
+            self._send_enter(child)
+
+            child.expect("Please choose model name:", timeout=10)
+            self._send_enter(child)
+
+            child.expect("choose setting to change.*API endpoint", timeout=10)
             for _ in range(5):
                 self._send_down(child)
             self._send_enter(child)
@@ -1149,6 +1154,10 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         cfg = self._read_profile_yaml()
         assert "ai_profiles" in cfg
         assert cfg["current_profile"] in cfg["ai_profiles"]
+
+        profile_id = cfg["current_profile"]
+        p = cfg["ai_profiles"][profile_id]
+        assert p["name"] == "Test OpenAI"
 
     # -- RemoveAiProfile (via /config) ---------------------------------------
 
@@ -1216,9 +1225,8 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         profile_id = cfg["current_profile"]
         p = cfg["ai_profiles"][profile_id]
         assert p.get("name"), "replacement profile must have a name"
-        assert p.get("endpoint"), "replacement profile must have an endpoint"
-        assert "api_type" in p, "replacement profile must have an api_type"
         assert p.get("preset_id"), "replacement profile must reference a preset"
+        assert len(p.keys()) == 2, "only name and preset_id are expected"
 
     # -- /model menu (presets from test binary) ------------------------------
 
@@ -1384,6 +1392,9 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             child.expect("choose model name", timeout=10)
             self._send_enter(child)
 
+            child.expect("Please enter profile name:", timeout=10)
+            self._send_enter(child)
+
             child.expect("profile is changed|Switching AI profile", timeout=15)
             self._wait_for_ai_prompt(child)
 
@@ -1424,7 +1435,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         cfg = self._read_profile_yaml()
         profile_id = cfg["current_profile"]
         p = cfg["ai_profiles"][profile_id]
-        assert p.get("token_provider") == "test_token"
+        assert p["name"] == "Sample Open AI model"
 
     # -- /config menu --------------------------------------------------------
 

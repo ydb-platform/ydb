@@ -39,8 +39,7 @@ class BaseInteractiveTest(BaseCliTestWithDatabase):
             timeout=timeout,
             env=env,
         )
-        if os.getenv("YDB_CLI_TEST_DEBUG"):
-            child.logfile_read = sys.stdout
+        child.logfile_read = sys.stdout
         return child
 
     @classmethod

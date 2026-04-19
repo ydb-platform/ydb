@@ -68,9 +68,7 @@ public:
 
         // Set initial selection
         if (initialSelected < Options.size()) {
-            PageBegin = std::max(0, static_cast<int>(initialSelected) - PageSize / 2);
-            PageBegin = std::min(PageBegin, static_cast<int>(Options.size()) - PageSize);
-            PageBegin = std::max(0, PageBegin);
+            PageBegin = std::max(0, std::min(static_cast<int>(initialSelected) - PageSize / 2, static_cast<int>(Options.size()) - PageSize));
             Selected = static_cast<int>(initialSelected) - PageBegin;
         }
 

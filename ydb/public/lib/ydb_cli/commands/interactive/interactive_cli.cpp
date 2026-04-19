@@ -66,7 +66,7 @@ TVersionInfo ResolveVersionInfo(const TDriver& driver) {
         }).ExtractValueSync();
 
         if (!select1Status.IsSuccess()) {
-            result.ServerAvailableCheckFail = ToString(select1Status.GetStatus());
+            result.ServerAvailableCheckFail = TStringBuilder() << "Status: " << select1Status.GetStatus() << "Issues:\n" << select1Status.GetIssues().ToString();
         }
     }
 

@@ -106,7 +106,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         const TString defaultReader = [&]() {
             const TString defGlobal =
-                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "SIMPLE";
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "TRIVIAL";
             if (Self->HasIndex()) {
                 return Self->GetIndexAs<TColumnEngineForLogs>()
                     .GetVersionedIndex()

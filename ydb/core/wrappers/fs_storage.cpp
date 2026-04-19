@@ -542,6 +542,7 @@ public:
             auto& session = it->second;
 
             session.File.Write(body.data(), body.size());
+            session.File.Flush();
             session.TotalSize += body.size();
 
             FS_LOG_I("UploadPart: written under lock"

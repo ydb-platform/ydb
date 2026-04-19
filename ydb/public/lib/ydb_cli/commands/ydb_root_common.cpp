@@ -18,7 +18,6 @@
 #include "ydb_yql.h"
 #include "ydb_workload.h"
 
-#include <ydb/core/base/backtrace.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
@@ -36,6 +35,10 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 #include <util/system/execpath.h>
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <ydb/core/base/backtrace.h>
+#endif
 
 namespace NYdb::NConsoleClient {
 
@@ -332,7 +335,9 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 void TClientCommandRootCommon::Config(TConfig& config) {
     if (!Initialized) {
         Initialized = true;
+#if defined(__linux__) || defined(__APPLE__)
         NKikimr::EnableYDBBacktraceFormat();
+#endif
 #ifndef NDEBUG
         SetupSignalActions();
 #endif

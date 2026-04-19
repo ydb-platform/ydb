@@ -80,8 +80,8 @@ protected:
 
 public:
     static bool CheckTypeCast(const EType type) {
-        return type == NCommon::IDataSource::EType::TrivialPortion || type == NCommon::IDataSource::EType::TrivialAggregation ||
-               type == NCommon::IDataSource::EType::TrivialSysInfo;
+        return type == NCommon::IDataSource::EType::SimplePortion || type == NCommon::IDataSource::EType::SimpleAggregation ||
+               type == NCommon::IDataSource::EType::SimpleSysInfo;
     }
 
     void ActualizeAggregatedMemoryGuards() {
@@ -186,7 +186,7 @@ public:
 
     void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
-    virtual NArrow::TTrivialRow GetStartPKRecordBatch() const = 0;
+    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
@@ -312,7 +312,7 @@ public:
     }
 
     static bool CheckTypeCast(const EType type) {
-        return type == NCommon::IDataSource::EType::TrivialPortion;
+        return type == NCommon::IDataSource::EType::SimplePortion;
     }
 
     virtual TString GetEntityStorageId(const ui32 entityId) const override {
@@ -351,7 +351,7 @@ public:
         TBase::InitializeProcessing(sourcePtr);
     }
 
-    virtual NArrow::TTrivialRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
             return Portion->IndexKeyEnd();
         } else {
@@ -515,7 +515,7 @@ private:
 
 public:
     static bool CheckTypeCast(const EType type) {
-        return type == NCommon::IDataSource::EType::TrivialAggregation;
+        return type == NCommon::IDataSource::EType::SimpleAggregation;
     }
 
     ui64 GetLastSourceIdx() const {
@@ -551,9 +551,9 @@ public:
         return 0;
     }
 
-    virtual NArrow::TTrivialRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
         AFL_VERIFY(false);
-        return NArrow::TTrivialRow(nullptr, 0);
+        return NArrow::TSimpleRow(nullptr, 0);
     }
 
     virtual bool DoAddTxConflict() override {
@@ -594,7 +594,7 @@ public:
 
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::TrivialAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
+        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
               CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceIdx())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())

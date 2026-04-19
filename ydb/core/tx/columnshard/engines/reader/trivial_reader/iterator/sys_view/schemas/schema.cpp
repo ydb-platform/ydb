@@ -5,12 +5,12 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NSchemas {
 
-NArrow::TTrivialRow TSchemaAdapter::GetPKTrivialRow(const ui64 tabletId, const ui64 presetId, const ui64 schemaVersion) {
-    NArrow::TTrivialRowViewV0::TWriter writer(sizeof(ui64) * 2);
+NArrow::TSimpleRow TSchemaAdapter::GetPKTrivialRow(const ui64 tabletId, const ui64 presetId, const ui64 schemaVersion) {
+    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2);
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(presetId);
     writer.Append<ui64>(schemaVersion);
-    return NArrow::TTrivialRow(writer.Finish(), GetPKSchema());
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

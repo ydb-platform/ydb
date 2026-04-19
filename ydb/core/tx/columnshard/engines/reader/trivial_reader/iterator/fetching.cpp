@@ -36,7 +36,7 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NComm
 
 void VerifyConflictingPortion(const std::shared_ptr<NCommon::IDataSource>& source) {
     // the portion must be a trivial portion
-    AFL_VERIFY(source->GetType() == IDataSource::EType::TrivialPortion);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
     auto* portionSource = static_cast<TPortionDataSource*>(source.get());
     auto& info = portionSource->GetPortionInfo();
     auto status = portionSource->GetContext()->GetPortionStateAtScanStart(info);
@@ -288,7 +288,7 @@ void TStepAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IData
 
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    AFL_VERIFY(source->GetType() == IDataSource::EType::TrivialAggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     std::vector<std::unique_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
     for (auto&& i : aggrSource->GetSources()) {
@@ -312,7 +312,7 @@ void TCleanAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IDat
 
 TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    AFL_VERIFY(source->GetType() == IDataSource::EType::TrivialAggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     for (auto&& i : aggrSource->GetSources()) {
         i->MutableAs<IDataSource>()->ClearResult();

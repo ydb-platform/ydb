@@ -69,10 +69,10 @@ TEvRequestFilter::TPtr MakeTestRequest(
     ui64 recordsCount,
     const std::shared_ptr<IFilterSubscriber>& subscriber)
 {
-    // Create a minimal arrow batch for TTrivialRow construction
+    // Create a minimal arrow batch for TSimpleRow construction
     auto batch = MakeTestBatch({0}, {0});
-    NArrow::TTrivialRow minPK(batch, 0);
-    NArrow::TTrivialRow maxPK(batch, 0);
+    NArrow::TSimpleRow minPK(batch, 0);
+    NArrow::TSimpleRow maxPK(batch, 0);
 
     auto abortionFlag = std::make_shared<TAtomicCounter>(0);
 

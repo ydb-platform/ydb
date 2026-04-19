@@ -37,7 +37,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     }
     auto readMetadata = std::make_shared<TReadMetadata>(index->GetVersionedIndexReadonlyCopy(), readCopy);
 
-    auto initResult = readMetadata->Init(self, read, true);
+    auto initResult = readMetadata->Init(self, read, EReaderClass::Plain);
     if (!initResult) {
         return initResult;
     }

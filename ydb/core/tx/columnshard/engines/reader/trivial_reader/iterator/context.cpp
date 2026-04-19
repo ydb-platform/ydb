@@ -14,7 +14,7 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool isFinalSyncPoint) {
     const bool partialUsageByPK = [&]() {
-        if (sourceExt->GetType() == NCommon::IDataSource::EType::TrivialPortion) {
+        if (sourceExt->GetType() == NCommon::IDataSource::EType::SimplePortion) {
             const auto source = std::static_pointer_cast<TPortionDataSource>(sourceExt);
             switch (source->GetUsageClass()) {
                 case TPKRangeFilter::EUsageClass::PartialUsage:
@@ -35,7 +35,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         .Conflicting = false,
         .MaxRecordSnapshot = source->GetRecordSnapshotMax()
     };
-    if (source->GetType() == NCommon::IDataSource::EType::TrivialPortion) {
+    if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
         const auto* portion = static_cast<const TPortionDataSource*>(source);
         portionState = GetPortionStateAtScanStart(portion->GetPortionInfo());
     }

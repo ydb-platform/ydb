@@ -46,9 +46,9 @@ private:
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(
         const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         if (AppDataVerified().ColumnShardConfig.GetEnableCursorV1()) {
-            return std::make_shared<TTrivialScanCursor>(nullptr, source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
+            return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
         } else {
-            return std::make_shared<TDeprecatedTrivialScanCursor>(nullptr, source->GetDeprecatedPortionId(), readyRecords);
+            return std::make_shared<TDeprecatedSimpleScanCursor>(nullptr, source->GetDeprecatedPortionId(), readyRecords);
         }
     }
     virtual void DoClear() override {

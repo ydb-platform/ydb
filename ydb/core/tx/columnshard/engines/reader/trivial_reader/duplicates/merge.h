@@ -27,7 +27,7 @@ private:
     TActorId Owner;
     std::shared_ptr<TMergeContext> Context;
     TEvBordersConstructionResult::TPtr Event;
-    std::vector<NArrow::TTrivialRow> ReadyBorders;
+    std::vector<NArrow::TSimpleRow> ReadyBorders;
 
 private:
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
@@ -35,7 +35,7 @@ private:
 
     virtual TString GetTaskClassIdentifier() const override;
 public:
-    TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TTrivialRow>& readyBorders);
+    TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TSimpleRow>& readyBorders);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

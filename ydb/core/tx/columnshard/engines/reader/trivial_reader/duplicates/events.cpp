@@ -15,7 +15,7 @@ TEvRequestFilter::TEvRequestFilter(const TPortionDataSource& source, const std::
 {
 }
 
-TEvRequestFilter::TEvRequestFilter(const NArrow::TTrivialRow& minPK, const NArrow::TTrivialRow& maxPK, const ui64 portionId,
+TEvRequestFilter::TEvRequestFilter(const NArrow::TSimpleRow& minPK, const NArrow::TSimpleRow& maxPK, const ui64 portionId,
     const ui64 recordsCount, const TSnapshot& maxVersion, const std::shared_ptr<IFilterSubscriber>& subscriber,
     const std::shared_ptr<const TAtomicCounter>& abortionFlag)
     : MinPK(minPK)

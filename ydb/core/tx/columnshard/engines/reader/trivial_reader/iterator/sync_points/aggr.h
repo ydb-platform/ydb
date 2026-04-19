@@ -141,24 +141,24 @@ private:
         }
         AFL_VERIFY(!Next);
         std::shared_ptr<IScanCursor> cursor;
-        if (source->GetType() == IDataSource::EType::TrivialAggregation) {
+        if (source->GetType() == IDataSource::EType::SimpleAggregation) {
             const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
             for (auto&& i : aggrSource->GetSources()) {
                 Collection->OnSourceFinished(i);
                 --SourcesCount;
             }
             cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
-                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedTrivialScanCursor>(
+                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
                                aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), source->GetPortionIdOptional()))
-                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedTrivialScanCursor>(
+                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
                                aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount()));
         } else {
-            AFL_VERIFY(source->GetType() == IDataSource::EType::TrivialPortion);
+            AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
             cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
-                                  ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedTrivialScanCursor>(
+                                  ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
                                         source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
-                                  : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedTrivialScanCursor>(
+                                  : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
                                         source->GetDeprecatedPortionId(), source->GetRecordsCount()));
             --SourcesCount;
         }

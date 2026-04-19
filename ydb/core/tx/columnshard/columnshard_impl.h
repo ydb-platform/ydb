@@ -72,6 +72,10 @@ class TIndexScannerConstructor;
 namespace NSimple {
 class TIndexScannerConstructor;
 }
+
+namespace NTrivial {
+class TIndexScannerConstructor;
+}
 }   // namespace NReader
 
 namespace NDataSharing {
@@ -217,6 +221,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
     friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
+    friend class NOlap::NReader::NTrivial::TIndexScannerConstructor;
     friend class NOlap::NReader::NCommon::TReadMetadata;
     friend class NOlap::TRemovePortionsChange;
     friend class NOlap::TMovePortionsChange;

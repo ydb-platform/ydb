@@ -4,6 +4,7 @@
 #include "reader/common_reader/constructor/read_metadata.h"
 #include "reader/plain_reader/iterator/constructors.h"
 #include "reader/simple_reader/iterator/collections/constructors.h"
+#include "reader/trivial_reader/iterator/collections/constructors.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
@@ -39,30 +40,50 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
         context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
             readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions, context.GetOrbit(), readDescription.TxId, readDescription.ScanId);
-    if (!isPlain) {
-        std::deque<NReader::NSimple::TSourceConstructor> sources;
-        for (auto&& i : portions) {
-            sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+    
+    switch (readerClass) {
+        case NReader::EReaderClass::Plain: {
+            std::vector<std::shared_ptr<TPortionInfo>> sources;
+            for (auto&& i : portions) {
+                sources.emplace_back(i.GetPortion());
+            }
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::move(sources));
         }
-        return std::make_unique<NReader::NSimple::TPortionsSources>(std::move(sources), readDescription.GetSorting());
-    } else {
-        std::vector<std::shared_ptr<TPortionInfo>> sources;
-        for (auto&& i : portions) {
-            sources.emplace_back(i.GetPortion());
+        case NReader::EReaderClass::Simple: {
+            std::deque<NReader::NSimple::TSourceConstructor> sources;
+            for (auto&& i : portions) {
+                sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+            }
+            return std::make_unique<NReader::NSimple::TPortionsSources>(std::move(sources), readDescription.GetSorting());
         }
-        return std::make_unique<NReader::NPlain::TPortionSources>(std::move(sources));
+        case NReader::EReaderClass::Trivial: {
+            std::deque<NReader::NTrivial::TSourceConstructor> sources;
+            for (auto&& i : portions) {
+                sources.emplace_back(NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
+            }
+            return std::make_unique<NReader::NTrivial::TPortionsSources>(std::move(sources), readDescription.GetSorting());
+        }
     }
+    return nullptr;
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,
-    const NReader::TReadDescription& /*readDescription*/, const bool /*isPlain*/) const {
-    return NReader::NSimple::TPortionsSources::BuildEmpty();
+    const NReader::TReadDescription& /*readDescription*/, const NReader::EReaderClass readerClass) const {
+    switch (readerClass) {
+        case NReader::EReaderClass::Plain:
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::vector<std::shared_ptr<TPortionInfo>>());
+        case NReader::EReaderClass::Simple:
+            return NReader::NSimple::TPortionsSources::BuildEmpty();
+        case NReader::EReaderClass::Trivial:
+            return NReader::NTrivial::TPortionsSources::BuildEmpty();
+    }
+    return nullptr;
 }
 
 }   // namespace NKikimr::NOlap

@@ -59,7 +59,7 @@ private:
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1) {
             AFL_VERIFY(Source);
-            AFL_VERIFY(Source->GetType() == IDataSource::EType::TrivialPortion)("type", Source->GetType());
+            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
             auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }

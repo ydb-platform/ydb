@@ -5,9 +5,9 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 std::shared_ptr<IScanCursor> TNotSortedCollection::DoBuildCursor(
     const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const {
     if (AppDataVerified().ColumnShardConfig.GetEnableCursorV1()) {
-        return std::make_shared<TNotSortedTrivialScanCursor>(source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
+        return std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
     } else {
-        return std::make_shared<TDeprecatedNotSortedTrivialScanCursor>(source->GetDeprecatedPortionId(), readyRecords);
+        return std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(source->GetDeprecatedPortionId(), readyRecords);
     }
 }
 

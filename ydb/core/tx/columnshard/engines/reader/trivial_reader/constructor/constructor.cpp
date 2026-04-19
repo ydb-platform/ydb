@@ -38,7 +38,7 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
 
     auto readMetadata = std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(*schemas), read);
 
-    auto initResult = readMetadata->Init(self, read, false);
+    auto initResult = readMetadata->Init(self, read, EReaderClass::Trivial);
     if (!initResult) {
         return initResult;
     }
@@ -50,26 +50,26 @@ std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor(const NKiki
         case ERequestSorting::ASC:
         case ERequestSorting::DESC:
             switch (impl) {
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardTrivial:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
                 case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
-                    return std::make_shared<TTrivialScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardTrivial:
-                    return std::make_shared<TDeprecatedTrivialScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedTrivial:
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedTrivial:
+                    return std::make_shared<TSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
+                    return std::make_shared<TDeprecatedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
                 case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
                     AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
             }
             Y_ABORT("unreachable");
         case ERequestSorting::NONE:
             switch (impl) {
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedTrivial:
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple:
                 case NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET:
-                    return std::make_shared<TNotSortedTrivialScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedTrivial:
-                    return std::make_shared<TDeprecatedNotSortedTrivialScanCursor>();
-                case NKikimrKqp::TEvKqpScanCursor::kColumnShardTrivial:
-                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardTrivial:
+                    return std::make_shared<TNotSortedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardNotSortedSimple:
+                    return std::make_shared<TDeprecatedNotSortedSimpleScanCursor>();
+                case NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple:
+                case NKikimrKqp::TEvKqpScanCursor::kDeprecatedColumnShardSimple:
                 case NKikimrKqp::TEvKqpScanCursor::kColumnShardPlain:
                     AFL_VERIFY(false)("impl", static_cast<ui64>(impl));
             }

@@ -51,7 +51,7 @@ public:
         return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();
     }
 
-    void ValidateCursor(const ITrivialScanCursor& cursor) const {
+    void ValidateCursor(const ISimpleScanCursor& cursor) const {
         AFL_VERIFY(cursor.GetPortionId() && GetPortion()->GetPortionId() == *cursor.GetPortionId())("expected", GetPortion()->GetPortionId())(
                                                                             "cursor", cursor.GetPortionId().value_or(0));
     }

@@ -35,7 +35,7 @@ public:
 
     TString DebugString() const;
 
-    std::optional<NArrow::TTrivialRow> NextReadyBorder();
+    std::optional<NArrow::TSimpleRow> NextReadyBorder();
 
     bool IsReversed() const;
 

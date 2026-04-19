@@ -143,7 +143,7 @@ NActors::IEventHandle* MakeFilterRequestHandle(
     const std::shared_ptr<IFilterSubscriber>& subscriber)
 {
     auto dummyBatch = MakePKBatch({ 0 });
-    NArrow::TTrivialRow dummyRow(dummyBatch, 0);
+    NArrow::TSimpleRow dummyRow(dummyBatch, 0);
     auto abortionFlag = std::make_shared<TAtomicCounter>(0);
     auto* ev = new TEvRequestFilter(
         dummyRow, dummyRow, portionId, recordsCount,

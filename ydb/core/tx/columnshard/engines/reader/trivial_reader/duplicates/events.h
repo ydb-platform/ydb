@@ -23,8 +23,8 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
-    NArrow::TTrivialRow MinPK;
-    NArrow::TTrivialRow MaxPK;
+    NArrow::TSimpleRow MinPK;
+    NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, PortionId);
     YDB_READONLY_DEF(ui64, RecordsCount);
     TSnapshot MaxVersion;
@@ -35,7 +35,7 @@ public:
     TEvRequestFilter(const TPortionDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
 
     // Test-only constructor that doesn't require TPortionDataSource
-    TEvRequestFilter(const NArrow::TTrivialRow& minPK, const NArrow::TTrivialRow& maxPK, const ui64 portionId,
+    TEvRequestFilter(const NArrow::TSimpleRow& minPK, const NArrow::TSimpleRow& maxPK, const ui64 portionId,
         const ui64 recordsCount, const TSnapshot& maxVersion, const std::shared_ptr<IFilterSubscriber>& subscriber,
         const std::shared_ptr<const TAtomicCounter>& abortionFlag);
 

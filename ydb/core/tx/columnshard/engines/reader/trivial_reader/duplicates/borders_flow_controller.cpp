@@ -87,7 +87,7 @@ TString TBordersFlowController::DebugString() const {
 
 void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
     for (const auto& border : batch.GetBorders()) {
-        auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TTrivialRow{border.GetKey()->MakeRecordBatch(), 0}, IsReversed());
+        auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{border.GetKey()->MakeRecordBatch(), 0}, IsReversed());
         AFL_VERIFY(WaitingBorders.erase(borderKey) == 1);
         AFL_VERIFY(ReadyBorders.insert(borderKey).second);
     }
@@ -95,7 +95,7 @@ void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
     Counters->OnReadyBorders(static_cast<i64>(batch.GetBorders().size()));
 }
 
-std::optional<NArrow::TTrivialRow> TBordersFlowController::NextReadyBorder() {
+std::optional<NArrow::TSimpleRow> TBordersFlowController::NextReadyBorder() {
     if (ReadyBorders.empty()) {
         return std::nullopt;
     }
@@ -130,7 +130,7 @@ void TBordersFlowController::DrainQueue() {
     auto ev = BordersQueue.front();
     BordersQueue.pop_front();
     AddBatch(ev->Get()->Context.GetBatch());
-    std::vector<NArrow::TTrivialRow> readyBorders;
+    std::vector<NArrow::TSimpleRow> readyBorders;
     while (auto readyBorder = NextReadyBorder()) {
         readyBorders.push_back(*readyBorder);
     }

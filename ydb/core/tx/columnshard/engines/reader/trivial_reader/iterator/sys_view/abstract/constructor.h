@@ -20,7 +20,7 @@ private:
     }
 
 public:
-    TDataSourceConstructor(const ui64 tabletId, NArrow::TTrivialRow&& start, NArrow::TTrivialRow&& finish)
+    TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
         : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false), false)
         , TabletId(tabletId)
     {

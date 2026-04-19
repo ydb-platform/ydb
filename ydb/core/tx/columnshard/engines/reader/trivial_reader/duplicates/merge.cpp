@@ -13,7 +13,7 @@ TMergeContext::TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStrea
     , FetchingColumns(fetchingColumns) {
 }
 
-TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TTrivialRow>& readyBorders)
+TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TSimpleRow>& readyBorders)
     : Owner(owner)
     , Context(context)
     , Event(event)

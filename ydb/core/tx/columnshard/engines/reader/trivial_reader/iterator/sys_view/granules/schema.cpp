@@ -5,11 +5,11 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NGranules {
 
-NArrow::TTrivialRow TSchemaAdapter::GetPKTrivialRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId) {
-    NArrow::TTrivialRowViewV0::TWriter writer(sizeof(ui64) * 2);
+NArrow::TSimpleRow TSchemaAdapter::GetPKTrivialRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId) {
+    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2);
     writer.Append<ui64>(pathId.GetRawValue());
     writer.Append<ui64>(tabletId);
-    return NArrow::TTrivialRow(writer.Finish(), GetPKSchema());
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

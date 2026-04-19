@@ -194,7 +194,7 @@ public:
     bool Edit();
 
 private:
-    void FillFromPreset(const TAiPresets::TEndpoint& info);
+    void FillFromPreset(const TAiPresets::TEndpoint& info, bool setName);
 
     bool SetupEndpoint();
 
@@ -255,10 +255,9 @@ public:
 
     static TString ModeToString(EMode mode);
 
-protected:
+private:
     void OnConfigChanged() final;
 
-private:
     void ChangeActiveAiProfile(const TString& id);
 
     TAiModelConfig::TPtr CreateAiProfile(const TString& presetId = ""); // Empty for empty preset

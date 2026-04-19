@@ -345,7 +345,7 @@ bool TAiModelConfig::Setup(const TString& presetId) {
     if (presetId) {
         const auto& preset = GetAiPresets().GetPreset(presetId);
         Y_VALIDATE(preset, "No preset configured with id: " << presetId);
-        FillFromPreset(*preset);
+        FillFromPreset(*preset, /* setName */ true);
         BaseConfig->SetString(Config, PRESET_ID_PROPERTY, presetId);
     } else {
         if (!GetEndpoint() && !SetupEndpoint()) {
@@ -403,10 +403,13 @@ bool TAiModelConfig::Edit() {
     return success;
 }
 
-void TAiModelConfig::FillFromPreset(const TAiPresets::TEndpoint& info) {
+void TAiModelConfig::FillFromPreset(const TAiPresets::TEndpoint& info, bool setName) {
     Y_VALIDATE(info.ApiEndpoint, "Invalid API endpoint in preset");
     BaseConfig->SetString(Config, ENDPOINT_PROPERTY, info.ApiEndpoint);
-    BaseConfig->SetString(Config, NAME_PROPERTY, info.Info);
+
+    if (setName && info.Info) {
+        BaseConfig->SetString(Config, NAME_PROPERTY, info.Info);
+    }
 
     if (info.ApiType) {
         BaseConfig->SetInt(Config, API_TYPE_PROPERTY, static_cast<ui64>(*info.ApiType));
@@ -451,7 +454,7 @@ bool TAiModelConfig::SetupEndpoint() {
     }
 
     if (presetEndpoint) {
-        FillFromPreset(*presetEndpoint);
+        FillFromPreset(*presetEndpoint, /* setName */ false);
         return true;
     }
 
@@ -607,6 +610,7 @@ bool TAiModelConfig::SetupModelName() {
     try {
         if (auto result = NAi::ListModelNames(apiEndpoint, *currentToken)) {
             allowedModels.swap(*result);
+            std::sort(allowedModels.begin(), allowedModels.end());
         } else {
             return false;
         }
@@ -750,17 +754,15 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::ActivateAiProfile(const T
             return nullptr;
         }
 
-        if (TString error; !it->second->IsValid(error)) {
-            YDB_CLI_LOG(Warning, "AI profile \"" << id << "\" is invalid: " << error);
-            return nullptr;
-        }
-
+        TString error;
+        Y_VALIDATE(it->second->IsValid(error), "AI profile was listed but is invalid: \"" << id << "\": " << error);
         ChangeActiveAiProfile(id);
         return it->second;
     }
 
-    const auto& activeProfile = StringFromYaml(Config, CURRENT_PROFILE_PROPERTY);
-    if (const auto it = existingAiProfiles.find(activeProfile); it != existingAiProfiles.end()) {
+    if (const auto it = existingAiProfiles.find(StringFromYaml(Config, CURRENT_PROFILE_PROPERTY)); it != existingAiProfiles.end()) {
+        TString error;
+        Y_VALIDATE(it->second->IsValid(error), "AI profile was listed but is invalid: \"" << id << "\": " << error);
         return it->second;
     }
 
@@ -832,6 +834,12 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::SelectAiProfile() {
     return CreateAiProfile(presetId);
 }
 
+void TInteractiveConfigurationManager::RemoveAiProfile(const TString& id) {
+    Config[AI_PROFILES_PROPERTY].remove(id);
+    OnConfigChanged();
+    Flush();
+}
+
 void TInteractiveConfigurationManager::Flush() {
     if (!ConfigChanged || ReadOnly) {
         return;
@@ -897,12 +905,6 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::CreateAiProfile(const TSt
     ChangeActiveAiProfile(id);
 
     return std::make_shared<TAiModelConfig>(Config[AI_PROFILES_PROPERTY][id], shared_from_this(), id);
-}
-
-void TInteractiveConfigurationManager::RemoveAiProfile(const TString& id) {
-    Config[AI_PROFILES_PROPERTY].remove(id);
-    OnConfigChanged();
-    Flush();
 }
 
 void TInteractiveConfigurationManager::LoadProfile() {

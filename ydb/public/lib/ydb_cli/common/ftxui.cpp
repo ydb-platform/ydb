@@ -313,7 +313,7 @@ bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>
         labels.push_back(label);
     }
 
-    if (auto idx = RunFtxuiMenu(title, labels, maxPageSize)) {
+    if (auto idx = RunFtxuiMenu(title, labels, /* initialSelected */ 0, maxPageSize)) {
         Y_VALIDATE(*idx < options.size(), "Unexpected option index: " << *idx);
         options[*idx].second();
         return true;

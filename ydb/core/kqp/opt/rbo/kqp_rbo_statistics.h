@@ -73,10 +73,19 @@ struct TColumnLineage {
     THashMap<TString, int, TInfoUnit::THashFunction> MaxDuplicateId;
 };
 
+enum ELogicalCardinality: ui32 {
+    ZeroOrMore,
+    Zero,
+    ZeroOrOne,
+    One,
+    OneOrMore
+};
+
 class TRBOMetadata {
 public:
     EStatisticsType Type = EStatisticsType::BaseTable;
     EStorageType StorageType = EStorageType::NA;
+    ELogicalCardinality LogicalCard = ELogicalCardinality::ZeroOrMore;
 
     TColumnLineage ColumnLineage;
     TVector<TInfoUnit> KeyColumns;

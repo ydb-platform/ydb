@@ -1,67 +1,104 @@
 #include "merge.h"
 #include "private_events.h"
 
-#include <ydb/core/formats/arrow/reader/merger.h>
-
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TMergeContext::TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed, const std::shared_ptr<TPortionStore>& portions, const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns)
-    : Merger(std::move(merger))
-    , Counters(std::move(counters))
-    , IsReversed(reversed)
-    , Portions(portions)
-    , FetchingColumns(fetchingColumns) {
-}
+class TFiltersBuilder {
+private:
+    THashMap<ui64, NArrow::TColumnFilter> Filters;
+    YDB_READONLY(ui64, RowsAdded, 0);
+    YDB_READONLY(ui64, RowsSkipped, 0);
+    bool IsDone = false;
 
-TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TSimpleRow>& readyBorders)
-    : Owner(owner)
-    , Context(context)
-    , Event(event)
-    , ReadyBorders(readyBorders) {
-}
+    void AddImpl(const ui64 portionId, const bool value) {
+        auto* findFilter = Filters.FindPtr(portionId);
+        AFL_VERIFY(findFilter);
+        findFilter->Add(value);
+    }
 
-void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    auto columnData = Event->Get()->Result->ExtractDataByPortion(Context->FetchingColumns);
+public:
+    void AddRecord(const NArrow::NMerger::TBatchIterator& cursor) {
+        AddImpl(cursor.GetSourceId(), true);
+        ++RowsAdded;
+    }
+
+    void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor) {
+        AddImpl(cursor.GetSourceId(), false);
+        ++RowsSkipped;
+    }
+
+    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const {
+    }
+
+    bool IsBufferExhausted() const {
+        return false;
+    }
+
+    THashMap<ui64, NArrow::TColumnFilter>&& ExtractFilters() && {
+        AFL_VERIFY(!IsDone);
+        IsDone = true;
+        return std::move(Filters);
+    }
+
+    void AddSource(const ui64 portionId) {
+        AFL_VERIFY(!IsDone);
+        AFL_VERIFY(Filters.emplace(portionId, NArrow::TColumnFilter::BuildAllowFilter()).second);
+    }
+};
+
+void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("task", "build_duplicate_filters")("info", DebugString());
+    auto columnData = ColumnData.ExtractDataByPortion(Context.GetGlobalContext().GetColumns());
+
+    NArrow::NMerger::TMergePartialStream merger(
+        Context.GetGlobalContext().GetPKSchema(), nullptr, false, GetVersionColumnNames(), ScanSnapshotBatch, MinUncommittedSnapshotBatch);
     for (const auto& [portionId, data] : columnData) {
-        Context->Merger->AddSource(data, nullptr, Context->IsReversed ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
-        Context->FiltersBuilder.AddSource(portionId, Context->Portions->GetPortionVerified(portionId)->GetRecordsCount());
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-            ("component", "duplicates_manager")
-            ("event", "TMergeBorders::DoExecute")
-            ("type", "add_source")
-            ("portion_id", portionId)
-            ("records_count", data->GetRecordsCount())
-            ("builder", Context->FiltersBuilder.DebugString());
+        merger.AddSource(data, nullptr, NArrow::NMerger::TIterationOrder::Forward(0), portionId);
     }
 
-    AFL_VERIFY(Context->FiltersBuilder.CountSources() > 0 || ReadyBorders.empty());
-
-    for (const auto& readyBorder: ReadyBorders) {
-        Context->Merger->PutControlPoint(readyBorder.BuildSortablePosition(Context->IsReversed), false);
-        Context->Merger->DrainToControlPoint(Context->FiltersBuilder, true);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-            ("component", "duplicates_manager")
-            ("event", "TMergeBorders::DoExecute")
-            ("type", "drain")
-            ("border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString())
-            ("builder", Context->FiltersBuilder.DebugString());
+    THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
+    for (const auto& interval : Context.GetIntervals()) {
+        for (auto&& [portionId, filter] : BuildFiltersOnInterval(interval, merger, columnData)) {
+            AFL_VERIFY(filters.emplace(TDuplicateMapInfo(Context.GetGlobalContext().GetMaxVersion(), TIntervalBordersView(interval.GetBegin().MakeView(), interval.GetEnd().MakeView()), portionId), std::move(filter)).second);
+        }
     }
 
-    Context->Counters->OnRowsMerged(Context->FiltersBuilder.GetRowsAdded() - Context->PrevRowsAdded, Context->FiltersBuilder.GetRowsSkipped() - Context->PrevRowsSkipped, 0);
-    Context->PrevRowsAdded = Context->FiltersBuilder.GetRowsAdded();
-    Context->PrevRowsSkipped = Context->FiltersBuilder.GetRowsSkipped();
-
-    TActivationContext::AsActorContext().Send(Owner,
-        std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context), Context->FiltersBuilder.ExtractReadyFilters(), TConclusionStatus::Success()));
+    TActivationContext::AsActorContext().Send(Context.GetGlobalContext().GetOwner(),
+        new NPrivate::TEvFilterConstructionResult(std::move(filters), Context.GetGlobalContext().MakeResultInFlightGuard()));
+    Context.GetExecutor()->ScheduleNext(Context.ExtractGlobalContext());
 }
 
-void TMergeBorders::DoOnCannotExecute(const TString& reason) {
-    TActivationContext::AsActorContext().Send(Owner,
-        std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context), THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason)));
+void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
+    TActivationContext::AsActorContext().Send(Context.GetGlobalContext().GetOwner(),
+        new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason), Context.GetGlobalContext().MakeResultInFlightGuard()));
 }
 
-TString TMergeBorders::GetTaskClassIdentifier() const {
-    return "BUILD_DUPLICATE_FILTERS";
+THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInterval(const TIntervalInfo& interval,
+    NArrow::NMerger::TMergePartialStream& merger, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData) {
+    merger.SkipToBound(*interval.GetBegin().GetKey(), !interval.GetBegin().GetIsLast());
+
+    AFL_VERIFY(!interval.IsEmpty());
+    if (interval.IsExclusive()) {
+        THashMap<ui64, NArrow::TColumnFilter> result;
+        for (const auto& [portionId, _] : columnData) {
+            result.emplace(portionId, NArrow::TColumnFilter::BuildAllowFilter());
+        }
+        const ui64 recordsOnInterval = merger.SkipToBound(*interval.GetEnd().GetKey(), !interval.GetEnd().GetIsLast());
+        NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+        filter.Add(true, recordsOnInterval);
+        result.insert_or_assign(interval.GetExclusivePortionId(), std::move(filter));
+        Context.GetGlobalContext().GetCounters()->OnRowsMerged(0, 0, recordsOnInterval);
+        return result;
+    }
+
+    TFiltersBuilder filtersBuilder;
+    for (const auto& [portionId, _] : columnData) {
+        filtersBuilder.AddSource(portionId);
+    }
+    merger.PutControlPoint(*interval.GetEnd().GetKey(), false);
+    merger.DrainToControlPoint(filtersBuilder, interval.GetEnd().GetIsLast());
+    Context.GetGlobalContext().GetCounters()->OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
+    return std::move(filtersBuilder).ExtractFilters();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

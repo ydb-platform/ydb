@@ -78,6 +78,7 @@ TScanCounters::TScanCounters(const TString& module)
 {
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
     DuplicateFilteringCounters = std::make_shared<TDuplicateFilteringCounters>();
+    SimpleDuplicateFilteringCounters = std::make_shared<TSimpleDuplicateFilteringCounters>();
 
     HistogramIntervalMemoryRequiredOnFail = TBase::GetHistogram("IntervalMemory/RequiredOnFail/Gb", NMonitoring::LinearHistogram(10, 1, 1));
     HistogramIntervalMemoryReduceSize = TBase::GetHistogram("IntervalMemory/Reduce/Gb", NMonitoring::ExponentialHistogram(8, 2, 1));

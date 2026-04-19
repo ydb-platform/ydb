@@ -245,7 +245,7 @@ public:
 
     void SetInteractiveMode(EMode mode);
 
-    TAiModelConfig::TPtr ActivateAiProfile(const TString& id = ""); // Empty for default profile
+    TAiModelConfig::TPtr ActivateAiProfile(const TString& id = "", bool printWelcomeMessage = true); // Empty for default profile
 
     TAiModelConfig::TPtr SelectAiProfile();
 

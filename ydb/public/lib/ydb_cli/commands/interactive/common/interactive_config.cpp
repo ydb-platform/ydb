@@ -740,7 +740,7 @@ void TInteractiveConfigurationManager::SetInteractiveMode(EMode mode) {
     Flush();
 }
 
-TAiModelConfig::TPtr TInteractiveConfigurationManager::ActivateAiProfile(const TString& id) {
+TAiModelConfig::TPtr TInteractiveConfigurationManager::ActivateAiProfile(const TString& id, bool printWelcomeMessage) {
     const auto& existingAiProfiles = ListAiProfiles();
 
     if (id) {
@@ -764,20 +764,25 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::ActivateAiProfile(const T
         return it->second;
     }
 
-    if (const auto& defaultPreset = GetAiPresets().GetMetaInfo().DefaultPreset) {
-        if (!WelcomeMessagePrinted) {
-            Cout << Endl << "Welcome to YDB CLI " << ModeToString(EMode::AI) << " interactive mode!\nUsing model: " << GetAiPresets().GetPreset(defaultPreset)->Info << Endl;
-            WelcomeMessagePrinted = true;
+    const auto welcomeMessagePrinter = [&](const TString& info) {
+        if (WelcomeMessagePrinted) {
+            return;
         }
 
+        WelcomeMessagePrinted = true;
+
+        if (printWelcomeMessage) {
+            Cout << Endl << "Welcome to YDB CLI " << ModeToString(EMode::AI) << " interactive mode!" << Endl;
+        }
+        Cout << info << Endl;
+    };
+
+    if (const auto& defaultPreset = GetAiPresets().GetMetaInfo().DefaultPreset) {
+        welcomeMessagePrinter(TStringBuilder() << "Using model: " << TLogger::EntityName(GetAiPresets().GetPreset(defaultPreset)->Info));
         return CreateAiProfile(defaultPreset);
     }
 
-    if (!WelcomeMessagePrinted) {
-        Cout << Endl << "Welcome to YDB CLI " << ModeToString(EMode::AI) << " interactive mode! Please setup your first model to continue." << Endl;
-        WelcomeMessagePrinted = true;
-    }
-
+    welcomeMessagePrinter("Please setup your first model to continue.");
     return SelectAiProfile();
 }
 

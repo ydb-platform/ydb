@@ -212,10 +212,18 @@ int TInteractiveCLI::PrintWelcomeMessage(const TClientCommand::TConfig& config, 
     }
 
     if (config.EnableAiInteractive && configManager->GetInteractiveMode() == TInteractiveConfigurationManager::EMode::AI) {
+        TString activeProfileName;
         if (const auto& activeProfileId = configManager->GetActiveAiProfileId()) {
             if (const auto aiProfile = configManager->ActivateAiProfile(activeProfileId)) {
-                Cout << "AI profile: " << TLogger::EntityName(aiProfile->GetName()) << Endl;
+                activeProfileName = aiProfile->GetName();
             }
+        }
+
+        if (activeProfileName) {
+            Cout << "Using model: " << TLogger::EntityName(activeProfileName) << Endl;            
+        } else if (!configManager->ActivateAiProfile("", /* printWelcomeMessage */ false)) {
+            configManager->SetInteractiveMode(TInteractiveConfigurationManager::EMode::YQL);
+            Cout << Endl << "Switching to " << configManager->ModeToString(configManager->GetInteractiveMode()) << " interactive mode, use " << TLogger::EntityNameQuoted("/switch") << " to change mode." << Endl;
         }
     }
 

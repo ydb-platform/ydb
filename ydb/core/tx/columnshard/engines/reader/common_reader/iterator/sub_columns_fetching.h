@@ -5,8 +5,11 @@
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 class TSubColumnChunkRestoreInfo {
 private:
@@ -163,6 +166,7 @@ private:
 
     const NArrow::NAccessor::TChunkConstructionData ChunkExternalInfo;
     const std::vector<TString> SubColumns;
+    std::weak_ptr<IDataSource> Source;
 
     std::vector<TColumnChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
@@ -196,8 +200,10 @@ private:
         TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);
+        ui32 chunkIndex = 0;
         for (auto&& i : ColumnChunks) {
             if (!!i.GetHeaderRange()) {
+                const auto headerStart = TInstant::Now();
                 const TString readBlob = blobs.ExtractVerified(*StorageId, *i.GetHeaderRange());
                 const TString blob = i.GetSavedBlob() ? (i.GetSavedBlob() + readBlob) : readBlob;
                 const auto fullHeader = NArrow::NAccessor::NSubColumns::TConstructor::GetFullHeaderSize(blob);
@@ -205,6 +211,26 @@ private:
                     i.SetSavedBlob(Default<TString>());
                     i.InitPartialReader(blob);
                     i.InitReading(reading, SubColumns);
+                    const auto headerDuration = TInstant::Now() - headerStart;
+                    if (auto source = Source.lock()) {
+                        auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+                        TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
+                        const ui64 blobBytes = blob.size();
+                        const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetHeaderSize();
+                        LWTRACK(SubColumnsHeaderRead,
+                            source->GetDataSourceOrbit(),
+                            source->GetRawPathId(),
+                            source->GetTabletId(),
+                            source->GetTxId(),
+                            source->GetDeprecatedPortionId(),
+                            GetEntityId(),
+                            columnName,
+                            headerDuration,
+                            chunkIndex,
+                            blobBytes,
+                            rawBytes);
+                        source->AddBytesRead(blobBytes);
+                    }
                 } else {
                     i.SetSavedBlob(blob);
                     ui32 size = 0;
@@ -220,14 +246,60 @@ private:
                 }
             } else {
                 if (!!i.GetOthersReadData()) {
+                    const auto dataStart = TInstant::Now();
                     i.SetOthersBlob(blobs.ExtractVerified(*StorageId, *i.GetOthersReadData()));
+                    const auto dataDuration = TInstant::Now() - dataStart;
+                    if (auto source = Source.lock()) {
+                        auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+                        TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
+                        const ui64 blobBytes = i.GetOthersBlobs()->size();
+                        const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetOthersSize();
+                        LWTRACK(SubColumnsDataRead,
+                            source->GetDataSourceOrbit(),
+                            source->GetRawPathId(),
+                            source->GetTabletId(),
+                            source->GetTxId(),
+                            source->GetDeprecatedPortionId(),
+                            GetEntityId(),
+                            columnName,
+                            dataDuration,
+                            "others",
+                            chunkIndex,
+                            blobBytes,
+                            rawBytes);
+                        source->AddBytesRead(blobBytes);
+                    }
                 }
                 for (auto&& [subColName, chunkData] : i.MutableChunks()) {
                     if (!!chunkData.GetBlobRangeOptional()) {
+                        const auto dataStart = TInstant::Now();
                         chunkData.SetBlobData(blobs.ExtractVerified(*StorageId, *chunkData.GetBlobRangeOptional()));
+                        const auto dataDuration = TInstant::Now() - dataStart;
+                        if (auto source = Source.lock()) {
+                            auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+                            TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
+                            const ui64 blobBytes = chunkData.GetBlobDataVerified().size();
+                            const ui32 colIndex = i.GetPartialArray()->GetHeader().GetColumnStats().GetKeyIndexVerified(subColName);
+                            const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnSize(colIndex);
+                            LWTRACK(SubColumnsDataRead,
+                                source->GetDataSourceOrbit(),
+                                source->GetRawPathId(),
+                                source->GetTabletId(),
+                                source->GetTxId(),
+                                source->GetDeprecatedPortionId(),
+                                GetEntityId(),
+                                columnName,
+                                dataDuration,
+                                subColName,
+                                chunkIndex,
+                                blobBytes,
+                                rawBytes);
+                            source->AddBytesRead(blobBytes);
+                        }
                     }
                 }
             }
+            ++chunkIndex;
         }
         nextRead.Add(reading);
     }
@@ -285,7 +357,8 @@ public:
     TSubColumnsFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source, const std::vector<TString>& subColumns)
         : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
         , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
-        , SubColumns(subColumns) {
+        , SubColumns(subColumns)
+        , Source(source) {
         const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
             "type", loader->GetAccessorConstructor()->GetType());
@@ -295,7 +368,8 @@ public:
         const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount, const std::vector<TString>& subColumns)
         : TBase(columnId, storages)
         , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount))
-        , SubColumns(subColumns) {
+        , SubColumns(subColumns)
+        , Source() {
         const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
         ("type", loader->GetAccessorConstructor()->GetType());

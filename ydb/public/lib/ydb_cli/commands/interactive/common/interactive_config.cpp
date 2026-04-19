@@ -283,6 +283,11 @@ bool TAiModelConfig::IsValid(TString& error) const {
         return false;
     }
 
+    if (const auto& presetId = GetPresetId(); presetId && !GetAiPresets().GetPreset(presetId)) {
+        error = TStringBuilder() << "Where is no preset with id: " << presetId << " in presets list";
+        return false;
+    }
+
     return true;
 }
 
@@ -291,11 +296,27 @@ TString TAiModelConfig::GetName() const {
 }
 
 TString TAiModelConfig::GetEndpoint() const {
-    return StringFromYaml(Config, ENDPOINT_PROPERTY);
+    if (const auto& endpoint = StringFromYaml(Config, ENDPOINT_PROPERTY)) {
+        return endpoint;
+    }
+
+    if (const auto& preset = GetAiPresets().GetPreset(GetPresetId())) {
+        return preset->ApiEndpoint;
+    }
+
+    return "";
 }
 
 std::optional<TAiPresets::EApiType> TAiModelConfig::GetApiType() const {
-    return EnumFromYaml<TAiPresets::EApiType>(Config, "api_type");
+    if (auto apiType = EnumFromYaml<TAiPresets::EApiType>(Config, API_TYPE_PROPERTY)) {
+        return apiType;
+    }
+
+    if (const auto& preset = GetAiPresets().GetPreset(GetPresetId())) {
+        return preset->ApiType;
+    }
+
+    return std::nullopt;
 }
 
 std::optional<TString> TAiModelConfig::GetApiToken(bool allowEnv) const {
@@ -304,7 +325,12 @@ std::optional<TString> TAiModelConfig::GetApiToken(bool allowEnv) const {
         return token;
     }
 
-    if (auto tokenProvider = StringFromYaml(Config, TOKEN_PROVIDER_PROPERTY)) {
+    TString tokenProvider = StringFromYaml(Config, TOKEN_PROVIDER_PROPERTY);
+    if (const auto& preset = GetAiPresets().GetPreset(GetPresetId()); !tokenProvider && preset && preset->TokenProvider) {
+        tokenProvider = *preset->TokenProvider;
+    }
+
+    if (tokenProvider) {
         YDB_CLI_LOG(Debug, "Using token from provider: " << tokenProvider);
         if (const auto& provider = GetAiPresets().GetTokenProvider(tokenProvider)) {
             const auto& token = provider->GetToken();
@@ -326,7 +352,15 @@ std::optional<TString> TAiModelConfig::GetApiToken(bool allowEnv) const {
 }
 
 TString TAiModelConfig::GetModelName() const {
-    return StringFromYaml(Config, MODEL_PROPERTY);
+    if (const auto& modelName = StringFromYaml(Config, MODEL_PROPERTY)) {
+        return modelName;
+    }
+
+    if (const auto& preset = GetAiPresets().GetPreset(GetPresetId())) {
+        return preset->ModelName.value_or("");
+    }
+
+    return "";
 }
 
 TString TAiModelConfig::GetPresetId() const {
@@ -345,7 +379,7 @@ bool TAiModelConfig::Setup(const TString& presetId) {
     if (presetId) {
         const auto& preset = GetAiPresets().GetPreset(presetId);
         Y_VALIDATE(preset, "No preset configured with id: " << presetId);
-        FillFromPreset(*preset, /* setName */ true);
+        FillFromPreset(*preset, /* setProperties */ false, /* setName */ true);
         BaseConfig->SetString(Config, PRESET_ID_PROPERTY, presetId);
     } else {
         if (!GetEndpoint() && !SetupEndpoint()) {
@@ -367,34 +401,33 @@ bool TAiModelConfig::Setup(const TString& presetId) {
     return true;
 }
 
-bool TAiModelConfig::Edit() {
+bool TAiModelConfig::Edit(bool& changed) {
     using TAction = bool (TAiModelConfig::*)();
 
     bool finished = false;
-    const auto doAction = [this, &finished](TAction action) {
-        return [this, &finished, action]() {
+    const auto doAction = [this, &finished, &changed](TAction action) {
+        return [this, &finished, &changed, action]() {
             if ((this->*action)()) {
-                BaseConfig->SetString(Config, PRESET_ID_PROPERTY, "");
-            } else {
+                changed = true;
+            } else{ 
                 finished = true;
             }
         };
     };
 
-    std::vector<TMenuEntry> options;
-    options.push_back({JoinOptionDesc("API endpoint", GetEndpoint()), doAction(&TAiModelConfig::SetupEndpoint)});
-    options.push_back({JoinOptionDesc("API type", GetApiType()), doAction(&TAiModelConfig::SetupApiType)});
-    options.push_back({JoinOptionDesc("Model name", GetModelName()), doAction(&TAiModelConfig::SetupModelName)});
-    options.push_back({JoinOptionDesc("Token", StringFromYaml(Config, TOKEN_PROVIDER_PROPERTY)), doAction(&TAiModelConfig::SetupApiToken)});
-    options.push_back({JoinOptionDesc("Profile display name", GetName()), doAction(&TAiModelConfig::SetupName)});
-
     bool success = false;
-    options.push_back({"Finish editing", [&finished, &success]() {
-        finished = true;
-        success = true;
-    }});
-
     while (!finished) {
+        std::vector<TMenuEntry> options;
+        options.push_back({JoinOptionDesc("API endpoint", GetEndpoint()), doAction(&TAiModelConfig::SetupEndpoint)});
+        options.push_back({JoinOptionDesc("API type", GetApiType()), doAction(&TAiModelConfig::SetupApiType)});
+        options.push_back({JoinOptionDesc("Model name", GetModelName()), doAction(&TAiModelConfig::SetupModelName)});
+        options.push_back({JoinOptionDesc("Token", StringFromYaml(Config, TOKEN_PROVIDER_PROPERTY)), doAction(&TAiModelConfig::SetupApiToken)});
+        options.push_back({JoinOptionDesc("Profile display name", GetName()), doAction(&TAiModelConfig::SetupName)});
+        options.push_back({"Finish editing", [&finished, &success]() {
+            finished = true;
+            success = true;
+        }});
+
         if (!RunFtxuiMenuWithActions("Please choose setting to change or use ^C to exit:", options)) {
             return false;
         }
@@ -403,24 +436,42 @@ bool TAiModelConfig::Edit() {
     return success;
 }
 
-void TAiModelConfig::FillFromPreset(const TAiPresets::TEndpoint& info, bool setName) {
+void TAiModelConfig::FillFromPreset(const TAiPresets::TEndpoint& info, bool setProperties, bool setName) {
+    ResetPresetInfo();
+
     Y_VALIDATE(info.ApiEndpoint, "Invalid API endpoint in preset");
-    BaseConfig->SetString(Config, ENDPOINT_PROPERTY, info.ApiEndpoint);
+
+    if (setProperties) {
+        BaseConfig->SetString(Config, ENDPOINT_PROPERTY, info.ApiEndpoint);
+
+        if (info.ApiType) {
+            BaseConfig->SetInt(Config, API_TYPE_PROPERTY, static_cast<ui64>(*info.ApiType));
+        }
+    
+        if (info.ModelName) {
+            BaseConfig->SetString(Config, MODEL_PROPERTY, *info.ModelName);
+        }
+    
+        if (info.TokenProvider) {
+            BaseConfig->SetString(Config, TOKEN_PROVIDER_PROPERTY, *info.TokenProvider);
+        }
+    }
 
     if (setName && info.Info) {
         BaseConfig->SetString(Config, NAME_PROPERTY, info.Info);
     }
+}
 
-    if (info.ApiType) {
-        BaseConfig->SetInt(Config, API_TYPE_PROPERTY, static_cast<ui64>(*info.ApiType));
+void TAiModelConfig::ResetPresetInfo() {
+    const auto& presetId = GetPresetId();
+    if (!presetId) {
+        return;
     }
 
-    if (info.ModelName) {
-        BaseConfig->SetString(Config, MODEL_PROPERTY, *info.ModelName);
-    }
+    BaseConfig->SetString(Config, PRESET_ID_PROPERTY, "");
 
-    if (info.TokenProvider) {
-        BaseConfig->SetString(Config, TOKEN_PROVIDER_PROPERTY, *info.TokenProvider);
+    if (const auto& preset = GetAiPresets().GetPreset(presetId)) {
+        FillFromPreset(*preset, /* setProperties */ true, /* setName */ false);
     }
 }
 
@@ -454,9 +505,15 @@ bool TAiModelConfig::SetupEndpoint() {
     }
 
     if (presetEndpoint) {
-        FillFromPreset(*presetEndpoint, /* setName */ false);
+        FillFromPreset(*presetEndpoint, /* setProperties */ true, /* setName */ false);
         return true;
     }
+
+    const auto setEndpoint = [&](const TString& endpoint) {
+        ResetPresetInfo();
+        BaseConfig->SetString(Config, ENDPOINT_PROPERTY, endpoint);
+        return true;
+    };
 
     while (true) {
         TString result;
@@ -489,7 +546,7 @@ bool TAiModelConfig::SetupEndpoint() {
 
         if (const auto checkResult = NAi::TestConnection(result)) {
             if (*checkResult) {
-                BaseConfig->SetString(Config, ENDPOINT_PROPERTY, result);
+                setEndpoint(result);
                 return true;
             }
         } else {
@@ -502,7 +559,7 @@ bool TAiModelConfig::SetupEndpoint() {
             ftxui::text(". Continue anyway?"),
         }) | ftxui::bold, false, ftxui::Color::Yellow)) {
             if (*forceContinue) {
-                BaseConfig->SetString(Config, ENDPOINT_PROPERTY, result);
+                setEndpoint(result);
                 return true;
             }
         } else {
@@ -535,6 +592,7 @@ bool TAiModelConfig::SetupApiType() {
         }
 
         options.push_back({prompt, [this, apiType]() {
+            ResetPresetInfo();
             BaseConfig->SetInt(Config, API_TYPE_PROPERTY, static_cast<ui64>(apiType));
         }});
     }
@@ -644,8 +702,14 @@ bool TAiModelConfig::SetupModelName() {
         }
     }
 
+    const auto setModelName = [&](const TString& modelName) {
+        ResetPresetInfo();
+        BaseConfig->SetString(Config, MODEL_PROPERTY, modelName);
+        return true;
+    };
+
     if (modelName) {
-        BaseConfig->SetString(Config, MODEL_PROPERTY, *modelName);
+        setModelName(*modelName);
         return true;
     }
 
@@ -654,7 +718,7 @@ bool TAiModelConfig::SetupModelName() {
         return false;
     }
 
-    BaseConfig->SetString(Config, MODEL_PROPERTY, Strip(*result));
+    setModelName(Strip(*result));
     return true;
 }
 
@@ -727,7 +791,7 @@ std::unordered_map<TString, TAiModelConfig::TPtr> TInteractiveConfigurationManag
 
         auto aiProfile = std::make_shared<TAiModelConfig>(settings, shared_from_this(), id);
         if (TString error; !aiProfile->IsValid(error)) {
-            YDB_CLI_LOG(Warning, "AI profile \"" << id << "\" is invalid: " << error << ", profile skipped");
+            YDB_CLI_LOG(Info, "AI profile \"" << id << "\" is invalid: " << error << ", profile skipped");
             continue;
         }
 
@@ -792,10 +856,12 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::SelectAiProfile() {
     TAiModelConfig::TPtr existingProfile;
     std::vector<TMenuEntry> options;
     std::unordered_set<TString> usedPresets;
+    std::unordered_set<TString> usedNames;
     for (const auto& [id, profile] : ListAiProfiles()) {
         usedPresets.emplace(profile->GetPresetId());
 
         TString prompt = profile->GetName();
+        usedNames.emplace(prompt);
         if (profile->GetId() == GetActiveAiProfileId()) {
             prompt += "\tactive";
         }
@@ -811,7 +877,12 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::SelectAiProfile() {
             continue;
         }
 
-        options.emplace_back(preset.Name, [id, &presetId]() {
+        TString prompt = preset.Name;
+        if (usedNames.contains(prompt)) {
+            prompt += " [preset]";
+        }
+
+        options.emplace_back(prompt, [id, &presetId]() {
             presetId = id;
         });
     }

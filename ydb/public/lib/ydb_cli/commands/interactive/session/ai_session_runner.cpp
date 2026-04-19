@@ -159,12 +159,14 @@ private:
             });
 
             options.emplace_back("Change current AI model settings", [&]() {
-                if (!AiModel->Edit()) {
+                bool changed = false;
+                if (!AiModel->Edit(changed)) {
                     exit = true;
-                    return;
                 }
 
-                ChangeAiProfile(AiModel);
+                if (changed) {
+                    ChangeAiProfile(AiModel);                    
+                }
             });
 
             options.emplace_back("Remove current AI model", [&]() {

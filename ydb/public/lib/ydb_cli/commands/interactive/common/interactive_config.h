@@ -191,10 +191,12 @@ public:
 
     bool Setup(const TString& presetId); // Empty preset id for custom setup
 
-    bool Edit();
+    bool Edit(bool& changed);
 
 private:
-    void FillFromPreset(const TAiPresets::TEndpoint& info, bool setName);
+    void FillFromPreset(const TAiPresets::TEndpoint& info, bool setProperties, bool setName);
+
+    void ResetPresetInfo();
 
     bool SetupEndpoint();
 

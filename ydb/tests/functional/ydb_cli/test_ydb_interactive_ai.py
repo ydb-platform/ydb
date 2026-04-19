@@ -1024,6 +1024,32 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self.mock_server.clear()
             child.close()
 
+    def test_ai_session_context_remains_after_roundtrip_switch(self):
+        child = self.spawn_ai_interactive("openai")
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "XXX from preset")
+            child.expect("Mock OpenAI response", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "/switch")
+            self._wait_for_yql_prompt(child)
+            self._send_query(child, "/switch")
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "another hello from preset")
+            child.expect("Mock OpenAI response", timeout=15)
+
+            assert len(self.mock_server.requests) == 2
+            last_request = str(self.mock_server.last_request["body"])
+            assert "another hello from preset" in last_request, last_request
+            assert "XXX from preset" in last_request, last_request
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
     # -- default preset auto-creation ----------------------------------------
 
     def test_default_preset_auto_creates_profile(self):

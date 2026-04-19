@@ -31,8 +31,17 @@ public:
     }
 
     ILineReader::TPtr Setup() final {
-        ModelHandler.reset();
+        if (ModelHandler && AiModel) {
+            if (AiModel->GetId() != ConfigurationManager->GetActiveAiProfileId()) {
+                Cout << Endl << Colors.Yellow() << "AI profile was changed, session context will be reset" << Colors.OldColor() << Endl;
+            } else if (TString validationError; !AiModel->IsValid(validationError)) {
+                Cout << Endl << Colors.Red() << "AI profile is not valid: " << validationError << ", session context will be reset" << Colors.OldColor() << Endl;
+            } else {
+                return TBase::Setup();
+            }
+        }
 
+        ModelHandler.reset();
         AiModel = ConfigurationManager->ActivateAiProfile();
         if (!AiModel) {
             return nullptr;

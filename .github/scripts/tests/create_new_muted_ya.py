@@ -52,14 +52,16 @@ def load_quarantine_state(ydb_wrapper, branch, build_type):
         logging.warning("mute_quarantine table is not configured in ydb_qa_config.json")
         return set(), set()
 
+    escaped_branch = str(branch).replace("'", "''")
+    escaped_build_type = str(build_type).replace("'", "''")
     query = f"""
     SELECT
         full_name,
         build_type,
         github_issue_number
     FROM `{table_path}`
-    WHERE branch = '{branch}'
-        AND build_type = '{build_type}'
+    WHERE branch = '{escaped_branch}'
+        AND build_type = '{escaped_build_type}'
     """
     try:
         rows = ydb_wrapper.execute_scan_query(

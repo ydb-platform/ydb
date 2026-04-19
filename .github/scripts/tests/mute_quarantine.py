@@ -107,6 +107,10 @@ def _timestamp_to_datetime(value):
     return None
 
 
+def _escape_yql_string(value) -> str:
+    return str(value).replace("'", "''")
+
+
 def get_status_option_ids():
     _, project_fields = get_project_v2_fields(ORG_NAME, PROJECT_ID)
     status_field_id = None
@@ -217,6 +221,8 @@ def fetch_project_issue_refs(issue_numbers=None):
                 "issue_id": content.get("id"),
                 "issue_url": content.get("url"),
             }
+        if required_numbers and len(refs) >= len(required_numbers):
+            break
         page_info = items.get("pageInfo") or {}
         has_next_page = bool(page_info.get("hasNextPage"))
         end_cursor = f"\"{page_info['endCursor']}\"" if page_info.get("endCursor") else "null"
@@ -336,40 +342,6 @@ def delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type
     )
 
 
-def fetch_monitor_failures(
-    ydb_wrapper,
-    tests_monitor_table,
-    full_name,
-    branch,
-    build_type,
-    days,
-    quarantine_since_date=None,
-):
-    query = f"""
-    SELECT
-        full_name,
-        fail_count,
-        date_window
-    FROM `{tests_monitor_table}`
-    WHERE full_name = '{full_name}'
-        AND branch = '{branch}'
-        AND build_type = '{build_type}'
-        AND date_window >= CurrentUtcDate() - {days} * Interval("P1D")
-    """
-    rows = ydb_wrapper.execute_scan_query(query, query_name="mute_quarantine_monitor_failures")
-    fail_count = 0
-    failed_tests = set()
-    for row in rows:
-        row_date = _scan_date_to_date(row.get("date_window"))
-        if quarantine_since_date and row_date and row_date < quarantine_since_date:
-            continue
-        row_fail = int(row.get("fail_count") or 0)
-        if row_fail > 0:
-            fail_count += row_fail
-            failed_tests.add(row.get("full_name") or full_name)
-    return fail_count, sorted(failed_tests)
-
-
 def process_enter_quarantine(
     ydb_wrapper,
     table_path,
@@ -484,6 +456,55 @@ def _scan_date_to_date(value):
     return None
 
 
+def fetch_monitor_failures_bulk(ydb_wrapper, tests_monitor_table, quarantine_rows, days):
+    failures_by_key = {}
+    grouped = {}
+    for row in quarantine_rows:
+        full_name = row.get("full_name")
+        branch = row.get("branch")
+        build_type = row.get("build_type")
+        if not full_name or not branch or not build_type:
+            continue
+        key = (branch, build_type)
+        if key not in grouped:
+            grouped[key] = {"full_names": set(), "since": {}}
+        grouped[key]["full_names"].add(full_name)
+        quarantine_since = _timestamp_to_datetime(row.get("quarantine_since"))
+        grouped[key]["since"][full_name] = quarantine_since.date() if quarantine_since else None
+        failures_by_key[(full_name, branch, build_type)] = 0
+
+    for (branch, build_type), group_data in grouped.items():
+        escaped_branch = _escape_yql_string(branch)
+        escaped_build_type = _escape_yql_string(build_type)
+        query = f"""
+        SELECT
+            full_name,
+            fail_count,
+            date_window
+        FROM `{tests_monitor_table}`
+        WHERE branch = '{escaped_branch}'
+            AND build_type = '{escaped_build_type}'
+            AND date_window >= CurrentUtcDate() - {days} * Interval("P1D")
+        """
+        monitor_rows = ydb_wrapper.execute_scan_query(
+            query,
+            query_name="mute_quarantine_monitor_failures_bulk",
+        )
+        for monitor_row in monitor_rows:
+            full_name = monitor_row.get("full_name")
+            if full_name not in group_data["full_names"]:
+                continue
+            row_date = _scan_date_to_date(monitor_row.get("date_window"))
+            quarantine_since_date = group_data["since"].get(full_name)
+            if quarantine_since_date and row_date and row_date < quarantine_since_date:
+                continue
+            fail_count = int(monitor_row.get("fail_count") or 0)
+            if fail_count <= 0:
+                continue
+            failures_by_key[(full_name, branch, build_type)] += fail_count
+    return failures_by_key
+
+
 def process_failed_quarantine(
     ydb_wrapper,
     table_path,
@@ -501,6 +522,12 @@ def process_failed_quarantine(
     }
     issue_refs = fetch_project_issue_refs(issue_numbers)
     updated_issue_numbers = set()
+    failures_by_key = fetch_monitor_failures_bulk(
+        ydb_wrapper,
+        tests_monitor_table,
+        rows,
+        quarantine_window_days,
+    )
 
     for row in rows:
         full_name = row.get("full_name")
@@ -519,16 +546,7 @@ def process_failed_quarantine(
             continue
 
         quarantine_since = _timestamp_to_datetime(row.get("quarantine_since"))
-        quarantine_since_date = quarantine_since.date() if quarantine_since else None
-        fail_count, failed_tests = fetch_monitor_failures(
-            ydb_wrapper,
-            tests_monitor_table,
-            full_name,
-            branch,
-            build_type,
-            quarantine_window_days,
-            quarantine_since_date=quarantine_since_date,
-        )
+        fail_count = failures_by_key.get((full_name, branch, build_type), 0)
         if fail_count <= 0:
             continue
 

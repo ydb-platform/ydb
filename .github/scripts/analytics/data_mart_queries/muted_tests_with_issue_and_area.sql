@@ -102,5 +102,5 @@ WHERE tm.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
     AND tm.state != 'Skipped'
     AND (
         gim.quarantine_since IS NULL
-        OR gim.quarantine_since < CurrentUtcTimestamp() - CAST($quarantine_window_days * 86400 AS Interval)
+        OR gim.quarantine_since < CurrentUtcTimestamp() - $quarantine_window_days * Interval("P1D")
     );

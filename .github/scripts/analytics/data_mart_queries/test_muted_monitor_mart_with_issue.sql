@@ -113,5 +113,5 @@ WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
     AND tm.is_test_chunk = 0
     AND (
         gim.quarantine_since IS NULL
-        OR gim.quarantine_since < CurrentUtcTimestamp() - CAST($quarantine_window_days * 86400 AS Interval)
+        OR gim.quarantine_since < CurrentUtcTimestamp() - $quarantine_window_days * Interval("P1D")
     );

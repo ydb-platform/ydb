@@ -126,4 +126,20 @@ jobs:
         if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
+      - name: Sync mute coordinator effective rules
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
+        run: |
+          python3 .github/scripts/analytics/export_mute_coordinator_state_to_ydb.py sync-effective-rules \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build-type=${{ env.BUILD_TYPE }}
+
+      - name: Reopen closed issues for quarantine tests
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+        run: |
+          python3 .github/scripts/tests/sync_quarantine_issues.py \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build-type=${{ env.BUILD_TYPE }}
+
       # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)

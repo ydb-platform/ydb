@@ -26,6 +26,17 @@ from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
+from mute_policy_rules import (
+    is_delete_candidate_counts,
+    load_mute_coordinator_thresholds,
+    passes_default_mute,
+    passes_default_unmute,
+)
+
+_THRESHOLDS = load_mute_coordinator_thresholds()
+MUTE_DAYS = _THRESHOLDS["default_mute_window_days"]
+UNMUTE_DAYS = _THRESHOLDS["default_unmute_window_days"]
+DELETE_DAYS = _THRESHOLDS["default_delete_window_days"]
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,11 +44,6 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 dir = os.path.dirname(__file__)
 repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
-
-# Constants for mute logic time windows
-MUTE_DAYS = 4
-UNMUTE_DAYS = 7
-DELETE_DAYS = 7
 
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest_config.json')
@@ -352,9 +358,10 @@ def is_mute_candidate(test):
     if test.get('is_muted', False):
         return False
 
-    total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
+    pass_count = test.get('pass_count', 0)
     fail_count = test.get('fail_count', 0)
-    result = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
+    total_runs = pass_count + fail_count
+    result = passes_default_mute(pass_count, fail_count, _THRESHOLDS)
 
     logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{fail_count}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
 
@@ -362,10 +369,13 @@ def is_mute_candidate(test):
 
 def is_unmute_candidate(test):
     """Check whether a test is an unmute candidate for the given period."""
-    total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
-    total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
+    pass_count = test.get('pass_count', 0)
+    fail_count = test.get('fail_count', 0)
+    mute_count = test.get('mute_count', 0)
+    total_runs = pass_count + fail_count + mute_count
+    total_fails = fail_count + mute_count
 
-    result = total_runs >= 4 and total_fails == 0
+    result = passes_default_unmute(pass_count, fail_count, mute_count, _THRESHOLDS)
 
     if test.get('is_muted', False):
         logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test.get('mute_count')}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
@@ -374,22 +384,23 @@ def is_unmute_candidate(test):
 
 def is_delete_candidate(test):
     """Check whether a test is a delete-from-mute candidate for the given period."""
-    pass_count = test.get('pass_count', 0)
-    fail_count = test.get('fail_count', 0)
-    mute_count = test.get('mute_count', 0)
-    skip_count = test.get('skip_count', 0)
+    pass_count = int(test.get("pass_count", 0) or 0)
+    fail_count = int(test.get("fail_count", 0) or 0)
+    mute_count = int(test.get("mute_count", 0) or 0)
+    skip_count = int(test.get("skip_count", 0) or 0)
     total_runs = pass_count + fail_count + mute_count + skip_count
-
     only_skipped_while_muted = (
-        test.get('is_muted', False)
+        bool(test.get("is_muted", False))
         and skip_count > 0
         and pass_count == 0
         and fail_count == 0
         and mute_count == 0
     )
-    result = total_runs == 0 or only_skipped_while_muted
+    result = is_delete_candidate_counts(
+        pass_count, fail_count, mute_count, skip_count, is_muted=bool(test.get("is_muted", False))
+    )
 
-    if test.get('is_muted', False):
+    if test.get("is_muted", False):
         logging.debug(
             f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, "
             f"p:{pass_count}, f:{fail_count}, m:{mute_count}, s:{skip_count}, "

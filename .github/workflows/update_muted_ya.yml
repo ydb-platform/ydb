@@ -129,6 +129,20 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
+      - name: Sync mute coordinator effective rules
+        run: |
+          python3 .github/scripts/analytics/export_mute_coordinator_state_to_ydb.py sync-effective-rules \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build-type=${{ env.BUILD_TYPE }}
+
+      - name: Reopen closed issues for quarantine tests
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+        run: |
+          python3 .github/scripts/tests/sync_quarantine_issues.py \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build-type=${{ env.BUILD_TYPE }}
+
       - name: Generate new muted_ya.txt
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \

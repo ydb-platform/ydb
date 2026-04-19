@@ -114,6 +114,22 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
             comments {
               totalCount
             }
+            timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {
+              nodes {
+                __typename
+                ... on ClosedEvent {
+                  actor {
+                    __typename
+                    ... on User {
+                      login
+                    }
+                    ... on Bot {
+                      login
+                    }
+                  }
+                }
+              }
+            }
             repository {
               id
               name
@@ -213,6 +229,22 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               }
               comments {
                 totalCount
+              }
+              timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {
+                nodes {
+                  __typename
+                  ... on ClosedEvent {
+                    actor {
+                      __typename
+                      ... on User {
+                        login
+                      }
+                      ... on Bot {
+                        login
+                      }
+                    }
+                  }
+                }
               }
               repository {
                 id
@@ -508,6 +540,15 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         
         # Extract state reason (e.g., COMPLETED, DUPLICATE, NOT_PLANNED)
         state_reason = issue.get('stateReason')
+        closed_by_login = None
+        closed_by_type = None
+        for event in reversed(issue.get('timelineItems', {}).get('nodes', []) or []):
+            if event.get('__typename') != 'ClosedEvent':
+                continue
+            actor = event.get('actor') or {}
+            closed_by_login = actor.get('login')
+            closed_by_type = actor.get('__typename')
+            break
         
         # Extract assignees
         assignees = []
@@ -567,6 +608,8 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'url': issue.get('url', ''),
             'state': issue.get('state', ''),
             'state_reason': state_reason,
+            'closed_by_login': closed_by_login,
+            'closed_by_type': closed_by_type,
             'body': issue.get('body', '') or '',
             'body_text': issue.get('bodyText', ''),
             
@@ -632,6 +675,8 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
             `url` Utf8,
             `state` Utf8,
             `state_reason` Utf8,  -- Reason for closing (COMPLETED, DUPLICATE, NOT_PLANNED)
+            `closed_by_login` Utf8,
+            `closed_by_type` Utf8,
             `body` Utf8,
             `body_text` Utf8,
             
@@ -686,6 +731,23 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
     """
     
     ydb_wrapper.create_table(table_path, create_sql)
+
+    # Backward-compatible schema upgrades for already existing tables.
+    for alter_sql in (
+        f"ALTER TABLE `{table_path}` ADD COLUMN `closed_by_login` Utf8",
+        f"ALTER TABLE `{table_path}` ADD COLUMN `closed_by_type` Utf8",
+    ):
+        try:
+            ydb_wrapper.create_table(table_path, alter_sql)
+        except Exception as exc:
+            message = str(exc)
+            already_exists = (
+                "already exists" in message.lower()
+                or "exists" in message.lower()
+                or "precondition failed" in message.lower()
+            )
+            if not already_exists:
+                raise
     
     elapsed = time.time() - start_time
     print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
@@ -821,6 +883,8 @@ def main():
                 .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("state_reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("closed_by_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("closed_by_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 

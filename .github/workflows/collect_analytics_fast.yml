@@ -33,6 +33,9 @@ jobs:
     - name: Upload new test history to fast table
       continue-on-error: true
       run: python3 .github/scripts/analytics/test_history_fast.py
+    - name: Sync mute coordinator effective rules (main relwithdebinfo)
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_mute_coordinator_state_to_ydb.py sync-effective-rules --branch=main --build-type=relwithdebinfo
     - name: Upload olap perfomance suites data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_suites_mart.sql --table_path perfomance/olap/fast_results_siutes --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite --ttl_min 43200 --ttl_key RunTs

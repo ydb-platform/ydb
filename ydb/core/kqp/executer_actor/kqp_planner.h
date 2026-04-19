@@ -72,7 +72,6 @@ public:
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
-    ~TKqpPlanner();
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isShutdown = false);
     std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();

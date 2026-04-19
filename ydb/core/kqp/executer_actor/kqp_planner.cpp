@@ -123,12 +123,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     }
 }
 
-TKqpPlanner::~TKqpPlanner() {
-    if (TxInfo) {
-        ResourceManager_->FinishTx(TxInfo);
-    }
-}
-
 // ResourcesSnapshot, ResourceEstimations
 
 void TKqpPlanner::LogMemoryStatistics(const TLogFunc& logFunc) {
@@ -498,7 +492,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         }
 
         TxInfo = MakeIntrusive<NRm::TTxState>(
-            TxId, TInstant::Now(), ResourceManager_->GetCounters(),
+            ResourceManager_, TxId, TInstant::Now(), ResourceManager_->GetCounters(),
             UserRequestContext->PoolId, memoryPoolPercent, Database, CaFactory_->GetVerboseMemoryLimitException());
     }
 

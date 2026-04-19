@@ -32,12 +32,6 @@ public:
     {
     }
 
-    ~TKqpQueryManager() {
-        if (TxInfo) {
-            ResourceManager_->FinishTx(TxInfo);
-        }
-    }
-
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvPoison, HandlePoison);
@@ -162,7 +156,7 @@ public:
         }
 
         if (!TxInfo) {
-            TxInfo = MakeIntrusive<NRm::TTxState>(txId, TInstant::Now(), ResourceManager_->GetCounters(),
+            TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(), ResourceManager_->GetCounters(),
                 poolId, msg.GetMemoryPoolPercent(),
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
         }

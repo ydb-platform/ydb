@@ -45,9 +45,12 @@ public:
     std::atomic<bool> SpillingPercentReached{false};
 };
 
+class IKqpResourceManager;
+
 class TTxState : public TAtomicRefCount<TTxState> {
 
 public:
+    std::shared_ptr<IKqpResourceManager> ResourceManager;
     const ui64 TxId;
     const TInstant CreatedAt;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -75,9 +78,10 @@ public:
     std::atomic<bool> HasFailedAllocationBacktrace = false;
 
 public:
-    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
+    explicit TTxState(std::shared_ptr<IKqpResourceManager> resourceManager, ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
         const TString& database, bool collectBacktrace)
-        : TxId(txId)
+        : ResourceManager(resourceManager)
+        , TxId(txId)
         , CreatedAt(now)
         , Counters(std::move(counters))
         , PoolId(poolId)
@@ -86,9 +90,7 @@ public:
         , CollectBacktrace(collectBacktrace)
     {}
 
-    ~TTxState() {
-        delete TxMaxAllocationBacktrace.load();
-    }
+    ~TTxState();
 
     std::pair<TString, TString> MakePoolId() const {
         return std::make_pair(Database, PoolId);
@@ -289,7 +291,7 @@ public:
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 
     virtual void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-    virtual void FinishTx(TIntrusivePtr<TTxState>& tx) = 0;
+    virtual void FinishTx(TTxState* tx) = 0;
     virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;

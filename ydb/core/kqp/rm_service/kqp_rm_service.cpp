@@ -46,6 +46,11 @@ using namespace NResourceBroker;
 #define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 #define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 
+TTxState::~TTxState() {
+    ResourceManager->FinishTx(this);
+    delete TxMaxAllocationBacktrace.load();
+}
+
 namespace {
 
 static constexpr double MYEPS = 1e-9;
@@ -354,7 +359,7 @@ public:
         return result;
     }
 
-    void FreeResourcesImpl(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources, bool reduceResourceBrokerTask) {
+    void FreeResourcesImpl(TTxState* tx, ui64 taskId, const TKqpResourcesRequest& resources, bool reduceResourceBrokerTask) {
 
         auto released = tx->Released(resources);
         Y_ABORT_UNLESS(released);
@@ -397,10 +402,10 @@ public:
     }
 
     void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) override {
-        FreeResourcesImpl(tx, taskId, resources, true);
+        FreeResourcesImpl(tx.Get(), taskId, resources, true);
     }
 
-    void FinishTx(TIntrusivePtr<TTxState>& tx) override {
+    void FinishTx(TTxState* tx) override {
         if (auto currentRbTaskId = tx->TxResourceBrokerTaskId.exchange(0); currentRbTaskId) {
             bool finished = ResourceBroker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(currentRbTaskId), SelfId);
             Y_DEBUG_ABORT_UNLESS(finished);

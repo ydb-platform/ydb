@@ -105,7 +105,9 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
     }
 
     void ProcessTabletsFromConfig(const NKikimrConfig::TBootstrap &bootstrapConfig) {
-        LastBootstrapConfig.CopyFrom(bootstrapConfig);
+        NKikimrConfig::TBootstrap newLast;
+        newLast.CopyFrom(bootstrapConfig);
+        newLast.ClearTablet();
 
         // check if bootstrappers are disabled via ICB
         if (DisableLocalBootstrappers && !WasLocalBootstrappersDisabled) {
@@ -118,10 +120,32 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
         THashSet<ui64> currentTabletIds;
         for (const auto &tablet : bootstrapConfig.GetTablet()) {
-            ui64 tabletId = tablet.GetInfo().GetTabletID();
+            auto normalizedTablet = tablet;
+            RestoreTabletInfoFromStartupConfig(normalizedTablet);
+
+            if (!HasCompleteTabletChannels(normalizedTablet)) {
+                if (normalizedTablet.HasInfo() && normalizedTablet.GetInfo().HasTabletID()) {
+                    const ui64 tabletId = normalizedTablet.GetInfo().GetTabletID();
+                    if (const auto it = TabletStates.find(tabletId); it != TabletStates.end()) {
+                        currentTabletIds.insert(tabletId);
+                        newLast.AddTablet()->CopyFrom(it->second.Config);
+                    }
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+                        "Skipping invalid tablet config update with incomplete channels for tablet "
+                        << tabletId << " on node " << SelfId().NodeId());
+                } else {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
+                        "Skipping invalid tablet config update without tablet id on node " << SelfId().NodeId());
+                }
+                continue;
+            }
+
+            newLast.AddTablet()->CopyFrom(normalizedTablet);
+
+            const ui64 tabletId = normalizedTablet.GetInfo().GetTabletID();
             currentTabletIds.insert(tabletId);
             RegisterTabletBootstrapperControl(tabletId);
-            UpdateTablet(tablet);
+            UpdateTablet(normalizedTablet);
         }
 
         // remove tablets that are no longer in config
@@ -133,6 +157,8 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                 ++it;
             }
         }
+
+        LastBootstrapConfig.Swap(&newLast);
     }
 
     void StopBootstrapper(ui64 tabletId, TTabletState& state) {
@@ -185,6 +211,49 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         }
 
         ReconcileTablet(tabletId, state);
+    }
+
+    void RestoreTabletInfoFromStartupConfig(NKikimrConfig::TBootstrap::TTablet& tabletConfig) const {
+        if (!tabletConfig.HasInfo() || !tabletConfig.GetInfo().HasTabletID()) {
+            return;
+        }
+
+        auto* info = tabletConfig.MutableInfo();
+
+        for (const auto& startupTablet : InitialBootstrapConfig.GetTablet()) {
+            if (startupTablet.HasInfo() && startupTablet.GetInfo().HasTabletID() && startupTablet.GetInfo().GetTabletID() == info->GetTabletID()) {
+                info->MutableChannels()->CopyFrom(startupTablet.GetInfo().GetChannels());
+                return;
+            }
+        }
+    }
+
+    static bool HasCompleteTabletChannels(const NKikimrConfig::TBootstrap::TTablet& tabletConfig) {
+        if (!tabletConfig.HasInfo() || !tabletConfig.GetInfo().HasTabletID()) {
+            return false;
+        }
+
+        const auto& info = tabletConfig.GetInfo();
+        if (!info.ChannelsSize()) {
+            return false;
+        }
+
+        for (const auto& channelInfo : info.GetChannels()) {
+            const bool hasChannelType = channelInfo.HasChannelType();
+            const bool hasErasureNameField = channelInfo.HasChannelErasureName();
+            const bool hasValidErasureName = hasErasureNameField && !channelInfo.GetChannelErasureName().empty();
+            if (hasChannelType && hasErasureNameField) {
+                return false;
+            }
+            if (!hasChannelType && !hasValidErasureName) {
+                return false;
+            }
+            if (!channelInfo.HistorySize()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     void StartBootstrapper(ui64 tabletId, TTabletState &state) {

@@ -2129,11 +2129,53 @@ class _ToolTestBase(BaseAiInteractiveTest):
             tool_result = self._get_tool_result_content()
             parsed = json.loads(tool_result)
             assert isinstance(parsed, list), "exec_query must return a JSON array of result sets"
-            assert len(parsed) > 0, "SELECT 1 must produce at least one result set"
+            assert len(parsed) == 1, "SELECT 1 must produce at least one result set"
             result_set = parsed[0]
             assert "columns" in result_set
             assert "rows" in result_set
-            assert len(result_set["rows"]) > 0
+            assert len(result_set["rows"]) == 1
+            assert result_set["truncated"] is False
+            assert result_set["row_count"] == 1
+            assert result_set["byte_count"] > 0
+            assert result_set["rows"][0]["val"] == 1
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_exec_query_tool_truncated(self):
+        handler, call_count = self._make_tool_handler(
+            "exec_query", {"query": "SELECT * FROM AS_TABLE(ListReplicate(<|val: 42|>, 1100))"}, "Query executed."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "run a query")
+
+            # The CLI shows an approval dialog before executing
+            self._approve_tool_execution(child)
+
+            child.expect("Query executed", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            self._validate_tool_call_in_first_request("exec_query", {"query": "SELECT * FROM AS_TABLE(ListReplicate(<|val: 42|>, 1100))"})
+
+            tool_result = self._get_tool_result_content()
+            parsed = json.loads(tool_result)
+            assert isinstance(parsed, list), "exec_query must return a JSON array of result sets"
+            assert len(parsed) == 1, "SELECT must produce at least one result set"
+            result_set = parsed[0]
+            assert len(result_set["rows"]) == 1000
+            assert result_set["truncated"] is True
+            assert result_set["row_count"] == 1100
+            assert result_set["byte_count"] > 0
+            assert "truncated" in result_set["truncatedMessage"]
+            assert result_set["rows"][0]["val"] == 42
 
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)

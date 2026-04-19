@@ -68,7 +68,11 @@ class _MockAIHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(payload)
+
+        try:
+            self.wfile.write(payload)
+        except BrokenPipeError:
+            pass
 
 
 class MockAIServer:
@@ -1797,7 +1801,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
 
     def test_request_interrupting(self):
         def handler(request):
-            time.sleep(60)
+            time.sleep(5)
             return {"choices": [{"message": {"role": "assistant", "content": "Ping response."}}]}
 
         self.mock_server.set_openai_handler(handler)

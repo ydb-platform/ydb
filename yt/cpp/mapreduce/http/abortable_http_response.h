@@ -97,7 +97,7 @@ public:
     {
     public:
         TOutage(TString urlPattern, TAbortableHttpResponseRegistry& registry, const TOutageOptions& options);
-        TOutage(TOutage&&) = default;
+        TOutage(TOutage&&) noexcept = default;
         TOutage(const TOutage&) = delete;
         ~TOutage();
 

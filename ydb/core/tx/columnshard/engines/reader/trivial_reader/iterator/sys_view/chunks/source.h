@@ -5,7 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/abstract/source.h>
 
-#include <ydb/library/formats/arrow/trivial_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NChunks {
 

@@ -39,7 +39,7 @@ TString GetFingerprintSHA256(const TX509Ptr& certificate);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(TSslContextImpl)
+DECLARE_REFCOUNTED_CLASS(TSslContextImpl)
 
 class TSslContext
     : public TRefCounted

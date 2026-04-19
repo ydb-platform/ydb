@@ -51,10 +51,10 @@ The tests have been moved to quarantine automatically.
 
 COMMENT_QUARANTINE_FAILED = """⚠️ **Returned to Muted**
 
-One or more tests failed during the quarantine period — the fix did not hold.
+Test **{failed_test_name}** failed during the quarantine period — the fix did not hold.
 
 **Details:**
-- Failed tests: {failed_test_names}
+- Failed test: {failed_test_name}
 - Failures detected: {fail_count}
 - Quarantine started: {quarantine_since}
 
@@ -68,8 +68,8 @@ One or more tests failed during the quarantine period — the fix did not hold.
 
 COMMENT_QUARANTINE_EXPIRED = """✅ **Quarantine complete**
 
-All tests were stable for {quarantine_window_days} days. Quarantine period is over.
-The tests will be unmuted automatically in the next automation run.
+Test **{full_name}** was stable for {quarantine_window_days} days. Quarantine period is over.
+The test will be unmuted automatically in the next automation run.
 
 This issue will be closed shortly.
 
@@ -379,17 +379,21 @@ def process_enter_quarantine(
     status_options,
 ):
     existing_rows = fetch_quarantine_rows(ydb_wrapper, table_path)
-    existing_issue_numbers = {
-        int(row["github_issue_number"])
+    existing_keys = {
+        (
+            row.get("full_name"),
+            row.get("branch"),
+            row.get("build_type"),
+        )
         for row in existing_rows
-        if row.get("github_issue_number") is not None
+        if row.get("full_name") and row.get("branch") and row.get("build_type")
     }
 
     closed_issues = fetch_candidate_closed_issues(ydb_wrapper, issues_table_path)
     candidate_numbers = {
         int(row["issue_number"])
         for row in closed_issues
-        if row.get("issue_number") is not None and int(row["issue_number"]) not in existing_issue_numbers
+        if row.get("issue_number") is not None
     }
     closer_info = fetch_issue_closer_types_and_logins(candidate_numbers)
     issue_refs = fetch_project_issue_refs(candidate_numbers)
@@ -410,8 +414,6 @@ def process_enter_quarantine(
         issue_url = issue_ref.get("issue_url") or f"https://github.com/{ORG_NAME}/{REPO_NAME}/issues/{issue_number}"
         if not issue_id or not project_item_id:
             continue
-        if issue_number in existing_issue_numbers:
-            continue
         closer = closer_info.get(issue_number, {})
         if closer.get("closed_by_type") != "User":
             continue
@@ -423,9 +425,13 @@ def process_enter_quarantine(
         if not tests:
             continue
 
+        issue_rows = []
         for full_name in tests:
             for branch in branches:
-                new_rows.append(
+                row_key = (full_name, branch, build_type)
+                if row_key in existing_keys:
+                    continue
+                issue_rows.append(
                     {
                         "full_name": full_name,
                         "branch": branch,
@@ -435,6 +441,8 @@ def process_enter_quarantine(
                         "quarantine_since": now,
                     }
                 )
+        if not issue_rows:
+            continue
 
         reopen_issue(issue_id)
         update_issue_status(
@@ -450,6 +458,9 @@ def process_enter_quarantine(
             workflow_run_url=run_url,
         )
         add_issue_comment(issue_id, comment)
+        new_rows.extend(issue_rows)
+        for issue_row in issue_rows:
+            existing_keys.add((issue_row["full_name"], issue_row["branch"], issue_row["build_type"]))
     deduped_rows = {}
     for row in new_rows:
         row_key = (row["full_name"], row["branch"], row["build_type"])
@@ -489,7 +500,7 @@ def process_failed_quarantine(
         if row.get("github_issue_number") is not None
     }
     issue_refs = fetch_project_issue_refs(issue_numbers)
-    processed_issue_numbers = set()
+    updated_issue_numbers = set()
 
     for row in rows:
         full_name = row.get("full_name")
@@ -522,18 +533,16 @@ def process_failed_quarantine(
             continue
 
         delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type)
-        if issue_number in processed_issue_numbers:
-            continue
-        if not project_item_id:
-            continue
-        update_issue_status(
-            project_item_id,
-            status_field_id,
-            status_options[STATUS_MUTED],
-            issue_url,
-        )
+        if issue_number not in updated_issue_numbers and project_item_id:
+            update_issue_status(
+                project_item_id,
+                status_field_id,
+                status_options[STATUS_MUTED],
+                issue_url,
+            )
+            updated_issue_numbers.add(issue_number)
         comment = COMMENT_QUARANTINE_FAILED.format(
-            failed_test_names=", ".join(failed_tests) if failed_tests else full_name,
+            failed_test_name=full_name,
             fail_count=fail_count,
             quarantine_since=quarantine_since.strftime("%Y-%m-%d %H:%M:%S UTC")
             if quarantine_since
@@ -541,7 +550,6 @@ def process_failed_quarantine(
             workflow_run_url=run_url,
         )
         add_issue_comment(issue_id, comment)
-        processed_issue_numbers.add(issue_number)
 
 
 def process_expired_quarantine(ydb_wrapper, table_path, quarantine_window_days):
@@ -554,8 +562,6 @@ def process_expired_quarantine(ydb_wrapper, table_path, quarantine_window_days):
         if row.get("github_issue_number") is not None
     }
     issue_refs = fetch_project_issue_refs(issue_numbers)
-    commented_issue_numbers = set()
-
     for row in rows:
         full_name = row.get("full_name")
         branch = row.get("branch")
@@ -571,13 +577,13 @@ def process_expired_quarantine(ydb_wrapper, table_path, quarantine_window_days):
         delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type)
         issue_ref = issue_refs.get(issue_number) if issue_number is not None else {}
         issue_id = (issue_ref or {}).get("issue_id") or row.get("github_issue_id")
-        if issue_id and issue_number not in commented_issue_numbers:
+        if issue_id:
             comment = COMMENT_QUARANTINE_EXPIRED.format(
+                full_name=full_name,
                 quarantine_window_days=quarantine_window_days,
                 workflow_run_url=run_url,
             )
             add_issue_comment(issue_id, comment)
-            commented_issue_numbers.add(issue_number)
 
 
 def main():

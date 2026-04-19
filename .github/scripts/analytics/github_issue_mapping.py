@@ -268,7 +268,7 @@ def ensure_quarantine_since_column(ydb_wrapper, table_path: str) -> None:
         raise
 
 
-def fetch_quarantine_since_by_issue_number(ydb_wrapper) -> dict[int, dt.datetime]:
+def fetch_quarantine_since_by_test_key(ydb_wrapper) -> dict[tuple[str, str, str], dt.datetime]:
     try:
         table_path = ydb_wrapper.get_table_path("mute_quarantine")
     except KeyError:
@@ -277,29 +277,34 @@ def fetch_quarantine_since_by_issue_number(ydb_wrapper) -> dict[int, dt.datetime
     rows = ydb_wrapper.execute_scan_query(
         f"""
         SELECT
+            full_name,
+            branch,
+            build_type,
             github_issue_number,
             quarantine_since
         FROM `{table_path}`
         """,
         query_name="github_issue_mapping_fetch_mute_quarantine",
     )
-    by_issue: dict[int, dt.datetime] = {}
+    by_test_key: dict[tuple[str, str, str], dt.datetime] = {}
     for row in rows:
-        issue_number = row.get("github_issue_number")
+        full_name = row.get("full_name")
+        branch = row.get("branch")
+        build_type = row.get("build_type")
         since = row.get("quarantine_since")
-        if issue_number is None or since is None:
+        if not full_name or not branch or not build_type or since is None:
             continue
-        key = int(issue_number)
-        previous = by_issue.get(key)
+        key = (str(full_name), str(branch), str(build_type))
+        previous = by_test_key.get(key)
         if previous is None or since > previous:
-            by_issue[key] = since
-    return by_issue
+            by_test_key[key] = since
+    return by_test_key
 
 
-def convert_mapping_to_table_data(test_to_issue_mapping, quarantine_since_by_issue_number=None):
+def convert_mapping_to_table_data(test_to_issue_mapping, quarantine_since_by_test_key=None):
     """Convert the test-to-issue mapping to table data format"""
     table_data = []
-    quarantine_since_by_issue_number = quarantine_since_by_issue_number or {}
+    quarantine_since_by_test_key = quarantine_since_by_test_key or {}
 
     for test_name, issues in test_to_issue_mapping.items():
         if not issues:
@@ -325,9 +330,7 @@ def convert_mapping_to_table_data(test_to_issue_mapping, quarantine_since_by_iss
                     'github_issue_state': latest_issue['state'],
                     'github_issue_created_at': latest_issue.get('created_at'),
                     'area_override': latest_issue.get('area_override'),
-                    'quarantine_since': quarantine_since_by_issue_number.get(
-                        int(latest_issue.get('issue_number', 0))
-                    ),
+                    'quarantine_since': quarantine_since_by_test_key.get((test_name, branch, bt)),
                 })
 
     return table_data
@@ -405,10 +408,10 @@ def main():
             create_test_issue_mapping_table(ydb_wrapper, table_path)
             ensure_quarantine_since_column(ydb_wrapper, table_path)
 
-            quarantine_since_by_issue_number = fetch_quarantine_since_by_issue_number(ydb_wrapper)
+            quarantine_since_by_test_key = fetch_quarantine_since_by_test_key(ydb_wrapper)
             mapping_data = convert_mapping_to_table_data(
                 test_to_issue,
-                quarantine_since_by_issue_number=quarantine_since_by_issue_number,
+                quarantine_since_by_test_key=quarantine_since_by_test_key,
             )
             print(f"Converted to {len(mapping_data)} table records")
 

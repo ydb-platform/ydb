@@ -421,7 +421,7 @@ int GetSocketError(SOCKET socket)
 {
     int error;
     socklen_t errorLen = sizeof(error);
-    getsockopt(socket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorLen);
+    YT_VERIFY(getsockopt(socket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorLen) == 0);
     return error;
 }
 

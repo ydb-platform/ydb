@@ -467,10 +467,10 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
             query << ")";
             if (AskYesNoFtxui(query, /* defaultAnswer */ true)) {
                 profileManager->SetActiveProfile(profileName);
-                Cout << "Profile \"" << profileName << "\" is now active." << Endl;
+                Cout << Endl << "Profile \"" << profileName << "\" is now active." << Endl;
             }
         }
-        Cout << "Profile \"" << profileName << "\" configured successfully." << Endl;
+        Cout << Endl << "Profile \"" << profileName << "\" configured successfully." << Endl;
     }
 }
 

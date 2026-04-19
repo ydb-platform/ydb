@@ -5,7 +5,6 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/scope.h>
@@ -54,6 +53,38 @@ public:
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(keys, paths);
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        const auto checksumFileIt = S3Mock().GetData().find(checksumFile);
+        UNIT_ASSERT_C(checksumFileIt != S3Mock().GetData().end(), "No checksum file: " << checksumFile);
+
+        // Automatic return to the previous state
+        const TString checksumValue = checksumFileIt->second;
+        Y_DEFER {
+            S3Mock().GetData()[checksumFile] = checksumValue;
+        };
+
+        checksumFileIt->second = ModifyHexEncodedString(checksumValue);
+
+        auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+        WaitOpStatus(res, NYdb::EStatus::CANCELLED);
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        auto copySettings = [&]() {
+            NYdb::NImport::TImportFromS3Settings settings = importSettings;
+            settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << RestoreAttempt++);
+            return settings;
+        };
+
+        // Check that settings are OK
+        auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+        WaitOpSuccess(res);
+
+        for (const TString& checksumFile : checksumFiles) {
+            ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
+        }
     }
 
 protected:
@@ -128,66 +159,6 @@ protected:
         ValidateListObjectPathsInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
     }
 
-    TString DebugListDir(const TString& path) { // Debug listing for specified dir
-        auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
-        TStringBuilder l;
-        if (res.IsSuccess()) {
-            for (const auto& entry : res.GetChildren()) {
-                if (l) {
-                    l << ", ";
-                }
-                l << "\"" << entry.Name << "\"";
-            }
-        } else {
-            l << "List dir \"" << path << "\" failed: " << res.GetIssues().ToOneLineString();
-        }
-        return l;
-    }
-
-    static TString ModifyHexEncodedString(TString value) {
-        UNIT_ASSERT_GT(value.size(), 0);
-        char c = value.front();
-        if (c == '9' || c == 'f' || c == 'F') {
-            --c;
-        } else {
-            ++c;
-        }
-        value[0] = c;
-        return value;
-    }
-
-    void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NYdb::NImport::TImportFromS3Settings& importSettings) {
-        const auto checksumFileIt = S3Mock().GetData().find(checksumFile);
-        UNIT_ASSERT_C(checksumFileIt != S3Mock().GetData().end(), "No checksum file: " << checksumFile);
-
-        // Automatic return to the previous state
-        const TString checksumValue = checksumFileIt->second;
-        Y_DEFER {
-            S3Mock().GetData()[checksumFile] = checksumValue;
-        };
-
-        checksumFileIt->second = ModifyHexEncodedString(checksumValue);
-
-        auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-        WaitOpStatus(res, NYdb::EStatus::CANCELLED);
-    }
-
-    void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NYdb::NImport::TImportFromS3Settings& importSettings) {
-        auto copySettings = [&]() {
-            NYdb::NImport::TImportFromS3Settings settings = importSettings;
-            settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << RestoreAttempt++);
-            return settings;
-        };
-
-        // Check that settings are OK
-        auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
-        WaitOpSuccess(res);
-
-        for (const TString& checksumFile : checksumFiles) {
-            ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
-        }
-    }
-
     void TestSchemeObjectEncryptedExportImport(
         const TString& query,
         const TString& objectName,
@@ -230,7 +201,6 @@ protected:
         UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
     }
 
-    YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
     YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
     YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
     YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
@@ -238,5 +208,4 @@ protected:
 private:
     ui16 S3Port_ = 0;
     TMaybe<NKikimr::NWrappers::NTestHelpers::TS3Mock> S3Mock_;
-    size_t RestoreAttempt = 0;
 };

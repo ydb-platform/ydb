@@ -407,7 +407,9 @@ std::string GetCurrentProcessName()
 std::string GetCurrentProcessCommandLine()
 {
 #if defined(__linux__)
-    return std::string(Trim(TUnbufferedFileInput("/proc/self/cmdline").ReadAll(), "\n"));
+    auto cmdline = TUnbufferedFileInput("/proc/self/cmdline").ReadAll();
+    auto delimiterPos = cmdline.find('\0');
+    return delimiterPos == std::string::npos ? cmdline : cmdline.substr(0, delimiterPos);
 #elif defined(_win_)
     return ::GetCommandLineA();
 #else

@@ -10,8 +10,7 @@
                 {
                     "columns": [
                         "a",
-                        "b",
-                        "rowid"
+                        "b"
                     ],
                     "scan_by": [
                         "rowid (-\u221e, +\u221e)"
@@ -21,8 +20,7 @@
                 {
                     "columns": [
                         "a",
-                        "b",
-                        "rowid"
+                        "b"
                     ],
                     "scan_by": [
                         "rowid (-\u221e, +\u221e)"

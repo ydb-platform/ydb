@@ -131,7 +131,7 @@ jobs:
 
       - name: Run mute quarantine
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           YDB_ENDPOINT: ${{ vars.YDB_ENDPOINT }}
           YDB_DATABASE: ${{ vars.YDB_DATABASE }}
         run: |

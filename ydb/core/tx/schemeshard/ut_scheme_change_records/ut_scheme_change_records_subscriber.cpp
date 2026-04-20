@@ -56,7 +56,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         }
 
         // ACK all
-        ui64 lastSeq = fetch->Record.GetLastSequenceId();
+        ui64 lastSeq = fetch->Record.EntriesSize() > 0
+            ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId()
+            : 0;
         TAutoPtr<IEventHandle> ackHandle;
         auto ack = AckSchemeChangeRecords(runtime, "backup:collection:1", lastSeq, ackHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)ack->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
@@ -95,7 +97,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 break;
             }
             totalFetched += fetch->Record.EntriesSize();
-            cursor = fetch->Record.GetLastSequenceId();
+            cursor = fetch->Record.EntriesSize() > 0
+                ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId()
+                : cursor;
             TAutoPtr<IEventHandle> ackHandle;
             AckSchemeChangeRecords(runtime, "backup:sub", cursor, ackHandle);
             if (!fetch->Record.GetHasMore()) {
@@ -129,7 +133,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto backupFetch = FetchSchemeChangeRecords(runtime, "backup:collection:1", 0, 100, backupFetchHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)backupFetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(backupFetch->Record.EntriesSize() >= 3);
-        ui64 backupLastSeq = backupFetch->Record.GetLastSequenceId();
+        ui64 backupLastSeq = backupFetch->Record.EntriesSize() > 0
+            ? backupFetch->Record.GetEntries(backupFetch->Record.EntriesSize() - 1).GetSequenceId()
+            : 0;
         TAutoPtr<IEventHandle> backupAckHandle;
         AckSchemeChangeRecords(runtime, "backup:collection:1", backupLastSeq, backupAckHandle);
 
@@ -291,7 +297,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto fetch = FetchSchemeChangeRecords(runtime, "cleanup:sub", 0, 100, fetchHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)fetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(fetch->Record.EntriesSize() >= 3);
-        ui64 lastSeq = fetch->Record.GetLastSequenceId();
+        ui64 lastSeq = fetch->Record.EntriesSize() > 0
+            ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId()
+            : 0;
 
         TAutoPtr<IEventHandle> ackHandle;
         AckSchemeChangeRecords(runtime, "cleanup:sub", lastSeq, ackHandle);
@@ -301,5 +309,35 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         UNIT_ASSERT_C(entries.empty(),
             "Records should be deleted inline by ack, got " << entries.size());
+    }
+
+    Y_UNIT_TEST(FetchResultHasNoLastSequenceIdField) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "tail:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto fetch = FetchSchemeChangeRecords(runtime, "tail:sub", 0, 100, fetchHandle);
+        UNIT_ASSERT(fetch->Record.EntriesSize() > 0);
+
+        // Tail is computed from entries, not a separate field
+        ui64 tailSeq = fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId();
+        UNIT_ASSERT(tailSeq > 0);
+
+        // Ack using entries-derived tail works end-to-end
+        TAutoPtr<IEventHandle> ackHandle;
+        auto ack = AckSchemeChangeRecords(runtime, "tail:sub", tailSeq, ackHandle);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)ack->Record.GetStatus(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
     }
 }

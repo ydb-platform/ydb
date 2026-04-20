@@ -51,7 +51,6 @@ message TEvFetchSchemeChangeRecordsResult {
     optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     repeated TSchemeChangeRecord Entries = 3;
-    uint64 LastSequenceId = 4;
     bool HasMore = 5;
     uint64 SkippedEntries = 6;
     uint64 MinInFlightPlanStep = 7;

@@ -98,7 +98,6 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         }
 
         ui32 count = 0;
-        ui64 lastSeqId = effectiveAfterSeqId;
         bool hasMore = false;
 
         while (!rowset.EndOfSet()) {
@@ -124,7 +123,6 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             entry->SetPlanStep(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PlanStep>(0));
             entry->SetBodySize(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::BodySize>(0));
 
-            lastSeqId = seqId;
             ++count;
 
             if (!rowset.Next()) {
@@ -141,7 +139,6 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         }
 
         Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-        Result->Record.SetLastSequenceId(lastSeqId);
         Result->Record.SetHasMore(hasMore);
         Result->Record.SetSkippedEntries(skippedEntries);
 

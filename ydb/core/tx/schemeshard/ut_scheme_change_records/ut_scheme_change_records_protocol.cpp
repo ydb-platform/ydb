@@ -159,7 +159,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(fetch1->Record.EntriesSize(), fetch2->Record.EntriesSize());
 
-        ui64 lastSeq = fetch1->Record.GetLastSequenceId();
+        ui64 lastSeq = fetch1->Record.EntriesSize() > 0
+            ? fetch1->Record.GetEntries(fetch1->Record.EntriesSize() - 1).GetSequenceId()
+            : 0;
         ui64 firstSeq = fetch1->Record.GetEntries(0).GetSequenceId();
         TAutoPtr<IEventHandle> ack1Handle, ack2Handle;
         AckSchemeChangeRecords(runtime, "sub1", lastSeq, ack1Handle);

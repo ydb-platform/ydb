@@ -212,30 +212,12 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
         }
 
         // Reactive cleanup: when this ack moves the global min subscriber
-        // cursor forward, delete the newly-acked records in the same tx.
-        // No cap: total backlog is bounded by MaxSchemeChangeRecords (100k),
-        // which is ~3.2 MB of redo log at ~32 bytes per per-row delete —
-        // comfortably within a single tablet tx. Background cleanup is
-        // only a boot-time safety net (see TTxSchemeChangeRecordsCleanup).
-        const ui64 newMinOrder = Self->GetMinSubscriberOrder();
-        if (newMinOrder > oldMinOrder) {
-            auto logRowset = db.Table<Schema::SchemeChangeRecords>()
-                .GreaterOrEqual(oldMinOrder + 1)
-                .Select();
-            if (!logRowset.IsReady()) {
-                return false;
-            }
-            while (!logRowset.EndOfSet()) {
-                ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
-                if (order > newMinOrder) {
-                    break;
-                }
-                db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
-                db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
-                if (!logRowset.Next()) {
-                    return false;
-                }
-            }
+        // cursor forward, delete newly-acked records in the same tx. No cap:
+        // total backlog is bounded by MaxSchemeChangeRecords (100k), which
+        // is ~3.2 MB of redo log — within single-tx budget. Background
+        // cleanup only runs at tablet boot as a safety net.
+        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
+            return false;
         }
 
         Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
@@ -282,27 +264,9 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         Self->Subscribers.erase(subscriberId);
 
         // Reactive cleanup: removing a slow subscriber may jump the global
-        // min cursor forward. Delete all newly-stale records inline. No cap
-        // — see TTxAckSchemeChangeRecords for the backlog-bound rationale.
-        const ui64 newMinOrder = Self->GetMinSubscriberOrder();
-        if (newMinOrder > oldMinOrder) {
-            auto logRowset = db.Table<Schema::SchemeChangeRecords>()
-                .GreaterOrEqual(oldMinOrder + 1)
-                .Select();
-            if (!logRowset.IsReady()) {
-                return false;
-            }
-            while (!logRowset.EndOfSet()) {
-                ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
-                if (order > newMinOrder) {
-                    break;
-                }
-                db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
-                db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
-                if (!logRowset.Next()) {
-                    return false;
-                }
-            }
+        // min cursor forward. Delete newly-stale records inline.
+        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
+            return false;
         }
 
         Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);

@@ -387,6 +387,35 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 << entries.size() << " remaining");
     }
 
+    Y_UNIT_TEST(ForceAdvanceDeletesStaleRecordsInline) {
+        // ForceAdvance jumps cursor to tail: the slowest-case stuck subscriber.
+        // It must delete newly-stale records inline, same as Ack/Unregister.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "stuck:sub", regHandle);
+
+        for (int i = 1; i <= 5; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("D%d", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        auto before = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT(!before.empty());
+
+        TAutoPtr<IEventHandle> advHandle;
+        auto result = ForceAdvanceSubscriber(runtime, "stuck:sub", advHandle);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetStatus(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
+
+        // IMMEDIATE read — no wakeup, no time advance.
+        auto after = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(after.empty(),
+            "ForceAdvance must sweep records inline; got " << after.size() << " remaining");
+    }
+
     Y_UNIT_TEST(UnregisterSweepsStaleRecordsRegardlessOfCount) {
         // Slow subscriber holds min cursor at 0. Write N > 1000 records.
         // Fast subscriber acks everything. Unregister the slow one. All

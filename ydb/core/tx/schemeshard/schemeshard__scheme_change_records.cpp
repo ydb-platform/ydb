@@ -31,4 +31,28 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
     }
 }
 
+bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder) {
+    if (newMinOrder <= oldMinOrder) {
+        return true;
+    }
+    auto logRowset = db.Table<Schema::SchemeChangeRecords>()
+        .GreaterOrEqual(oldMinOrder + 1)
+        .Select();
+    if (!logRowset.IsReady()) {
+        return false;
+    }
+    while (!logRowset.EndOfSet()) {
+        ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
+        if (order > newMinOrder) {
+            break;
+        }
+        db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
+        db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
+        if (!logRowset.Next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace NKikimr::NSchemeShard

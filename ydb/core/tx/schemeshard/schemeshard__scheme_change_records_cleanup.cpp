@@ -94,6 +94,8 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             return true;
         }
 
+        const ui64 oldMinOrder = Self->GetMinSubscriberOrder();
+
         const ui64 newOrder = Self->NextSchemeChangeOrder;
         const TInstant now = TInstant::Now();
 
@@ -105,6 +107,12 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
             it->second.LastAckedOrder = newOrder;
             it->second.LastActivityAt = now;
+        }
+
+        // Reactive cleanup: force-advance is the slowest-subscriber-rescue
+        // path, where records most need immediate deletion.
+        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
+            return false;
         }
 
         Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);

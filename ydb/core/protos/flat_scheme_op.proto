@@ -312,9 +312,6 @@ message TTableDetailedMetricsSettings {
     message TConfigured {
         /**
          * The level at which detailed metrics are aggregated and reported.
-         *
-         * @note If this value is not set, the default value from the parent database
-         *       is used instead.
          */
         optional EMetricsLevel MetricsLevel = 1;
     }
@@ -450,6 +447,15 @@ message TTableDescription {
      *       with the TTableDetailedMetricsSettings.Configured field set to the desired settings.
      *       To remove the current detailed metrics settings, this field should be populated
      *       with the TTableDetailedMetricsSettings.NotConfigured field set.
+     *
+     * @note If the detailed metrics settings are not configured for a table,
+     *       the default metrics settings from the parent database are used instead
+     *       (by default, no detailed metrics settings are configured at the database
+     *       level). Setting the detailed metrics level to TABLE/PARITITION for a table,
+     *       enables detailed metrics for the given table regardless of the detailed
+     *       metrics settings at the database level. Setting the detailed metrics
+     *       level to DISABLED for a table, disables detailed metrics for the given table
+     *       regardless of the detailed metrics settings at the database level.
      */
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 }

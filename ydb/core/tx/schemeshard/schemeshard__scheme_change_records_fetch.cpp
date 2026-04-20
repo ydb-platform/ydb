@@ -24,21 +24,21 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
         }
 
         if (rowset.IsValid()) {
-            ui64 currentCursor = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedSequenceId>();
+            ui64 currentOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
             Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-            Result->Record.SetCurrentSequenceId(currentCursor);
+            Result->Record.SetCurrentOrder(currentOrder);
         } else {
             const TInstant now = TInstant::Now();
             db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
-                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(0),
+                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(0),
                 NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
             );
             TSchemeShard::TSubscriberInfo info;
-            info.LastAckedSequenceId = 0;
+            info.LastAckedOrder = 0;
             info.LastActivityAt = now;
             Self->Subscribers.emplace(subscriberId, info);
             Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-            Result->Record.SetCurrentSequenceId(0);
+            Result->Record.SetCurrentOrder(0);
         }
 
         return true;
@@ -62,7 +62,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
         TString subscriberId = record.GetSubscriberId();
-        ui64 afterSeqId = record.GetAfterSequenceId();
+        ui64 afterOrder = record.GetAfterOrder();
         ui32 maxCount = record.GetMaxCount();
 
         if (maxCount == 0 || maxCount > 1000) {
@@ -82,17 +82,17 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             return true;
         }
 
-        ui64 storedCursor = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedSequenceId>();
+        ui64 storedOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
 
-        ui64 effectiveAfterSeqId = afterSeqId;
+        ui64 effectiveAfterOrder = afterOrder;
         ui64 skippedEntries = 0;
-        if (storedCursor > afterSeqId) {
-            skippedEntries = storedCursor - afterSeqId;
-            effectiveAfterSeqId = storedCursor;
+        if (storedOrder > afterOrder) {
+            skippedEntries = storedOrder - afterOrder;
+            effectiveAfterOrder = storedOrder;
         }
 
-        Y_ENSURE(effectiveAfterSeqId < Max<ui64>(), "effectiveAfterSeqId overflow");
-        auto rowset = db.Table<Schema::SchemeChangeRecords>().GreaterOrEqual(effectiveAfterSeqId + 1).Select();
+        Y_ENSURE(effectiveAfterOrder < Max<ui64>(), "effectiveAfterOrder overflow");
+        auto rowset = db.Table<Schema::SchemeChangeRecords>().GreaterOrEqual(effectiveAfterOrder + 1).Select();
         if (!rowset.IsReady()) {
             return false;
         }
@@ -107,8 +107,8 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             }
 
             auto* entry = Result->Record.AddEntries();
-            ui64 seqId = rowset.GetValue<Schema::SchemeChangeRecords::SequenceId>();
-            entry->SetSequenceId(seqId);
+            ui64 order = rowset.GetValue<Schema::SchemeChangeRecords::Order>();
+            entry->SetOrder(order);
             entry->SetTxId(rowset.GetValue<Schema::SchemeChangeRecords::TxId>());
             entry->SetOperationType(rowset.GetValue<Schema::SchemeChangeRecords::OperationType>());
             auto* pathId = entry->MutablePathId();
@@ -177,7 +177,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
         TString subscriberId = record.GetSubscriberId();
-        ui64 upToSeqId = record.GetUpToSequenceId();
+        ui64 upToOrder = record.GetUpToOrder();
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -192,52 +192,52 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             return true;
         }
 
-        ui64 currentCursor = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedSequenceId>();
+        ui64 currentOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
 
-        ui64 newCursor = Max(currentCursor, upToSeqId);
+        ui64 newOrder = Max(currentOrder, upToOrder);
 
-        if (newCursor > Self->NextSchemeChangeSequenceId) {
-            newCursor = Self->NextSchemeChangeSequenceId;
+        if (newOrder > Self->NextSchemeChangeOrder) {
+            newOrder = Self->NextSchemeChangeOrder;
         }
 
-        const ui64 oldMinCursor = Self->GetMinSubscriberCursor();
+        const ui64 oldMinOrder = Self->GetMinSubscriberOrder();
 
         const TInstant now = TInstant::Now();
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(newCursor),
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(newOrder),
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
         );
 
         if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
-            it->second.LastAckedSequenceId = newCursor;
+            it->second.LastAckedOrder = newOrder;
             it->second.LastActivityAt = now;
         }
 
         // Reactive cleanup: if this ack moved the global min cursor forward,
         // delete newly-acked records inline (up to a cap) so overflow capacity
         // is restored without waiting for the background sweep.
-        const ui64 newMinCursor = Self->GetMinSubscriberCursor();
-        if (newMinCursor > oldMinCursor) {
+        const ui64 newMinOrder = Self->GetMinSubscriberOrder();
+        if (newMinOrder > oldMinOrder) {
             const ui64 reactiveCleanupCap = 1000;
             ui64 deletedCount = 0;
 
             auto logRowset = db.Table<Schema::SchemeChangeRecords>()
-                .GreaterOrEqual(oldMinCursor + 1)
+                .GreaterOrEqual(oldMinOrder + 1)
                 .Select();
             if (!logRowset.IsReady()) {
                 return false;
             }
             while (!logRowset.EndOfSet()) {
-                ui64 seqId = logRowset.GetValue<Schema::SchemeChangeRecords::SequenceId>();
-                if (seqId > newMinCursor) {
+                ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
+                if (order > newMinOrder) {
                     break;
                 }
                 if (deletedCount >= reactiveCleanupCap) {
                     ReactiveCleanupCapHit = true;
                     break;
                 }
-                db.Table<Schema::SchemeChangeRecords>().Key(seqId).Delete();
-                db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Delete();
+                db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
+                db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
                 ++deletedCount;
                 if (!logRowset.Next()) {
                     return false;
@@ -246,7 +246,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
         }
 
         Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-        Result->Record.SetNewCursor(newCursor);
+        Result->Record.SetLastAckedOrder(newOrder);
 
         return true;
     }
@@ -291,35 +291,35 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
             return true;
         }
 
-        const ui64 oldMinCursor = Self->GetMinSubscriberCursor();
+        const ui64 oldMinOrder = Self->GetMinSubscriberOrder();
 
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Delete();
         Self->Subscribers.erase(subscriberId);
 
         // Reactive cleanup: removing a slow subscriber may jump the global
         // min cursor forward. Delete newly-stale records inline up to a cap.
-        const ui64 newMinCursor = Self->GetMinSubscriberCursor();
-        if (newMinCursor > oldMinCursor) {
+        const ui64 newMinOrder = Self->GetMinSubscriberOrder();
+        if (newMinOrder > oldMinOrder) {
             const ui64 reactiveCleanupCap = 1000;
             ui64 deletedCount = 0;
 
             auto logRowset = db.Table<Schema::SchemeChangeRecords>()
-                .GreaterOrEqual(oldMinCursor + 1)
+                .GreaterOrEqual(oldMinOrder + 1)
                 .Select();
             if (!logRowset.IsReady()) {
                 return false;
             }
             while (!logRowset.EndOfSet()) {
-                ui64 seqId = logRowset.GetValue<Schema::SchemeChangeRecords::SequenceId>();
-                if (seqId > newMinCursor) {
+                ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
+                if (order > newMinOrder) {
                     break;
                 }
                 if (deletedCount >= reactiveCleanupCap) {
                     ReactiveCleanupCapHit = true;
                     break;
                 }
-                db.Table<Schema::SchemeChangeRecords>().Key(seqId).Delete();
-                db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Delete();
+                db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
+                db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
                 ++deletedCount;
                 if (!logRowset.Next()) {
                     return false;
@@ -366,9 +366,9 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             return true;
         }
 
-        for (ui64 seqId : record.GetSequenceIds()) {
+        for (ui64 order : record.GetOrders()) {
             // Skip records not present in metadata table (already cleaned up).
-            auto metaRowset = db.Table<Schema::SchemeChangeRecords>().Key(seqId).Select();
+            auto metaRowset = db.Table<Schema::SchemeChangeRecords>().Key(order).Select();
             if (!metaRowset.IsReady()) {
                 return false;
             }
@@ -376,13 +376,13 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
                 continue;
             }
 
-            auto detailsRowset = db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Select();
+            auto detailsRowset = db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Select();
             if (!detailsRowset.IsReady()) {
                 return false;
             }
 
             auto* entry = Result->Record.AddEntries();
-            entry->SetSequenceId(seqId);
+            entry->SetOrder(order);
             if (detailsRowset.IsValid()) {
                 entry->SetBody(detailsRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>());
             }

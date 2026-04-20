@@ -2,16 +2,16 @@
 
 namespace NKikimr::NSchemeShard {
 
-ui64 TSchemeShard::AllocateSchemeChangeSequenceId(NIceDb::TNiceDb& db) {
-    ui64 id = ++NextSchemeChangeSequenceId;
-    PersistUpdateNextSchemeChangeSequenceId(db);
+ui64 TSchemeShard::AllocateSchemeChangeOrder(NIceDb::TNiceDb& db) {
+    ui64 id = ++NextSchemeChangeOrder;
+    PersistUpdateNextSchemeChangeOrder(db);
     return id;
 }
 
 void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry)
 {
     using T = Schema::SchemeChangeRecords;
-    db.Table<T>().Key(entry.SequenceId).Update(
+    db.Table<T>().Key(entry.Order).Update(
         NIceDb::TUpdate<T::TxId>(ui64(entry.TxId)),
         NIceDb::TUpdate<T::OperationType>(ui32(entry.TxType)),
         NIceDb::TUpdate<T::PathOwnerId>(entry.PathId.OwnerId),
@@ -26,7 +26,7 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
         NIceDb::TUpdate<T::BodySize>(entry.Body.size())
     );
     if (!entry.Body.empty()) {
-        db.Table<Schema::SchemeChangeRecordDetails>().Key(entry.SequenceId).Update(
+        db.Table<Schema::SchemeChangeRecordDetails>().Key(entry.Order).Update(
             NIceDb::TUpdate<Schema::SchemeChangeRecordDetails::Body>(entry.Body)
         );
     }

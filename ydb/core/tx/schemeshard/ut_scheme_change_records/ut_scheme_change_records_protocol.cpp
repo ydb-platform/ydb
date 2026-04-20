@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         TAutoPtr<IEventHandle> handle;
         auto result = RegisterSubscriber(runtime, "test:sub:1", handle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetCurrentSequenceId(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetCurrentOrder(), 0u);
     }
 
     Y_UNIT_TEST(RegisterSubscriberIdempotent) {
@@ -109,14 +109,14 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         auto fetch1 = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetch1Handle);
         UNIT_ASSERT(fetch1->Record.EntriesSize() >= 2);
 
-        ui64 firstSeqId = fetch1->Record.GetEntries(0).GetSequenceId();
+        ui64 firstOrder = fetch1->Record.GetEntries(0).GetOrder();
         TAutoPtr<IEventHandle> ackHandle;
-        auto ack = AckSchemeChangeRecords(runtime, "test:sub:1", firstSeqId, ackHandle);
+        auto ack = AckSchemeChangeRecords(runtime, "test:sub:1", firstOrder, ackHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)ack->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ack->Record.GetNewCursor(), firstSeqId);
+        UNIT_ASSERT_VALUES_EQUAL(ack->Record.GetLastAckedOrder(), firstOrder);
 
         TAutoPtr<IEventHandle> fetch2Handle;
-        auto fetch2 = FetchSchemeChangeRecords(runtime, "test:sub:1", firstSeqId, 100, fetch2Handle);
+        auto fetch2 = FetchSchemeChangeRecords(runtime, "test:sub:1", firstOrder, 100, fetch2Handle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)fetch2->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(fetch2->Record.EntriesSize() < fetch1->Record.EntriesSize());
     }
@@ -159,17 +159,17 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(fetch1->Record.EntriesSize(), fetch2->Record.EntriesSize());
 
-        ui64 lastSeq = fetch1->Record.EntriesSize() > 0
-            ? fetch1->Record.GetEntries(fetch1->Record.EntriesSize() - 1).GetSequenceId()
+        ui64 lastOrder = fetch1->Record.EntriesSize() > 0
+            ? fetch1->Record.GetEntries(fetch1->Record.EntriesSize() - 1).GetOrder()
             : 0;
-        ui64 firstSeq = fetch1->Record.GetEntries(0).GetSequenceId();
+        ui64 firstOrder = fetch1->Record.GetEntries(0).GetOrder();
         TAutoPtr<IEventHandle> ack1Handle, ack2Handle;
-        AckSchemeChangeRecords(runtime, "sub1", lastSeq, ack1Handle);
-        AckSchemeChangeRecords(runtime, "sub2", firstSeq, ack2Handle);
+        AckSchemeChangeRecords(runtime, "sub1", lastOrder, ack1Handle);
+        AckSchemeChangeRecords(runtime, "sub2", firstOrder, ack2Handle);
 
         TAutoPtr<IEventHandle> fetch1bHandle, fetch2bHandle;
-        auto fetch1b = FetchSchemeChangeRecords(runtime, "sub1", lastSeq, 100, fetch1bHandle);
-        auto fetch2b = FetchSchemeChangeRecords(runtime, "sub2", firstSeq, 100, fetch2bHandle);
+        auto fetch1b = FetchSchemeChangeRecords(runtime, "sub1", lastOrder, 100, fetch1bHandle);
+        auto fetch2b = FetchSchemeChangeRecords(runtime, "sub2", firstOrder, 100, fetch2bHandle);
         UNIT_ASSERT_VALUES_EQUAL(fetch1b->Record.EntriesSize(), 0);
         UNIT_ASSERT(fetch2b->Record.EntriesSize() > 0);
     }

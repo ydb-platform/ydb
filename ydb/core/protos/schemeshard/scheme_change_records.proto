@@ -23,11 +23,11 @@ message TEvRegisterSubscriber {
 message TEvRegisterSubscriberResult {
     optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
-    uint64 CurrentSequenceId = 3;
+    uint64 CurrentOrder = 3;
 }
 
 message TSchemeChangeRecord {
-    uint64 SequenceId = 1;
+    uint64 Order = 1;
     uint64 TxId = 2;
     uint64 PlanStep = 3;
     uint32 OperationType = 4;
@@ -43,7 +43,7 @@ message TSchemeChangeRecord {
 
 message TEvFetchSchemeChangeRecords {
     string SubscriberId = 1;
-    uint64 AfterSequenceId = 2;
+    uint64 AfterOrder = 2;
     uint32 MaxCount = 3;
 }
 
@@ -61,13 +61,13 @@ message TEvFetchSchemeChangeRecordsResult {
 
 message TEvAckSchemeChangeRecords {
     string SubscriberId = 1;
-    uint64 UpToSequenceId = 2;
+    uint64 UpToOrder = 2;
 }
 
 message TEvAckSchemeChangeRecordsResult {
     optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
-    uint64 NewCursor = 3;
+    uint64 LastAckedOrder = 3;
 }
 
 message TEvForceAdvanceSubscriber {
@@ -77,7 +77,7 @@ message TEvForceAdvanceSubscriber {
 message TEvForceAdvanceSubscriberResult {
     optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
-    uint64 NewCursor = 3;
+    uint64 LastAckedOrder = 3;
 }
 
 message TEvUnregisterSubscriber {
@@ -91,12 +91,12 @@ message TEvUnregisterSubscriberResult {
 
 message TEvFetchSchemeChangeRecordBodies {
     string SubscriberId = 1;
-    repeated uint64 SequenceIds = 2;
+    repeated uint64 Orders = 2;
 }
 
 message TEvFetchSchemeChangeRecordBodiesResult {
     message TEntry {
-        uint64 SequenceId = 1;
+        uint64 Order = 1;
         bytes Body = 2;
     }
     optional TSchemeChangeRecordsStatus.EStatus Status = 1;

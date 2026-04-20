@@ -3691,16 +3691,16 @@ void TSchemeShard::PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const {
                 NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextLocalShardIdx)));
 }
 
-void TSchemeShard::PersistUpdateNextSchemeChangeSequenceId(NIceDb::TNiceDb& db) const {
-    db.Table<Schema::SysParams>().Key(Schema::SysParam_NextSchemeChangeSequenceId).Update(
-        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeSequenceId)));
+void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_NextSchemeChangeOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeOrder)));
 }
 
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr) const {
     if (Subscribers.empty()) {
         return true;
     }
-    const ui64 unacked = NextSchemeChangeSequenceId - GetMinSubscriberCursor();
+    const ui64 unacked = NextSchemeChangeOrder - GetMinSubscriberOrder();
     if (unacked >= MaxSchemeChangeRecords) {
         errStr = TStringBuilder()
             << "scheme change records is full: " << unacked

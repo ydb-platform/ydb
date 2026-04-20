@@ -17,13 +17,13 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
             return false;
         }
 
-        ui64 minCursor = Max<ui64>();
+        ui64 minOrder = Max<ui64>();
         bool hasSubscribers = false;
 
         while (!subRowset.EndOfSet()) {
-            ui64 cursor = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedSequenceId>();
+            ui64 order = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
             hasSubscribers = true;
-            minCursor = Min(minCursor, cursor);
+            minOrder = Min(minOrder, order);
 
             if (!subRowset.Next()) {
                 return false;
@@ -31,10 +31,10 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
         }
 
         if (!hasSubscribers) {
-            minCursor = Self->NextSchemeChangeSequenceId;
+            minOrder = Self->NextSchemeChangeOrder;
         }
 
-        if (minCursor == 0 || minCursor == Max<ui64>()) {
+        if (minOrder == 0 || minOrder == Max<ui64>()) {
             return true;
         }
 
@@ -47,8 +47,8 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
         }
 
         while (!logRowset.EndOfSet()) {
-            ui64 seqId = logRowset.GetValue<Schema::SchemeChangeRecords::SequenceId>();
-            if (seqId > minCursor) {
+            ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
+            if (order > minOrder) {
                 break;
             }
             if (deletedCount >= maxDeletesPerBatch) {
@@ -56,8 +56,8 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
                 break;
             }
 
-            db.Table<Schema::SchemeChangeRecords>().Key(seqId).Delete();
-            db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Delete();
+            db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
+            db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
             ++deletedCount;
 
             if (!logRowset.Next()) {
@@ -105,21 +105,21 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             return true;
         }
 
-        ui64 newCursor = Self->NextSchemeChangeSequenceId;
+        ui64 newOrder = Self->NextSchemeChangeOrder;
         const TInstant now = TInstant::Now();
 
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(newCursor),
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(newOrder),
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
         );
 
         if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
-            it->second.LastAckedSequenceId = newCursor;
+            it->second.LastAckedOrder = newOrder;
             it->second.LastActivityAt = now;
         }
 
         Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-        Result->Record.SetNewCursor(newCursor);
+        Result->Record.SetLastAckedOrder(newOrder);
 
         return true;
     }

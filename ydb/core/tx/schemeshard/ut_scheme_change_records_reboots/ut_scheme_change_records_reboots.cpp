@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 for (const auto& e : entries) {
                     if (e.PathName == "Table1") {
                         found = true;
-                        UNIT_ASSERT(e.SequenceId > 0);
+                        UNIT_ASSERT(e.Order > 0);
                         UNIT_ASSERT_VALUES_EQUAL(e.ObjectType, (ui32)NKikimrSchemeOp::EPathTypeTable);
                         break;
                     }
@@ -98,15 +98,15 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 for (const auto& e : entries) {
                     if (e.PathName == "T1") {
                         foundT1 = true;
-                        UNIT_ASSERT(e.SequenceId > 0);
+                        UNIT_ASSERT(e.Order > 0);
                     }
                 }
                 UNIT_ASSERT_C(foundT1, "Scheme change record for T1 not found");
 
                 // Verify monotonic sequence IDs across all entries
                 for (size_t i = 1; i < entries.size(); ++i) {
-                    UNIT_ASSERT_C(entries[i].SequenceId > entries[i-1].SequenceId,
-                        "SequenceIds must be strictly monotonic");
+                    UNIT_ASSERT_C(entries[i].Order > entries[i-1].Order,
+                        "Orders must be strictly monotonic");
                 }
             }
         });
@@ -146,21 +146,21 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 for (const auto& e : entries) {
                     if (e.PathName == "Table1" && e.OperationType == (ui32)TTxState::TxCreateTable) {
                         foundCreate = true;
-                        UNIT_ASSERT(e.SequenceId > 0);
+                        UNIT_ASSERT(e.Order > 0);
                     }
                 }
                 UNIT_ASSERT_C(foundCreate, "CREATE TABLE entry not found in notification log");
 
                 // Verify monotonic sequence IDs across all entries
                 for (size_t i = 1; i < entries.size(); ++i) {
-                    UNIT_ASSERT_C(entries[i].SequenceId > entries[i-1].SequenceId,
-                        "SequenceIds must be strictly monotonic");
+                    UNIT_ASSERT_C(entries[i].Order > entries[i-1].Order,
+                        "Orders must be strictly monotonic");
                 }
             }
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SequenceIdCounterSurvivesReboot) {
+    Y_UNIT_TEST_WITH_REBOOTS(OrderCounterSurvivesReboot) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -193,25 +193,25 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 auto entries = ReadSchemeChangeRecords(runtime);
 
                 // T1 was created in inactive zone -- its entry must exist
-                ui64 t1SeqId = 0;
+                ui64 t1Order = 0;
                 for (const auto& e : entries) {
-                    if (e.PathName == "T1") t1SeqId = e.SequenceId;
+                    if (e.PathName == "T1") t1Order = e.Order;
                 }
-                UNIT_ASSERT_C(t1SeqId > 0, "T1 entry not found in notification log");
+                UNIT_ASSERT_C(t1Order > 0, "T1 entry not found in notification log");
 
                 // If T2's entry exists, verify counter continuity
                 for (const auto& e : entries) {
                     if (e.PathName == "T2") {
-                        UNIT_ASSERT_C(e.SequenceId > t1SeqId,
-                            "T2 SequenceId (" << e.SequenceId
-                                << ") must be greater than T1 SequenceId (" << t1SeqId << ")");
+                        UNIT_ASSERT_C(e.Order > t1Order,
+                            "T2 Order (" << e.Order
+                                << ") must be greater than T1 Order (" << t1Order << ")");
                     }
                 }
 
                 // Verify monotonic sequence IDs across all entries
                 for (size_t i = 1; i < entries.size(); ++i) {
-                    UNIT_ASSERT_C(entries[i].SequenceId > entries[i-1].SequenceId,
-                        "SequenceIds must be strictly monotonic");
+                    UNIT_ASSERT_C(entries[i].Order > entries[i-1].Order,
+                        "Orders must be strictly monotonic");
                 }
             }
         });

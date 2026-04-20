@@ -1364,7 +1364,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextPathId, Self->NextLocalPathId));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextShardIdx, Self->NextLocalShardIdx));
-        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextSchemeChangeSequenceId, Self->NextSchemeChangeSequenceId));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextSchemeChangeOrder, Self->NextSchemeChangeOrder));
 
         {
             auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
@@ -1373,7 +1373,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             while (!subRowset.EndOfSet()) {
                 TString id = subRowset.GetValue<Schema::SchemeChangeSubscribers::SubscriberId>();
                 TSchemeShard::TSubscriberInfo info;
-                info.LastAckedSequenceId = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedSequenceId>();
+                info.LastAckedOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
                 info.LastActivityAt = TInstant::MicroSeconds(
                     subRowset.GetValue<Schema::SchemeChangeSubscribers::LastActivityAt>());
                 Self->Subscribers.emplace(std::move(id), info);

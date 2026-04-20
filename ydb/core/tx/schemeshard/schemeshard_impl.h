@@ -276,22 +276,22 @@ public:
     ui64 MaxIncompatibleChange = 0;
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
-    ui64 NextSchemeChangeSequenceId = 0;
+    ui64 NextSchemeChangeOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
 
     struct TSubscriberInfo {
-        ui64 LastAckedSequenceId = 0;
+        ui64 LastAckedOrder = 0;
         TInstant LastActivityAt;
     };
     THashMap<TString, TSubscriberInfo> Subscribers;
 
-    ui64 GetMinSubscriberCursor() const {
+    ui64 GetMinSubscriberOrder() const {
         if (Subscribers.empty()) {
-            return NextSchemeChangeSequenceId;
+            return NextSchemeChangeOrder;
         }
         ui64 m = Max<ui64>();
         for (const auto& [_, info] : Subscribers) {
-            m = Min(m, info.LastAckedSequenceId);
+            m = Min(m, info.LastAckedOrder);
         }
         return m;
     }
@@ -870,11 +870,11 @@ public:
     void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
-    void PersistUpdateNextSchemeChangeSequenceId(NIceDb::TNiceDb& db) const;
-    ui64 AllocateSchemeChangeSequenceId(NIceDb::TNiceDb& db);
+    void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
+    ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
 
     struct TSchemeChangeRecordData {
-        ui64 SequenceId = 0;
+        ui64 Order = 0;
         TTxId TxId = InvalidTxId;
         TTxState::ETxType TxType = TTxState::TxInvalid;
         TPathId PathId;

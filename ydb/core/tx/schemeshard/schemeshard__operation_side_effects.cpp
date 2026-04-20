@@ -1009,7 +1009,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
 
         TPathElement::TPtr path = ss->PathsById.at(pathId);
 
-        ui64 seqId = ss->AllocateSchemeChangeSequenceId(db);
+        ui64 order = ss->AllocateSchemeChangeOrder(db);
 
         TString pathName = path->Name;
         NKikimrSchemeOp::EPathType objectType = path->PathType;
@@ -1026,7 +1026,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         }
 
         ss->PersistSchemeChangeRecord(db, {
-            .SequenceId = seqId,
+            .Order = order,
             .TxId = txId,
             .TxType = txState.TxType,
             .PathId = pathId,
@@ -1042,7 +1042,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "DoPersistSchemeChangeRecords: logged entry"
-                << " seqId=" << seqId
+                << " order=" << order
                 << " txId=" << txId
                 << " partIdx=" << candidate.PartIdx
                 << " path=" << pathName

@@ -2332,7 +2332,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct SchemeChangeRecords : Table<133> {
-        struct SequenceId :    Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Order :         Column<1, NScheme::NTypeIds::Uint64> {};
         struct TxId :          Column<2, NScheme::NTypeIds::Uint64> {};
         struct OperationType : Column<3, NScheme::NTypeIds::Uint32> {};
         struct PathOwnerId :   Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
@@ -2346,27 +2346,27 @@ struct Schema : NIceDb::Schema {
         struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
         struct BodySize :      Column<13, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<SequenceId>;
-        using TColumns = TableColumns<SequenceId, TxId, OperationType, PathOwnerId, PathLocalId,
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
                                       PathName, ObjectType, Status, UserSID, SchemaVersion,
                                       CompletedAt, PlanStep, BodySize>;
     };
 
     struct SchemeChangeRecordDetails : Table<135> {
-        struct SequenceId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Body :       Column<2, NScheme::NTypeIds::String> {};
+        struct Order : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Body :  Column<2, NScheme::NTypeIds::String> {};
 
-        using TKey = TableKey<SequenceId>;
-        using TColumns = TableColumns<SequenceId, Body>;
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, Body>;
     };
 
     struct SchemeChangeSubscribers : Table<134> {
-        struct SubscriberId :        Column<1, NScheme::NTypeIds::Utf8> {};
-        struct LastAckedSequenceId : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct LastActivityAt :      Column<3, NScheme::NTypeIds::Uint64> {};
+        struct SubscriberId :   Column<1, NScheme::NTypeIds::Utf8> {};
+        struct LastAckedOrder : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastActivityAt : Column<3, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<SubscriberId>;
-        using TColumns = TableColumns<SubscriberId, LastAckedSequenceId, LastActivityAt>;
+        using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAt>;
     };
     using TTables = SchemaTables<
         Paths,
@@ -2516,7 +2516,7 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_ServerlessStorageLastBillTime = 10;
     static constexpr ui64 SysParam_MaxIncompatibleChange = 11;
     static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12;
-    static constexpr ui64 SysParam_NextSchemeChangeSequenceId = 13;
+    static constexpr ui64 SysParam_NextSchemeChangeOrder = 13;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

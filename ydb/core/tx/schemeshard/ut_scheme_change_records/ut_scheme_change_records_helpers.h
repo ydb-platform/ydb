@@ -24,13 +24,13 @@ inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriber(
 }
 
 inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecords(
-    TTestActorRuntime& runtime, const TString& subscriberId, ui64 afterSeqId, ui32 maxCount,
+    TTestActorRuntime& runtime, const TString& subscriberId, ui64 afterOrder, ui32 maxCount,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
     auto req = MakeHolder<TEvSchemeShard::TEvFetchSchemeChangeRecords>();
     req->Record.SetSubscriberId(subscriberId);
-    req->Record.SetAfterSequenceId(afterSeqId);
+    req->Record.SetAfterOrder(afterOrder);
     req->Record.SetMaxCount(maxCount);
     ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
     auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFetchSchemeChangeRecordsResult>(handle);
@@ -39,13 +39,13 @@ inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecor
 }
 
 inline TEvSchemeShard::TEvAckSchemeChangeRecordsResult* AckSchemeChangeRecords(
-    TTestActorRuntime& runtime, const TString& subscriberId, ui64 upToSeqId,
+    TTestActorRuntime& runtime, const TString& subscriberId, ui64 upToOrder,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
     auto req = MakeHolder<TEvSchemeShard::TEvAckSchemeChangeRecords>();
     req->Record.SetSubscriberId(subscriberId);
-    req->Record.SetUpToSequenceId(upToSeqId);
+    req->Record.SetUpToOrder(upToOrder);
     ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
     auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvAckSchemeChangeRecordsResult>(handle);
     UNIT_ASSERT(result);
@@ -79,14 +79,14 @@ inline TEvSchemeShard::TEvUnregisterSubscriberResult* UnregisterSubscriber(
 }
 
 inline TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult* FetchSchemeChangeRecordBodies(
-    TTestActorRuntime& runtime, const TString& subscriberId, const TVector<ui64>& seqIds,
+    TTestActorRuntime& runtime, const TString& subscriberId, const TVector<ui64>& orders,
     TAutoPtr<IEventHandle>& handle)
 {
     auto sender = runtime.AllocateEdgeActor();
     auto req = MakeHolder<TEvSchemeShard::TEvFetchSchemeChangeRecordBodies>();
     req->Record.SetSubscriberId(subscriberId);
-    for (ui64 seqId : seqIds) {
-        req->Record.AddSequenceIds(seqId);
+    for (ui64 order : orders) {
+        req->Record.AddOrders(order);
     }
     ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
     auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult>(handle);
@@ -95,7 +95,7 @@ inline TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult* FetchSchemeChange
 }
 
 struct TSchemeChangeRecordEntry {
-    ui64 SequenceId = 0;
+    ui64 Order = 0;
     ui64 TxId = 0;
     ui64 PlanStep = 0;
     ui32 OperationType = 0;
@@ -131,11 +131,11 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
     TSchemeChangeRecordsReadResult result;
     result.WatermarkPlanStep = fetch->Record.GetWatermarkPlanStep();
 
-    TVector<ui64> seqIdsWithBody;
+    TVector<ui64> ordersWithBody;
     for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
         const auto& proto = fetch->Record.GetEntries(i);
         TSchemeChangeRecordEntry entry;
-        entry.SequenceId = proto.GetSequenceId();
+        entry.Order = proto.GetOrder();
         entry.TxId = proto.GetTxId();
         entry.PlanStep = proto.GetPlanStep();
         entry.OperationType = proto.GetOperationType();
@@ -148,23 +148,23 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
         entry.SchemaVersion = proto.GetSchemaVersion();
         entry.CompletedAt = proto.GetCompletedAt();
         if (proto.GetBodySize() > 0) {
-            seqIdsWithBody.push_back(proto.GetSequenceId());
+            ordersWithBody.push_back(proto.GetOrder());
         }
         result.Entries.push_back(std::move(entry));
     }
 
     // Step 2: Fetch bodies for entries with non-zero BodySize; merge back.
-    if (!seqIdsWithBody.empty()) {
+    if (!ordersWithBody.empty()) {
         TAutoPtr<IEventHandle> bodiesHandle;
-        auto* bodies = FetchSchemeChangeRecordBodies(runtime, tempSubId, seqIdsWithBody, bodiesHandle);
-        THashMap<ui64, TString> bodyBySeqId;
+        auto* bodies = FetchSchemeChangeRecordBodies(runtime, tempSubId, ordersWithBody, bodiesHandle);
+        THashMap<ui64, TString> bodyByOrder;
         for (size_t i = 0; i < static_cast<size_t>(bodies->Record.EntriesSize()); ++i) {
             const auto& b = bodies->Record.GetEntries(i);
-            bodyBySeqId.emplace(b.GetSequenceId(), b.GetBody());
+            bodyByOrder.emplace(b.GetOrder(), b.GetBody());
         }
         for (auto& entry : result.Entries) {
-            auto it = bodyBySeqId.find(entry.SequenceId);
-            if (it != bodyBySeqId.end() && !it->second.empty()) {
+            auto it = bodyByOrder.find(entry.Order);
+            if (it != bodyByOrder.end() && !it->second.empty()) {
                 Y_ABORT_UNLESS(entry.Body.ParseFromString(it->second));
             }
         }

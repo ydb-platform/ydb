@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 UNIT_ASSERT_VALUES_EQUAL(e.TxId, (ui64)txId);
                 UNIT_ASSERT_VALUES_EQUAL(e.ObjectType, (ui32)NKikimrSchemeOp::EPathTypeTable);
                 UNIT_ASSERT_VALUES_EQUAL(e.Status, (ui32)NKikimrScheme::StatusSuccess);
-                UNIT_ASSERT(e.SequenceId > 0);
+                UNIT_ASSERT(e.Order > 0);
                 UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description");
                 UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpCreateTable);
                 break;
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_C(found, "DROP TABLE entry not found in notification log");
     }
 
-    Y_UNIT_TEST(SequenceIdsAreMonotonicAcrossOperations) {
+    Y_UNIT_TEST(OrdersAreMonotonicAcrossOperations) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -197,8 +197,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT(entries.size() >= 2);
 
         for (size_t i = 1; i < entries.size(); ++i) {
-            UNIT_ASSERT_C(entries[i].SequenceId > entries[i-1].SequenceId,
-                "SequenceIds must be strictly monotonic");
+            UNIT_ASSERT_C(entries[i].Order > entries[i-1].Order,
+                "Orders must be strictly monotonic");
         }
     }
 
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
     Y_UNIT_TEST(AckFreesOverflowCapacityImmediately) {
         // Verifies the post-Phase-2 invariant: overflow check uses
-        // (NextSchemeChangeSequenceId - MinSubscriberCursor), so an ack
+        // (NextSchemeChangeOrder - MinSubscriberOrder), so an ack
         // restores capacity immediately without waiting for background cleanup.
         TSchemeShard* schemeshard;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
@@ -287,9 +287,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         // Ack everything (without manually firing background cleanup)
         auto entries = ReadSchemeChangeRecords(runtime);
         UNIT_ASSERT(!entries.empty());
-        ui64 lastSeq = entries.back().SequenceId;
+        ui64 lastOrder = entries.back().Order;
         TAutoPtr<IEventHandle> ackHandle;
-        AckSchemeChangeRecords(runtime, "test:sub", lastSeq, ackHandle);
+        AckSchemeChangeRecords(runtime, "test:sub", lastOrder, ackHandle);
 
         // Capacity must be free immediately after ack (overflow check is
         // based on unacked range, not on row count in SchemeChangeRecords).
@@ -491,9 +491,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
             if (curr.PlanStep != prev.PlanStep || curr.TxId != prev.TxId) {
                 bool planStepTxIdOrdering = std::tie(curr.PlanStep, curr.TxId) > std::tie(prev.PlanStep, prev.TxId);
                 UNIT_ASSERT_C(planStepTxIdOrdering,
-                    "(PlanStep, TxId) ordering must match SequenceId ordering:"
-                        << " prev=(" << prev.PlanStep << "," << prev.TxId << ") seqId=" << prev.SequenceId
-                        << " curr=(" << curr.PlanStep << "," << curr.TxId << ") seqId=" << curr.SequenceId);
+                    "(PlanStep, TxId) ordering must match Order ordering:"
+                        << " prev=(" << prev.PlanStep << "," << prev.TxId << ") order=" << prev.Order
+                        << " curr=(" << curr.PlanStep << "," << curr.TxId << ") order=" << curr.Order);
             }
         }
     }

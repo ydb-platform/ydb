@@ -49,23 +49,23 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_C(fetch->Record.EntriesSize() >= 4,
             "Expected >= 4 entries, got " << fetch->Record.EntriesSize());
 
-        // Verify sequence is monotonic
+        // Verify order is monotonic
         for (int i = 1; i < (int)fetch->Record.EntriesSize(); ++i) {
-            UNIT_ASSERT(fetch->Record.GetEntries(i).GetSequenceId() >
-                        fetch->Record.GetEntries(i-1).GetSequenceId());
+            UNIT_ASSERT(fetch->Record.GetEntries(i).GetOrder() >
+                        fetch->Record.GetEntries(i-1).GetOrder());
         }
 
         // ACK all
-        ui64 lastSeq = fetch->Record.EntriesSize() > 0
-            ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId()
+        ui64 lastOrder = fetch->Record.EntriesSize() > 0
+            ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetOrder()
             : 0;
         TAutoPtr<IEventHandle> ackHandle;
-        auto ack = AckSchemeChangeRecords(runtime, "backup:collection:1", lastSeq, ackHandle);
+        auto ack = AckSchemeChangeRecords(runtime, "backup:collection:1", lastOrder, ackHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)ack->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
 
         // Fetch again - should be empty
         TAutoPtr<IEventHandle> fetch2Handle;
-        auto fetch2 = FetchSchemeChangeRecords(runtime, "backup:collection:1", lastSeq, 100, fetch2Handle);
+        auto fetch2 = FetchSchemeChangeRecords(runtime, "backup:collection:1", lastOrder, 100, fetch2Handle);
         UNIT_ASSERT_VALUES_EQUAL(fetch2->Record.EntriesSize(), 0);
         UNIT_ASSERT(!fetch2->Record.GetHasMore());
     }
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             }
             totalFetched += fetch->Record.EntriesSize();
             cursor = fetch->Record.EntriesSize() > 0
-                ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId()
+                ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetOrder()
                 : cursor;
             TAutoPtr<IEventHandle> ackHandle;
             AckSchemeChangeRecords(runtime, "backup:sub", cursor, ackHandle);
@@ -133,29 +133,29 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto backupFetch = FetchSchemeChangeRecords(runtime, "backup:collection:1", 0, 100, backupFetchHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)backupFetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(backupFetch->Record.EntriesSize() >= 3);
-        ui64 backupLastSeq = backupFetch->Record.EntriesSize() > 0
-            ? backupFetch->Record.GetEntries(backupFetch->Record.EntriesSize() - 1).GetSequenceId()
+        ui64 backupLastOrder = backupFetch->Record.EntriesSize() > 0
+            ? backupFetch->Record.GetEntries(backupFetch->Record.EntriesSize() - 1).GetOrder()
             : 0;
         TAutoPtr<IEventHandle> backupAckHandle;
-        AckSchemeChangeRecords(runtime, "backup:collection:1", backupLastSeq, backupAckHandle);
+        AckSchemeChangeRecords(runtime, "backup:collection:1", backupLastOrder, backupAckHandle);
 
         // audit fetches but only acks first entry
         TAutoPtr<IEventHandle> auditFetchHandle;
         auto auditFetch = FetchSchemeChangeRecords(runtime, "audit:system", 0, 100, auditFetchHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)auditFetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(auditFetch->Record.EntriesSize() >= 3);
-        ui64 auditFirstSeq = auditFetch->Record.GetEntries(0).GetSequenceId();
+        ui64 auditFirstOrder = auditFetch->Record.GetEntries(0).GetOrder();
         TAutoPtr<IEventHandle> auditAckHandle;
-        AckSchemeChangeRecords(runtime, "audit:system", auditFirstSeq, auditAckHandle);
+        AckSchemeChangeRecords(runtime, "audit:system", auditFirstOrder, auditAckHandle);
 
         // backup should have nothing new
         TAutoPtr<IEventHandle> backupFetch2Handle;
-        auto backupFetch2 = FetchSchemeChangeRecords(runtime, "backup:collection:1", backupLastSeq, 100, backupFetch2Handle);
+        auto backupFetch2 = FetchSchemeChangeRecords(runtime, "backup:collection:1", backupLastOrder, 100, backupFetch2Handle);
         UNIT_ASSERT_VALUES_EQUAL(backupFetch2->Record.EntriesSize(), 0);
 
         // audit should still have remaining entries
         TAutoPtr<IEventHandle> auditFetch2Handle;
-        auto auditFetch2 = FetchSchemeChangeRecords(runtime, "audit:system", auditFirstSeq, 100, auditFetch2Handle);
+        auto auditFetch2 = FetchSchemeChangeRecords(runtime, "audit:system", auditFirstOrder, 100, auditFetch2Handle);
         UNIT_ASSERT(auditFetch2->Record.EntriesSize() > 0);
     }
 
@@ -177,11 +177,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TAutoPtr<IEventHandle> advHandle;
         auto result = ForceAdvanceSubscriber(runtime, "stuck:sub", advHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
-        UNIT_ASSERT(result->Record.GetNewCursor() > 0);
+        UNIT_ASSERT(result->Record.GetLastAckedOrder() > 0);
 
         // Fetch should return empty (cursor is at tail)
         TAutoPtr<IEventHandle> fetchHandle;
-        auto fetch = FetchSchemeChangeRecords(runtime, "stuck:sub", result->Record.GetNewCursor(), 100, fetchHandle);
+        auto fetch = FetchSchemeChangeRecords(runtime, "stuck:sub", result->Record.GetLastAckedOrder(), 100, fetchHandle);
         UNIT_ASSERT_VALUES_EQUAL(fetch->Record.EntriesSize(), 0);
     }
 
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         for (int i = 0; i < (int)fetch->Record.EntriesSize(); ++i) {
             const auto& entry = fetch->Record.GetEntries(i);
             UNIT_ASSERT_C(entry.GetBodySize() > 0,
-                "Metadata should include non-zero BodySize for entry " << entry.GetSequenceId());
+                "Metadata should include non-zero BodySize for entry " << entry.GetOrder());
         }
     }
 
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
         TVector<ui64> orders;
         for (int i = 0; i < (int)fetch->Record.EntriesSize(); ++i) {
-            orders.push_back(fetch->Record.GetEntries(i).GetSequenceId());
+            orders.push_back(fetch->Record.GetEntries(i).GetOrder());
         }
 
         TAutoPtr<IEventHandle> bodiesHandle;
@@ -297,12 +297,12 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto fetch = FetchSchemeChangeRecords(runtime, "cleanup:sub", 0, 100, fetchHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)fetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(fetch->Record.EntriesSize() >= 3);
-        ui64 lastSeq = fetch->Record.EntriesSize() > 0
-            ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId()
+        ui64 lastOrder = fetch->Record.EntriesSize() > 0
+            ? fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetOrder()
             : 0;
 
         TAutoPtr<IEventHandle> ackHandle;
-        AckSchemeChangeRecords(runtime, "cleanup:sub", lastSeq, ackHandle);
+        AckSchemeChangeRecords(runtime, "cleanup:sub", lastOrder, ackHandle);
 
         // No manual TEvWakeupToRunSchemeChangeRecordsCleanup forwarded:
         // records must be gone from the table as a side effect of the ack.
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "Records should be deleted inline by ack, got " << entries.size());
     }
 
-    Y_UNIT_TEST(FetchResultHasNoLastSequenceIdField) {
+    Y_UNIT_TEST(FetchResultHasNoTailOrderField) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -331,12 +331,12 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT(fetch->Record.EntriesSize() > 0);
 
         // Tail is computed from entries, not a separate field
-        ui64 tailSeq = fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetSequenceId();
-        UNIT_ASSERT(tailSeq > 0);
+        ui64 tailOrder = fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetOrder();
+        UNIT_ASSERT(tailOrder > 0);
 
         // Ack using entries-derived tail works end-to-end
         TAutoPtr<IEventHandle> ackHandle;
-        auto ack = AckSchemeChangeRecords(runtime, "tail:sub", tailSeq, ackHandle);
+        auto ack = AckSchemeChangeRecords(runtime, "tail:sub", tailOrder, ackHandle);
         UNIT_ASSERT_VALUES_EQUAL((ui32)ack->Record.GetStatus(),
             (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
     }

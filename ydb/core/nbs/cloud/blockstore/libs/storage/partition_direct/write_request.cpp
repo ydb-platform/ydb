@@ -162,6 +162,21 @@ void TBaseWriteRequestExecutor::RequestTimeoutCallback()
     Reply(MakeError(E_TIMEOUT, "Write request timeout"));
 }
 
+TVector<ELocation>
+TBaseWriteRequestExecutor::GetAvailableHandOffLocations() const
+{
+    TVector<ELocation> locations;
+    locations.reserve(2);
+    if (!RequestedWrites.Get(ELocation::HOPBuffer0)) {
+        locations.push_back(ELocation::HOPBuffer0);
+    }
+    if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
+        locations.push_back(ELocation::HOPBuffer1);
+    }
+
+    return locations;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

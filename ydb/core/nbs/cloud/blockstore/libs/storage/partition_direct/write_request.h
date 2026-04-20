@@ -57,6 +57,8 @@ protected:
     void ScheduleRequestTimeoutCallback();
     void RequestTimeoutCallback();
 
+    TVector<ELocation> GetAvailableHandOffLocations() const;
+
     virtual void ScheduleHedging() = 0;
 
     NActors::TActorSystem* ActorSystem;

@@ -66,32 +66,23 @@ void TWriteWithDirectReplicationRequestExecutor::
         return;
     }
 
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1 &&
-        !RequestedWrites.Get(ELocation::HOPBuffer0))
-    {
+    const auto availableHandOffLocations = GetAvailableHandOffLocations();
+    const size_t neededHedgingRequestsCount = std::min(
+        QuorumDirectBlockGroupHostCount - CompletedWrites.Count(),
+        availableHandOffLocations.size());
+
+    for (size_t i = 0; i < neededHedgingRequestsCount; ++i) {
+        const auto& location = availableHandOffLocations[i];
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "HOPBuffer0 since we "
+            "handoff buffer %lu since we "
             "have %lu completed writes",
+            GetLocationIndex(location),
             CompletedWrites.Count());
 
-        SendWriteRequest(ELocation::HOPBuffer0);
-    }
-
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2 &&
-        !RequestedWrites.Get(ELocation::HOPBuffer1))
-    {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "HOPBuffer1 since we "
-            "have %lu completed writes",
-            CompletedWrites.Count());
-
-        SendWriteRequest(ELocation::HOPBuffer1);
+        SendWriteRequest(location);
     }
 }
 

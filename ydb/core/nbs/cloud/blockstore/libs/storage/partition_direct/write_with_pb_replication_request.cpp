@@ -126,14 +126,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         return;
     }
 
-    TVector<ELocation> availableHandOffLocations;
-    if (!RequestedWrites.Get(ELocation::HOPBuffer0)) {
-        availableHandOffLocations.push_back(ELocation::HOPBuffer0);
-    }
-    if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
-        availableHandOffLocations.push_back(ELocation::HOPBuffer1);
-    }
-
+    const auto availableHandOffLocations = GetAvailableHandOffLocations();
     if (CompletedWrites.Count() + availableHandOffLocations.size() <
         QuorumDirectBlockGroupHostCount)
     {

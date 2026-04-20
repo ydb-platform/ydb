@@ -533,8 +533,7 @@ def apply_and_add_mutes(
         to_mute, to_mute_debug = create_file_set(
             aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
         )
-        write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
-        
+
         # 2. Unmute candidates.
         def is_unmute_non_chunk(test):
             if is_chunk_test(test):
@@ -581,6 +580,25 @@ def apply_and_add_mutes(
             to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual)))
             to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_debug)))
 
+        # Drop mute candidates that are also unmute candidates in this same run.
+        #
+        # to_unmute can be satisfied on the short manual fast-unmute window (clean fail+mute in 2 days)
+        # while is_mute_candidate uses a longer window (MUTE_DAYS) and counts only fail_count toward its
+        # threshold—so both can fire for one test. new_muted_ya would otherwise remove the line via
+        # to_unmute then append it again from to_mute (same-run oscillation).
+        _unmute_set = set(to_unmute)
+        if _unmute_set:
+            paired = list(zip(to_mute, to_mute_debug))
+            filtered = [(t, d) for t, d in paired if t not in _unmute_set]
+            if len(filtered) != len(paired):
+                logging.info(
+                    'Excluded %d mute candidate(s) already in to_unmute',
+                    len(paired) - len(filtered),
+                )
+            to_mute = [x[0] for x in filtered]
+            to_mute_debug = [x[1] for x in filtered]
+
+        write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
         # 3. Delete-from-mute candidates (to_delete).

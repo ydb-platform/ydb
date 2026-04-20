@@ -10,7 +10,7 @@ the default one. Rows are cleaned up when the test is either unmuted, fails
 during the fast window, or the window expires.
 
 Usage:
-    python3 mute_manual_unmute.py sync
+    python3 manual_unmute.py sync
 """
 
 import argparse
@@ -22,25 +22,24 @@ import sys
 
 import ydb
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
-from ydb_wrapper import YDBWrapper
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(_SCRIPT_DIR, '..', 'analytics'))
+sys.path.append(_SCRIPT_DIR)
+sys.path.append(os.path.join(_SCRIPT_DIR, '..'))
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
 from update_mute_issues import (
     ORG_NAME,
     REPO_NAME,
     add_issue_comment,
     run_query,
 )
+from ydb_wrapper import YDBWrapper
 
 
 LABEL_NAME = 'manual-fast-unmute'
 
 _LABEL_ID_CACHE = {}
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
-
 
 CONFIG_PATH = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_config.json')
@@ -50,6 +49,13 @@ CONFIG_PATH = os.path.normpath(
 # Issues closed earlier than this will not be reopened by this script even if
 # they still have muted tests — this keeps the scan cheap and bounds surprises.
 ISSUE_CLOSED_LOOKBACK_DAYS = 14
+
+# ``tests_monitor`` has one row per (full_name, date_window); take ``is_muted`` from the
+# latest ``date_window`` only (bounded scan), not DISTINCT over recent days (M1).
+CURRENTLY_MUTED_LOOKBACK_DAYS = 30
+
+# GitHub ``__typename`` is ``User`` for PAT-based bot accounts; skip known bot logins (M2).
+BOT_LOGINS = frozenset({'ydbot', 'github-actions'})
 
 
 COMMENT_ENTER = """🚀 **Fast-unmute started**
@@ -118,6 +124,20 @@ def _coerce_dt(value):
     return None
 
 
+_MONITOR_EPOCH = datetime.date(1970, 1, 1)
+
+
+def _date_window_to_days(date_window):
+    """Normalize ``tests_monitor.date_window`` to days since 1970-01-01 (matches create_new_muted_ya)."""
+    if date_window is None:
+        return None
+    if isinstance(date_window, datetime.datetime):
+        date_window = date_window.date()
+    if isinstance(date_window, datetime.date):
+        return (date_window - _MONITOR_EPOCH).days
+    return int(date_window)
+
+
 def create_manual_unmute_table(ydb_wrapper, table_path):
     create_sql = f"""
     CREATE TABLE IF NOT EXISTS `{table_path}` (
@@ -170,37 +190,66 @@ def fetch_candidate_issues(ydb_wrapper, issues_table_path, lookback_days):
 
 
 def fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type):
+    lb = int(CURRENTLY_MUTED_LOOKBACK_DAYS)
+    br = _escape(branch)
+    bt = _escape(build_type)
     query = f"""
-    SELECT DISTINCT full_name
-    FROM `{tests_monitor_path}`
-    WHERE branch = '{_escape(branch)}'
-        AND build_type = '{_escape(build_type)}'
-        AND is_muted = 1
-        AND date_window >= CurrentUtcDate() - 1 * Interval("P1D")
+    SELECT t.full_name AS full_name
+    FROM `{tests_monitor_path}` AS t
+    INNER JOIN (
+        SELECT full_name AS fn, MAX(date_window) AS max_date_window
+        FROM `{tests_monitor_path}`
+        WHERE branch = '{br}'
+            AND build_type = '{bt}'
+            AND date_window >= CurrentUtcDate() - {lb} * Interval("P1D")
+        GROUP BY full_name
+    ) AS last_row
+        ON t.full_name = last_row.fn AND t.date_window = last_row.max_date_window
+    WHERE t.branch = '{br}'
+        AND t.build_type = '{bt}'
+        AND t.is_muted = 1
     """
     rows = ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_currently_muted')
     return {row['full_name'] for row in rows if row.get('full_name')}
 
 
-def fetch_failures_since(ydb_wrapper, tests_monitor_path, branch, build_type, full_names, window_days):
-    """Return {full_name: total_fail_count} over the last `window_days` for the given test set."""
-    if not full_names:
-        return {}
-    fails = {name: 0 for name in full_names}
+def fetch_monitor_outcomes_in_days(ydb_wrapper, tests_monitor_path, branch, build_type, lookback_days):
+    """Daily rows from ``tests_monitor`` for one branch/build (bounded scan).
+
+    In CI, a failed run that is muted is stored as status ``mute`` → ``mute_count``;
+    non-muted failures are ``fail_count`` (see ``transform_build_results.mute_test_result`` /
+    ``upload_tests_results``). For fast-unmute revert we follow the same ``total_fails`` idea
+    as ``create_new_muted_ya`` (``fail_count`` + ``mute_count``), then anchor per-row by
+    ``requested_at`` in cleanup so pre-entry history does not spuriously revert (C1 review).
+    """
     query = f"""
-    SELECT full_name, fail_count, mute_count
+    SELECT full_name, date_window, fail_count, mute_count
     FROM `{tests_monitor_path}`
     WHERE branch = '{_escape(branch)}'
         AND build_type = '{_escape(build_type)}'
-        AND date_window >= CurrentUtcDate() - {int(window_days)} * Interval("P1D")
+        AND date_window >= CurrentUtcDate() - {int(lookback_days)} * Interval("P1D")
     """
-    rows = ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_failures')
-    for row in rows:
-        name = row.get('full_name')
-        if name not in fails:
+    return ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_outcomes_window')
+
+
+def bad_outcomes_in_day_range(monitor_rows, full_name, since_days_inclusive):
+    """Sum ``fail_count`` + ``mute_count`` for ``full_name`` on monitor days ``>= since_days_inclusive``.
+
+    Used for rollback: same trailing calendar span as ``aggregate_test_data(..., period_days)``
+    in ``create_new_muted_ya`` (see ``start_date = today - (period_days - 1)``), bounded below
+    by fast-unmute entry so pre-entry history never counts (C1).
+    """
+    if since_days_inclusive is None:
+        return 0
+    total = 0
+    for row in monitor_rows:
+        if row.get('full_name') != full_name:
             continue
-        fails[name] += int(row.get('fail_count') or 0) + int(row.get('mute_count') or 0)
-    return fails
+        dw = _date_window_to_days(row.get('date_window'))
+        if dw is None or dw < since_days_inclusive:
+            continue
+        total += int(row.get('fail_count') or 0) + int(row.get('mute_count') or 0)
+    return total
 
 
 def fetch_issue_closers(issue_numbers):
@@ -385,7 +434,11 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         if r.get('full_name') and r.get('branch') and r.get('build_type')
     }
 
-    candidates = fetch_candidate_issues(ydb_wrapper, issues_table_path, ISSUE_CLOSED_LOOKBACK_DAYS)
+    raw_candidates = fetch_candidate_issues(ydb_wrapper, issues_table_path, ISSUE_CLOSED_LOOKBACK_DAYS)
+    # One issue can appear twice if linked from multiple projects (M4).
+    candidates = list(
+        {int(c['issue_number']): c for c in raw_candidates if c.get('issue_number') is not None}.values()
+    )
     if not candidates:
         logging.info('manual_unmute_enter: no CLOSED+COMPLETED candidates in lookback window')
         return
@@ -407,6 +460,9 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
 
         closer = closers.get(issue_number) or {}
         if closer.get('type') != 'User':
+            continue
+        login = (closer.get('login') or '').lower()
+        if login in BOT_LOGINS:
             continue
 
         parsed = parse_body(issue.get('body') or '')
@@ -441,6 +497,8 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         if not issue_rows:
             continue
 
+        upsert_rows(ydb_wrapper, table_path, issue_rows)
+
         reopen_issue(issue_id)
         add_issue_comment(
             issue_id,
@@ -458,7 +516,6 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         for row in issue_rows:
             existing[(row['full_name'], row['branch'], row['build_type'])] = row
 
-    upsert_rows(ydb_wrapper, table_path, new_rows)
     logging.info('manual_unmute_enter: inserted %d row(s) from %d candidate issue(s)',
                  len(new_rows), len(candidates))
 
@@ -489,17 +546,14 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
     delete_count = 0
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
-        full_names = {r.get('full_name') for r in group_rows if r.get('full_name')}
-        # Failure check window is the widest stored window in this group; this
-        # catches fails for any test regardless of its individual window length.
+        # Failure lookback must cover the longest row TTL (2 × window_days per row).
         check_window = max(
-            (int(r.get('window_days') or default_window_days) for r in group_rows),
-            default=default_window_days,
+            (2 * int(r.get('window_days') or default_window_days) for r in group_rows),
+            default=2 * default_window_days,
         )
-        failures = fetch_failures_since(
-            ydb_wrapper, tests_monitor_path, branch, build_type, full_names, check_window
+        monitor_rows = fetch_monitor_outcomes_in_days(
+            ydb_wrapper, tests_monitor_path, branch, build_type, check_window
         )
-
         for row in group_rows:
             full_name = row.get('full_name')
             if not full_name:
@@ -509,6 +563,19 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
             row_window = int(row.get('window_days') or default_window_days)
             ttl = datetime.timedelta(days=row_window * 2)
 
+            # Rollback uses the same *rolling* calendar window width as manual unmute in
+            # create_new_muted_ya (``manual_unmute_window_days`` == row_window), not a cumulative
+            # sum since entry. Stale reds from before the fix age out of the trailing window; we
+            # still ignore any day strictly before fast-unmute entry (max with requested_at date).
+            today = now.date()
+            trailing_start = today - datetime.timedelta(days=row_window - 1)
+            if requested_at:
+                entry_date = requested_at.astimezone(datetime.timezone.utc).date()
+                effective_start = max(trailing_start, entry_date)
+            else:
+                effective_start = trailing_start
+            since_days = (effective_start - _MONITOR_EPOCH).days
+
             if full_name not in currently_muted:
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
@@ -517,7 +584,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
                 logging.info('manual_unmute_cleanup: %s (already unmuted)', full_name)
                 continue
 
-            if failures.get(full_name, 0) > 0:
+            if bad_outcomes_in_day_range(monitor_rows, full_name, since_days) > 0:
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
                 if issue_number:

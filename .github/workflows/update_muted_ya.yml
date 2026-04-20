@@ -132,7 +132,7 @@ jobs:
       - name: Sync manual fast-unmute state
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-        run: python3 .github/scripts/tests/mute_manual_unmute.py sync
+        run: python3 .github/scripts/tests/manual_unmute.py sync
 
       - name: Generate new muted_ya.txt
         run: |

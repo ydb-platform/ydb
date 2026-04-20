@@ -1,5 +1,3 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Резервное копирование системных таблеток
   href: system-tablet-backup.md

@@ -16,13 +16,13 @@ The restore operation:
 
 * Finds the **current chain** of backups in the collection (the latest full backup followed by its incremental backups).
 * Restores tables to the state of the **most recent** backup in that chain: applies the full backup and all subsequent incrementals in sequence.
-* Overwrites existing tables with the same names.
+* Fails if any of the tables being restored already exists at the same path.
 
 Restoring to an arbitrary point "between" two saved backups is not supported: the result is always the state captured by one of the backups in the chain.
 
 {% note warning %}
 
-The restore operation will overwrite any existing tables with the same names. Make sure to back up or rename existing tables before restoring if you want to preserve them.
+The restore operation fails if any of the tables being restored already exists at the same path. Rename or drop the conflicting tables before restoring.
 
 {% endnote %}
 

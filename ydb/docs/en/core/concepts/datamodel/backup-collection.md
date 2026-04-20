@@ -155,7 +155,7 @@ Restoration recovers data to the state of the latest backup in the chain current
 
 {% note warning %}
 
-The restore operation overwrites existing tables with the same names. Back up or rename existing tables before restoring if you need to preserve their current data.
+The restore operation fails if any of the tables being restored already exists at the same path. Rename or drop the conflicting tables before restoring.
 
 {% endnote %}
 

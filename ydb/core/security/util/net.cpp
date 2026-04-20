@@ -3,6 +3,7 @@
 #include <library/cpp/ipv6_address/ipv6_address.h>
 
 #include <util/generic/strbuf.h>
+#include <util/string/cast.h>
 
 #include <regex>
 
@@ -20,8 +21,8 @@ bool IsGoodIPv4Part1(TStringBuf peername) {
 
 bool IsGoodIPv4Part2(TStringBuf peername) {
     static const std::regex pattern{R"((.+):(\d+))"};
-    if (std::smatch match;
-        std::regex_match(peername.begin(), peername.end(), match, pattern) &&
+    if (std::cmatch match;
+        std::regex_match(peername.data(), match, pattern) &&
         match.ready() &&
         match.size() == 3) {
         const TString address = match.str(1);
@@ -51,8 +52,8 @@ bool IsGoodIPv6Part1(TStringBuf peername) {
 
 bool IsGoodIPv6Part2(TStringBuf peername) {
     static const std::regex pattern{R"(\[(.+)\]:(\d+))"};
-    if (std::smatch match;
-        std::regex_match(peername.begin(), peername.end(), match, pattern) &&
+    if (std::cmatch match;
+        std::regex_match(peername.data(), match, pattern) &&
         match.ready() &&
         match.size() == 3) {
         const TString address = match.str(1);

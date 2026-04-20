@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(IsIPv6("::ffff:192.0.2.1"));                        // IPv4-mapped IPv6 address
         UNIT_ASSERT(IsIPv6("::"));                                      // all-zeros unspecified address
         UNIT_ASSERT(IsIPv6("fe80::1"));                                 // link-local address
-        UNIT_ASSERT(IsIPv6("ff02::1"));                                 // multicast all-nodesExpand comment
+        UNIT_ASSERT(IsIPv6("ff02::1"));                                 // multicast all-nodes
         UNIT_ASSERT(IsIPv6("::ffff:127.0.0.1"));                        // IPv4-mapped IPv6 (loopback)
         UNIT_ASSERT(IsIPv6("::ffff:0:0"));                              // IPv4-mapped with zeros
         UNIT_ASSERT(IsIPv6("2001:db8::1"));                             // documentation address with compression
@@ -166,6 +166,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:0"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:999999"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:65536"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[127.0.0.1]:8080"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:256.1.1.1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:port"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:invalid"));

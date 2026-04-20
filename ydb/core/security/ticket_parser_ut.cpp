@@ -2585,7 +2585,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         if (shouldFail) {
             UNIT_ASSERT(result->HasError());
             UNIT_ASSERT(!result->Error.Retryable);
-            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "\"" + peername + "\"");
+            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "Unacceptable peername format");
         } else {
             UNIT_ASSERT(!result->HasError());
         }

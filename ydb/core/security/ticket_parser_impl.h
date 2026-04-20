@@ -979,8 +979,7 @@ private:
                            " for DB: " << ev->Get()->Database.Quote());
 
                 TEvTicketParser::TError error;
-                error.Message = "Wrong peername format: " + ev->Get()->PeerName.Quote() +
-                                " for DB: " + ev->Get()->Database.Quote();
+                error.Message = "Unacceptable peername format";
                 error.Retryable = false;
                 BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) << ": " << error);
                 Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, ev->Cookie);

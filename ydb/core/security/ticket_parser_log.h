@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
+#if defined BLOG_D || defined BLOG_INFO || defined BLOG_ERROR || defined BLOG_TRACE || defined BLOG_W
 #error log macro definition clash
 #endif
 

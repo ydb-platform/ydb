@@ -2084,6 +2084,7 @@ bool TTcpConnection::DoSslHandshake()
                 NCrypto::TX509Ptr peerCertificate(SSL_get_peer_certificate(Ssl_.get()));
                 if (!peerCertificate) {
                     Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL peer certificate is not available"));
+                    return false;
                 }
                 YT_LOG_DEBUG("TLS/SSL peer certificate (FingerprintSHA256: %v)",
                     NCrypto::GetFingerprintSHA256(peerCertificate));

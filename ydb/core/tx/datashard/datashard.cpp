@@ -5,6 +5,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
+#include <ydb/core/base/tablet_devui_mon_access.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
@@ -28,6 +29,15 @@ IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
 }
 
 namespace NDataShard {
+
+namespace {
+// Allowlisted (page,action) may skip secure DevUI admin gate; default none.
+bool IsDataShardMonDevUiBypassAllowlisted(TStringBuf page, TStringBuf action, bool hasPage, bool hasAction) {
+    Y_UNUSED(page, action, hasPage, hasAction);
+    return false;
+}
+
+} // namespace
 
 using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;
@@ -2336,6 +2346,15 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
 
     auto cgi = ev->Get()->Cgi();
+    const bool hasAction = cgi.Has("action");
+    const bool hasPage = cgi.Has("page");
+    const TStringBuf action = hasAction ? TStringBuf(cgi.Get("action")) : TStringBuf();
+    const TStringBuf page = hasPage ? TStringBuf(cgi.Get("page")) : TStringBuf();
+    if (TabletMonDevUIReplyForbiddenUnlessSecureAdmin(ctx, ev->Sender, ev->Get(), ev->Get()->PathInfo(),
+            IsDataShardMonDevUiBypassAllowlisted(page, action, hasPage, hasAction)))
+    {
+        return true;
+    }
 
     if (const auto& action = cgi.Get("action")) {
         if (action == "cleanup-borrowed-parts") {

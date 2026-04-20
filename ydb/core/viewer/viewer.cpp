@@ -127,12 +127,13 @@ public:
                 .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
                 .AllowedSIDs = requireCountersAuth ? viewerAllowedSIDs : TVector<TString>(),
             });
-            // For healthcheck, always extract token so access can be checked in handler.
+            // Healthcheck: with enforce_user_token_requirement use RelaxedMonitoring (handler decides access).
+            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
             mon->RegisterActorHandler({
                 .Path = "/healthcheck",
                 .Handler = ctx.SelfID,
-                .AuthMode = TMon::EAuthMode::ExtractOnly,
-                // No need to set AllowedSIDs since the SIDs will be checked in handler if required.
+                .AuthMode = enforceUserToken ? TMon::EAuthMode::RelaxedMonitoring : TMon::EAuthMode::Disabled,
+                // AllowedSIDs omitted: not enforced in monitoring for this mode; handler may still check.
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",

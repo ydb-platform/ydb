@@ -1,5 +1,6 @@
 #include "volatile_tx.h"
 #include "datashard_impl.h"
+#include <ydb/core/base/tablet_devui_mon_access.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <library/cpp/resource/resource.h>
 #include <util/string/cast.h>
@@ -33,7 +34,7 @@ namespace NKikimr::NDataShard {
                     html << "Volatile Transactions";
                     SMALL() {
                         html << "&nbsp;";
-                        html << "<a href=\"app?TabletID=" << TabletID() << "\">";
+                        html << "<a href=\"" << TabletDevUiSecureMonRelativePath << "?TabletID=" << TabletID() << "\">";
                         html << "Back to tablet " << TabletID();
                         html << "</a>";
                     }
@@ -65,7 +66,7 @@ namespace NKikimr::NDataShard {
                         const auto& info = VolatileTxManager.VolatileTxs.at(txId);
                         TABLER() {
                             TABLED() {
-                                html << "<a href=\"app?TabletID=" << TabletID()
+                                html << "<a href=\"" << TabletDevUiSecureMonRelativePath << "?TabletID=" << TabletID()
                                     << "&page=volatile-txs&TxId=" << txId << "\">"
                                     << txId << "</a>";
                             }
@@ -124,7 +125,7 @@ namespace NKikimr::NDataShard {
         };
 
         auto linkToTxId = [&](ui64 txId) -> TString {
-            return TStringBuilder() << "<a href=\"app?TabletID=" << TabletID()
+            return TStringBuilder() << "<a href=\"" << TabletDevUiSecureMonRelativePath << "?TabletID=" << TabletID()
                 << "&page=volatile-txs&TxId=" << txId << "\">" << txId << "</a>";
         };
 
@@ -138,11 +139,12 @@ namespace NKikimr::NDataShard {
                     html << "Volatile Transaction " << txId;
                     SMALL() {
                         html << "&nbsp;";
-                        html << "<a href=\"app?TabletID=" << TabletID() << "&page=volatile-txs\">";
+                        html << "<a href=\"" << TabletDevUiSecureMonRelativePath << "?TabletID=" << TabletID()
+                            << "&page=volatile-txs\">";
                         html << "Back to volatile transactions";
                         html << "</a>";
                         html << "&nbsp;";
-                        html << "<a href=\"app?TabletID=" << TabletID() << "\">";
+                        html << "<a href=\"" << TabletDevUiSecureMonRelativePath << "?TabletID=" << TabletID() << "\">";
                         html << "Back to tablet " << TabletID();
                         html << "</a>";
                     }

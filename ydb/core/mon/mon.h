@@ -30,7 +30,7 @@ public:
     enum class EAuthMode {
         Disabled,      // Don't check authorization
         Enforce,       // Check authorization in monitoring layer
-        ExtractOnly    // Extract token only, check authorization in handler
+        RelaxedMonitoring    // Skip monitoring AllowedSIDs; do not reject on failed auth-RPC; keep token; further checks in this actor or downstream may still apply
     };
 
     using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;

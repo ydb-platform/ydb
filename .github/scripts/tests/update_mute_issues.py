@@ -14,8 +14,8 @@ REPO_NAME = 'ydb'
 PROJECT_ID = '45'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
-MUTE_QUARANTINE_CONFIG_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_quarantine_config.json')
+MUTE_OBSERVATION_CONFIG_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_observation_config.json')
 )
 
 # Github api (personal access token (classic)) token shoud have permitions to
@@ -29,16 +29,16 @@ MUTE_QUARANTINE_CONFIG_PATH = os.path.normpath(
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
 
 
-def load_quarantine_window_days():
-    with open(MUTE_QUARANTINE_CONFIG_PATH, 'r', encoding='utf-8') as config_file:
+def load_observation_window_days():
+    with open(MUTE_OBSERVATION_CONFIG_PATH, 'r', encoding='utf-8') as config_file:
         config = json.load(config_file)
-    quarantine_window_days = int(config["quarantine_window_days"])
-    if quarantine_window_days <= 0:
-        raise ValueError("quarantine_window_days must be a positive integer")
-    return quarantine_window_days
+    observation_window_days = int(config["observation_window_days"])
+    if observation_window_days <= 0:
+        raise ValueError("observation_window_days must be a positive integer")
+    return observation_window_days
 
 
-QUARANTINE_WINDOW_DAYS = load_quarantine_window_days()
+OBSERVATION_WINDOW_DAYS = load_observation_window_days()
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -417,7 +417,7 @@ def generate_github_issue_title_and_body(test_data):
         "---\n"
         "## What to do when tests are fixed?\n\n"
         "1. Close this issue as **Completed** ✅\n"
-        f"2. Tests will be moved to quarantine automatically ({QUARANTINE_WINDOW_DAYS}-day observation period)\n"
+        f"2. Tests will be moved to observation automatically ({OBSERVATION_WINDOW_DAYS}-day observation period)\n"
         "3. If stable → unmuted automatically, issue closed\n"
         "4. If any test fails again → issue returns to **Muted**\n\n"
         "> ⚠️ Do not edit `muted_ya.txt` manually — automation handles it."
@@ -492,15 +492,15 @@ def _extract_issue_number_from_url(issue_url):
         return None
 
 
-def get_muted_tests_from_issues(quarantine_issue_numbers: set[int] = None):
+def get_muted_tests_from_issues(observation_issue_numbers: set[int] = None):
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
-    quarantine_issue_numbers = quarantine_issue_numbers or set()
+    observation_issue_numbers = observation_issue_numbers or set()
     
     # First, collect all issues for each (test, build_type) key
     for issue in issues:
         issue_number = _extract_issue_number_from_url(issues[issue].get("url"))
-        if issues[issue]["state"] != 'CLOSED' or issue_number in quarantine_issue_numbers:
+        if issues[issue]["state"] != 'CLOSED' or issue_number in observation_issue_numbers:
             bt = issues[issue].get('build_type') or DEFAULT_BUILD_TYPE
             for test in issues[issue]['tests']:
                 key = (test, bt)

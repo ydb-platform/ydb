@@ -24,7 +24,7 @@
               "issues": "github_data/issues",
               "pull_requests": "github_data/pull_requests",
               "digest_queue": "test_results/analytics/digest_queue",
-              "mute_quarantine": "test_results/analytics/mute_quarantine"
+              "mute_observation": "test_results/analytics/mute_observation"
 
           }
       },

@@ -241,7 +241,7 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
         `github_issue_created_at` Timestamp,
         `area_override`           Utf8,
         `area_override_since`     Date,
-        `quarantine_since`        Timestamp,
+        `observation_since`       Timestamp,
         PRIMARY KEY (full_name, branch, build_type, github_issue_number)
     )
     PARTITION BY HASH(full_name)
@@ -252,11 +252,11 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_table_sql)
 
 
-def fetch_quarantine_since_by_test_key(ydb_wrapper) -> dict[tuple[str, str, str], dt.datetime]:
+def fetch_observation_since_by_test_key(ydb_wrapper) -> dict[tuple[str, str, str], dt.datetime]:
     try:
-        table_path = ydb_wrapper.get_table_path("mute_quarantine")
+        table_path = ydb_wrapper.get_table_path("mute_observation")
     except KeyError:
-        print("mute_quarantine table is not configured; quarantine_since will be NULL")
+        print("mute_observation table is not configured; observation_since will be NULL")
         return {}
     rows = ydb_wrapper.execute_scan_query(
         f"""
@@ -265,17 +265,17 @@ def fetch_quarantine_since_by_test_key(ydb_wrapper) -> dict[tuple[str, str, str]
             branch,
             build_type,
             github_issue_number,
-            quarantine_since
+            observation_since
         FROM `{table_path}`
         """,
-        query_name="github_issue_mapping_fetch_mute_quarantine",
+        query_name="github_issue_mapping_fetch_mute_observation",
     )
     by_test_key: dict[tuple[str, str, str], dt.datetime] = {}
     for row in rows:
         full_name = row.get("full_name")
         branch = row.get("branch")
         build_type = row.get("build_type")
-        since = row.get("quarantine_since")
+        since = row.get("observation_since")
         if not full_name or not branch or not build_type or since is None:
             continue
         key = (str(full_name), str(branch), str(build_type))
@@ -285,10 +285,10 @@ def fetch_quarantine_since_by_test_key(ydb_wrapper) -> dict[tuple[str, str, str]
     return by_test_key
 
 
-def convert_mapping_to_table_data(test_to_issue_mapping, quarantine_since_by_test_key=None):
+def convert_mapping_to_table_data(test_to_issue_mapping, observation_since_by_test_key=None):
     """Convert the test-to-issue mapping to table data format"""
     table_data = []
-    quarantine_since_by_test_key = quarantine_since_by_test_key or {}
+    observation_since_by_test_key = observation_since_by_test_key or {}
 
     for test_name, issues in test_to_issue_mapping.items():
         if not issues:
@@ -314,7 +314,7 @@ def convert_mapping_to_table_data(test_to_issue_mapping, quarantine_since_by_tes
                     'github_issue_state': latest_issue['state'],
                     'github_issue_created_at': latest_issue.get('created_at'),
                     'area_override': latest_issue.get('area_override'),
-                    'quarantine_since': quarantine_since_by_test_key.get((test_name, branch, bt)),
+                    'observation_since': observation_since_by_test_key.get((test_name, branch, bt)),
                 })
 
     return table_data
@@ -335,7 +335,7 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     column_types.add_column('area_override', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('area_override_since', ydb.OptionalType(ydb.PrimitiveType.Date))
-    column_types.add_column('quarantine_since', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    column_types.add_column('observation_since', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
 
     ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types)
     print(f"Bulk upsert completed")
@@ -391,10 +391,10 @@ def main():
 
             create_test_issue_mapping_table(ydb_wrapper, table_path)
 
-            quarantine_since_by_test_key = fetch_quarantine_since_by_test_key(ydb_wrapper)
+            observation_since_by_test_key = fetch_observation_since_by_test_key(ydb_wrapper)
             mapping_data = convert_mapping_to_table_data(
                 test_to_issue,
-                quarantine_since_by_test_key=quarantine_since_by_test_key,
+                observation_since_by_test_key=observation_since_by_test_key,
             )
             print(f"Converted to {len(mapping_data)} table records")
 

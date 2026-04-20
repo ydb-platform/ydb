@@ -12,19 +12,19 @@ from ydb_wrapper import YDBWrapper
 # Get repository path
 dir = os.path.dirname(__file__)
 repo_path = os.path.abspath(f"{dir}/../../../")
-MUTE_QUARANTINE_CONFIG_PATH = os.path.join(
-    repo_path, ".github", "config", "mute_quarantine_config.json"
+MUTE_OBSERVATION_CONFIG_PATH = os.path.join(
+    repo_path, ".github", "config", "mute_observation_config.json"
 )
 
 
 def load_query_variables():
     variables = {}
-    with open(MUTE_QUARANTINE_CONFIG_PATH, "r", encoding="utf-8") as config_file:
+    with open(MUTE_OBSERVATION_CONFIG_PATH, "r", encoding="utf-8") as config_file:
         config = json.load(config_file)
-    quarantine_window_days = int(config["quarantine_window_days"])
-    if quarantine_window_days <= 0:
-        raise ValueError("quarantine_window_days must be a positive integer")
-    variables["quarantine_window_days"] = quarantine_window_days
+    observation_window_days = int(config["observation_window_days"])
+    if observation_window_days <= 0:
+        raise ValueError("observation_window_days must be a positive integer")
+    variables["observation_window_days"] = observation_window_days
     return variables
 
 

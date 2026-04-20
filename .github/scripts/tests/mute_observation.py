@@ -26,37 +26,37 @@ from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
 
 
 CONFIG_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_quarantine_config.json')
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_observation_config.json')
 )
 
 STATUS_MUTED = "Muted"
-STATUS_QUARANTINE = "Quarantine"
+STATUS_OBSERVATION = "Observation"
 
-COMMENT_QUARANTINE_ENTERED = """🔒 **Quarantine started**
+COMMENT_OBSERVATION_ENTERED = """🔒 **Observation started**
 
 User **{closed_by_login}** closed this issue, marking the tests as fixed.
-The tests have been moved to quarantine automatically.
+The tests have been moved to observation automatically.
 
 **What happens next:**
 - Tests are hidden from the mute dashboard immediately
-- Tests remain muted in CI for up to {quarantine_window_days} days
+- Tests remain muted in CI for up to {observation_window_days} days
 - If stable → they will be unmuted automatically, this issue will be closed
 - If any test fails again → issue will return to **Muted** status
 
 **No action needed from you.** Do not edit `muted_ya.txt` manually.
 
-⏱ Quarantine until: {quarantine_until_date}
+⏱ Observation until: {observation_until_date}
 🔗 Workflow run: {workflow_run_url}
 """
 
-COMMENT_QUARANTINE_FAILED = """⚠️ **Returned to Muted**
+COMMENT_OBSERVATION_FAILED = """⚠️ **Returned to Muted**
 
-Test **{failed_test_name}** failed during the quarantine period — the fix did not hold.
+Test **{failed_test_name}** failed during the observation period — the fix did not hold.
 
 **Details:**
 - Failed test: {failed_test_name}
 - Failures detected: {fail_count}
-- Quarantine started: {quarantine_since}
+- Observation started: {observation_since}
 
 **What to do:**
 1. Investigate the failures
@@ -66,9 +66,9 @@ Test **{failed_test_name}** failed during the quarantine period — the fix did 
 🔗 Workflow run: {workflow_run_url}
 """
 
-COMMENT_QUARANTINE_EXPIRED = """✅ **Quarantine complete**
+COMMENT_OBSERVATION_EXPIRED = """✅ **Observation complete**
 
-Test **{full_name}** was stable for {quarantine_window_days} days. Quarantine period is over.
+Test **{full_name}** was stable for {observation_window_days} days. Observation period is over.
 The test will be unmuted automatically in the next automation run.
 
 This issue will be closed shortly.
@@ -77,12 +77,12 @@ This issue will be closed shortly.
 """
 
 
-def load_quarantine_window_days() -> int:
+def load_observation_window_days() -> int:
     with open(CONFIG_PATH, 'r', encoding='utf-8') as config_file:
         config = json.load(config_file)
-    days = int(config["quarantine_window_days"])
+    days = int(config["observation_window_days"])
     if days <= 0:
-        raise ValueError("quarantine_window_days must be a positive integer")
+        raise ValueError("observation_window_days must be a positive integer")
     return days
 
 
@@ -126,12 +126,12 @@ def get_status_option_ids():
         break
     if not status_field_id:
         raise RuntimeError("Status field was not found in project fields")
-    if STATUS_MUTED not in status_options or STATUS_QUARANTINE not in status_options:
+    if STATUS_MUTED not in status_options or STATUS_OBSERVATION not in status_options:
         raise RuntimeError("Required status options are missing in project fields")
     return status_field_id, status_options
 
 
-def create_quarantine_table(ydb_wrapper, table_path):
+def create_observation_table(ydb_wrapper, table_path):
     create_sql = f"""
     CREATE TABLE IF NOT EXISTS `{table_path}` (
         `full_name`             Utf8      NOT NULL,
@@ -139,7 +139,7 @@ def create_quarantine_table(ydb_wrapper, table_path):
         `build_type`            Utf8      NOT NULL,
         `github_issue_number`   Uint64    NOT NULL,
         `github_issue_id`       Utf8,
-        `quarantine_since`      Timestamp NOT NULL,
+        `observation_since`      Timestamp NOT NULL,
         PRIMARY KEY (full_name, branch, build_type)
     )
     WITH (STORE = COLUMN)
@@ -147,7 +147,7 @@ def create_quarantine_table(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def fetch_quarantine_rows(ydb_wrapper, table_path):
+def fetch_observation_rows(ydb_wrapper, table_path):
     query = f"""
     SELECT
         full_name,
@@ -155,10 +155,10 @@ def fetch_quarantine_rows(ydb_wrapper, table_path):
         build_type,
         github_issue_number,
         github_issue_id,
-        quarantine_since
+        observation_since
     FROM `{table_path}`
     """
-    return ydb_wrapper.execute_scan_query(query, query_name="mute_quarantine_fetch_rows")
+    return ydb_wrapper.execute_scan_query(query, query_name="mute_observation_fetch_rows")
 
 
 def fetch_candidate_closed_issues(ydb_wrapper, issues_table_path):
@@ -173,7 +173,7 @@ def fetch_candidate_closed_issues(ydb_wrapper, issues_table_path):
     WHERE state = 'CLOSED'
         AND state_reason = 'COMPLETED'
     """
-    return ydb_wrapper.execute_scan_query(query, query_name="mute_quarantine_closed_issues")
+    return ydb_wrapper.execute_scan_query(query, query_name="mute_observation_closed_issues")
 
 
 def fetch_currently_muted_tests(ydb_wrapper, tests_monitor_table, branch, build_type):
@@ -190,7 +190,7 @@ def fetch_currently_muted_tests(ydb_wrapper, tests_monitor_table, branch, build_
     """
     rows = ydb_wrapper.execute_scan_query(
         query,
-        query_name="mute_quarantine_currently_muted_tests",
+        query_name="mute_observation_currently_muted_tests",
     )
     return {row.get("full_name") for row in rows if row.get("full_name")}
 
@@ -342,7 +342,7 @@ def reopen_issue(issue_id):
     run_query(query, {"issueId": issue_id})
 
 
-def upsert_quarantine_rows(ydb_wrapper, table_path, rows):
+def upsert_observation_rows(ydb_wrapper, table_path, rows):
     if not rows:
         return
     column_types = (
@@ -352,12 +352,12 @@ def upsert_quarantine_rows(ydb_wrapper, table_path, rows):
         .add_column("build_type", ydb.PrimitiveType.Utf8)
         .add_column("github_issue_number", ydb.PrimitiveType.Uint64)
         .add_column("github_issue_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("quarantine_since", ydb.PrimitiveType.Timestamp)
+        .add_column("observation_since", ydb.PrimitiveType.Timestamp)
     )
     ydb_wrapper.bulk_upsert(table_path, rows, column_types)
 
 
-def delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type):
+def delete_observation_row(ydb_wrapper, table_path, full_name, branch, build_type):
     query = f"""
     DECLARE $full_name AS Utf8;
     DECLARE $branch AS Utf8;
@@ -375,20 +375,20 @@ def delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type
             "$branch": branch,
             "$build_type": build_type,
         },
-        query_name="mute_quarantine_delete_row",
+        query_name="mute_observation_delete_row",
     )
 
 
-def process_enter_quarantine(
+def process_enter_observation(
     ydb_wrapper,
     table_path,
     issues_table_path,
     tests_monitor_table,
-    quarantine_window_days,
+    observation_window_days,
     status_field_id,
     status_options,
 ):
-    existing_rows = fetch_quarantine_rows(ydb_wrapper, table_path)
+    existing_rows = fetch_observation_rows(ydb_wrapper, table_path)
     existing_keys = {
         (
             row.get("full_name"),
@@ -409,7 +409,7 @@ def process_enter_quarantine(
     issue_refs = fetch_project_issue_refs(candidate_numbers)
     run_url = workflow_run_url()
     now = datetime.datetime.now(tz=datetime.timezone.utc)
-    quarantine_until = now + datetime.timedelta(days=quarantine_window_days)
+    observation_until = now + datetime.timedelta(days=observation_window_days)
     currently_muted_cache = {}
 
     new_rows = []
@@ -459,7 +459,7 @@ def process_enter_quarantine(
                         "build_type": build_type,
                         "github_issue_number": issue_number,
                         "github_issue_id": issue_id,
-                        "quarantine_since": now,
+                        "observation_since": now,
                     }
                 )
         if not issue_rows:
@@ -469,13 +469,13 @@ def process_enter_quarantine(
         update_issue_status(
             project_item_id,
             status_field_id,
-            status_options[STATUS_QUARANTINE],
+            status_options[STATUS_OBSERVATION],
             issue_url,
         )
-        comment = COMMENT_QUARANTINE_ENTERED.format(
+        comment = COMMENT_OBSERVATION_ENTERED.format(
             closed_by_login=closer.get("closed_by_login") or "unknown",
-            quarantine_window_days=quarantine_window_days,
-            quarantine_until_date=quarantine_until.strftime("%Y-%m-%d"),
+            observation_window_days=observation_window_days,
+            observation_until_date=observation_until.strftime("%Y-%m-%d"),
             workflow_run_url=run_url,
         )
         add_issue_comment(issue_id, comment)
@@ -486,7 +486,7 @@ def process_enter_quarantine(
     for row in new_rows:
         row_key = (row["full_name"], row["branch"], row["build_type"])
         deduped_rows[row_key] = row
-    upsert_quarantine_rows(ydb_wrapper, table_path, list(deduped_rows.values()))
+    upsert_observation_rows(ydb_wrapper, table_path, list(deduped_rows.values()))
 
 
 def _scan_date_to_date(value):
@@ -505,10 +505,10 @@ def _scan_date_to_date(value):
     return None
 
 
-def fetch_monitor_failures_bulk(ydb_wrapper, tests_monitor_table, quarantine_rows, days):
+def fetch_monitor_failures_bulk(ydb_wrapper, tests_monitor_table, observation_rows, days):
     failures_by_key = {}
     grouped = {}
-    for row in quarantine_rows:
+    for row in observation_rows:
         full_name = row.get("full_name")
         branch = row.get("branch")
         build_type = row.get("build_type")
@@ -518,8 +518,8 @@ def fetch_monitor_failures_bulk(ydb_wrapper, tests_monitor_table, quarantine_row
         if key not in grouped:
             grouped[key] = {"full_names": set(), "since": {}}
         grouped[key]["full_names"].add(full_name)
-        quarantine_since = _timestamp_to_datetime(row.get("quarantine_since"))
-        grouped[key]["since"][full_name] = quarantine_since.date() if quarantine_since else None
+        observation_since = _timestamp_to_datetime(row.get("observation_since"))
+        grouped[key]["since"][full_name] = observation_since.date() if observation_since else None
         failures_by_key[(full_name, branch, build_type)] = 0
 
     for (branch, build_type), group_data in grouped.items():
@@ -537,15 +537,15 @@ def fetch_monitor_failures_bulk(ydb_wrapper, tests_monitor_table, quarantine_row
         """
         monitor_rows = ydb_wrapper.execute_scan_query(
             query,
-            query_name="mute_quarantine_monitor_failures_bulk",
+            query_name="mute_observation_monitor_failures_bulk",
         )
         for monitor_row in monitor_rows:
             full_name = monitor_row.get("full_name")
             if full_name not in group_data["full_names"]:
                 continue
             row_date = _scan_date_to_date(monitor_row.get("date_window"))
-            quarantine_since_date = group_data["since"].get(full_name)
-            if quarantine_since_date and row_date and row_date < quarantine_since_date:
+            observation_since_date = group_data["since"].get(full_name)
+            if observation_since_date and row_date and row_date < observation_since_date:
                 continue
             fail_count = int(monitor_row.get("fail_count") or 0)
             if fail_count <= 0:
@@ -554,15 +554,15 @@ def fetch_monitor_failures_bulk(ydb_wrapper, tests_monitor_table, quarantine_row
     return failures_by_key
 
 
-def process_failed_quarantine(
+def process_failed_observation(
     ydb_wrapper,
     table_path,
     tests_monitor_table,
-    quarantine_window_days,
+    observation_window_days,
     status_field_id,
     status_options,
 ):
-    rows = fetch_quarantine_rows(ydb_wrapper, table_path)
+    rows = fetch_observation_rows(ydb_wrapper, table_path)
     if not rows:
         return
     run_url = workflow_run_url()
@@ -576,7 +576,7 @@ def process_failed_quarantine(
         ydb_wrapper,
         tests_monitor_table,
         rows,
-        quarantine_window_days,
+        observation_window_days,
     )
     rows_by_issue = {}
     failed_rows_by_issue = {}
@@ -603,7 +603,7 @@ def process_failed_quarantine(
         issue_url = issue_ref.get("issue_url") or f"https://github.com/{ORG_NAME}/{REPO_NAME}/issues/{issue_number}"
 
         for issue_row in rows_by_issue.get(issue_number, []):
-            delete_quarantine_row(
+            delete_observation_row(
                 ydb_wrapper,
                 table_path,
                 issue_row.get("full_name"),
@@ -620,20 +620,20 @@ def process_failed_quarantine(
 
         for failed_row, fail_count in failed_rows:
             full_name = failed_row.get("full_name")
-            quarantine_since = _timestamp_to_datetime(failed_row.get("quarantine_since"))
-            comment = COMMENT_QUARANTINE_FAILED.format(
+            observation_since = _timestamp_to_datetime(failed_row.get("observation_since"))
+            comment = COMMENT_OBSERVATION_FAILED.format(
                 failed_test_name=full_name,
                 fail_count=fail_count,
-                quarantine_since=quarantine_since.strftime("%Y-%m-%d %H:%M:%S UTC")
-                if quarantine_since
+                observation_since=observation_since.strftime("%Y-%m-%d %H:%M:%S UTC")
+                if observation_since
                 else "unknown",
                 workflow_run_url=run_url,
             )
             add_issue_comment(issue_id, comment)
 
 
-def process_expired_quarantine(ydb_wrapper, table_path, quarantine_window_days):
-    rows = fetch_quarantine_rows(ydb_wrapper, table_path)
+def process_expired_observation(ydb_wrapper, table_path, observation_window_days):
+    rows = fetch_observation_rows(ydb_wrapper, table_path)
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     run_url = workflow_run_url()
     issue_numbers = {
@@ -648,59 +648,59 @@ def process_expired_quarantine(ydb_wrapper, table_path, quarantine_window_days):
         build_type = row.get("build_type")
         issue_number_raw = row.get("github_issue_number")
         issue_number = int(issue_number_raw) if issue_number_raw is not None else None
-        quarantine_since = _timestamp_to_datetime(row.get("quarantine_since"))
-        if not full_name or not branch or not build_type or not quarantine_since:
+        observation_since = _timestamp_to_datetime(row.get("observation_since"))
+        if not full_name or not branch or not build_type or not observation_since:
             continue
-        if quarantine_since > now - datetime.timedelta(days=quarantine_window_days):
+        if observation_since > now - datetime.timedelta(days=observation_window_days):
             continue
 
-        delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type)
+        delete_observation_row(ydb_wrapper, table_path, full_name, branch, build_type)
         issue_ref = issue_refs.get(issue_number) if issue_number is not None else {}
         issue_id = (issue_ref or {}).get("issue_id") or row.get("github_issue_id")
         if issue_id:
-            comment = COMMENT_QUARANTINE_EXPIRED.format(
+            comment = COMMENT_OBSERVATION_EXPIRED.format(
                 full_name=full_name,
-                quarantine_window_days=quarantine_window_days,
+                observation_window_days=observation_window_days,
                 workflow_run_url=run_url,
             )
             add_issue_comment(issue_id, comment)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mute quarantine state machine")
+    parser = argparse.ArgumentParser(description="Mute observation state machine")
     parser.parse_args()
 
-    quarantine_window_days = load_quarantine_window_days()
+    observation_window_days = load_observation_window_days()
 
     with YDBWrapper() as ydb_wrapper:
         if not ydb_wrapper.check_credentials():
             return 1
 
-        quarantine_table = ydb_wrapper.get_table_path("mute_quarantine")
+        observation_table = ydb_wrapper.get_table_path("mute_observation")
         issues_table = ydb_wrapper.get_table_path("issues")
         tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
 
-        create_quarantine_table(ydb_wrapper, quarantine_table)
+        create_observation_table(ydb_wrapper, observation_table)
         status_field_id, status_options = get_status_option_ids()
 
-        process_enter_quarantine(
+        process_enter_observation(
             ydb_wrapper,
-            quarantine_table,
+            observation_table,
             issues_table,
             tests_monitor_table,
-            quarantine_window_days,
+            observation_window_days,
             status_field_id,
             status_options,
         )
-        process_failed_quarantine(
+        process_failed_observation(
             ydb_wrapper,
-            quarantine_table,
+            observation_table,
             tests_monitor_table,
-            quarantine_window_days,
+            observation_window_days,
             status_field_id,
             status_options,
         )
-        process_expired_quarantine(ydb_wrapper, quarantine_table, quarantine_window_days)
+        process_expired_observation(ydb_wrapper, observation_table, observation_window_days)
 
     return 0
 

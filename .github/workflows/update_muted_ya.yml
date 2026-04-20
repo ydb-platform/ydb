@@ -129,13 +129,13 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Run mute quarantine
+      - name: Run mute observation
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           YDB_ENDPOINT: ${{ vars.YDB_ENDPOINT }}
           YDB_DATABASE: ${{ vars.YDB_DATABASE }}
         run: |
-          python3 .github/scripts/tests/mute_quarantine.py
+          python3 .github/scripts/tests/mute_observation.py
 
       - name: Generate new muted_ya.txt
         run: |

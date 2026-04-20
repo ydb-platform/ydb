@@ -85,7 +85,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
-          python3 .github/scripts/tests/mute_quarantine.py
+          python3 .github/scripts/tests/mute_observation.py
           .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
 
       - name: Add issues to PR

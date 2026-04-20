@@ -155,10 +155,11 @@ public:
             rlPath.ConstructInPlace(runtimeSettings.GetRlPath());
         }
 
-        TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
-            txId, TInstant::Now(), ResourceManager_->GetCounters(),
-            poolId, msg.GetMemoryPoolPercent(),
-            msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+        if (!TxInfo) {
+            TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+                poolId, msg.GetMemoryPoolPercent(),
+                msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+        }
 
         auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
 
@@ -173,7 +174,7 @@ public:
                 .LockNodeId = lockNodeId,
                 .LockMode = lockMode,
                 .Task = &dqTask,
-                .TxInfo = txInfo,
+                .TxInfo = TxInfo,
                 .ReportStatsSettings = reportStatsSettings,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
@@ -323,6 +324,7 @@ public:
 private:
     TIntrusivePtr<TKqpCounters> Counters_;
     std::shared_ptr<TNodeState> State_;
+    TIntrusivePtr<NRm::TTxState> TxInfo;
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TActorId ExecuterId;

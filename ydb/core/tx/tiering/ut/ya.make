@@ -13,7 +13,6 @@ IF (AUTOCHECK)
     TAG(
         ya:external
         ya:force_sandbox
-        ya:fat
     )
 
     REQUIREMENTS(

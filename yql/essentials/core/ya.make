@@ -77,6 +77,7 @@ SRCS(
     yql_window_frames_collector_params_serializer.h
     yql_window_frame_settings_pg.cpp
     yql_window_frame_settings_pg.h
+    yql_yqlselect.cpp
 )
 
 PEERDIR(

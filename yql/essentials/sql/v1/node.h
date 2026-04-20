@@ -1613,7 +1613,7 @@ TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
 TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 TNodePtr BuildBinaryOpRaw(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 
-TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call);
+TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call, bool isYqlSelect);
 TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson);
 
 TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);

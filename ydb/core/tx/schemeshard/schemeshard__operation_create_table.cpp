@@ -546,13 +546,13 @@ public:
             return result;
         }
 
-        if (schema.HasMetricsSettings()) {
+        if (schema.HasDetailedMetricsSettings()) {
             TString errorString;
 
-            // Make sure the metrics settings are valid (correct metrics level etc)
-            if (!ValidateMetricsSettings(
+            // Make sure the detailed metrics settings are valid (correct metrics level etc)
+            if (!ValidateTableDetailedMetricsSettings(
                 true /* forCreate */,
-                schema.GetMetricsSettings(),
+                schema.GetDetailedMetricsSettings(),
                 errorString
             )) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errorString);

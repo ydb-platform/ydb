@@ -393,7 +393,7 @@
             },
             {
                 "ColumnId": 15,
-                "ColumnName": "MetricsSettings",
+                "ColumnName": "DetailedMetricsSettings",
                 "ColumnType": "String"
             }
         ],
@@ -3994,7 +3994,7 @@
             },
             {
                 "ColumnId": 16,
-                "ColumnName": "MetricsSettings",
+                "ColumnName": "DetailedMetricsSettings",
                 "ColumnType": "String"
             }
         ],

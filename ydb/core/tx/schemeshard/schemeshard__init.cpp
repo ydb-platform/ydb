@@ -338,7 +338,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::MetricsSettings>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::DetailedMetricsSettings>()
         );
     }
 
@@ -1912,8 +1912,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
                 }
 
-                if (const auto metricsSettings = std::get<14>(rec)) {
-                    bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableMetricsSettings(), metricsSettings);
+                if (const auto detailedMetricsSettings = std::get<14>(rec)) {
+                    bool parseOk = ParseFromStringNoSizeLimit(
+                        tableInfo->MutableDetailedMetricsSettings(),
+                        detailedMetricsSettings
+                    );
+
                     Y_ABORT_UNLESS(parseOk);
                 }
 

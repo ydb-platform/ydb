@@ -715,35 +715,35 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     }
 
     /**
-     * Determine if the metrics settings are configured for the given table.
+     * Determine if the detailed metrics settings are configured for the given table.
      *
-     * @return True, if the metrics settings are configured for the given table
+     * @return True, if the detailed metrics settings are configured for the given table
      */
-    bool HasMetricsSettings() const {
-        return TableDescription.HasMetricsSettings()
-            && (TableDescription.GetMetricsSettings().GetStatusCase()
-                    == NKikimrSchemeOp::TMetricsSettings::kConfigured)
-            && (TableDescription.GetMetricsSettings().HasConfigured());
+    bool HasDetailedMetricsSettings() const {
+        return TableDescription.HasDetailedMetricsSettings()
+            && (TableDescription.GetDetailedMetricsSettings().GetStatusCase()
+                    == NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured)
+            && (TableDescription.GetDetailedMetricsSettings().HasConfigured());
     };
 
     /**
-     * Return the metrics settings for the given table.
+     * Return the detailed metrics settings for the given table.
      *
-     * @warning This function should be called only if HasMetricsSettings() returns true.
+     * @warning This function should be called only if HasDetailedMetricsSettings() returns true.
      *
-     * @return The metrics settings for the given table
+     * @return The detailed metrics settings for the given table
      */
-    const NKikimrSchemeOp::TMetricsSettings::TConfigured& GetMetricsSettings() const {
-        return TableDescription.GetMetricsSettings().GetConfigured();
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings::TConfigured& GetDetailedMetricsSettings() const {
+        return TableDescription.GetDetailedMetricsSettings().GetConfigured();
     }
 
     /**
-     * Return the modifiable version of the metrics settings for the given table.
+     * Return the modifiable version of the detailed metrics settings for the given table.
      *
-     * @return The modifiable version of the metrics settings for the given table
+     * @return The modifiable version of the detailed metrics settings for the given table
      */
-    NKikimrSchemeOp::TMetricsSettings::TConfigured& MutableMetricsSettings() {
-        return *TableDescription.MutableMetricsSettings()->MutableConfigured();
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::TConfigured& MutableDetailedMetricsSettings() {
+        return *TableDescription.MutableDetailedMetricsSettings()->MutableConfigured();
     }
 
     ui32 GetTTLColumnId() const {
@@ -3896,17 +3896,17 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TSubDomainInfo& subDomain, TString& errStr);
 
 /**
- * Check if the given metrics settings are valid.
+ * Check if the given detailed metrics settings (for a table) are valid.
  *
  * @param[in] forCreate Indicates if this is for CREATE TABLE (ALTER TABLE otherwise)
- * @param[in] metricsSettings The metrics settings to validate
+ * @param[in] metricsSettings The detailed metrics settings to validate
  * @param[out] errorString Receives the error message, if the metrics settings are not valid
  *
- * @return Indicates if the metrics settings are valid
+ * @return Indicates if the detailed metrics settings are valid
  */
-bool ValidateMetricsSettings(
+bool ValidateTableDetailedMetricsSettings(
     bool forCreate,
-    const NKikimrSchemeOp::TMetricsSettings& metricsSettings,
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings& metricsSettings,
     TString& errorString
 );
 

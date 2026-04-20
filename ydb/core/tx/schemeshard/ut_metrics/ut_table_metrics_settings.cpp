@@ -49,17 +49,17 @@ void VerifyTableDescriptionAndRestartSchemeShard(
 } // namespace <anonymous>
 
 /**
- * Unit test for the logic in Scheme Shard, which configures metrics settings
+ * Unit test for the logic in Scheme Shard, which configures detailed metrics settings
  * for individual tables.
  */
-Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
+Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     /**
-     * Verify that CREATE TABLE without the metrics level specified works correctly.
+     * Verify that CREATE TABLE without the detailed metrics level specified works correctly.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across SchemeShard restarts.
      */
-    Y_UNIT_TEST(CreateTableNoMetricsLevel) {
+    Y_UNIT_TEST(CreateTableNoDetailedMetricsLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 100);
 
-        // Make sure the metrics settings are not configured for this table
+        // Make sure the detailed metrics settings are not configured for this table
         VerifyTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/TestTable",
@@ -86,17 +86,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& tableDescription = record.GetPathDescription().GetTable();
 
-                    UNIT_ASSERT(!tableDescription.HasMetricsSettings());
+                    UNIT_ASSERT(!tableDescription.HasDetailedMetricsSettings());
                 },
             }
         );
     }
 
     /**
-     * Verify that CREATE TABLE with the metrics settings explicitly dropped
+     * Verify that CREATE TABLE with the detailed metrics settings explicitly dropped
      * is not allowed and fails with an error.
      */
-    Y_UNIT_TEST(CreateTableDroppingMetricsSettingsNotAllowed) {
+    Y_UNIT_TEST(CreateTableDroppingDetailedMetricsSettingsNotAllowed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
@@ -109,51 +109,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "String" }
                 KeyColumnNames: ["key"]
-                MetricsSettings {
+                DetailedMetricsSettings {
                     NotConfigured {
                     }
                 }
             )",
             {{
                 NKikimrScheme::StatusInvalidParameter,
-                "Unable to remove the metrics settings in CREATE TABLE",
-            }}
-        );
-    }
-
-    /**
-     * Verify that CREATE TABLE fails correctly, when the given invalid metrics
-     * level is specified in the request.
-     *
-     * @param[in] metricsLevel The metrics level to verify
-     */
-    void VerifyCreateTableInvalidMetricsLevel(
-        NKikimrSchemeOp::TMetricsSettings::EMetricsLevel metricsLevel
-    ) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-
-        TestCreateTable(
-            runtime,
-            100,
-            "/MyRoot",
-            Sprintf(
-                R"(
-                    Name: "TestTable"
-                    Columns { Name: "key"   Type: "Uint64" }
-                    Columns { Name: "value" Type: "String" }
-                    KeyColumnNames: ["key"]
-                    MetricsSettings {
-                        Configured {
-                            MetricsLevel: %s
-                        }
-                    }
-                )",
-                NKikimrSchemeOp::TMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
-            ),
-            {{
-                NKikimrScheme::StatusInvalidParameter,
-                "Only DATABASE, TABLE and PARTITION metrics levels are supported",
+                "Unable to remove the detailed metrics settings in CREATE TABLE",
             }}
         );
     }
@@ -162,33 +125,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
      * Verify that CREATE TABLE fails correctly, when an invalid metrics level
      * is specified (UNSPECIFIED).
      */
-    Y_UNIT_TEST(CreateTableInvalidMetricsLevelUnspecified) {
-        VerifyCreateTableInvalidMetricsLevel(
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelUnspecified
+    Y_UNIT_TEST(CreateTableInvalidDetailedMetricsLevelUnspecified) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TestCreateTable(
+            runtime,
+            100,
+            "/MyRoot",
+            R"(
+                Name: "TestTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "String" }
+                KeyColumnNames: ["key"]
+                DetailedMetricsSettings {
+                    Configured {
+                        MetricsLevel: MetricsLevelUnspecified
+                    }
+                }
+            )",
+            {{
+                NKikimrScheme::StatusInvalidParameter,
+                "Only DISABLED, TABLE and PARTITION detailed metrics levels are supported",
+            }}
         );
     }
 
     /**
-     * Verify that CREATE TABLE fails correctly, when an invalid metrics level
-     * is specified (DISABLED).
-     */
-    Y_UNIT_TEST(CreateTableInvalidMetricsLevelDisabled) {
-        VerifyCreateTableInvalidMetricsLevel(
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelDisabled
-        );
-    }
-
-    /**
-     * Verify that CREATE TABLE works correctly, when the given valid metrics
-     * level is specified in the request.
+     * Verify that CREATE TABLE works correctly, when the given valid
+     * detailed metrics level is specified in the request.
      *
-     * @note This functions also verifies that the metrics settings are preserved
+     * @note This functions also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      *
-     * @param[in] metricsLevel The metrics level to verify
+     * @param[in] metricsLevel The detailed metrics level to verify
      */
-    void VerifyCreateTableValidMetricsLevel(
-        NKikimrSchemeOp::TMetricsSettings::EMetricsLevel metricsLevel
+    void VerifyCreateTableValidDetailedMetricsLevel(
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel
     ) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -203,19 +176,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                     Columns { Name: "key"   Type: "Uint64" }
                     Columns { Name: "value" Type: "String" }
                     KeyColumnNames: ["key"]
-                    MetricsSettings {
+                    DetailedMetricsSettings {
                         Configured {
                             MetricsLevel: %s
                         }
                     }
                 )",
-                NKikimrSchemeOp::TMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
             )
         );
 
         env.TestWaitNotification(runtime, 100);
 
-        // Make sure the metrics settings are configured correctly for this table
+        // Make sure the detailed metrics settings are configured correctly for this table
         VerifyTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/TestTable",
@@ -224,18 +197,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 [metricsLevel](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& tableDescription = record.GetPathDescription().GetTable();
 
-                    UNIT_ASSERT(tableDescription.HasMetricsSettings());
+                    UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
 
                     UNIT_ASSERT_EQUAL(
-                        tableDescription.GetMetricsSettings().GetStatusCase(),
-                        NKikimrSchemeOp::TMetricsSettings::kConfigured
+                        tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
                     );
 
-                    UNIT_ASSERT(tableDescription.GetMetricsSettings().HasConfigured());
-                    UNIT_ASSERT(!tableDescription.GetMetricsSettings().HasNotConfigured());
+                    UNIT_ASSERT(tableDescription.GetDetailedMetricsSettings().HasConfigured());
+                    UNIT_ASSERT(!tableDescription.GetDetailedMetricsSettings().HasNotConfigured());
 
                     UNIT_ASSERT_EQUAL(
-                        tableDescription.GetMetricsSettings().GetConfigured().GetMetricsLevel(),
+                        tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
                         metricsLevel
                     );
                 },
@@ -244,53 +217,56 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
     }
 
     /**
-     * Verify that CREATE TABLE works correctly with a valid metrics level (DATABASE).
+     * Verify that CREATE TABLE works correctly with a valid
+     * detailed metrics level (DISABLED).
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(CreateTableValidMetricsLevelDatabase) {
-        VerifyCreateTableValidMetricsLevel(
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelDatabase
+    Y_UNIT_TEST(CreateTableValidDetailedMetricsLevelDisabled) {
+        VerifyCreateTableValidDetailedMetricsLevel(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
         );
     }
 
     /**
-     * Verify that CREATE TABLE works correctly with a valid metrics level (TABLE).
+     * Verify that CREATE TABLE works correctly with a valid
+     * detailed metrics level (TABLE).
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(CreateTableValidMetricsLevelTable) {
-        VerifyCreateTableValidMetricsLevel(
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelTable
+    Y_UNIT_TEST(CreateTableValidDetailedMetricsLevelTable) {
+        VerifyCreateTableValidDetailedMetricsLevel(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
         );
     }
 
     /**
-     * Verify that CREATE TABLE works correctly with a valid metrics level (PARTITION).
+     * Verify that CREATE TABLE works correctly with a valid
+     * detailed metrics level (PARTITION).
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(CreateTableValidMetricsLevelPartition) {
-        VerifyCreateTableValidMetricsLevel(
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelPartition
+    Y_UNIT_TEST(CreateTableValidDetailedMetricsLevelPartition) {
+        VerifyCreateTableValidDetailedMetricsLevel(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
         );
     }
 
     /**
-     * Verify that ALTER TABLE without the metrics level specified works correctly,
-     * when applied to a table, which does not have any metrics settings configured.
+     * Verify that ALTER TABLE without the detailed metrics level specified works correctly,
+     * when applied to a table, which does not have any detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceNoMetricsLevelTargetNoMetricsLevel) {
+    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        // First, create a table without any metrics settings
+        // First, create a table without any detailed metrics settings
         TestCreateTable(
             runtime,
             100,
@@ -305,7 +281,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 100);
 
-        // Second, execute ALTER TABLE without specifying metrics settings
+        // Second, execute ALTER TABLE without specifying detailed metrics settings
         TestAlterTable(
             runtime,
             101,
@@ -318,7 +294,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 101);
 
-        // Make sure the metrics settings are not configured for this table
+        // Make sure the detailed metrics settings are not configured for this table
         VerifyTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/TestTable",
@@ -327,25 +303,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& tableDescription = record.GetPathDescription().GetTable();
 
-                    UNIT_ASSERT(!tableDescription.HasMetricsSettings());
+                    UNIT_ASSERT(!tableDescription.HasDetailedMetricsSettings());
                 },
             }
         );
     }
 
     /**
-     * Verify that ALTER TABLE with the metrics level explicitly removed works correctly.
+     * Verify that ALTER TABLE with the detailed metrics level explicitly removed
+     * works correctly.
      *
-     * @note This functions also verifies that the metrics settings are preserved
+     * @note This functions also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      *
-     * @param[in] sourceHasMetricsLevel Indicates whether the source table has the metrics level configured
+     * @param[in] sourceHasMetricsLevel Indicates whether the source table has
+     *                                  the detailed metrics level configured
      */
-    void VerifyAlterTableRemoveMetricsLevel(bool sourceHasMetricsLevel) {
+    void VerifyAlterTableRemoveDetailedMetricsLevel(bool sourceHasMetricsLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        // First, create a table with or without metrics settings configured
+        // First, create a table with or without detailed metrics settings configured
         TestCreateTable(
             runtime,
             100,
@@ -362,7 +340,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                     Columns { Name: "key"   Type: "Uint64" }
                     Columns { Name: "value" Type: "String" }
                     KeyColumnNames: ["key"]
-                    MetricsSettings {
+                    DetailedMetricsSettings {
                         Configured {
                             MetricsLevel: MetricsLevelPartition
                         }
@@ -372,14 +350,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 100);
 
-        // Second, execute ALTER TABLE with the metrics settings explicitly removed
+        // Second, execute ALTER TABLE with the detailed metrics settings explicitly removed
         TestAlterTable(
             runtime,
             101,
             "/MyRoot",
             R"(
                 Name: "TestTable"
-                MetricsSettings {
+                DetailedMetricsSettings {
                     NotConfigured {
                     }
                 }
@@ -388,7 +366,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 101);
 
-        // Make sure the metrics settings are not configured for this table
+        // Make sure the detailed metrics settings are not configured for this table
         VerifyTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/TestTable",
@@ -397,36 +375,33 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& tableDescription = record.GetPathDescription().GetTable();
 
-                    UNIT_ASSERT(!tableDescription.HasMetricsSettings());
+                    UNIT_ASSERT(!tableDescription.HasDetailedMetricsSettings());
                 },
             }
         );
     }
 
     /**
-     * Verify that ALTER TABLE with the metrics level explicitly removed works correctly,
-     * when applied to a table, which does not have any metrics settings configured.
+     * Verify that ALTER TABLE with the detailed metrics level explicitly removed
+     * works correctly, when applied to a table, which does not have
+     * any detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceNoMetricsLevelTargetRemoveMetricsLevel) {
-        VerifyAlterTableRemoveMetricsLevel(false /* sourceHasMetricsLevel */);
+    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetRemoveDetailedMetricsLevel) {
+        VerifyAlterTableRemoveDetailedMetricsLevel(false /* sourceHasMetricsLevel */);
     }
 
     /**
-     * Verify that ALTER TABLE fails correctly, when the given invalid metrics
-     * level is specified in the request.
-     *
-     * @param[in] metricsLevel The metrics level to verify
+     * Verify that ALTER TABLE fails correctly, when an invalid detailed metrics level
+     * is specified (UNSPECIFIED).
      */
-    void VerifyAlterTableInvalidMetricsLevel(
-        NKikimrSchemeOp::TMetricsSettings::EMetricsLevel metricsLevel
-    ) {
+    Y_UNIT_TEST(AlterTableInvalidDetailedMetricsLevelUnspecified) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        // First, create a table without any metrics settings
+        // First, create a table without any detailed metrics settings
         TestCreateTable(
             runtime,
             100,
@@ -441,67 +416,45 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 100);
 
-        // Second, execute ALTER TABLE with an invalid metrics level
+        // Second, execute ALTER TABLE with an invalid detailed metrics level
         TestAlterTable(
             runtime,
             101,
             "/MyRoot",
-            Sprintf(
-                R"(
-                    Name: "TestTable"
-                    MetricsSettings {
-                        Configured {
-                            MetricsLevel: %s
-                        }
+            R"(
+                Name: "TestTable"
+                DetailedMetricsSettings {
+                    Configured {
+                        MetricsLevel: MetricsLevelUnspecified
                     }
-                )",
-                NKikimrSchemeOp::TMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
-            ),
+                }
+            )",
             {{
                 NKikimrScheme::StatusInvalidParameter,
-                "Only DATABASE, TABLE and PARTITION metrics levels are supported",
+                "Only DISABLED, TABLE and PARTITION detailed metrics levels are supported",
             }}
         );
     }
 
     /**
-     * Verify that ALTER TABLE fails correctly, when an invalid metrics level
-     * is specified (UNSPECIFIED).
-     */
-    Y_UNIT_TEST(AlterTableInvalidMetricsLevelUnspecified) {
-        VerifyAlterTableInvalidMetricsLevel(
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelUnspecified
-        );
-    }
-
-    /**
-     * Verify that ALTER TABLE fails correctly, when an invalid metrics level
-     * is specified (DISABLED).
-     */
-    Y_UNIT_TEST(AlterTableInvalidMetricsLevelDisabled) {
-        VerifyAlterTableInvalidMetricsLevel(
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelDisabled
-        );
-    }
-
-    /**
-     * Verify that ALTER TABLE works correctly, when the given valid metrics
+     * Verify that ALTER TABLE works correctly, when the given valid detailed metrics
      * level is specified in the request.
      *
-     * @note This functions also verifies that the metrics settings are preserved
+     * @note This functions also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      *
-     * @param[in] sourceHasMetricsLevel Indicates whether the source table has the metrics level configured
+     * @param[in] sourceHasMetricsLevel Indicates whether the source table has
+     *                                  the detailed metrics level configured
      * @param[in] metricsLevel The metrics level to verify
      */
-    void VerifyAlterTableValidMetricsLevel(
+    void VerifyAlterTableValidDetailedMetricsLevel(
         bool sourceHasMetricsLevel,
-        NKikimrSchemeOp::TMetricsSettings::EMetricsLevel metricsLevel
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel
     ) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        // First, create a table with or without metrics settings configured
+        // First, create a table with or without detailed metrics settings configured
         TestCreateTable(
             runtime,
             100,
@@ -519,26 +472,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                         Columns { Name: "key"   Type: "Uint64" }
                         Columns { Name: "value" Type: "String" }
                         KeyColumnNames: ["key"]
-                        MetricsSettings {
+                        DetailedMetricsSettings {
                             Configured {
                                 MetricsLevel: %s
                             }
                         }
                     )",
-                    NKikimrSchemeOp::TMetricsSettings::EMetricsLevel_Name(
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(
                         // NOTE: Use any valid level here, but it must be different
                         //       from the requested target level to be able to detect
                         //       the changes after ALTER TABLE is completed
-                        (metricsLevel == NKikimrSchemeOp::TMetricsSettings::MetricsLevelPartition)
-                            ? NKikimrSchemeOp::TMetricsSettings::MetricsLevelTable
-                            : NKikimrSchemeOp::TMetricsSettings::MetricsLevelPartition
+                        (metricsLevel == NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition)
+                            ? NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+                            : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
                     ).c_str()
                   )
         );
 
         env.TestWaitNotification(runtime, 100);
 
-        // Second, execute ALTER TABLE with the metrics settings explicitly specified
+        // Second, execute ALTER TABLE with the detailed metrics settings explicitly specified
         TestAlterTable(
             runtime,
             101,
@@ -546,19 +499,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
             Sprintf(
                 R"(
                     Name: "TestTable"
-                    MetricsSettings {
+                    DetailedMetricsSettings {
                         Configured {
                             MetricsLevel: %s
                         }
                     }
                 )",
-                NKikimrSchemeOp::TMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(metricsLevel).c_str()
             )
         );
 
         env.TestWaitNotification(runtime, 101);
 
-        // Make sure the metrics settings are configured correctly for this table
+        // Make sure the detailed metrics settings are configured correctly for this table
         VerifyTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/TestTable",
@@ -567,18 +520,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 [metricsLevel](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& tableDescription = record.GetPathDescription().GetTable();
 
-                    UNIT_ASSERT(tableDescription.HasMetricsSettings());
+                    UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
 
                     UNIT_ASSERT_EQUAL(
-                        tableDescription.GetMetricsSettings().GetStatusCase(),
-                        NKikimrSchemeOp::TMetricsSettings::kConfigured
+                        tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
                     );
 
-                    UNIT_ASSERT(tableDescription.GetMetricsSettings().HasConfigured());
-                    UNIT_ASSERT(!tableDescription.GetMetricsSettings().HasNotConfigured());
+                    UNIT_ASSERT(tableDescription.GetDetailedMetricsSettings().HasConfigured());
+                    UNIT_ASSERT(!tableDescription.GetDetailedMetricsSettings().HasNotConfigured());
 
                     UNIT_ASSERT_EQUAL(
-                        tableDescription.GetMetricsSettings().GetConfigured().GetMetricsLevel(),
+                        tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
                         metricsLevel
                     );
                 },
@@ -587,59 +540,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
     }
 
     /**
-     * Verify that ALTER TABLE works correctly with a valid metrics level (DATABASE),
-     * when applied to a table, which does not have any metrics settings configured.
+     * Verify that ALTER TABLE works correctly with a valid detailed metrics level (DISABLED),
+     * when applied to a table, which does not have any detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceNoMetricsLevelTargetValidMetricsLevelDatabase) {
-        VerifyAlterTableValidMetricsLevel(
+    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetValidDetailedMetricsLevelDisabled) {
+        VerifyAlterTableValidDetailedMetricsLevel(
             false /* sourceHasMetricsLevel */,
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelDatabase
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
         );
     }
 
     /**
-     * Verify that ALTER TABLE works correctly with a valid metrics level (TABLE),
-     * when applied to a table, which does not have any metrics settings configured.
+     * Verify that ALTER TABLE works correctly with a valid detailed metrics level (TABLE),
+     * when applied to a table, which does not have any detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceNoMetricsLevelTargetValidMetricsLevelTable) {
-        VerifyAlterTableValidMetricsLevel(
+    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetValidDetailedMetricsLevelTable) {
+        VerifyAlterTableValidDetailedMetricsLevel(
             false /* sourceHasMetricsLevel */,
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelTable
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
         );
     }
 
     /**
-     * Verify that ALTER TABLE works correctly with a valid metrics level (PARTITION),
-     * when applied to a table, which does not have any metrics settings configured.
+     * Verify that ALTER TABLE works correctly with a valid detailed metrics level (PARTITION),
+     * when applied to a table, which does not have any detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceNoMetricsLevelTargetValidMetricsLevelPartition) {
-        VerifyAlterTableValidMetricsLevel(
+    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetValidDetailedMetricsLevelPartition) {
+        VerifyAlterTableValidDetailedMetricsLevel(
             false /* sourceHasMetricsLevel */,
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelPartition
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
         );
     }
 
     /**
-     * Verify that ALTER TABLE without the metrics level specified works correctly,
-     * when applied to a table, which has some metrics settings configured.
+     * Verify that ALTER TABLE without the detailed metrics level specified works correctly,
+     * when applied to a table, which has some detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceWithMetricsLevelTargetNoMetricsLevel) {
+    Y_UNIT_TEST(AlterTableSourceWithDetailedMetricsLevelTargetNoDetailedMetricsLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        // First, create a table with some metrics settings configured
+        // First, create a table with some detailed metrics settings configured
         TestCreateTable(
             runtime,
             100,
@@ -649,7 +602,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "String" }
                 KeyColumnNames: ["key"]
-                MetricsSettings {
+                DetailedMetricsSettings {
                     Configured {
                         MetricsLevel: MetricsLevelPartition
                     }
@@ -659,7 +612,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 100);
 
-        // Second, execute ALTER TABLE without specifying metrics settings
+        // Second, execute ALTER TABLE without specifying detailed metrics settings
         TestAlterTable(
             runtime,
             101,
@@ -672,7 +625,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
 
         env.TestWaitNotification(runtime, 101);
 
-        // Make sure the metrics settings are configured correctly for this table
+        // Make sure the detailed metrics settings are configured correctly for this table
         VerifyTableDescriptionAndRestartSchemeShard(
             runtime,
             "/MyRoot/TestTable",
@@ -681,19 +634,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
                 [](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& tableDescription = record.GetPathDescription().GetTable();
 
-                    UNIT_ASSERT(tableDescription.HasMetricsSettings());
+                    UNIT_ASSERT(tableDescription.HasDetailedMetricsSettings());
 
                     UNIT_ASSERT_EQUAL(
-                        tableDescription.GetMetricsSettings().GetStatusCase(),
-                        NKikimrSchemeOp::TMetricsSettings::kConfigured
+                        tableDescription.GetDetailedMetricsSettings().GetStatusCase(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured
                     );
 
-                    UNIT_ASSERT(tableDescription.GetMetricsSettings().HasConfigured());
-                    UNIT_ASSERT(!tableDescription.GetMetricsSettings().HasNotConfigured());
+                    UNIT_ASSERT(tableDescription.GetDetailedMetricsSettings().HasConfigured());
+                    UNIT_ASSERT(!tableDescription.GetDetailedMetricsSettings().HasNotConfigured());
 
                     UNIT_ASSERT_EQUAL(
-                        tableDescription.GetMetricsSettings().GetConfigured().GetMetricsLevel(),
-                        NKikimrSchemeOp::TMetricsSettings::MetricsLevelPartition
+                        tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
                     );
                 },
             }
@@ -701,55 +654,56 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
     }
 
     /**
-     * Verify that ALTER TABLE with the metrics level explicitly removed works correctly,
-     * when applied to a table, which has some metrics settings configured.
+     * Verify that ALTER TABLE with the detailed metrics level explicitly removed
+     * works correctly,  when applied to a table, which has some detailed metrics
+     * settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceWithMetricsLevelTargetRemoveMetricsLevel) {
-        VerifyAlterTableRemoveMetricsLevel(true /* sourceHasMetricsLevel */);
+    Y_UNIT_TEST(AlterTableSourceWithDetailedMetricsLevelTargetRemoveDetailedMetricsLevel) {
+        VerifyAlterTableRemoveDetailedMetricsLevel(true /* sourceHasMetricsLevel */);
     }
 
     /**
-     * Verify that ALTER TABLE works correctly with a valid metrics level (DATABASE),
-     * when applied to a table, which has some metrics settings configured.
+     * Verify that ALTER TABLE works correctly with a valid detailed metrics level (DISABLED),
+     * when applied to a table, which has some detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceWithMetricsLevelTargetValidMetricsLevelDatabase) {
-        VerifyAlterTableValidMetricsLevel(
+    Y_UNIT_TEST(AlterTableSourceWithDetailedMetricsLevelTargetValidDetailedMetricsLevelDisabled) {
+        VerifyAlterTableValidDetailedMetricsLevel(
             true /* sourceHasMetricsLevel */,
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelDatabase
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
         );
     }
 
     /**
-     * Verify that ALTER TABLE works correctly with a valid metrics level (TABLE),
-     * when applied to a table, which has some metrics settings configured.
+     * Verify that ALTER TABLE works correctly with a valid detailed metrics level (TABLE),
+     * when applied to a table, which has some detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceWithMetricsLevelTargetValidMetricsLevelTable) {
-        VerifyAlterTableValidMetricsLevel(
+    Y_UNIT_TEST(AlterTableSourceWithDetailedMetricsLevelTargetValidDetailedMetricsLevelTable) {
+        VerifyAlterTableValidDetailedMetricsLevel(
             true /* sourceHasMetricsLevel */,
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelTable
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
         );
     }
 
     /**
-     * Verify that ALTER TABLE works correctly with a valid metrics level (PARTITION),
-     * when applied to a table, which has some metrics settings configured.
+     * Verify that ALTER TABLE works correctly with a valid detailed metrics level (PARTITION),
+     * when applied to a table, which has some detailed metrics settings configured.
      *
-     * @note This test also verifies that the metrics settings are preserved
+     * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceWithMetricsLevelTargetValidMetricsLevelPartition) {
-        VerifyAlterTableValidMetricsLevel(
+    Y_UNIT_TEST(AlterTableSourceWithDetailedMetricsLevelTargetValidDetailedMetricsLevelPartition) {
+        VerifyAlterTableValidDetailedMetricsLevel(
             true /* sourceHasMetricsLevel */,
-            NKikimrSchemeOp::TMetricsSettings::MetricsLevelPartition
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
         );
     }
 }

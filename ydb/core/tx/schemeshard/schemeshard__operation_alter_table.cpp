@@ -98,7 +98,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         && !copyAlter.HasTTLSettings()
         && !copyAlter.HasReplicationConfig()
         && !copyAlter.HasIncrementalBackupConfig()
-        && !copyAlter.HasMetricsSettings())
+        && !copyAlter.HasDetailedMetricsSettings())
     {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -113,12 +113,12 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         }
     }
 
-    if (copyAlter.HasMetricsSettings()) {
-        // New metrics settings are specified in the request,
-        // make sure the metrics settings are valid (correct metrics level etc)
-        if (!ValidateMetricsSettings(
+    if (copyAlter.HasDetailedMetricsSettings()) {
+        // New detailed metrics settings are specified in the request,
+        // make sure the detailed metrics settings are valid (correct metrics level etc)
+        if (!ValidateTableDetailedMetricsSettings(
             false /* forCreate */,
-            copyAlter.GetMetricsSettings(),
+            copyAlter.GetDetailedMetricsSettings(),
             errStr
         )) {
             status = NKikimrScheme::StatusInvalidParameter;

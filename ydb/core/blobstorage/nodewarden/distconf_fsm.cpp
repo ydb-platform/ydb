@@ -2,6 +2,8 @@
 #include "distconf_quorum.h"
 #include "distconf_invoke.h"
 
+#include <ydb/library/actors/retro_tracing/retro_span.h>
+#include <ydb/library/actors/retro_tracing/span_buffer.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NKikimr::NStorage {
@@ -581,6 +583,10 @@ namespace NKikimr::NStorage {
                 }
                 break;
 
+            case TEvScatter::kDemandRetroTrace:
+                // No async preparation needed — spans are collected synchronously in PerformScatterTask
+                break;
+
             case TEvScatter::REQUEST_NOT_SET:
                 break;
         }
@@ -594,6 +600,10 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kProposeStorageConfig:
                 Perform(task.Response.MutableProposeStorageConfig(), task.Request.GetProposeStorageConfig(), task);
+                break;
+
+            case TEvScatter::kDemandRetroTrace:
+                Perform(task.Request.GetDemandRetroTrace(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -693,6 +703,46 @@ namespace NKikimr::NStorage {
                     }
                 }
             }
+        }
+    }
+
+    void TDistributedConfigKeeper::HandleFlushRetroTraceBatch() {
+        RetroTraceBatchFlushScheduled = false;
+        FlushRetroTraceBatch();
+    }
+
+    void TDistributedConfigKeeper::FlushRetroTraceBatch() {
+        if (PendingRetroTraceIds.empty()) {
+            return;
+        }
+
+        // Issue a scatter task with all accumulated trace IDs
+        TEvScatter task;
+        auto* demandRetroTrace = task.MutableDemandRetroTrace();
+        for (const NWilson::TTraceId& traceId : PendingRetroTraceIds) {
+            traceId.Serialize(demandRetroTrace->AddTraceId());
+        }
+        PendingRetroTraceIds.clear();
+
+        IssueScatterTask(TScatterTaskOriginFsm{}, std::move(task));
+    }
+
+    void TDistributedConfigKeeper::Perform(const TEvScatter::TDemandRetroTrace& request, TScatterTask& /*task*/) {
+        // Deserialize trace IDs from scatter request
+        std::vector<NWilson::TTraceId> traceIds;
+        for (const auto& proto : request.GetTraceId()) {
+            NWilson::TTraceId traceId(proto);
+            if (traceId) {
+                traceIds.push_back(std::move(traceId));
+            }
+        }
+        // Collect matching retro spans from thread-local buffers (single scan)
+        std::vector<std::unique_ptr<NRetroTracing::TRetroSpan>> spans = NRetroTracing::GetSpansOfTraces(traceIds);
+        // Convert to Wilson spans and upload
+        for (const std::unique_ptr<NRetroTracing::TRetroSpan>& span : spans) {
+            std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
+            wilson->Attribute("type", "RETRO");
+            wilson->End();
         }
     }
 

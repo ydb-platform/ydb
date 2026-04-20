@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace NRetroTracing {
 
@@ -48,8 +49,25 @@ public:
         }
     }
 
+    // Hash functor for trace ID portion only (128-bit)
+    struct TTraceIdHash {
+        size_t operator()(const NWilson::TTraceId& id) const {
+            const auto* p = static_cast<const ui64*>(id.GetTraceIdPtr());
+            return std::hash<ui64>()(p[0]) ^ (std::hash<ui64>()(p[1]) << 1);
+        }
+    };
+
+    // Equality functor comparing only the trace portion
+    struct TTraceIdEqual {
+        bool operator()(const NWilson::TTraceId& a, const NWilson::TTraceId& b) const {
+            return a.IsSameTrace(b);
+        }
+    };
+
+    using TTraceIdSet = std::unordered_set<NWilson::TTraceId, TTraceIdHash, TTraceIdEqual>;
+
     std::vector<std::unique_ptr<TRetroSpan>> GetSpans(TBuffer& readBuffer,
-            const NWilson::TTraceId& traceId, bool getAll) {
+            const TTraceIdSet& traceIds, bool getAll) {
         {
             std::lock_guard guard(Lock);
             std::memcpy(
@@ -65,7 +83,7 @@ public:
                 reinterpret_cast<void*>(&spanHeader),
                 ptr,
                 sizeof(TRetroSpan));
-            if (spanHeader.GetTraceId() && (getAll || spanHeader.GetTraceId().IsSameTrace(traceId))) {
+            if (spanHeader.GetTraceId() && (getAll || traceIds.count(spanHeader.GetTraceId()))) {
                 res.push_back(TRetroSpan::DeserializeToUnique(ptr));
             }
         }
@@ -97,13 +115,13 @@ void WriteSpan(const TRetroSpan* span) {
     SpanBuffer->WriteSpan(span);
 }
 
-static std::vector<std::unique_ptr<TRetroSpan>> GetSpans(const NWilson::TTraceId& traceId, bool getAll) {
+static std::vector<std::unique_ptr<TRetroSpan>> GetSpansImpl(const TSpanCircleBuffer::TTraceIdSet& traceIds, bool getAll) {
     static TSpanCircleBuffer::TBuffer readBuffer;
     std::vector<std::unique_ptr<TRetroSpan>> res;
     std::lock_guard guard(Mutex);
     for (const auto& [id, buffer] : SpanBuffers) {
         if (std::shared_ptr<TSpanCircleBuffer> locked = buffer.lock()) {
-            std::vector<std::unique_ptr<TRetroSpan>> spans = locked->GetSpans(readBuffer, traceId, getAll);
+            std::vector<std::unique_ptr<TRetroSpan>> spans = locked->GetSpans(readBuffer, traceIds, getAll);
             std::move(spans.begin(), spans.end(), std::back_inserter(res));
         }
     }
@@ -111,11 +129,18 @@ static std::vector<std::unique_ptr<TRetroSpan>> GetSpans(const NWilson::TTraceId
 }
 
 std::vector<std::unique_ptr<TRetroSpan>> GetSpansOfTrace(const NWilson::TTraceId& traceId) {
-    return GetSpans(traceId, false);
+    TSpanCircleBuffer::TTraceIdSet traceIds;
+    traceIds.insert(NWilson::TTraceId(traceId));
+    return GetSpansImpl(traceIds, false);
+}
+
+std::vector<std::unique_ptr<TRetroSpan>> GetSpansOfTraces(const std::vector<NWilson::TTraceId>& traceIds) {
+    TSpanCircleBuffer::TTraceIdSet traceIdSet(traceIds.begin(), traceIds.end());
+    return GetSpansImpl(traceIdSet, false);
 }
 
 std::vector<std::unique_ptr<TRetroSpan>> GetAllSpans() {
-    return GetSpans({}, true);
+    return GetSpansImpl({}, true);
 }
 
 void DropThreadLocalBuffer() {

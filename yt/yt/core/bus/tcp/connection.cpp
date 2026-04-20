@@ -1237,10 +1237,8 @@ bool TTcpConnection::OnPacketReceived() noexcept
             YT_LOG_ERROR("Packet of unknown type received, ignored (PacketId: %v, PacketType: %v)",
                 Decoder_->GetPacketId(),
                 Decoder_->GetPacketType());
-            break;
+            return true;
     }
-
-    return false;
 }
 
 bool TTcpConnection::OnAckPacketReceived()

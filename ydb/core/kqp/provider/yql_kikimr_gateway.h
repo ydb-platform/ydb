@@ -729,8 +729,6 @@ struct TKikimrTableMetadata : public TThrRefBase {
 
     TVector<TString> PartitionedByColumns;
 
-    TVector<NKikimrSchemeOp::TOlapIndexDescription> OlapIndexes;
-
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
         , Name(table)

@@ -20,6 +20,30 @@ bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, co
 
 } // namespace
 
+std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
+    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
+    const IIndexMeta& existingMeta) const {
+    if (!ColumnName.empty()) {
+        return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+    }
+
+    const auto colId = existingMeta.GetSingleColumnId();
+    if (!colId) {
+        errors.AddError("existing index has no single column; cannot determine column for ALTER INDEX");
+        return nullptr;
+    }
+
+    const auto* col = currentSchema.GetColumns().GetById(*colId);
+    if (!col) {
+        errors.AddError(TStringBuilder() << "column id " << *colId << " not found in schema for ALTER INDEX");
+        return nullptr;
+    }
+
+    TIndexConstructor patched = *this;
+    patched.ColumnName = col->GetName();
+    return patched.DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+}
+
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
@@ -43,10 +67,6 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
 TConclusionStatus TIndexConstructor::ValidateValues() const {
     if (auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize); conclusion.IsFail()) {
         return conclusion;
-    }
-
-    if (!ColumnName) {
-        return TConclusionStatus::Fail("empty column name");
     }
 
     return TConclusionStatus::Success();

@@ -2634,134 +2634,52 @@ public:
                             return SyncError();
                         }
 
-                        const NKikimrSchemeOp::TOlapIndexDescription* olapIndex = nullptr;
-                        for (auto&& candidate : table.Metadata->OlapIndexes) {
-                            if (candidate.GetName() == alterIndexName) {
-                                olapIndex = &candidate;
-                                break;
-                            }
-                        }
+                        TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
+                        TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                        bool useBloomFilter = false;
 
-                        if (!olapIndex) {
-                            ctx.AddError(
-                                YqlIssue(ctx.GetPosition(action.Name().Pos()),
-                                    TIssuesIds::KIKIMR_SCHEME_ERROR,
-                                    TStringBuilder() << "Unknown index name: " << alterIndexName));
-                            return SyncError();
-                        }
-
-                        auto resolveColumnName = [&](ui32 columnId, TPositionHandle errPos) -> std::optional<TString> {
-                            for (auto&& [colName, colMeta] : table.Metadata->Columns) {
-                                if (colMeta.Id == columnId) {
-                                    return colName;
+                        const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
+                        for (auto&& is : alterIndexSettings) {
+                            YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                            const auto& nameAtom = is.Name();
+                            const auto& valueAtom = is.Value().Cast<TCoAtom>();
+                            TString ngramErr;
+                            FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), ngramErr);
+                            if (ngramErr) {
+                                TString bloomErr;
+                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), bloomErr);
+                                if (bloomErr) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), ngramErr));
+                                    return SyncError();
                                 }
-                            }
 
-                            ctx.AddError(TIssue(ctx.GetPosition(errPos),
-                                TStringBuilder() << "Unknown column id " << columnId << " for OLAP index " << alterIndexName));
-                            return std::nullopt;
-                        };
+                                useBloomFilter = true;
+                            }
+                        }
 
                         auto add_index = alterTableRequest.add_add_indexes();
                         add_index->set_name(alterIndexName);
 
-                        if (olapIndex->HasBloomNGrammFilter()) {
+                        if (!useBloomFilter) {
                             if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom ngram filter index support is disabled"));
                                 return SyncError();
                             }
 
-                            add_index->mutable_local_bloom_ngram_filter_index();
-                            const auto& bf = olapIndex->GetBloomNGrammFilter();
-                            if (!bf.HasColumnId()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                    TStringBuilder() << "OLAP index " << alterIndexName << " has no column id"));
-                                return SyncError();
-                            }
-
-                            const auto colName = resolveColumnName(bf.GetColumnId(), action.Name().Pos());
-                            if (!colName) {
-                                return SyncError();
-                            }
-
-                            add_index->add_index_columns(*colName);
-
-                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
-                            if (bf.HasNGrammSize()) {
-                                localBloomNgramFilterDesc.NgramSize = bf.GetNGrammSize();
-                            }
-
-                            if (bf.HasFalsePositiveProbability()) {
-                                localBloomNgramFilterDesc.FalsePositiveProbability = bf.GetFalsePositiveProbability();
-                            }
-
-                            if (bf.HasCaseSensitive()) {
-                                localBloomNgramFilterDesc.CaseSensitive = bf.GetCaseSensitive();
-                            }
-
-                            const auto alterIndexIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
-                            for (auto&& is : alterIndexIndexSettings) {
-                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
-                                const auto& nameAtom = is.Name();
-                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
-                                TString err;
-                                FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), err);
-                                if (err) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), err));
-                                    return SyncError();
-                                }
-                            }
-
                             auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
                             applyLocalBloomFilterIndex(proto, localBloomNgramFilterDesc);
-                        } else if (olapIndex->HasBloomFilter()) {
+                        } else {
                             if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom filter index support is disabled"));
                                 return SyncError();
                             }
 
-                            add_index->mutable_local_bloom_filter_index();
-                            const auto& bloom = olapIndex->GetBloomFilter();
-                            if (bloom.GetColumnIds().empty()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                    TStringBuilder() << "OLAP index " << alterIndexName << " has no columns"));
-                                return SyncError();
-                            }
-
-                            const auto colName = resolveColumnName(bloom.GetColumnIds(0), action.Name().Pos());
-                            if (!colName) {
-                                return SyncError();
-                            }
-
-                            add_index->add_index_columns(*colName);
-
-                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
-                            if (bloom.HasFalsePositiveProbability()) {
-                                localBloomFilterDesc.FalsePositiveProbability = bloom.GetFalsePositiveProbability();
-                            }
-
-                            const auto alterIndexIndexSettingsBloom = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
-                            for (auto&& is : alterIndexIndexSettingsBloom) {
-                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
-                                const auto& nameAtom = is.Name();
-                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
-                                TString err;
-                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), err);
-                                if (err) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), err));
-                                    return SyncError();
-                                }
-                            }
-
                             auto* proto = add_index->mutable_local_bloom_filter_index();
-                            const double fpp = localBloomFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
-                            proto->set_false_positive_probability(fpp);
-                        } else {
-                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                "ALTER INDEX is supported for local bloom and bloom ngram indexes on column tables"));
-                            return SyncError();
+                            if (localBloomFilterDesc.FalsePositiveProbability) {
+                                proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                            }
                         }
                     } else {
                         const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {

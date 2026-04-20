@@ -45,6 +45,18 @@ $gim_latest = (
     WHERE g_rnk.rn = 1
 );
 
+$mfu = (
+    SELECT
+        full_name AS full_name,
+        branch AS branch,
+        build_type AS build_type,
+        github_issue_number AS mfu_issue_number,
+        requested_at AS mfu_since,
+        window_days AS mfu_window_days,
+        requested_at + 2 * window_days * Interval("P1D") AS mfu_expires_at
+    FROM `test_results/analytics/mute_manual_unmute`
+);
+
 SELECT
     tm.state_filtered AS state_filtered,
     tm.test_name AS test_name,
@@ -95,7 +107,12 @@ SELECT
     gim.github_issue_state AS github_issue_state,
     gim.github_issue_created_at AS github_issue_created_at,
     gim.area_override AS area_override,
-    gim.area_override_since AS area_override_since
+    gim.area_override_since AS area_override_since,
+    CAST(CASE WHEN mfu.full_name IS NOT NULL THEN 1 ELSE 0 END AS Uint8) AS is_manual_fast_unmute,
+    mfu.mfu_since AS manual_fast_unmute_since,
+    mfu.mfu_window_days AS manual_fast_unmute_window_days,
+    mfu.mfu_expires_at AS manual_fast_unmute_expires_at,
+    mfu.mfu_issue_number AS manual_fast_unmute_issue_number
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN $area_fallback AS af
     ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team
@@ -103,6 +120,10 @@ LEFT JOIN $gim_latest AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
     AND tm.build_type = gim.build_type
+LEFT JOIN $mfu AS mfu
+    ON tm.full_name = mfu.full_name
+    AND tm.branch = mfu.branch
+    AND tm.build_type = mfu.build_type
 WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
     AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%')
     AND tm.is_test_chunk = 0;

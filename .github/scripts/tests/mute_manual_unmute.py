@@ -33,6 +33,11 @@ from update_mute_issues import (
     run_query,
 )
 
+
+LABEL_NAME = 'manual-fast-unmute'
+
+_LABEL_ID_CACHE = {}
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
 
@@ -121,6 +126,7 @@ def create_manual_unmute_table(ydb_wrapper, table_path):
         `build_type`           Utf8      NOT NULL,
         `github_issue_number`  Uint64    NOT NULL,
         `requested_at`         Timestamp NOT NULL,
+        `window_days`          Uint32    NOT NULL,
         PRIMARY KEY (full_name, branch, build_type)
     )
     WITH (STORE = COLUMN)
@@ -130,10 +136,26 @@ def create_manual_unmute_table(ydb_wrapper, table_path):
 
 def fetch_all_rows(ydb_wrapper, table_path):
     query = f"""
-    SELECT full_name, branch, build_type, github_issue_number, requested_at
+    SELECT full_name, branch, build_type, github_issue_number, requested_at, window_days
     FROM `{table_path}`
     """
     return ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_fetch_all')
+
+
+def count_rows_per_issue(ydb_wrapper, table_path, issue_numbers):
+    """Return {issue_number: remaining_row_count} for the given issues."""
+    numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
+    if not numbers:
+        return {}
+    in_list = ','.join(str(n) for n in numbers)
+    query = f"""
+    SELECT github_issue_number AS n, COUNT(*) AS c
+    FROM `{table_path}`
+    WHERE github_issue_number IN ({in_list})
+    GROUP BY github_issue_number
+    """
+    rows = ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_count_remaining')
+    return {int(r['n']): int(r['c']) for r in rows if r.get('n') is not None}
 
 
 def fetch_candidate_issues(ydb_wrapper, issues_table_path, lookback_days):
@@ -255,6 +277,70 @@ def reopen_issue(issue_id):
     run_query(mutation, {'issueId': issue_id})
 
 
+def _get_label_id():
+    """Resolve the pre-created label node id (cached). Returns None if missing."""
+    if LABEL_NAME in _LABEL_ID_CACHE:
+        return _LABEL_ID_CACHE[LABEL_NAME]
+
+    query = """
+    query ($owner: String!, $name: String!, $labelName: String!) {
+      repository(owner: $owner, name: $name) {
+        label(name: $labelName) { id }
+      }
+    }
+    """
+    result = run_query(
+        query,
+        {'owner': ORG_NAME, 'name': REPO_NAME, 'labelName': LABEL_NAME},
+    )
+    label = (((result.get('data') or {}).get('repository') or {}).get('label') or {})
+    label_id = label.get('id')
+    if not label_id:
+        logging.warning(
+            "Label %r not found in %s/%s — create it manually in the repository labels page",
+            LABEL_NAME, ORG_NAME, REPO_NAME,
+        )
+        return None
+    _LABEL_ID_CACHE[LABEL_NAME] = label_id
+    return label_id
+
+
+def add_label_to_issue(issue_id):
+    """Attach the fast-unmute label. Idempotent — GitHub ignores duplicates."""
+    label_id = _get_label_id()
+    if not label_id:
+        return
+    mutation = """
+    mutation ($labelableId: ID!, $labelIds: [ID!]!) {
+      addLabelsToLabelable(input: {labelableId: $labelableId, labelIds: $labelIds}) {
+        labelable { __typename }
+      }
+    }
+    """
+    try:
+        run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
+    except Exception as exc:
+        logging.warning('Failed to add label to issue %s: %s', issue_id, exc)
+
+
+def remove_label_from_issue(issue_id):
+    """Detach the fast-unmute label. No-op if label is not present."""
+    label_id = _get_label_id()
+    if not label_id:
+        return
+    mutation = """
+    mutation ($labelableId: ID!, $labelIds: [ID!]!) {
+      removeLabelsFromLabelable(input: {labelableId: $labelableId, labelIds: $labelIds}) {
+        labelable { __typename }
+      }
+    }
+    """
+    try:
+        run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
+    except Exception as exc:
+        logging.warning('Failed to remove label from issue %s: %s', issue_id, exc)
+
+
 def upsert_rows(ydb_wrapper, table_path, rows):
     if not rows:
         return
@@ -265,6 +351,7 @@ def upsert_rows(ydb_wrapper, table_path, rows):
         .add_column('build_type', ydb.PrimitiveType.Utf8)
         .add_column('github_issue_number', ydb.PrimitiveType.Uint64)
         .add_column('requested_at', ydb.PrimitiveType.Timestamp)
+        .add_column('window_days', ydb.PrimitiveType.Uint32)
     )
     ydb_wrapper.bulk_upsert(table_path, rows, column_types)
 
@@ -348,6 +435,7 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                     'build_type': build_type,
                     'github_issue_number': issue_number,
                     'requested_at': now,
+                    'window_days': window_days,
                 })
 
         if not issue_rows:
@@ -364,6 +452,7 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                 workflow_run_url=run_url,
             ),
         )
+        add_label_to_issue(issue_id)
 
         new_rows.extend(issue_rows)
         for row in issue_rows:
@@ -374,14 +463,18 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                  len(new_rows), len(candidates))
 
 
-def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, window_days):
-    """Drop rows that have served their purpose, failed, or expired."""
+def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_window_days):
+    """Drop rows that have served their purpose, failed, or expired.
+
+    TTL is computed from the ``window_days`` stored on each row (the value
+    captured at enter time). ``default_window_days`` is used only as a fallback
+    for rows without a stored value (e.g. legacy rows).
+    """
     rows = fetch_all_rows(ydb_wrapper, table_path)
     if not rows:
         return
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
-    ttl = datetime.timedelta(days=window_days * 2)
     run_url = workflow_run_url()
 
     grouped = {}
@@ -392,12 +485,19 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, window_da
         grouped.setdefault(key, []).append(row)
 
     fails_by_issue = {}
+    affected_issues = set()
     delete_count = 0
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
         full_names = {r.get('full_name') for r in group_rows if r.get('full_name')}
+        # Failure check window is the widest stored window in this group; this
+        # catches fails for any test regardless of its individual window length.
+        check_window = max(
+            (int(r.get('window_days') or default_window_days) for r in group_rows),
+            default=default_window_days,
+        )
         failures = fetch_failures_since(
-            ydb_wrapper, tests_monitor_path, branch, build_type, full_names, window_days
+            ydb_wrapper, tests_monitor_path, branch, build_type, full_names, check_window
         )
 
         for row in group_rows:
@@ -406,28 +506,38 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, window_da
                 continue
             requested_at = _coerce_dt(row.get('requested_at'))
             issue_number = row.get('github_issue_number')
+            row_window = int(row.get('window_days') or default_window_days)
+            ttl = datetime.timedelta(days=row_window * 2)
 
             if full_name not in currently_muted:
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
+                if issue_number:
+                    affected_issues.add(int(issue_number))
                 logging.info('manual_unmute_cleanup: %s (already unmuted)', full_name)
                 continue
 
             if failures.get(full_name, 0) > 0:
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
-                logging.info('manual_unmute_cleanup: %s (failed during window)', full_name)
                 if issue_number:
+                    affected_issues.add(int(issue_number))
                     fails_by_issue.setdefault(int(issue_number), []).append(full_name)
+                logging.info('manual_unmute_cleanup: %s (failed during window)', full_name)
                 continue
 
             if requested_at and (now - requested_at) > ttl:
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
+                if issue_number:
+                    affected_issues.add(int(issue_number))
                 logging.info('manual_unmute_cleanup: %s (window expired)', full_name)
 
-    if fails_by_issue:
-        issue_ids = _fetch_issue_node_ids(fails_by_issue.keys())
+    if affected_issues:
+        remaining = count_rows_per_issue(ydb_wrapper, table_path, affected_issues)
+        issues_to_delabel = {num for num in affected_issues if remaining.get(num, 0) == 0}
+        issue_ids = _fetch_issue_node_ids(affected_issues)
+
         for issue_number, failed_tests in fails_by_issue.items():
             issue_id = issue_ids.get(issue_number)
             if not issue_id:
@@ -439,6 +549,11 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, window_da
                     workflow_run_url=run_url,
                 ),
             )
+
+        for issue_number in issues_to_delabel:
+            issue_id = issue_ids.get(issue_number)
+            if issue_id:
+                remove_label_from_issue(issue_id)
 
     logging.info('manual_unmute_cleanup: removed %d row(s)', delete_count)
 

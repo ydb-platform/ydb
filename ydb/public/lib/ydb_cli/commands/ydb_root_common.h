@@ -99,7 +99,6 @@ private:
 
     TString ProfileName;
     TString ProfileFile;
-    TString AiProfileFile;
     std::shared_ptr<IProfile> Profile;
     std::shared_ptr<IProfileManager> ProfileManager;
 

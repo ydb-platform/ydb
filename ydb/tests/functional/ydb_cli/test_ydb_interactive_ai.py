@@ -233,16 +233,18 @@ class BaseAiInteractiveTest(BaseInteractiveTest):
         return path
 
     @classmethod
-    def spawn_interactive(cls, timeout=15, extra_args=None, env_name="YDB_CLI_WITH_ENABLED_AI_BINARY", env=None):
+    def spawn_interactive(cls, timeout=15, extra_args=None, profile_path=None, env_name="YDB_CLI_WITH_ENABLED_AI_BINARY", env=None):
         if env is None:
             env = os.environ.copy()
         env["YDB_CLI_TEST_AI_PORT"] = str(cls.mock_server.port)
+        if profile_path:
+            env["YDB_CLI_AI_PROFILE_FILE"] = profile_path
         return super().spawn_interactive(timeout, extra_args, env_name, env=env)
 
     def spawn_ai_interactive(self, api_type="openai", timeout=15):
         """Spawn the AI-enabled CLI binary in AI mode."""
         profile_path = self._create_ai_profile(api_type)
-        return self.spawn_interactive(timeout, ["--ai-profile-file", profile_path])
+        return self.spawn_interactive(timeout, profile_path=profile_path)
 
     # ------------------------------------------------------------------
     # FTXUI navigation helpers
@@ -913,7 +915,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
     def test_welcome_on_empty_config(self):
         profile_path = self._create_minimal_ai_config()
-        child = self.spawn_interactive(timeout=15, extra_args=["--ai-profile-file", profile_path])
+        child = self.spawn_interactive(timeout=15, profile_path=profile_path)
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             child.expect("AI.*interactive mode", timeout=10)
@@ -941,7 +943,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
     def test_switch_yql_to_ai(self):
         profile_path = str(self.tmp_path / "ai_profile.yaml")
-        child = self.spawn_interactive(timeout=15, extra_args=["--ai-profile-file", profile_path])
+        child = self.spawn_interactive(timeout=15, profile_path=profile_path)
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_yql_prompt(child)
@@ -1057,7 +1059,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         from the default preset and enters AI mode."""
         self.mock_server.set_openai_response("preset auto-created ok")
         profile_path = self._create_minimal_ai_config()
-        child = self.spawn_interactive(timeout=15, extra_args=["--ai-profile-file", profile_path])
+        child = self.spawn_interactive(timeout=15, profile_path=profile_path)
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             child.expect("AI", timeout=10)
@@ -1089,7 +1091,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         YAML file contains all expected keys with correct values."""
         self.mock_server.set_openai_response("ok")
         profile_path = self._create_minimal_ai_config()
-        child = self.spawn_interactive(timeout=15, extra_args=["--ai-profile-file", profile_path])
+        child = self.spawn_interactive(timeout=15, profile_path=profile_path)
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_ai_prompt(child)
@@ -1456,7 +1458,7 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         to ``"test_token"`` and is sent as the Bearer token."""
         self.mock_server.set_openai_response("token check ok")
         profile_path = self._create_minimal_ai_config()
-        child = self.spawn_interactive(timeout=15, extra_args=["--ai-profile-file", profile_path])
+        child = self.spawn_interactive(timeout=15, profile_path=profile_path)
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_ai_prompt(child)

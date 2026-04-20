@@ -636,11 +636,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
-    if (config.EnableAiInteractive) {
-        opts.AddLongOption("ai-profile-file", "Path to config file with AI profile data in yaml format")
-            .RequiredArgument("PATH").StoreResult(&AiProfileFile);
-    }
-
     opts.SetAuthMethodsEnvPriority(
         iamTokenAuth,
         ycTokenAuth,
@@ -690,8 +685,8 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     }
 
     if (config.EnableAiInteractive) {
-        if (AiProfileFile) {
-            config.AiProfileFile = TFsPath(AiProfileFile).RealLocation().GetPath();
+        if (const auto& aiProfileFile = GetEnv("YDB_CLI_AI_PROFILE_FILE")) {
+            config.AiProfileFile = TFsPath(aiProfileFile).RealLocation().GetPath();
         }
 
         if (TFsPath(config.AiProfileFile).Exists() && !TFsPath(config.AiProfileFile).IsFile()) {

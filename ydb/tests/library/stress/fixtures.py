@@ -17,7 +17,7 @@ class StressFixture:
 
         self.base_duration = yatest.common.get_param('stress_default_duration', default='60')
 
-    def setup_cluster(self, erasure=None, create_serverless_databases=True, **kwargs):
+    def setup_cluster(self, erasure=None, create_serverless_databases=False, **kwargs):
         erasure = erasure or self.base_erasure
         self.config = KikimrConfigGenerator(
             binary_paths=self.all_binary_paths,
@@ -49,6 +49,12 @@ class StressFixture:
         yield
         self.driver.stop()
         self.cluster.stop()
+
+    def get_kafka_api_ports(self):
+        ports = []
+        for node in self.cluster.nodes.values():
+            ports.append(node.kafka_api_port)
+        return ports
 
     def _create_serverless_databases(self):
         timeout_seconds = 30

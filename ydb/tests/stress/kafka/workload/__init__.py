@@ -27,7 +27,8 @@ class Workload(unittest.TestCase):
         self.duration = duration
         self.tmp_dirs = []
         self.archive_path = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
-        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
+        # self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
+        self.jar_path = "/home/nerhneiro/ydb/ydb/tests/stress/kafka/e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
@@ -52,9 +53,11 @@ class Workload(unittest.TestCase):
         if not os.path.exists(TEST_FILES_DIRECTORY):
             os.makedirs(TEST_FILES_DIRECTORY)
 
-        urllib.request.urlretrieve(self.jar_path, TEST_FILES_DIRECTORY + JAR_FILE_NAME)
+        # urllib.request.urlretrieve(self.jar_path, TEST_FILES_DIRECTORY + JAR_FILE_NAME)
         urllib.request.urlretrieve(self.archive_path, TEST_FILES_DIRECTORY + JDK_FILE_NAME)
-        os.chmod(TEST_FILES_DIRECTORY + JAR_FILE_NAME, 0o777)
+        # os.chmod(TEST_FILES_DIRECTORY + JAR_FILE_NAME, 0o777)
+        # time.sleep(1000000)
+        os.chmod(self.jar_path, 0o777)
         os.chmod(TEST_FILES_DIRECTORY + JDK_FILE_NAME, 0o777)
 
         tar = tarfile.open(TEST_FILES_DIRECTORY + JDK_FILE_NAME, "r:gz")
@@ -65,7 +68,8 @@ class Workload(unittest.TestCase):
         os.chmod(TEST_FILES_DIRECTORY + 'lib/server/classes_nocoops.jsa', 0o777)
 
         java_path = TEST_FILES_DIRECTORY + "/bin/java"
-        jar_file_path = TEST_FILES_DIRECTORY + JAR_FILE_NAME
+        jar_file_path = self.jar_path
+        # jar_file_path = TEST_FILES_DIRECTORY + JAR_FILE_NAME
 
         workloadConsumerName = self.workload_consumer_name
 
@@ -73,11 +77,31 @@ class Workload(unittest.TestCase):
         testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
         checkerConsumer = "targetCheckerConsumer"
         self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer] + [f"{checkerConsumer}-{i}" for i in range(len(testOptions))])
-
+        #  ydb -e grpc://HOST:2136 -d /Root/testdb yql -s \ "CREATE USER ivanov PASSWORD \"passw0rd\""
         print("Running workload topic run")
+        user_creation_command = "CREATE USER iwgrnkn PASSWORD 'abrengo'"
+        command = f"{self.cli_path} -e {self.endpoint} -d {self.database} yql -s {user_creation_command}"
+        print("Running user creation:", command)
+        # user_creation = subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "yql", "-s", user_creation_command])
+        # user_creation.wait()
+        # result = subprocess.run([self.cli_path, "-e", self.endpoint, "-d", self.database, "yql", "-s", user_creation_command], capture_output=True, text=True)
+        # print("User creation result:", result.stdout)
+        # # os.popen(command).read()
+        # result1 = subprocess.run(, capture_output=True, text=True)
+        # print("Whoami result:", result1.stdout)
+        processes = [
+            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "yql", "-s", user_creation_command]),
+            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "scheme", "permissions", "grant", "-p", "ydb.generic.full", self.database, "iwgrnkn"])
+        ]
+        processes[0].wait()
+        print("Created user")
+        processes[1].wait()
+        print("Granted access")
+
         processes = [
             subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write", "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"])
         ]
+
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
 
@@ -87,8 +111,8 @@ class Workload(unittest.TestCase):
             self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
             for j in range(self.num_workers):
                 processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap,
-                                                   f"streams-store-{i * self.num_workers + j}", self.database + "/" + self.test_topic_path,
-                                                   self.database + "/" + targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
+                                                   f"streams-store-{i * self.num_workers + j}", self.test_topic_path,
+                                                   targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
         processes[0].wait()
         assert processes[0].returncode == 0
 

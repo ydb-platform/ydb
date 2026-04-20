@@ -121,6 +121,8 @@ namespace TEvSchemeShard {
         EvForceAdvanceSubscriberResult,
         EvUnregisterSubscriber,
         EvUnregisterSubscriberResult,
+        EvFetchSchemeChangeRecordBodies,
+        EvFetchSchemeChangeRecordBodiesResult,
         EvWakeupToRunSchemeChangeRecordsCleanup,
 
         EvEnd
@@ -764,6 +766,10 @@ namespace TEvSchemeShard {
         NKikimrSchemeShard::TEvUnregisterSubscriber, EvUnregisterSubscriber> {};
     struct TEvUnregisterSubscriberResult : public TEventPB<TEvUnregisterSubscriberResult,
         NKikimrSchemeShard::TEvUnregisterSubscriberResult, EvUnregisterSubscriberResult> {};
+    struct TEvFetchSchemeChangeRecordBodies : public TEventPB<TEvFetchSchemeChangeRecordBodies,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecordBodies, EvFetchSchemeChangeRecordBodies> {};
+    struct TEvFetchSchemeChangeRecordBodiesResult : public TEventPB<TEvFetchSchemeChangeRecordBodiesResult,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecordBodiesResult, EvFetchSchemeChangeRecordBodiesResult> {};
 };
 
 }

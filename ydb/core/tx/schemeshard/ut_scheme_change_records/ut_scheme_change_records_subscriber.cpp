@@ -188,6 +188,75 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
     }
 
+    Y_UNIT_TEST(FetchReturnsMetadataWithoutBody) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "meta:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto fetch = FetchSchemeChangeRecords(runtime, "meta:sub", 0, 100, fetchHandle);
+        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT(fetch->Record.EntriesSize() >= 1);
+        for (int i = 0; i < (int)fetch->Record.EntriesSize(); ++i) {
+            const auto& entry = fetch->Record.GetEntries(i);
+            UNIT_ASSERT_C(entry.GetBodySize() > 0,
+                "Metadata should include non-zero BodySize for entry " << entry.GetSequenceId());
+        }
+    }
+
+    Y_UNIT_TEST(FetchBodiesReturnsRequestedBodies) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "body:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto fetch = FetchSchemeChangeRecords(runtime, "body:sub", 0, 100, fetchHandle);
+        UNIT_ASSERT(fetch->Record.EntriesSize() >= 1);
+
+        TVector<ui64> orders;
+        for (int i = 0; i < (int)fetch->Record.EntriesSize(); ++i) {
+            orders.push_back(fetch->Record.GetEntries(i).GetSequenceId());
+        }
+
+        TAutoPtr<IEventHandle> bodiesHandle;
+        auto bodies = FetchSchemeChangeRecordBodies(runtime, "body:sub", orders, bodiesHandle);
+        UNIT_ASSERT_VALUES_EQUAL(bodies->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(bodies->Record.EntriesSize(), orders.size());
+        for (int i = 0; i < (int)bodies->Record.EntriesSize(); ++i) {
+            UNIT_ASSERT(!bodies->Record.GetEntries(i).GetBody().empty());
+        }
+    }
+
+    Y_UNIT_TEST(FetchBodiesUnregisteredSubscriberRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TVector<ui64> orders = {1, 2, 3};
+        TAutoPtr<IEventHandle> bodiesHandle;
+        auto bodies = FetchSchemeChangeRecordBodies(runtime, "ghost:sub", orders, bodiesHandle);
+        UNIT_ASSERT_VALUES_EQUAL(bodies->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
+    }
+
     Y_UNIT_TEST(AckDeletesAckedRecordsInline) {
         // Phase 3 invariant: Ack tx deletes records (up to ReactiveCleanupCap)
         // in the same transaction. No manual wakeup / background sweep needed.

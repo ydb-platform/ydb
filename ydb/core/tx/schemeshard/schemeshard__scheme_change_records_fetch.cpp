@@ -122,20 +122,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             entry->SetSchemaVersion(rowset.GetValue<Schema::SchemeChangeRecords::SchemaVersion>());
             entry->SetCompletedAt(rowset.GetValue<Schema::SchemeChangeRecords::CompletedAt>());
             entry->SetPlanStep(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PlanStep>(0));
-
-            // Read body from details table (stored separately for precharge efficiency)
-            {
-                auto detailsRowset = db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Select();
-                if (!detailsRowset.IsReady()) {
-                    return false;
-                }
-                if (detailsRowset.IsValid()) {
-                    TString body = detailsRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>();
-                    if (!body.empty()) {
-                        entry->SetBody(body);
-                    }
-                }
-            }
+            entry->SetBodySize(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::BodySize>(0));
 
             lastSeqId = seqId;
             ++count;
@@ -357,6 +344,63 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
     }
 };
 
+struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr Request;
+    THolder<TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult> Result;
+
+    TTxFetchSchemeChangeRecordBodies(TSchemeShard* self, TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev)
+        : TTransactionBase(self)
+        , Request(ev)
+        , Result(MakeHolder<TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult>())
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        const auto& record = Request->Get()->Record;
+        TString subscriberId = record.GetSubscriberId();
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        // Subscriber-gated: reject unknown subscribers. Bodies are sensitive;
+        // anonymous consumers must not pull them. Subscribers that lose their
+        // registration between Fetch and FetchBodies must re-register first.
+        if (!Self->Subscribers.contains(subscriberId)) {
+            Result->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+            Result->Record.SetReason("Subscriber not registered: " + subscriberId);
+            return true;
+        }
+
+        for (ui64 seqId : record.GetSequenceIds()) {
+            // Skip records not present in metadata table (already cleaned up).
+            auto metaRowset = db.Table<Schema::SchemeChangeRecords>().Key(seqId).Select();
+            if (!metaRowset.IsReady()) {
+                return false;
+            }
+            if (!metaRowset.IsValid()) {
+                continue;
+            }
+
+            auto detailsRowset = db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Select();
+            if (!detailsRowset.IsReady()) {
+                return false;
+            }
+
+            auto* entry = Result->Record.AddEntries();
+            entry->SetSequenceId(seqId);
+            if (detailsRowset.IsValid()) {
+                entry->SetBody(detailsRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>());
+            }
+            // else: metadata present but no body row -> empty body entry.
+        }
+
+        Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Request->Sender, Result.Release());
+    }
+};
+
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUnregisterSubscriber(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev) {
     return new TTxUnregisterSubscriber(this, ev);
 }
@@ -387,6 +431,14 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev,
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxAckSchemeChangeRecords(ev), ctx);
+}
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxFetchSchemeChangeRecordBodies(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev) {
+    return new TTxFetchSchemeChangeRecordBodies(this, ev);
+}
+
+void TSchemeShard::Handle(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxFetchSchemeChangeRecordBodies(ev), ctx);
 }
 
 } // namespace NKikimr::NSchemeShard

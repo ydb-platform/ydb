@@ -78,6 +78,22 @@ inline TEvSchemeShard::TEvUnregisterSubscriberResult* UnregisterSubscriber(
     return result;
 }
 
+inline TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult* FetchSchemeChangeRecordBodies(
+    TTestActorRuntime& runtime, const TString& subscriberId, const TVector<ui64>& seqIds,
+    TAutoPtr<IEventHandle>& handle)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    auto req = MakeHolder<TEvSchemeShard::TEvFetchSchemeChangeRecordBodies>();
+    req->Record.SetSubscriberId(subscriberId);
+    for (ui64 seqId : seqIds) {
+        req->Record.AddSequenceIds(seqId);
+    }
+    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
+    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult>(handle);
+    UNIT_ASSERT(result);
+    return result;
+}
+
 struct TSchemeChangeRecordEntry {
     ui64 SequenceId = 0;
     ui64 TxId = 0;
@@ -108,13 +124,14 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
     TAutoPtr<IEventHandle> regHandle;
     RegisterSubscriber(runtime, tempSubId, regHandle);
 
-    // Fetch all records
+    // Step 1: Fetch metadata only (body is no longer returned by Fetch).
     TAutoPtr<IEventHandle> fetchHandle;
     auto* fetch = FetchSchemeChangeRecords(runtime, tempSubId, 0, 1000, fetchHandle);
 
     TSchemeChangeRecordsReadResult result;
     result.MinInFlightPlanStep = fetch->Record.GetMinInFlightPlanStep();
 
+    TVector<ui64> seqIdsWithBody;
     for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
         const auto& proto = fetch->Record.GetEntries(i);
         TSchemeChangeRecordEntry entry;
@@ -130,10 +147,27 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
         entry.UserSID = proto.GetUserSID();
         entry.SchemaVersion = proto.GetSchemaVersion();
         entry.CompletedAt = proto.GetCompletedAt();
-        if (!proto.GetBody().empty()) {
-            Y_ABORT_UNLESS(entry.Body.ParseFromString(TString(proto.GetBody())));
+        if (proto.GetBodySize() > 0) {
+            seqIdsWithBody.push_back(proto.GetSequenceId());
         }
         result.Entries.push_back(std::move(entry));
+    }
+
+    // Step 2: Fetch bodies for entries with non-zero BodySize; merge back.
+    if (!seqIdsWithBody.empty()) {
+        TAutoPtr<IEventHandle> bodiesHandle;
+        auto* bodies = FetchSchemeChangeRecordBodies(runtime, tempSubId, seqIdsWithBody, bodiesHandle);
+        THashMap<ui64, TString> bodyBySeqId;
+        for (size_t i = 0; i < static_cast<size_t>(bodies->Record.EntriesSize()); ++i) {
+            const auto& b = bodies->Record.GetEntries(i);
+            bodyBySeqId.emplace(b.GetSequenceId(), b.GetBody());
+        }
+        for (auto& entry : result.Entries) {
+            auto it = bodyBySeqId.find(entry.SequenceId);
+            if (it != bodyBySeqId.end() && !it->second.empty()) {
+                Y_ABORT_UNLESS(entry.Body.ParseFromString(it->second));
+            }
+        }
     }
 
     // Unregister temp subscriber

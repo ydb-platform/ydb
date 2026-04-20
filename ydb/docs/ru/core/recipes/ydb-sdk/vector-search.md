@@ -374,7 +374,6 @@
       import struct
       import ydb
 
-
       def convert_vector_to_bytes(vector: list[float]) -> bytes:
           b = struct.pack("f" * len(vector), *vector)
           return b + b"\x01"

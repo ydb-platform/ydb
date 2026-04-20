@@ -260,6 +260,7 @@ message TFeatureFlags {
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
+    optional bool TransferInternalDataDecompression = 237 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
 }

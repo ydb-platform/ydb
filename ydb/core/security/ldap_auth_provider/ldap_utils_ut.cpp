@@ -60,6 +60,52 @@ Y_UNIT_TEST_SUITE(TLdapUtilsSearchFilterCreatorTest) {
         const TString filter = filterCreator.GetFilter(login);
         UNIT_ASSERT_STRINGS_EQUAL(expectedFilter, filter);
     }
+
+    Y_UNIT_TEST(EscapeSpecialCharsInDefaultUidFilter) {
+        NKikimrProto::TLdapAuthentication settings;
+        TSearchFilterCreator filterCreator(settings);
+        TString login("u");
+        login += '*';
+        login += '(';
+        login += ')';
+        login += '\\';
+        login += '\0';
+        login += 'x';
+        const TString filter = filterCreator.GetFilter(login);
+        UNIT_ASSERT_STRINGS_EQUAL(R"(uid=u\2a\28\29\5c\00x)", filter);
+    }
+
+    Y_UNIT_TEST(EscapeSpecialCharsInSearchAttributeFilter) {
+        NKikimrProto::TLdapAuthentication settings;
+        settings.SetSearchAttribute("mail");
+        TSearchFilterCreator filterCreator(settings);
+        const TString login("a)admin");
+        const TString filter = filterCreator.GetFilter(login);
+        UNIT_ASSERT_STRINGS_EQUAL(R"(mail=a\29admin)", filter);
+    }
+
+    Y_UNIT_TEST(EscapeInjectionInTemplatePlaceholder) {
+        NKikimrProto::TLdapAuthentication settings;
+        settings.SetSearchFilter("(&(uid=$username)(objectClass=person))");
+        TSearchFilterCreator filterCreator(settings);
+        const TString login(")(|(uid=*");
+        const TString filter = filterCreator.GetFilter(login);
+        UNIT_ASSERT_STRINGS_EQUAL("(&(uid=\\29\\28|\\28uid=\\2a)(objectClass=person))", filter);
+    }
+
+    Y_UNIT_TEST(EscapeSpecialCharsWithTwoUsernamePlaceholders) {
+        auto getFilterString = [](const TString& name) {
+            return "|(&(uid=" + name + ")(groupid=1234))(&(login=" + name + ")(groupid=9876))";
+        };
+        NKikimrProto::TLdapAuthentication settings;
+        settings.SetSearchFilter(getFilterString("$username"));
+        TSearchFilterCreator filterCreator(settings);
+        const TString login(")(|(uid=*");
+        const TString filter = filterCreator.GetFilter(login);
+        const TString escaped = "\\29\\28|\\28uid=\\2a";
+        const TString expected = "|(&(uid=" + escaped + ")(groupid=1234))(&(login=" + escaped + ")(groupid=9876))";
+        UNIT_ASSERT_STRINGS_EQUAL(expected, filter);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TLdapUtilsUrisCreatorTest) {

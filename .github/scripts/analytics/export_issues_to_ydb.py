@@ -125,6 +125,28 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
             issueType {
               name
             }
+            timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {
+              nodes {
+                ... on ClosedEvent {
+                  createdAt
+                  actor {
+                    __typename
+                    login
+                  }
+                }
+              }
+            }
+            projectItems(first: 30) {
+              nodes {
+                id
+                project {
+                  id
+                  number
+                  title
+                  url
+                }
+              }
+            }
           }
         }
       }
@@ -224,6 +246,28 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               }
               issueType {
                 name
+              }
+              timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {
+                nodes {
+                  ... on ClosedEvent {
+                    createdAt
+                    actor {
+                      __typename
+                      login
+                    }
+                  }
+                }
+              }
+              projectItems(first: 30) {
+                nodes {
+                  id
+                  project {
+                    id
+                    number
+                    title
+                    url
+                  }
+                }
               }
             }
             pageInfo {
@@ -415,6 +459,45 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
     except (ValueError, TypeError):
         return None
 
+
+def extract_last_close_actor(issue: Dict[str, Any]) -> Dict[str, Any]:
+    """Who closed the issue — same timeline rule as ``manual_unmute.fetch_issue_closers``."""
+    login = ''
+    actor_type = ''
+    event_at = None
+    nodes = (issue.get('timelineItems') or {}).get('nodes') or []
+    for event in reversed(nodes):
+        if not event:
+            continue
+        actor = event.get('actor') or {}
+        cand_login = actor.get('login') or ''
+        if cand_login:
+            login = cand_login
+            actor_type = actor.get('__typename') or ''
+            event_at = parse_datetime(event.get('createdAt'))
+            break
+    return {'login': login, 'actor_type': actor_type, 'event_at': event_at}
+
+
+def projects_for_info_json(issue: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Projects (v2) that contain this issue — id/title from GraphQL ``projectItems``."""
+    out = []
+    for node in (issue.get('projectItems') or {}).get('nodes') or []:
+        proj = node.get('project') or {}
+        pid = proj.get('id')
+        if not pid:
+            continue
+        row = {
+            'project_id': pid,
+            'project_number': proj.get('number'),
+            'title': proj.get('title'),
+            'url': proj.get('url'),
+            'project_item_id': node.get('id'),
+        }
+        out.append(row)
+    return out
+
+
 # --- branch version helpers ---
 def parse_branch(label):
     if label == 'main':
@@ -497,6 +580,9 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         branch = ';'.join(branch_labels) if branch_labels else None
         max_branch = get_max_branch(branch_labels) if branch_labels else None
         info = {'branch': branch, 'max_branch': max_branch, 'env': env, 'priority': priority, 'area': area}
+        proj_list = projects_for_info_json(issue)
+        if proj_list:
+            info['projects'] = proj_list
         # Issue type: GraphQL issueType.name (Bug/Feature/Task), then project field, then label "bug"
         issue_type = (issue.get('issueType') or {}).get('name')
         if issue_type is None:
@@ -539,6 +625,17 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         created_at = parse_datetime(issue.get('createdAt'))
         updated_at = parse_datetime(issue.get('updatedAt'))
         closed_at = parse_datetime(issue.get('closedAt'))
+
+        closer = extract_last_close_actor(issue)
+        if closer['login']:
+            info['closed_by_login'] = closer['login']
+        if closer['actor_type']:
+            info['closed_by_typename'] = closer['actor_type']
+        if closer['event_at'] is not None:
+            info['closed_event_at_iso'] = closer['event_at'].isoformat()
+        if closed_at:
+            info['closed_at_iso'] = closed_at.isoformat()
+
         now = datetime.now(timezone.utc)
         
         is_in_project = bool(issue_project_fields)

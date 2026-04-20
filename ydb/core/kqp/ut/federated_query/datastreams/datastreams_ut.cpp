@@ -5237,6 +5237,46 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
         });
     }
+
+    Y_UNIT_TEST_F(TableModeWithPartitionPredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 2;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "data", 0, /* local */ true);  // wrong schema
+        WriteTopicMessage(topic, "{\"key\": \"data\"}", 1, /* local */ true);
+
+        Sleep(TDuration::Seconds(1));
+
+        const TString text = fmt::format(R"(
+            SELECT 
+                SystemMetadata('partition_id') as partition_id,
+                key as data
+            FROM `{topic}`
+            WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL
+                )
+            )
+            WHERE 
+                SystemMetadata('partition_id') = 1;)",
+            "topic"_a = topic
+        );
+
+        const auto& result1 = ExecQuery(text);
+        CheckScriptResult(result1[0], 2, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "data");
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

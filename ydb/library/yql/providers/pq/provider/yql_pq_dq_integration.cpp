@@ -41,7 +41,12 @@ public:
         : State_(state.Get())
     {}
 
-    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
+    ui64 PartitionTopicRead(
+        const TPqTopic& topic,
+        size_t maxPartitions,
+        TVector<TString>& partitions,
+        bool streamingTopicRead,
+        const std::set<ui64>& predicatePartitions) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -57,43 +62,59 @@ public:
             maxPartitions = DefaultMaxPartitions;
         }
 
-        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
-        partitions.reserve(tasks);
-        for (size_t i = 0; i < tasks; ++i) {
-            NPq::NProto::TDqReadTaskParams params;
-            auto* partitioningParams = params.MutablePartitioningParams();
-            partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
-            partitioningParams->SetEachTopicPartitionGroupId(i);
-            partitioningParams->SetDqPartitionsCount(tasks);
-            YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+        if (predicatePartitions.empty()) {      // read all partitions
+            const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+            partitions.reserve(tasks);
+            for (size_t i = 0; i < tasks; ++i) {
+                NPq::NProto::TDqReadTaskParams params;
+                auto* partitioningParams = params.MutablePartitioningParams();
+                partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                partitioningParams->SetEachTopicPartitionGroupId(i);
+                partitioningParams->SetDqPartitionsCount(tasks);
+                YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
 
-            TString serializedParams;
-            YQL_ENSURE(params.SerializeToString(&serializedParams));
-            partitions.emplace_back(std::move(serializedParams));
+                TString serializedParams;
+                YQL_ENSURE(params.SerializeToString(&serializedParams));
+                partitions.emplace_back(std::move(serializedParams));
+            }
+        } else {    // read only predicate partitions
+             const size_t tasks = predicatePartitions.size();
+             partitions.reserve(tasks);
+             for (auto partition : predicatePartitions) {
+                 NPq::NProto::TDqReadTaskParams params;
+                 auto* partitioningParams = params.MutablePartitioningParams();
+                 partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                 partitioningParams->SetEachTopicPartitionGroupId(partition);
+                 partitioningParams->SetDqPartitionsCount(topicPartitionsCount);    // todo 
+                 YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+
+                TString serializedParams;
+                YQL_ENSURE(params.SerializeToString(&serializedParams));
+                partitions.emplace_back(std::move(serializedParams));
+            }
         }
         return 0;
     }
 
-    bool GetPartition(const TExprNode& node,  std::set<ui64>& partitions) {
-        std::set<ui64> partitions;
-        auto partitions1 = node.Ptr();
+    bool GetPartition(const TExprNode& node, std::set<ui64>& partitions) {
+        partitions.clear();
 
-        if (!partitions1->IsCallable("AsList")) {
+        if (!node.IsCallable("AsList")) {
             return false;
         }
 
-        for (ui32 j = 0; j < partitions1->ChildrenSize(); ++j) {
-            if (!partitions1->Child(j)->IsCallable("Uint64")) {
+        for (ui32 j = 0; j < node.ChildrenSize(); ++j) {
+            if (!node.Child(j)->IsCallable("Uint64")) {
                 return false;
             }
-            partitions.insert(FromString<ui64>(partitions1->Child(j)->Child(0)->Content()));
+            partitions.insert(FromString<ui64>(node.Child(j)->Child(0)->Content()));
         }
-        return partitions;
+        return true;
     }
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true);
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true, {});
         }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto srcSettings = maybeDqSource.Cast().Settings();
@@ -110,13 +131,13 @@ public:
                     streamingTopicRead = FromString<bool>(Value(setting));
                     break;
                 }
-                std::set<ui64> partitions;
-                bool success = GetPartition(topicSource.Partitions(), partitions);
+                std::set<ui64> predicatePartitions;
+                bool success = GetPartition(*topicSource.Partitions().Ptr(), predicatePartitions);
                 if (success) {
-                    YQL_CLOG(DEBUG, ProviderPq) << "partitions999  " << JoinSeq(" ", partitions);
+                    YQL_CLOG(DEBUG, ProviderPq) << "partitions999  " << JoinSeq(" ", predicatePartitions);
                 }
 
-                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead);
+                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead, predicatePartitions);
             }
         }
         return 0;

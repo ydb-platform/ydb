@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include "node_warden_mock.h"
+#include "ydb/core/blobstorage/dsproxy/dsproxy.h"
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -1042,6 +1043,30 @@ config:
         request.AddCommand()->MutableSetScrubPeriodicity()->SetScrubPeriodicity(periodicity.Seconds());
         auto response = Invoke(request);
         UNIT_ASSERT(response.GetSuccess());
+    }
+
+    TActorId CreateRealDSProxy(ui32 groupId, ui32 nodeId) {
+        auto realProxyActorId = MakeBlobStorageProxyID(groupId);
+        auto& appData = *(Runtime->GetNode(nodeId)->AppData.get());
+        TIntrusivePtr<NKikimr::TDsProxyNodeMon> nodeMon = new NKikimr::TDsProxyNodeMon(appData.Counters, true);
+        TString name = Sprintf("%09" PRIu64, groupId);
+
+        TDsProxyPerPoolCounters perPoolCounters(appData.Counters);
+        TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
+        TControlWrapper enablePutBatching(true, false, true);
+        TControlWrapper enableVPatch(false, false, true);
+        auto info = GetGroupInfo(groupId);
+        IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
+            std::move(storagePoolCounters), TBlobStorageProxyParameters{
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
+                }
+            );
+        TActorId actorId = Runtime->Register(dsproxy, nodeId);
+        Runtime->RegisterService(realProxyActorId, actorId);
+        return actorId;
     }
 
     void SettlePDisk(const TActorId& vdiskActorId) {

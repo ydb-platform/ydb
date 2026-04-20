@@ -961,7 +961,7 @@
 - Python
 
     {% list tabs %}
-    
+
     - Native SDK
 
         ```python
@@ -1064,6 +1064,7 @@
 
             print(f"Table index {index_name} created.")
         ```
+
     {% endlist %}
 
 - C++

@@ -2283,7 +2283,7 @@
             {
                 "ColumnId": 4,
                 "ColumnName": "ResponseType",
-                "ColumnType": "String"
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 5,

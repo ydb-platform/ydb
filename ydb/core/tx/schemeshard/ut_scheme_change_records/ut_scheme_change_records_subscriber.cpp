@@ -340,4 +340,88 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_VALUES_EQUAL((ui32)ack->Record.GetStatus(),
             (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
     }
+
+    // Pull tail order across Fetch's 1000-record server-side cap.
+    static ui64 FetchTailOrder(TTestBasicRuntime& runtime, const TString& subscriberId) {
+        ui64 tailOrder = 0;
+        ui64 cursor = 0;
+        while (true) {
+            TAutoPtr<IEventHandle> h;
+            auto fetch = FetchSchemeChangeRecords(runtime, subscriberId, cursor, 1000, h);
+            if (fetch->Record.EntriesSize() == 0) break;
+            tailOrder = fetch->Record.GetEntries(fetch->Record.EntriesSize() - 1).GetOrder();
+            cursor = tailOrder;
+            if (!fetch->Record.GetHasMore()) break;
+        }
+        return tailOrder;
+    }
+
+    Y_UNIT_TEST(AckDeletesAllAckedRecordsRegardlessOfCount) {
+        // Write more than the old 1000-row cap, ack everything, immediately
+        // read — expect zero records left without any wakeup or time advance.
+        // Uses MkDir to stay within the test runtime event budget.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "bulk:sub", regHandle);
+
+        const int kCount = 1200;  // > old cap of 1000
+        for (int i = 1; i <= kCount; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("D%d", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        ui64 tailOrder = FetchTailOrder(runtime, "bulk:sub");
+        UNIT_ASSERT_C(tailOrder >= (ui64)kCount,
+            "Expected tail >= " << kCount << ", got " << tailOrder);
+
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "bulk:sub", tailOrder, ackHandle);
+
+        // IMMEDIATE read — no manual wakeup, no time advance.
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(entries.empty(),
+            "All " << kCount << " records must be deleted inline by the ack tx; got "
+                << entries.size() << " remaining");
+    }
+
+    Y_UNIT_TEST(UnregisterSweepsStaleRecordsRegardlessOfCount) {
+        // Slow subscriber holds min cursor at 0. Write N > 1000 records.
+        // Fast subscriber acks everything. Unregister the slow one. All
+        // records must be gone immediately, no wakeup needed.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> reg1Handle, reg2Handle;
+        RegisterSubscriber(runtime, "slow:sub", reg1Handle);
+        RegisterSubscriber(runtime, "fast:sub", reg2Handle);
+
+        const int kCount = 1100;
+        for (int i = 1; i <= kCount; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("D%d", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        ui64 tailOrder = FetchTailOrder(runtime, "fast:sub");
+        UNIT_ASSERT_C(tailOrder >= (ui64)kCount,
+            "Expected tail >= " << kCount << ", got " << tailOrder);
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "fast:sub", tailOrder, ackHandle);
+
+        // slow:sub still at 0 -> records held by slow
+        auto stillThere = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT(!stillThere.empty());
+
+        // Unregister slow -> min jumps to fast's tail -> all records go
+        TAutoPtr<IEventHandle> unregHandle;
+        UnregisterSubscriber(runtime, "slow:sub", unregHandle);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(entries.empty(),
+            "Unregister of the slow subscriber must sweep all " << kCount
+                << " stale records inline; got " << entries.size() << " remaining");
+    }
 }

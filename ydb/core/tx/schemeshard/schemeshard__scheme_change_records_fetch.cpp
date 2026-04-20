@@ -166,8 +166,6 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
 struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr Request;
     THolder<TEvSchemeShard::TEvAckSchemeChangeRecordsResult> Result;
-    bool ReactiveCleanupCapHit = false;
-
     TTxAckSchemeChangeRecords(TSchemeShard* self, TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev)
         : TTransactionBase(self)
         , Request(ev)
@@ -213,14 +211,14 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        // Reactive cleanup: if this ack moved the global min cursor forward,
-        // delete newly-acked records inline (up to a cap) so overflow capacity
-        // is restored without waiting for the background sweep.
+        // Reactive cleanup: when this ack moves the global min subscriber
+        // cursor forward, delete the newly-acked records in the same tx.
+        // No cap: total backlog is bounded by MaxSchemeChangeRecords (100k),
+        // which is ~3.2 MB of redo log at ~32 bytes per per-row delete —
+        // comfortably within a single tablet tx. Background cleanup is
+        // only a boot-time safety net (see TTxSchemeChangeRecordsCleanup).
         const ui64 newMinOrder = Self->GetMinSubscriberOrder();
         if (newMinOrder > oldMinOrder) {
-            const ui64 reactiveCleanupCap = 1000;
-            ui64 deletedCount = 0;
-
             auto logRowset = db.Table<Schema::SchemeChangeRecords>()
                 .GreaterOrEqual(oldMinOrder + 1)
                 .Select();
@@ -232,13 +230,8 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
                 if (order > newMinOrder) {
                     break;
                 }
-                if (deletedCount >= reactiveCleanupCap) {
-                    ReactiveCleanupCapHit = true;
-                    break;
-                }
                 db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
                 db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
-                ++deletedCount;
                 if (!logRowset.Next()) {
                     return false;
                 }
@@ -253,20 +246,12 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
-        if (ReactiveCleanupCapHit) {
-            // More records to drain; trigger background sweep immediately.
-            ctx.Send(ctx.SelfID,
-                new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
-        }
-        // Otherwise rely on the 1-hour background timer rescheduled by the
-        // cleanup tx itself as a safety net.
     }
 };
 
 struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvUnregisterSubscriber::TPtr Request;
     THolder<TEvSchemeShard::TEvUnregisterSubscriberResult> Result;
-    bool ReactiveCleanupCapHit = false;
 
     TTxUnregisterSubscriber(TSchemeShard* self, TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev)
         : TTransactionBase(self)
@@ -297,12 +282,10 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         Self->Subscribers.erase(subscriberId);
 
         // Reactive cleanup: removing a slow subscriber may jump the global
-        // min cursor forward. Delete newly-stale records inline up to a cap.
+        // min cursor forward. Delete all newly-stale records inline. No cap
+        // — see TTxAckSchemeChangeRecords for the backlog-bound rationale.
         const ui64 newMinOrder = Self->GetMinSubscriberOrder();
         if (newMinOrder > oldMinOrder) {
-            const ui64 reactiveCleanupCap = 1000;
-            ui64 deletedCount = 0;
-
             auto logRowset = db.Table<Schema::SchemeChangeRecords>()
                 .GreaterOrEqual(oldMinOrder + 1)
                 .Select();
@@ -314,13 +297,8 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
                 if (order > newMinOrder) {
                     break;
                 }
-                if (deletedCount >= reactiveCleanupCap) {
-                    ReactiveCleanupCapHit = true;
-                    break;
-                }
                 db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
                 db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
-                ++deletedCount;
                 if (!logRowset.Next()) {
                     return false;
                 }
@@ -334,10 +312,6 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
-        if (ReactiveCleanupCapHit) {
-            ctx.Send(ctx.SelfID,
-                new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
-        }
     }
 };
 

@@ -129,6 +129,9 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
+      - name: Export mute control state to YDB
+        run: python3 .github/scripts/analytics/export_mute_control_state_to_ydb.py
+
       - name: Generate new muted_ya.txt
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \

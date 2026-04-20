@@ -44,6 +44,31 @@ $gim_latest = (
     WHERE g_rnk.rn = 1
 );
 
+$default_unmute_days = 7u;
+$manual_fast_unmute_days = 2u;
+
+$mru_latest = (
+    SELECT
+        full_name AS full_name,
+        branch AS branch,
+        build_type AS build_type,
+        manual_unmute_status AS manual_unmute_status,
+        resolution_reason AS resolution_reason,
+        effective_unmute_window_days AS effective_unmute_window_days,
+        default_unmute_window_days AS default_unmute_window_days,
+        manual_fast_unmute_window_days AS manual_fast_unmute_window_days
+    FROM (
+        SELECT
+            m.*,
+            ROW_NUMBER() OVER (
+                PARTITION BY m.full_name, m.branch, m.build_type
+                ORDER BY m.exported_at DESC, m.issue_number DESC
+            ) AS rn
+        FROM `test_results/analytics/mute_control_state` AS m
+    ) AS m_rnk
+    WHERE m_rnk.rn = 1
+);
+
 SELECT
     tm.state_filtered AS state_filtered,
     tm.test_name AS test_name,
@@ -82,7 +107,12 @@ SELECT
     gim.github_issue_state AS github_issue_state,
     gim.github_issue_created_at AS github_issue_created_at,
     gim.area_override AS area_override,
-    gim.area_override_since AS area_override_since
+    gim.area_override_since AS area_override_since,
+    Coalesce(mru.manual_unmute_status, 'none') AS manual_unmute_status,
+    mru.resolution_reason AS manual_unmute_reason,
+    Coalesce(mru.effective_unmute_window_days, $default_unmute_days) AS effective_unmute_window_days,
+    Coalesce(mru.default_unmute_window_days, $default_unmute_days) AS default_unmute_window_days,
+    Coalesce(mru.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS manual_fast_unmute_window_days
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN $area_fallback AS af
     ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team
@@ -90,6 +120,10 @@ LEFT JOIN $gim_latest AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
     AND tm.build_type = gim.build_type
+LEFT JOIN $mru_latest AS mru
+    ON tm.full_name = mru.full_name
+    AND tm.branch = mru.branch
+    AND tm.build_type = mru.build_type
 WHERE tm.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
     AND tm.branch = 'main'
     AND tm.build_type = 'relwithdebinfo'

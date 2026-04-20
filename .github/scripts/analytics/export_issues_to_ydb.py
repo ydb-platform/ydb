@@ -6,46 +6,75 @@ import configparser
 import time
 import json
 import argparse
-from datetime import datetime, timezone, timedelta
 import requests
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from ydb_wrapper import YDBWrapper
 
-# Configuration
-ORG_NAME = 'ydb-platform'
-REPO_NAME = 'ydb'
+ORG_NAME = "ydb-platform"
+REPO_NAME = "ydb"
+
 PROJECT_ID = None #'45'  # Optional: set to None to skip project data
 
 
-# YDB configuration is now handled by ydb_wrapper
-
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     """Execute GraphQL query against GitHub API"""
-    GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not GITHUB_TOKEN:
+        raise Exception("Neither GITHUB_TOKEN nor GH_TOKEN is set")
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
-    
-    request = requests.post(
-        'https://api.github.com/graphql', 
-        json={'query': query, 'variables': variables}, 
-        headers=HEADERS
-    )
-    
-    if request.status_code == 200:
-        response = request.json()
-        if 'errors' in response:
-            for error in response['errors']:
-                print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-                raise Exception(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-        return response
-    else:
-        raise Exception(f"Query failed with status {request.status_code}: {request.text}")
+    max_attempts = 5
+    timeout_seconds = 30
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            request = requests.post(
+                "https://api.github.com/graphql",
+                json={"query": query, "variables": variables},
+                headers=HEADERS,
+                timeout=timeout_seconds,
+            )
+        except requests.exceptions.RequestException as exc:
+            if attempt == max_attempts:
+                raise Exception(f"GitHub GraphQL request failed after {max_attempts} attempts: {exc}") from exc
+            sleep_seconds = min(2 ** (attempt - 1), 10)
+            print(
+                f"run_query: transient request failure (attempt {attempt}/{max_attempts}), "
+                f"retrying in {sleep_seconds}s: {exc}"
+            )
+            time.sleep(sleep_seconds)
+            continue
+
+        if request.status_code == 200:
+            response = request.json()
+            if "errors" in response:
+                for error in response["errors"]:
+                    print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
+                    raise Exception(f"GraphQL Error: {error.get('message', 'Unknown error')}")
+            return response
+
+        should_retry = request.status_code in (429, 500, 502, 503, 504)
+        if should_retry and attempt < max_attempts:
+            sleep_seconds = min(2 ** (attempt - 1), 10)
+            print(
+                f"run_query: HTTP {request.status_code} (attempt {attempt}/{max_attempts}), "
+                f"retrying in {sleep_seconds}s"
+            )
+            time.sleep(sleep_seconds)
+            continue
+
+        query_preview = query[:200].replace("\n", " ")
+        raise Exception(
+            f"Query failed with HTTP {request.status_code}. query_preview={query_preview}"
+        )
+
 
 def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[datetime]:
     """Get the latest updated_at timestamp from existing records"""
     try:
         query = f"SELECT MAX(updated_at) as max_updated_at FROM `{table_path}`"
         results = ydb_wrapper.execute_scan_query(query)
-        
+
         if results and results[0]['max_updated_at']:
             # Convert timestamp to datetime
             timestamp = results[0]['max_updated_at']
@@ -61,12 +90,11 @@ def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[d
         return None
 
 
-
 def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Optional[Dict[str, Any]]:
     """Fetch a single issue by number from GitHub repository"""
     print(f"Debug mode: Fetching issue #{issue_number} from repository {org_name}/{repo_name}...")
     start_time = time.time()
-    
+
     issue_query = """
     {
       organization(login: "%s") {
@@ -111,8 +139,11 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
             reactions {
               totalCount
             }
-            comments {
+            comments(first: 100) {
               totalCount
+              nodes {
+                body
+              }
             }
             repository {
               id
@@ -130,42 +161,96 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
       }
     }
     """
-    
+
     query = issue_query % (org_name, repo_name, issue_number)
     result = run_query(query)
-    
-    if result and 'data' in result:
-        repository = result['data']['organization']['repository']
-        issue = repository.get('issue')
-        
+
+    if result and "data" in result:
+        repository = result["data"]["organization"]["repository"]
+        issue = repository.get("issue")
+
         if issue is None:
             print(f"Issue #{issue_number} not found")
             return None
-        
+
         elapsed = time.time() - start_time
         print(f"Fetched issue #{issue_number} (took {elapsed:.2f}s)")
         return issue
-    
+
     return None
 
-def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME, since: Optional[datetime] = None) -> List[Dict[str, Any]]:
+
+def fetch_repository_issues(
+    org_name: str = ORG_NAME,
+    repo_name: str = REPO_NAME,
+    since: Optional[datetime] = None,
+    include_comment_bodies: bool = False,
+    include_timeline_items: bool = False,
+) -> List[Dict[str, Any]]:
     """Fetch all issues from GitHub repository with comprehensive information"""
     if since:
         print(f"Fetching issues updated since {since.isoformat()} from repository {org_name}/{repo_name}...")
     else:
         print(f"Fetching all issues from repository {org_name}/{repo_name}...")
     start_time = time.time()
-    
+
     issues = []
     has_next_page = True
     end_cursor = "null"
-    
-    # Convert datetime to GitHub API format if needed
+
     since_filter = ""
     if since:
-        since_str = since.strftime('%Y-%m-%dT%H:%M:%SZ')
+        since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
         since_filter = f', filterBy: {{since: "{since_str}"}}'
-    
+
+    comments_body_field = "body" if include_comment_bodies else "bodyText"
+    timeline_items_block = ""
+    if include_timeline_items:
+        timeline_items_block = """
+              timelineItems(last: 100, itemTypes: [CLOSED_EVENT, CONNECTED_EVENT, CROSS_REFERENCED_EVENT]) {
+                nodes {
+                  __typename
+                  ... on ClosedEvent {
+                    actor {
+                      __typename
+                      ... on User {
+                        login
+                      }
+                      ... on Bot {
+                        login
+                      }
+                    }
+                  }
+                  ... on ConnectedEvent {
+                    subject {
+                      __typename
+                      ... on PullRequest {
+                        number
+                        state
+                        isDraft
+                        repository {
+                          nameWithOwner
+                        }
+                      }
+                    }
+                  }
+                  ... on CrossReferencedEvent {
+                    source {
+                      __typename
+                      ... on PullRequest {
+                        number
+                        state
+                        isDraft
+                        repository {
+                          nameWithOwner
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+"""
+
     repository_issues_query = """
     {
       organization(login: "%s") {
@@ -211,9 +296,13 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               reactions {
                 totalCount
               }
-              comments {
+              comments(first: 100) {
                 totalCount
+                nodes {
+                  %s
+                }
               }
+%s
               repository {
                 id
                 name
@@ -235,30 +324,74 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
       }
     }
     """
-    
+
     total_fetched = 0
     while has_next_page:
-        query = repository_issues_query % (org_name, repo_name, end_cursor, since_filter)
+        query = repository_issues_query % (
+            org_name,
+            repo_name,
+            end_cursor,
+            since_filter,
+            comments_body_field,
+            timeline_items_block,
+        )
         result = run_query(query)
-        
-        if result and 'data' in result:
-            repository_issues = result['data']['organization']['repository']['issues']
-            current_batch = repository_issues['nodes']
-            
+
+        if result and "data" in result:
+            repository_issues = result["data"]["organization"]["repository"]["issues"]
+            current_batch = repository_issues["nodes"]
+
             issues.extend(current_batch)
             total_fetched += len(current_batch)
-            
+
             print(f"Fetched {len(current_batch)} issues from repository (total: {total_fetched})")
-            
-            page_info = repository_issues['pageInfo']
-            has_next_page = page_info['hasNextPage']
-            end_cursor = f'"{page_info["endCursor"]}"' if page_info['endCursor'] else "null"
+
+            page_info = repository_issues["pageInfo"]
+            has_next_page = page_info["hasNextPage"]
+            end_cursor = f'"{page_info["endCursor"]}"' if page_info["endCursor"] else "null"
         else:
             has_next_page = False
-    
+
     elapsed = time.time() - start_time
     print(f"Fetched {len(issues)} issues total (took {elapsed:.2f}s)")
     return issues
+
+
+def fetch_all_issue_comment_nodes(issue_id: str) -> List[Dict[str, Any]]:
+    """All issue comments via GraphQL pagination (bodies only)."""
+    if not issue_id:
+        return []
+    query = """
+    query ($issueId: ID!, $after: String) {
+      node(id: $issueId) {
+        ... on Issue {
+          comments(first: 100, after: $after) {
+            nodes {
+              body
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }
+    """
+    all_nodes: List[Dict[str, Any]] = []
+    after: Optional[str] = None
+    has_next_page = True
+    while has_next_page:
+        result = run_query(query, {"issueId": issue_id, "after": after})
+        node = (result.get("data") or {}).get("node") or {}
+        comments = node.get("comments") or {}
+        batch = comments.get("nodes") or []
+        all_nodes.extend(batch)
+        page_info = comments.get("pageInfo") or {}
+        has_next_page = bool(page_info.get("hasNextPage"))
+        after = page_info.get("endCursor")
+    return all_nodes
+
 
 def get_project_fields_for_issues(org_name: str, project_id: str, issue_numbers: List[int]) -> Dict[int, Dict[str, Any]]:
     """Get project fields for specific issues from GitHub project"""
@@ -752,7 +885,12 @@ def main():
                         since_time = None
                 
                 # Fetch issues from GitHub
-                issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
+                issues = fetch_repository_issues(
+                    ORG_NAME,
+                    REPO_NAME,
+                    since_time,
+                    include_comment_bodies=False,
+                )
             
             # Validate that issues were fetched
             if issues is None:

@@ -20,16 +20,14 @@ bool IsGoodIPv4Part1(TStringBuf peername) {
 }
 
 bool IsGoodIPv4Part2(TStringBuf peername) {
-    static const std::regex pattern{R"((.+):(\d+))"};
-    if (std::cmatch match;
-        std::regex_match(peername.data(), match, pattern) &&
-        match.ready() &&
-        match.size() == 3) {
-        const TString address = match.str(1);
-        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
-        return (port != 0) && IsIPv4(address);
+    const auto colonPos = peername.find(':');
+    if (colonPos == TStringBuf::npos ||
+        colonPos == 0 || peername.length() <= colonPos + 1) {
+        return false;
     }
-    return false;
+
+    const TIpPort port = FromStringWithDefault<TIpPort>(peername.substr(colonPos + 1), 0);
+    return (port != 0) && IsGoodIPv4Part1(peername.substr(0, colonPos));
 }
 
 bool IsGoodIPv4Part3(TStringBuf peername) {
@@ -51,16 +49,21 @@ bool IsGoodIPv6Part1(TStringBuf peername) {
 }
 
 bool IsGoodIPv6Part2(TStringBuf peername) {
-    static const std::regex pattern{R"(\[(.+)\]:(\d+))"};
-    if (std::cmatch match;
-        std::regex_match(peername.data(), match, pattern) &&
-        match.ready() &&
-        match.size() == 3) {
-        const TString address = match.str(1);
-        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
-        return (port != 0) && IsIPv6(address);
+    if (peername.length() < 1 || peername[0] != '[') {
+        return false;
     }
-    return false;
+
+    const auto lastClosedBracketPos = peername.find_last_of(']');
+    if (lastClosedBracketPos == TStringBuf::npos || lastClosedBracketPos < 2) {
+        return false;
+    }
+
+    if (peername.length() <= lastClosedBracketPos + 2 || peername[lastClosedBracketPos + 1] != ':') {
+        return false;
+    }
+
+    const TIpPort port = FromStringWithDefault<TIpPort>(peername.substr(lastClosedBracketPos + 2), 0);
+    return (port != 0) && IsGoodIPv6Part1(peername.substr(1, lastClosedBracketPos - 1));
 }
 
 bool IsGoodIPv6Part3(TStringBuf peername) {

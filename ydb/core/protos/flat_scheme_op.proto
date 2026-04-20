@@ -209,7 +209,13 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
-    repeated uint32 ByKeyFilterPrefixes = 26; // Build per-part bloom filters on PK prefixes of these lengths (number of leading key columns)
+    reserved 26; // deprecated -> ByKeyFilterPrefixes
+    repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+}
+
+message TByKeyFilterPrefix {
+    optional uint32 PrefixLength = 1;           // Number of leading key columns
+    optional double FalsePositiveProbability = 2; // Bloom filter FPP (default 0.0001 when absent)
 }
 
 message TSplitBoundary {

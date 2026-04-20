@@ -4,6 +4,7 @@
 #include "ydb_convert.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
@@ -229,7 +230,8 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
     tableDesc->SetName(pathPair.second);
 
     // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
-    TSet<ui32> bloomPrefixes;
+    // When duplicated, the last FPP wins.
+    TMap<ui32, double> bloomPrefixes;
     for (const auto& index : req->add_indexes()) {
         if (index.type_case() != Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
             continue;
@@ -239,11 +241,23 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
             error = "Bloom filter index must specify at least one column";
             return false;
         }
-        bloomPrefixes.insert(static_cast<ui32>(index.index_columns_size()));
+        ui32 prefixLen = static_cast<ui32>(index.index_columns_size());
+        double fpp = NTable::DefaultBloomFilterFpp;
+        if (index.local_bloom_filter_index().has_false_positive_probability()) {
+            fpp = index.local_bloom_filter_index().false_positive_probability();
+            if (fpp <= 0.0 || fpp >= 1.0) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "false_positive_probability must be in range (0, 1)";
+                return false;
+            }
+        }
+        bloomPrefixes[prefixLen] = fpp;
     }
 
-    for (ui32 prefix : bloomPrefixes) {
-        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
+    for (const auto& [prefix, fpp] : bloomPrefixes) {
+        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(prefix);
+        entry->SetFalsePositiveProbability(fpp);
     }
 
     return true;
@@ -1521,11 +1535,12 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
     }
 
     // Synthesize LocalBloomFilter index entries for DataShard tables.
-    // ByKeyFilterPrefixes stores prefix lengths (not index names), so names are generated
+    // ByKeyFilterPrefixes stores prefix lengths + FPP. Names are generated
     // as "idx_bloom_<prefixLen>".
     if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
         const auto& pkCols = in.GetKeyColumnNames();
-        for (auto prefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
+        for (const auto& bloomPrefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
+            ui32 prefix = bloomPrefix.GetPrefixLength();
             if (prefix == 0 || static_cast<int>(prefix) > pkCols.size()) {
                 continue;
             }
@@ -1534,7 +1549,11 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             for (ui32 i = 0; i < prefix; ++i) {
                 index->add_index_columns(pkCols[i]);
             }
-            index->mutable_local_bloom_filter_index();
+            auto* bloomFilter = index->mutable_local_bloom_filter_index();
+            if (bloomPrefix.HasFalsePositiveProbability() &&
+                bloomPrefix.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
+                bloomFilter->set_false_positive_probability(bloomPrefix.GetFalsePositiveProbability());
+            }
             if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
                 index->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
             }

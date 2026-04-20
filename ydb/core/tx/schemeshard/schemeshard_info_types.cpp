@@ -6,6 +6,7 @@
 
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
@@ -1088,21 +1089,25 @@ bool TPartitionConfigMerger::ApplyChanges(
     }
 
     if (changes.ByKeyFilterPrefixesSize() > 0) {
-        TVector<ui32> prefixes;
-        for (auto p : result.GetByKeyFilterPrefixes()) {
-            if (p > 0) {
-                prefixes.push_back(p);
+        // Merge existing + new prefixes, keyed by PrefixLength (new FPP wins on conflict)
+        TMap<ui32, double> prefixMap;
+        for (const auto& p : result.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
-        for (auto p : changes.GetByKeyFilterPrefixes()) {
-            if (p > 0) {
-                prefixes.push_back(p);
+        for (const auto& p : changes.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
-        SortUnique(prefixes);
         result.ClearByKeyFilterPrefixes();
-        for (auto p : prefixes) {
-            result.AddByKeyFilterPrefixes(p);
+        for (const auto& [len, fpp] : prefixMap) {
+            auto* entry = result.AddByKeyFilterPrefixes();
+            entry->SetPrefixLength(len);
+            entry->SetFalsePositiveProbability(fpp);
         }
     }
 

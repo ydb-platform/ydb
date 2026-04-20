@@ -12,27 +12,31 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
         , TIntrusivePtr<NRm::TTxState> tx
-        , TIntrusivePtr<NRm::TTaskState> task
+        , ui64 taskId
         , ui64 limit)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
     , ResourceManager(std::move(resourceManager))
     , Tx(std::move(tx))
-    , Task(std::move(task))
+    , TaskId(taskId)
     {}
 
     ~TMemoryQuotaManager() override {
-        ResourceManager->FreeResources(Tx, Task);
+        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{
+            .ExecutionUnits = 1,
+            .Memory = Limit - Guarantee,
+            .ExternalMemory = Guarantee,
+        });
     }
 
     bool AllocateExtraQuota(ui64 extraSize) override {
-        auto result = ResourceManager->AllocateResources(Tx, Task,
+        auto result = ResourceManager->AllocateResources(*Tx, TaskId,
             NRm::TKqpResourcesRequest{.Memory = extraSize});
 
         if (!result) {
             AFL_WARN(NKikimrServices::KQP_COMPUTE)
                 ("problem", "cannot_allocate_memory")
                 ("tx_id", Tx->TxId)
-                ("task_id", Task->TaskId)
+                ("task_id", TaskId)
                 ("memory", extraSize);
 
             return false;
@@ -42,29 +46,20 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     void FreeExtraQuota(ui64 extraSize) override {
-        NRm::TKqpResourcesRequest request = NRm::TKqpResourcesRequest{.Memory = extraSize};
-        ResourceManager->FreeResources(Tx, Task, Task->FitRequest(request));
+        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
     }
 
     bool IsReasonableToUseSpilling() const override {
-        return Task->IsReasonableToStartSpilling();
+        return Tx->IsReasonableToStartSpilling();
     }
 
     TString MemoryConsumptionDetails() const override {
         return Tx->ToString();
     }
 
-    void TerminateHandler(bool success, const NYql::TIssues& issues) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
-            ("problem", "finish_compute_actor")
-            ("tx_id", Tx->TxId)("task_id", Task->TaskId)("success", success)("message", issues.ToOneLineString());
-        Success = success;
-    }
-
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
     TIntrusivePtr<NRm::TTxState> Tx;
-    TIntrusivePtr<NRm::TTaskState> Task;
-    bool Success = true;
+    ui64 TaskId;
     ui64 ReasonableSpillingTreshold = 0;
 };
 
@@ -158,10 +153,8 @@ public:
             .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
         };
 
-        TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
-
         auto rmResult = ResourceManager_->AllocateResources(
-            args.TxInfo, task, resourcesRequest);
+            *args.TxInfo, args.Task->GetId(), resourcesRequest);
 
         if (!rmResult) {
             return NRm::TKqpRMAllocateResult{rmResult};
@@ -187,7 +180,7 @@ public:
         memoryLimits.MemoryQuotaManager = std::make_shared<TMemoryQuotaManager>(
             ResourceManager_,
             std::move(args.TxInfo),
-            std::move(task),
+            args.Task->GetId(),
             memoryLimits.MkqlLightProgramMemoryLimit);
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettings;
@@ -209,12 +202,11 @@ public:
             runtimeSettings.RlPath = args.RlPath;
         }
 
-        NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;
-        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
+        runtimeSettings.TerminateHandler = [state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
-                if (auto manager = memoryQuotaManager.lock()) {
-                    static_cast<TMemoryQuotaManager*>(manager.get())->TerminateHandler(success, issues);
-                }
+                AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
+                    ("problem", "finish_compute_actor")
+                    ("tx_id", txId)("task_id", taskId)("success", success)("message", issues.ToOneLineString());
                 if (state) {
                     state->OnTaskFinished(txId, executerId, taskId, success);
                 }

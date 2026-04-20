@@ -390,7 +390,6 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
     }
 
     // Собрать все перекрывающиеся inflight записи
-    // Используем легковесную структуру с указателем на Value вместо ссылки
     struct TOverlappingItem
     {
         ui64 Key;
@@ -407,97 +406,75 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             return TInflightMap::EEnumerateContinuation::Continue;
         });
 
-    // Сортировать по началу диапазона, затем по LSN (убывание для более свежих)
-    Sort(
-        overlappingItems.begin(),
-        overlappingItems.end(),
-        [](const auto& a, const auto& b)
-        {
-            if (a.Range.Start != b.Range.Start) {
-                return a.Range.Start < b.Range.Start;
-            }
-            // При одинаковом начале диапазона, больший LSN первым
-            return a.Key > b.Key;
-        });
+    // Алгоритм sweep-line: для каждого блока в запрашиваемом диапазоне
+    // определяем inflight-запись с максимальным LSN (наиболее свежие данные).
+    //
+    // Строим список «событий» — границ inflight-диапазонов, пересекающихся с
+    // запросом. Между соседними событиями все блоки принадлежат одному и тому
+    // же набору активных inflight-записей, поэтому достаточно выбрать запись с
+    // максимальным LSN для каждого такого сегмента.
 
-    // Отфильтровать дубликаты - для одинаковых диапазонов оставить только
-    // первый (с максимальным LSN)
-    TVector<TOverlappingItem> filteredItems;
-    for (size_t i = 0; i < overlappingItems.size(); ++i) {
-        // Пропустить, если следующий элемент имеет тот же диапазон
-        if (i + 1 < overlappingItems.size() &&
-            overlappingItems[i].Range == overlappingItems[i + 1].Range)
+    // Собрать все граничные точки внутри запрашиваемого диапазона.
+    TVector<ui64> boundaries;
+    boundaries.push_back(range.Start);
+    for (const auto& item: overlappingItems) {
+        if (item.Range.Start > range.Start && item.Range.Start <= range.End) {
+            boundaries.push_back(item.Range.Start);
+        }
+        if (item.Range.End + 1 > range.Start && item.Range.End + 1 <= range.End)
         {
-            // Текущий элемент имеет больший LSN (из-за сортировки), оставляем
-            // его
-            filteredItems.push_back(overlappingItems[i]);
-            // Пропускаем все последующие с тем же диапазоном
-            while (i + 1 < overlappingItems.size() &&
-                   overlappingItems[i].Range == overlappingItems[i + 1].Range)
-            {
-                ++i;
-            }
-        } else {
-            filteredItems.push_back(overlappingItems[i]);
+            boundaries.push_back(item.Range.End + 1);
         }
     }
+    boundaries.push_back(range.End + 1);
 
-    // Разбить на сегменты
-    ui64 currentPos = range.Start;
+    Sort(boundaries.begin(), boundaries.end());
+    boundaries.erase(
+        std::unique(boundaries.begin(), boundaries.end()),
+        boundaries.end());
+
+    // Для каждого сегмента [boundaries[i], boundaries[i+1]) найти inflight с
+    // максимальным LSN.
     ui64 offsetBlocks = 0;
 
-    for (const auto& item: filteredItems) {
-        if (item.Range.End < currentPos) {
-            continue;
+    for (size_t i = 0; i + 1 < boundaries.size(); ++i) {
+        const ui64 segStart = boundaries[i];
+        const ui64 segEnd = boundaries[i + 1] - 1;
+        const auto segRange =
+            TBlockRange64::MakeClosedInterval(segStart, segEnd);
+
+        // Найти inflight с максимальным LSN, покрывающий этот сегмент.
+        const TOverlappingItem* bestItem = nullptr;
+        for (const auto& item: overlappingItems) {
+            if (item.Range.Contains(segRange)) {
+                if (bestItem == nullptr || item.Key > bestItem->Key) {
+                    bestItem = &item;
+                }
+            }
         }
 
-        // Добавить gap до текущего item (если есть)
-        if (currentPos < item.Range.Start) {
-            auto gapRange = TBlockRange64::MakeClosedInterval(
-                currentPos,
-                Min(item.Range.Start - 1, range.End));
-
+        if (bestItem == nullptr) {
+            // Нет inflight для этого сегмента — читаем с DDisk.
             result.RangeHints.push_back(
-                makeDefaultHint(gapRange, offsetBlocks));
+                makeDefaultHint(segRange, offsetBlocks));
+        } else {
+            if (bestItem->Value->ReadMask().Empty()) {
+                // Нужно ждать quorum.
+                result.WaitReady = bestItem->Value->GetQuorumReadyFuture();
+                result.RangeHints.clear();
+                return result;
+            }
 
-            offsetBlocks += gapRange.Size();
-            currentPos = item.Range.Start;
+            result.RangeHints.push_back(makeHint(
+                bestItem->Value->ReadMask(),
+                bestItem->Value->ReadMask().OnlyDDisk() ? 0 : bestItem->Key,
+                segRange,
+                offsetBlocks));
         }
 
-        // не нужно?
-        if (currentPos > range.End) {
-            break;
-        }
-
-        // Добавить пересечение с item
-        auto intersection = range.Intersect(item.Range);
-        // Y_ABORT_UNLESS(offsetBlocks == intersection.Start);
-
-        if (item.Value->ReadMask().Empty()) {
-            // Нужно ждать quorum
-            result.WaitReady = item.Value->GetQuorumReadyFuture();
-            result.RangeHints.clear();
-            return result;
-        }
-
-        result.RangeHints.push_back(makeHint(
-            item.Value->ReadMask(),
-            item.Value->ReadMask().OnlyDDisk() ? 0
-                                               : item.Key,   // LSN=0 для DDisk
-            intersection,
-            offsetBlocks));   // intersection.Start?
-
-        offsetBlocks += intersection.Size();
-        currentPos = intersection.End + 1;
+        offsetBlocks += segRange.Size();
     }
 
-    // Добавить оставшийся gap (если есть)
-    if (currentPos <= range.End) {
-        auto gapRange =
-            TBlockRange64::MakeClosedInterval(currentPos, range.End);
-
-        result.RangeHints.push_back(makeDefaultHint(gapRange, offsetBlocks));
-    }
     return result;
 }
 

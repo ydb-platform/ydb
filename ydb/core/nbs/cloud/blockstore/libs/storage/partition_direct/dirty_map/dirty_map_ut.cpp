@@ -847,8 +847,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto readHint =
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 100));
+        // LSN=123 covers [0..99] and is in PBufferErasing state (data on
+        // DDisk). LSN=124 covers [10..19] and is in PBufferWritten state (data
+        // in PBuffer only, not yet on DDisk). LSN=124 is fresher, so blocks
+        // [10..19] must be read from PBuffer, not from DDisk.
         UNIT_ASSERT_VALUES_EQUAL(
-            "0{[D+++..P.....][0..99][0..99]};",
+            "0{[D+++..P.....][0..9][0..9]};"
+            "124{[D.....P+++..][10..19][10..19]};"
+            "0{[D+++..P.....][20..99][20..99]};",
             readHint.DebugPrint());
     }
 

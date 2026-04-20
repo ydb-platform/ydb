@@ -724,7 +724,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
             && (TableDescription.GetDetailedMetricsSettings().GetStatusCase()
                     == NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured)
             && (TableDescription.GetDetailedMetricsSettings().HasConfigured());
-    };
+    }
 
     /**
      * Return the detailed metrics settings for the given table.

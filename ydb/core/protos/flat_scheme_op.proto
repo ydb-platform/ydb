@@ -451,7 +451,7 @@ message TTableDescription {
      * @note If the detailed metrics settings are not configured for a table,
      *       the default metrics settings from the parent database are used instead
      *       (by default, no detailed metrics settings are configured at the database
-     *       level). Setting the detailed metrics level to TABLE/PARITITION for a table,
+     *       level). Setting the detailed metrics level to TABLE/PARTITION for a table,
      *       enables detailed metrics for the given table regardless of the detailed
      *       metrics settings at the database level. Setting the detailed metrics
      *       level to DISABLED for a table, disables detailed metrics for the given table

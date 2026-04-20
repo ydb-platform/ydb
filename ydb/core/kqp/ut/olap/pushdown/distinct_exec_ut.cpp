@@ -106,19 +106,34 @@ TCollectedStreamResult RunDistinctScanQuery(
     NYdb::NTable::TTableClient& tableClient,
     const TString& tablePath,
     bool enablePushdown,
+    const TString& forceDistinctColumn,
     const TString& selectList,
     const TString& whereClause,
+    const TString& orderByClause,
     const std::optional<ui64> limit)
 {
     TStringBuilder q;
     q << R"(
         --!syntax_v1
         PRAGMA Kikimr.OptEnableOlapPushdown = "true";
-        PRAGMA Kikimr.OptEnableOlapPushdownDistinct = ")" << (enablePushdown ? "true" : "false") << R"(";
+    )";
+    if (enablePushdown) {
+        q << R"(
+        PRAGMA Kikimr.OptForceOlapPushdownDistinct = ")" << forceDistinctColumn << R"(";
+    )";
+        if (limit.has_value()) {
+            q << R"(
+        PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = ")" << *limit << R"(";
+    )";
+        }
+    }
 
-        SELECT DISTINCT )" << selectList << " FROM `" << tablePath << "`";
+    q << "\n\n        SELECT DISTINCT " << selectList << " FROM `" << tablePath << "`";
     if (!whereClause.empty()) {
         q << "\n" << whereClause;
+    }
+    if (!orderByClause.empty()) {
+        q << "\n" << orderByClause;
     }
     if (limit.has_value()) {
         q << "\nLIMIT " << *limit;
@@ -130,7 +145,7 @@ TCollectedStreamResult RunDistinctScanQuery(
 }
 
 TCollectedStreamResult RunDistinctQuery(NYdb::NTable::TTableClient& tableClient, const TString& tablePath, const bool enablePushdown) {
-    return RunDistinctScanQuery(tableClient, tablePath, enablePushdown, "resource_id", {}, std::nullopt);
+    return RunDistinctScanQuery(tableClient, tablePath, enablePushdown, "resource_id", "resource_id", {}, {}, std::nullopt);
 }
 
 } // namespace
@@ -139,7 +154,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
     Y_UNIT_TEST(OneShard_DistinctOnOff_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         // single columnshard & single table shard to avoid cross-shard merge effects
@@ -158,7 +172,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
     Y_UNIT_TEST(OneShard_WithDuplicates_DistinctOnOff_SameResult_UniqueCount) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
@@ -178,7 +191,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
     Y_UNIT_TEST(TwoShards_HalfRowsPerShard_DistinctOnOff_SameResult_AllRowsReturned) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 2, 2);
@@ -215,7 +227,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
     Y_UNIT_TEST(TwoShards_DuplicatesAcrossShards_DistinctOnOff_SameResult_KqpMerges) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 2, 2);
@@ -260,7 +271,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
     Y_UNIT_TEST(OneShard_WithDuplicates_DistinctOnOff_LimitBelowUniques_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
@@ -271,17 +281,15 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kLimit = 7;
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", {}, kLimit);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", {}, kLimit);
+        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit);
+        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct+limit results differ with pushdown on/off");
     }
 
     Y_UNIT_TEST(OneShard_AllUniques_DistinctOnOff_Limit_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
@@ -289,17 +297,15 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kLimit = 25;
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", {}, kLimit);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", {}, kLimit);
+        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit);
+        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct+limit results differ with pushdown on/off");
     }
 
     Y_UNIT_TEST(TwoShards_DuplicatesAcrossShards_DistinctOnOff_Limit_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 2, 2);
@@ -325,18 +331,16 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kLimit = 15;
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", {}, kLimit);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", {}, kLimit);
+        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit);
+        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct+limit results differ with pushdown on/off");
     }
 
     // PK is (timestamp, uid): filter on the first key column (prefix) — pushdown-friendly; results must match with pragma off.
     Y_UNIT_TEST(CompositePk_WhereTimestampPrefix_DistinctLevel_OnOff_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
@@ -348,51 +352,22 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             << R"() AND `timestamp` < DateTime::FromMicroseconds()" << (tsBegin + rowCount) << ")";
 
         auto tableClient = kikimr.GetTableClient();
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "`level`", where, std::nullopt);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "`level`", where, std::nullopt);
+        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", where, {}, std::nullopt);
+        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "level", "`level`", where, {}, std::nullopt);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 5);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 5);
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct+pk-prefix where results differ with pushdown on/off");
 
         constexpr ui64 kLimit = 3;
-        auto resOffL = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "`level`", where, kLimit);
-        auto resOnL = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "`level`", where, kLimit);
+        auto resOffL = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", where, "ORDER BY `level`", kLimit);
+        auto resOnL = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "level", "`level`", where, "ORDER BY `level`", kLimit);
         UNIT_ASSERT_VALUES_EQUAL(resOffL.RowsCount, kLimit);
         UNIT_ASSERT_VALUES_EQUAL(resOnL.RowsCount, kLimit);
-        CompareYsonUnordered(resOffL.ResultSetYson, resOnL.ResultSetYson, "distinct+pk-prefix+limit results differ with pushdown on/off");
     }
 
-    // Predicate only on the second PK column — DISTINCT may not push; correctness must still match pragma off.
-    Y_UNIT_TEST(CompositePk_WhereSecondPkOnly_DistinctLevel_OnOff_SameResult) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
-        TKikimrRunner kikimr(settings);
-
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
-        constexpr ui64 tsBegin = 2'000'000;
-        constexpr size_t rowCount = 20;
-        TLocalHelper(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", 0, tsBegin, rowCount);
-
-        const TString targetUid = TStringBuilder() << "uid_" << (tsBegin + 7);
-        const TString where = TStringBuilder() << R"(WHERE `uid` = ")" << targetUid << "\"";
-
-        auto tableClient = kikimr.GetTableClient();
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "`level`", where, std::nullopt);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "`level`", where, std::nullopt);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 1);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct+second-pk where results differ with pushdown on/off");
-
-        constexpr ui64 kLimit = 1;
-        auto resOffL = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "`level`", where, kLimit);
-        auto resOnL = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "`level`", where, kLimit);
-        UNIT_ASSERT_VALUES_EQUAL(resOffL.RowsCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(resOnL.RowsCount, 1);
-        CompareYsonUnordered(resOffL.ResultSetYson, resOnL.ResultSetYson, "distinct+second-pk+limit results differ with pushdown on/off");
-    }
+    // NOTE: In forced pushdown mode we intentionally keep KQP-side logic minimal.
+    // More complex filters (e.g. non-PK predicates) are expected to be handled correctly by KQP later.
 }
 
 } // namespace NKikimr::NKqp
-

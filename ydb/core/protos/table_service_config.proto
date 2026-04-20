@@ -498,5 +498,4 @@ message TTableServiceConfig {
 
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 
-    optional bool EnableOlapPushdownDistinct = 126 [ default = false, (InvalidateCompileCache) = true ];
 };

@@ -81,7 +81,12 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
-    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownDistinct;
+    // Force OLAP DISTINCT pushdown for a specific column name (testing / debug).
+    // If unset/empty -> do not pushdown.
+    NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
+    // Force ItemsLimit pushdown for OLAP DISTINCT (testing / debug).
+    // If unset/0 -> do not pushdown.
+    NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
@@ -211,7 +216,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
-    bool GetEnableOlapPushdownDistinct() const;
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;

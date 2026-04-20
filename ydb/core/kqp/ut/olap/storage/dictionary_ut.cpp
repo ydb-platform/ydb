@@ -429,35 +429,35 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         PATH: tablets/subsystem/columnshard/module_id/Scan
         EXPECTED: 0
         ------
-        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true"; SELECT DISTINCT message FROM `/Root/ColumnTable` ORDER BY message;
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable` ORDER BY message;
         EXPECTED: [[["a"]];[["b"]];[["c"]]]
         ------
         CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
         PATH: tablets/subsystem/columnshard/module_id/Scan
         EXPECTED: 1
         ------
-        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true"; SELECT DISTINCT message FROM `/Root/ColumnTable`;
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable`;
         EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
         ------
         CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
         PATH: tablets/subsystem/columnshard/module_id/Scan
         EXPECTED: 2
         ------
-        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true"; SELECT DISTINCT message FROM `/Root/ColumnTable` WHERE pk > 0;
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable` WHERE pk > 0;
         EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
         ------
         CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
         PATH: tablets/subsystem/columnshard/module_id/Scan
         EXPECTED: 3
         ------
-        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true"; SELECT DISTINCT message FROM `/Root/ColumnTable` WHERE pk > 0 AND pk < 5;
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable` WHERE pk > 0 AND pk < 5;
         EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
         ------
         CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
         PATH: tablets/subsystem/columnshard/module_id/Scan
         EXPECTED: 4
         ------
-        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptEnableOlapPushdownDistinct = "true"; SELECT DISTINCT message, pk FROM `/Root/ColumnTable` ORDER BY message, pk;
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message, pk FROM `/Root/ColumnTable` ORDER BY message, pk;
         EXPECTED: [[["a"];1u];[["a"];3u];[["b"];2u];[["c"];4u]]
         ------
         CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
@@ -466,7 +466,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     )";
     Y_UNIT_TEST(DistinctDictionary) {
         auto settings = GetDictionarySettings();
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownDistinct(true);
         Variator::ToExecutor(Variator::SingleScript(scriptDistinctDictionary)).Execute(settings);
     }
 

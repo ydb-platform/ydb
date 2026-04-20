@@ -29,6 +29,14 @@ namespace NKikimr::NOlap::NReader {
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui64, ui64, ui64, TString, TString), \
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "blobBytes", "rawBytes", "totalReservedBytes", "executionResult", "details")) \
+    PROBE(SubColumnsHeaderRead, \
+        GROUPS("DataSource"), \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, ui32, ui64, ui64), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "columnId", "columnName", "durationMs", "chunkIndex", "blobBytes", "rawBytes")) \
+    PROBE(SubColumnsDataRead, \
+        GROUPS("DataSource"), \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, TString, ui32, ui64, ui64), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "columnId", "columnName", "durationMs", "subColumnName", "chunkIndex", "blobBytes", "rawBytes")) \
     PROBE(ProgramAssembleOriginalData, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui64, TString, TString), \

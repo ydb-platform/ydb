@@ -9,6 +9,12 @@ the test against a shorter unmute window (see `mute_config.json`) instead of
 the default one. Rows are cleaned up when the test is either unmuted, fails
 during the fast window, or the window expires.
 
+If fast-unmute **reverts** (failure comment), rows are removed but the GitHub
+issue stays **open**; org Project **Status** is set back to **Muted**. CI tests
+remain governed by the **default** unmute rules until those criteria are met.
+If someone **closes the issue again** as Completed while tests are still muted,
+the next ``sync`` can insert new rows and start another fast-unmute cycle.
+
 Usage:
     python3 manual_unmute.py sync
     python3 manual_unmute.py sync -v   # DEBUG: why each issue/test was skipped
@@ -30,8 +36,10 @@ sys.path.append(os.path.join(_SCRIPT_DIR, '..'))
 from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
 from update_mute_issues import (
     ORG_NAME,
+    PROJECT_ID,
     REPO_NAME,
     add_issue_comment,
+    get_project_v2_fields,
     run_query,
 )
 from ydb_wrapper import YDBWrapper
@@ -46,6 +54,10 @@ from mute_constants import (
 
 LABEL_NAME = 'manual-fast-unmute'
 
+# Org project board (same as ``update_mute_issues.PROJECT_ID``).
+PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN = 'Observation'
+PROJECT_STATUS_ON_FAST_UNMUTE_FAIL = 'Muted'
+
 _LABEL_ID_CACHE = {}
 
 # GitHub ``__typename`` is ``User`` for PAT-based bot accounts; skip known bot logins (M2).
@@ -57,7 +69,9 @@ _LOG = logging.getLogger('manual_unmute')
 
 COMMENT_ENTER = """🚀 **Fast-unmute started**
 
-User **{closer_login}** closed this issue, signalling that the listed tests are fixed.
+{closer_mention_line}This issue was **reopened** automatically so automation can track the shorter unmute window after you closed it.
+
+You closed this issue, signalling that the listed tests are fixed.
 The following tests are now on a **shorter unmute window** ({window_days} days, min {min_runs} clean runs) instead of the default:
 
 {tests_bullet_list}
@@ -110,8 +124,12 @@ def _coerce_dt(value):
         if value.tzinfo is None:
             return value.replace(tzinfo=datetime.timezone.utc)
         return value.astimezone(datetime.timezone.utc)
+    if isinstance(value, datetime.date):
+        return datetime.datetime.combine(value, datetime.time.min, tzinfo=datetime.timezone.utc)
     if isinstance(value, int):
         return datetime.datetime.fromtimestamp(value / 1_000_000, tz=datetime.timezone.utc)
+    if isinstance(value, float):
+        return datetime.datetime.fromtimestamp(value, tz=datetime.timezone.utc)
     return None
 
 
@@ -209,9 +227,13 @@ def fetch_monitor_outcomes_in_days(ydb_wrapper, tests_monitor_path, branch, buil
 
     In CI, a failed run that is muted is stored as status ``mute`` → ``mute_count``;
     non-muted failures are ``fail_count`` (see ``transform_build_results.mute_test_result`` /
-    ``upload_tests_results``). For fast-unmute revert we follow the same ``total_fails`` idea
-    as ``create_new_muted_ya`` (``fail_count`` + ``mute_count``), then anchor per-row by
-    ``requested_at`` in cleanup so pre-entry history does not spuriously revert (C1 review).
+    ``upload_tests_results``).     Fast-unmute **rollback** counts only ``fail_count``: while the test
+    is still muted, failures accumulate in ``mute_count``; summing both would immediately exceed
+    zero for any active mute and wrongly trigger ``failed during window`` right after insert.
+    The row for the **calendar day of** ``requested_at`` is still skipped when scoring rollback:
+    daily aggregates mix runs before and after the request, and the same day may carry both
+    ``fail_count`` and ``mute_count``. Anchor per-row by ``requested_at`` so pre-entry history
+    never counts (C1 review).
     """
     query = f"""
     SELECT full_name, date_window, fail_count, mute_count
@@ -223,12 +245,23 @@ def fetch_monitor_outcomes_in_days(ydb_wrapper, tests_monitor_path, branch, buil
     return ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_outcomes_window')
 
 
-def bad_outcomes_in_day_range(monitor_rows, full_name, since_days_inclusive):
-    """Sum ``fail_count`` + ``mute_count`` for ``full_name`` on monitor days ``>= since_days_inclusive``.
+def bad_outcomes_in_day_range(
+    monitor_rows,
+    full_name,
+    since_days_inclusive,
+    skip_fail_counts_on_day_ordinal=None,
+):
+    """Sum ``fail_count`` only for ``full_name`` on monitor days ``>= since_days_inclusive``.
 
-    Used for rollback: same trailing calendar span as ``aggregate_test_data(..., period_days)``
-    in ``create_new_muted_ya`` (see ``start_date = today - (period_days - 1)``), bounded below
-    by fast-unmute entry so pre-entry history never counts (C1).
+    Rollback tracks **unmuted** failures only; ``mute_count`` is omitted (see
+    ``fetch_monitor_outcomes_in_days``). Same trailing calendar span idea as
+    ``aggregate_test_data(..., period_days)`` in ``create_new_muted_ya``, bounded below by
+    fast-unmute entry so pre-entry history never counts (C1).
+
+    ``skip_fail_counts_on_day_ordinal``: days since 1970-01-01 for the fast-unmute **request
+    date** (UTC). That day's ``tests_monitor`` row is omitted: it aggregates the whole UTC day,
+    including activity before ``requested_at``, and may still show ``fail_count`` while the test
+    was muted earlier the same day.
     """
     if since_days_inclusive is None:
         return 0
@@ -239,7 +272,9 @@ def bad_outcomes_in_day_range(monitor_rows, full_name, since_days_inclusive):
         dw = _date_window_to_days(row.get('date_window'))
         if dw is None or dw < since_days_inclusive:
             continue
-        total += int(row.get('fail_count') or 0) + int(row.get('mute_count') or 0)
+        if skip_fail_counts_on_day_ordinal is not None and dw == skip_fail_counts_on_day_ordinal:
+            continue
+        total += int(row.get('fail_count') or 0)
     return total
 
 
@@ -315,6 +350,138 @@ def reopen_issue(issue_id):
     }
     """
     run_query(mutation, {'issueId': issue_id})
+
+
+def _issue_project_board_item_id(issue_node_id, project_number):
+    """Return Project v2 **item** id for ``issue_node_id`` on board ``project_number``, or ``None``."""
+    query = """
+    query ($issueId: ID!) {
+      node(id: $issueId) {
+        ... on Issue {
+          projectItems(first: 40) {
+            nodes {
+              id
+              project { number }
+            }
+          }
+        }
+      }
+    }
+    """
+    try:
+        result = run_query(query, {'issueId': issue_node_id})
+    except Exception as exc:
+        logging.warning('manual_unmute: projectItems query failed: %s', exc)
+        return None
+    node = (result.get('data') or {}).get('node') or {}
+    want = int(project_number)
+    for it in ((node.get('projectItems') or {}).get('nodes')) or []:
+        num = (it.get('project') or {}).get('number')
+        if num is not None and int(num) == want:
+            return it.get('id')
+    return None
+
+
+def _add_issue_to_org_project(project_global_id, issue_node_id):
+    """Add issue to org project; return new project **item** id."""
+    mutation = """
+    mutation ($projectId: ID!, $contentId: ID!) {
+      addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+        item { id }
+      }
+    }
+    """
+    try:
+        result = run_query(
+            mutation, {'projectId': project_global_id, 'contentId': issue_node_id}
+        )
+    except Exception as exc:
+        logging.warning('manual_unmute: addProjectV2ItemById failed: %s', exc)
+        return None
+    item = (((result.get('data') or {}).get('addProjectV2ItemById') or {}).get('item') or {})
+    return item.get('id')
+
+
+def _set_manual_unmute_project_board_status(issue_node_id, status_label):
+    """Set org project ``Status`` (single select) by option name (case-insensitive).
+
+    Issues not yet on the board are added to the project (same behaviour as mute tooling).
+    Requires token scope that can read/update org projects.
+    """
+    label = (status_label or '').strip()
+    if not label:
+        return
+    try:
+        project_global_id, project_fields = get_project_v2_fields(ORG_NAME, PROJECT_ID)
+    except Exception as exc:
+        logging.warning('manual_unmute: could not load project %s fields: %s', PROJECT_ID, exc)
+        return
+    status_field_id = None
+    option_id = None
+    want = label.lower()
+    for field in project_fields:
+        if (field.get('name') or '').lower() != 'status':
+            continue
+        status_field_id = field.get('id')
+        for opt in field.get('options') or []:
+            if (opt.get('name') or '').lower() == want:
+                option_id = opt.get('id')
+                break
+        break
+    if not status_field_id or not option_id:
+        logging.warning(
+            'manual_unmute: project %s: Status field or %r option not found; skip board update',
+            PROJECT_ID,
+            label,
+        )
+        return
+
+    item_id = _issue_project_board_item_id(issue_node_id, PROJECT_ID)
+    if not item_id:
+        item_id = _add_issue_to_org_project(project_global_id, issue_node_id)
+    if not item_id:
+        logging.warning(
+            'manual_unmute: could not resolve or create project item for issue (project %s)',
+            PROJECT_ID,
+        )
+        return
+
+    mutation = """
+    mutation ($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String) {
+      updateProjectV2ItemFieldValue(input: {
+        projectId: $projectId,
+        itemId: $itemId,
+        fieldId: $fieldId,
+        value: { singleSelectOptionId: $optionId }
+      }) {
+        projectV2Item { id }
+      }
+    }
+    """
+    try:
+        run_query(
+            mutation,
+            {
+                'projectId': project_global_id,
+                'itemId': item_id,
+                'fieldId': status_field_id,
+                'optionId': option_id,
+            },
+        )
+        logging.info(
+            'manual_unmute: set project %s Status to %r',
+            PROJECT_ID,
+            label,
+        )
+    except Exception as exc:
+        logging.warning('manual_unmute: updateProjectV2ItemFieldValue failed: %s', exc)
+
+
+def set_fast_unmute_reopen_project_status(issue_node_id):
+    """Status → Observation when reopening for fast-unmute."""
+    _set_manual_unmute_project_board_status(
+        issue_node_id, PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN
+    )
 
 
 def _get_label_id():
@@ -629,10 +796,14 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         upsert_rows(ydb_wrapper, table_path, issue_rows)
 
         reopen_issue(issue_id)
+        set_fast_unmute_reopen_project_status(issue_id)
+        raw_login = (closer.get('login') or '').strip()
+        closer_mention_line = f'@{raw_login}\n\n' if raw_login else ''
         add_issue_comment(
             issue_id,
             COMMENT_ENTER.format(
-                closer_login=closer.get('login') or 'unknown',
+                closer_mention_line=closer_mention_line,
+                closer_login=raw_login or 'unknown',
                 window_days=window_days,
                 min_runs=min_runs,
                 tests_bullet_list=_format_bullet_list(r['full_name'] for r in issue_rows),
@@ -711,6 +882,11 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
             else:
                 effective_start = trailing_start
             since_days = (effective_start - _MONITOR_EPOCH).days
+            entry_day_ordinal = None
+            if requested_at:
+                entry_day_ordinal = (
+                    requested_at.astimezone(datetime.timezone.utc).date() - _MONITOR_EPOCH
+                ).days
 
             if full_name not in currently_muted:
                 if grace_table_path:
@@ -735,7 +911,12 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
                 logging.info('manual_unmute_cleanup: %s (already unmuted)', full_name)
                 continue
 
-            if bad_outcomes_in_day_range(monitor_rows, full_name, since_days) > 0:
+            if bad_outcomes_in_day_range(
+                monitor_rows,
+                full_name,
+                since_days,
+                skip_fail_counts_on_day_ordinal=entry_day_ordinal,
+            ) > 0:
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
                 if issue_number:
@@ -766,6 +947,9 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
                     tests_bullet_list=_format_bullet_list(failed_tests),
                     workflow_run_url=run_url,
                 ),
+            )
+            _set_manual_unmute_project_board_status(
+                issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_FAIL
             )
 
         for issue_number in issues_to_delabel:

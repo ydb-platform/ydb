@@ -347,7 +347,6 @@ def generate_github_issue_title_and_body(test_data):
     branch = test_data[0]['branch']
     build_type = test_data[0].get('build_type', DEFAULT_BUILD_TYPE)
     test_full_names = [f"{d['full_name']}" for d in test_data]
-    test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
         f"{d['test_name']}: {d['state']} last {d['days_in_state']} days, at {d['date_window']}: success_rate {d['success_rate']}%, {d['summary']}"
         for d in test_data
@@ -362,8 +361,6 @@ def generate_github_issue_title_and_body(test_data):
 
     # Преобразование списка тестов в строку и кодирование
     test_string = "\n".join(test_full_names)
-
-    test_mute_strings_string = "\n".join(test_mute_strings)
 
     summary_string = "\n".join(summary)
 
@@ -388,12 +385,12 @@ def generate_github_issue_title_and_body(test_data):
         f"Build type:<!--build_type_list_start-->\n"
         f"{build_type}\n"
         f"<!--build_type_list_end-->\n\n"
-        f"**Add line to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**\n"
-        "```\n"
-        f"{test_mute_strings_string}\n"
-        "```\n\n"
         f"Owner: {owner}\n\n"
-        "**Read more in [mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**\n\n"
+        "**About this issue**\n"
+        "- Auto-created by the mute workflow.\n"
+        "- Bot closes when all listed tests are unmuted or no longer exist.\n"
+        "- Close as **Completed** to trigger fast-unmute.\n"
+        "- [mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md) — full details.\n\n"
         f"**Summary history:** \n {summary_string}\n"
         "\n\n"
         f"**Test run history:** [link]({test_run_history_link})\n\n"

@@ -45,6 +45,7 @@ struct TSettings {
         IntervalCtor = 1 << 26,
         MinMax = 1 << 27,
         NonDeterministic = 1 << 28,
+        PredicateAsExpression = ui64{1} << 31, // Predicates can be used in expressions (e.g. (a = b) = (c = d))
     };
 
     explicit TSettings(NLog::EComponent logComponent)

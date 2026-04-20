@@ -14,6 +14,8 @@ namespace NKqp {
 
 using namespace NOpt;
 
+class TKqpOptimizerTraceHtml;
+
 class TRBOContext {
 public:
     TRBOContext(TKqpOptimizeContext& kqpCtx, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, NYql::IGraphTransformer& typeAnnTransformer,
@@ -29,7 +31,8 @@ public:
                 kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()), 
                 kqpCtx.Config->UseBlockHashJoin.Get().GetOrElse(false)))
         , ExecutionJson(std::nullopt)
-        , ExplainJson(std::nullopt) {
+        , ExplainJson(std::nullopt)
+        , HtmlTrace(nullptr) {
     }
 
     TKqpOptimizeContext& KqpCtx;
@@ -41,6 +44,9 @@ public:
     TKqpProviderContext CBOCtx;
     std::optional<NJson::TJsonValue> ExecutionJson;
     std::optional<NJson::TJsonValue> ExplainJson;
+
+    /// When non-null, rule applications append to this trace (see YDB_KQP_NEW_RBO_HTML_TRACE).
+    TKqpOptimizerTraceHtml* HtmlTrace;
 };
 
 } // namespace NKqp

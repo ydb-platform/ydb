@@ -14,7 +14,7 @@ Backup collections address common backup challenges for production workloads:
 
 - **Storage efficiency**: Incremental backups capture only changes since the previous backup, significantly reducing storage requirements compared to multiple full backups.
 - **Consistent recovery**: All tables in a collection are backed up from the same global snapshot, ensuring referential integrity across tables during restoration.
-- **Chain-based recovery**: Recovery to the state at the time of the selected backup (usually the latest in the current chain — see [`RESTORE`](../../yql/reference/syntax/restore-backup-collection.md)).
+- **Chain-based recovery**: Recovery to the state of the **latest** backup in the current chain — see [`RESTORE`](../../yql/reference/syntax/restore-backup-collection.md).
 
 For a comparison with other backup methods (export/import, dump/restore), see [Backup concepts](../backup.md).
 
@@ -145,7 +145,7 @@ All backup and restore operations run asynchronously, allowing normal database o
 
 ## Restoring from Backups
 
-Restoration recovers data from a backup chain to a specified point in time.
+Restoration recovers data to the state of the latest backup in the chain currently in the cluster. To restore to an earlier point, import only the desired prefix of the chain from external storage — see [Importing and Restoring](../../recipes/backup-collections/importing-and-restoring.md).
 
 ### Restore Workflow
 

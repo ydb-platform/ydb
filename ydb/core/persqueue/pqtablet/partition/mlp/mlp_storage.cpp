@@ -459,14 +459,14 @@ size_t TStorage::Compact() {
                 case EMessageStatus::DLQ:
                     break;
             }
-            RemoveFirstMessageFromMessages();
+            RemoveFirstMessageFromFastZone();
             ++removed;
         }
     }
 
     // Remove already committed messages
     while(!Messages.empty() && FirstOffset < FirstUncommittedOffset) {
-        RemoveFirstMessageFromMessages();
+        RemoveFirstMessageFromFastZone();
         ++removed;
     }
 
@@ -710,7 +710,7 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
     }
 }
 
-void TStorage::RemoveFirstMessageFromMessages() {
+void TStorage::RemoveFirstMessageFromFastZone() {
     AFL_ENSURE(!Messages.empty());
     auto& message = Messages.front();
     RemoveMessage(FirstOffset, message);
@@ -733,7 +733,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
     while (!Messages.empty() && offset > GetLastOffset()) {
-        RemoveFirstMessageFromMessages();
+        RemoveFirstMessageFromFastZone();
     }
 
     if (Messages.size() >= MaxFastMessages) {
@@ -751,7 +751,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
                     ++FirstOffset;
                     break;
                 case EMessageStatus::Committed:
-                    RemoveFirstMessageFromMessages();
+                    RemoveFirstMessageFromFastZone();
                     break;
             }
         }

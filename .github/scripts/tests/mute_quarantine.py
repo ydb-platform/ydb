@@ -311,6 +311,24 @@ def fetch_issue_closer_types_and_logins(issue_numbers):
 
 
 def reopen_issue(issue_id):
+    state_query = """
+    query ($issueId: ID!) {
+      node(id: $issueId) {
+        ... on Issue {
+          state
+        }
+      }
+    }
+    """
+    state_result = run_query(state_query, {"issueId": issue_id})
+    issue_state = (
+        state_result.get("data", {})
+        .get("node", {})
+        .get("state")
+    )
+    if issue_state != "CLOSED":
+        return
+
     query = """
     mutation ($issueId: ID!) {
       reopenIssue(input: {issueId: $issueId}) {

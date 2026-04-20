@@ -252,22 +252,6 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_table_sql)
 
 
-def ensure_quarantine_since_column(ydb_wrapper, table_path: str) -> None:
-    try:
-        ydb_wrapper.execute_dml(
-            f"ALTER TABLE `{table_path}` ADD COLUMN `quarantine_since` Timestamp",
-            query_name="github_issue_mapping_add_quarantine_since_column",
-        )
-        print("Added column quarantine_since")
-    except Exception as exc:
-        # Backward-compatible migration: ignore if column already exists.
-        text = str(exc).lower()
-        if "already exists" in text or "duplicate" in text:
-            print("Column quarantine_since already exists")
-            return
-        raise
-
-
 def fetch_quarantine_since_by_test_key(ydb_wrapper) -> dict[tuple[str, str, str], dt.datetime]:
     try:
         table_path = ydb_wrapper.get_table_path("mute_quarantine")
@@ -406,7 +390,6 @@ def main():
                 print(f"Resolved {override_count} area_override(s) from area labels")
 
             create_test_issue_mapping_table(ydb_wrapper, table_path)
-            ensure_quarantine_since_column(ydb_wrapper, table_path)
 
             quarantine_since_by_test_key = fetch_quarantine_since_by_test_key(ydb_wrapper)
             mapping_data = convert_mapping_to_table_data(

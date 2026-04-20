@@ -65,8 +65,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         bool foundT1 = false;
         bool foundT2 = false;
         for (const auto& e : entries) {
-            if (e.PathName == "T1") foundT1 = true;
-            if (e.PathName == "T2") foundT2 = true;
+            if (e.Path == "T1") foundT1 = true;
+            if (e.Path == "T2") foundT2 = true;
         }
         UNIT_ASSERT_C(!foundT1, "T1 record should not exist (created before subscriber)");
         UNIT_ASSERT_C(foundT2, "T2 record should exist (created after subscriber)");
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         bool found = false;
         for (const auto& e : entries) {
-            if (e.OperationType == (ui32)TTxState::TxCreateTable && e.PathName == "Table1") {
+            if (e.OperationType == (ui32)TTxState::TxCreateTable && e.Path == "Table1") {
                 found = true;
                 UNIT_ASSERT_VALUES_EQUAL(e.TxId, (ui64)txId);
                 UNIT_ASSERT_VALUES_EQUAL(e.ObjectType, (ui32)NKikimrSchemeOp::EPathTypeTable);
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         ui32 alterCount = 0;
         for (const auto& e : entries) {
-            if (e.OperationType == (ui32)TTxState::TxAlterTable && e.PathName == "Table1") {
+            if (e.OperationType == (ui32)TTxState::TxAlterTable && e.Path == "Table1") {
                 ++alterCount;
                 UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description for ALTER");
                 UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpAlterTable);
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         bool found = false;
         for (const auto& e : entries) {
-            if (e.OperationType == (ui32)TTxState::TxDropTable && e.PathName == "Table1") {
+            if (e.OperationType == (ui32)TTxState::TxDropTable && e.Path == "Table1") {
                 found = true;
                 UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description for DROP");
                 UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpDropTable);
@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
         bool found = false;
         for (const auto& e : entries) {
-            if (e.PathName == "Table1" && e.OperationType == (ui32)TTxState::TxCreateTable) {
+            if (e.Path == "Table1" && e.OperationType == (ui32)TTxState::TxCreateTable) {
                 found = true;
                 UNIT_ASSERT_C(e.PlanStep > 0,
                     "CreateTable should have a valid PlanStep, got: " << e.PlanStep);
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
         auto entries = ReadSchemeChangeRecords(runtime);
         for (const auto& e : entries) {
-            if (e.PathName == "Table1") {
+            if (e.Path == "Table1") {
                 UNIT_ASSERT_C(e.PlanStep > 0,
                     "Table1 entry (opType=" << e.OperationType << ") should have a valid PlanStep, got: " << e.PlanStep);
             }
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         for (const auto& e : entries) {
             UNIT_ASSERT_C(e.PlanStep >= prevPlanStep,
                 "PlanStep should be monotonically non-decreasing: prev=" << prevPlanStep
-                    << " current=" << e.PlanStep << " path=" << e.PathName);
+                    << " current=" << e.PlanStep << " path=" << e.Path);
             prevPlanStep = e.PlanStep;
         }
 
@@ -512,7 +512,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         bool found = false;
         for (const auto& e : entries) {
-            if (e.PathName == "DirA") {
+            if (e.Path == "DirA") {
                 found = true;
                 break;
             }
@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         for (const auto& e : entries) {
             if (e.TxId != (ui64)txId) continue;
             if (e.OperationType == (ui32)TTxState::TxCreateTable) {
-                if (e.PathName == "Main") ++mainTableCount;
+                if (e.Path == "Main") ++mainTableCount;
                 else ++implTableCount;
             } else if (e.OperationType == (ui32)TTxState::TxCreateTableIndex) {
                 ++indexCount;
@@ -675,10 +675,10 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         for (const auto& e : entries.Entries) {
             if (e.TxId != (ui64)txId) continue;
             if (e.OperationType == (ui32)TTxState::TxMkDir) {
-                if (e.PathName == "A") foundA = true;
-                else if (e.PathName == "B") foundB = true;
-                else if (e.PathName == "C") foundC = true;
-            } else if (e.OperationType == (ui32)TTxState::TxCreateTable && e.PathName == "Leaf") {
+                if (e.Path == "A") foundA = true;
+                else if (e.Path == "B") foundB = true;
+                else if (e.Path == "C") foundC = true;
+            } else if (e.OperationType == (ui32)TTxState::TxCreateTable && e.Path == "Leaf") {
                 foundLeaf = true;
             }
         }

@@ -14,7 +14,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        TString subscriberId = record.GetSubscriberId();
+        const TString& subscriberId = record.GetSubscriberId();
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -24,7 +24,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
         }
 
         if (rowset.IsValid()) {
-            ui64 currentOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
+            const ui64 currentOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
             Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
             Result->Record.SetCurrentOrder(currentOrder);
         } else {
@@ -61,8 +61,8 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        TString subscriberId = record.GetSubscriberId();
-        ui64 afterOrder = record.GetAfterOrder();
+        const TString& subscriberId = record.GetSubscriberId();
+        const ui64 afterOrder = record.GetAfterOrder();
         ui32 maxCount = record.GetMaxCount();
 
         if (maxCount == 0 || maxCount > 1000) {
@@ -82,7 +82,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             return true;
         }
 
-        ui64 storedOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
+        const ui64 storedOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
 
         ui64 effectiveAfterOrder = afterOrder;
         ui64 skippedEntries = 0;
@@ -114,12 +114,12 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             auto* pathId = entry->MutablePathId();
             pathId->SetOwnerId(rowset.GetValue<Schema::SchemeChangeRecords::PathOwnerId>());
             pathId->SetLocalId(rowset.GetValue<Schema::SchemeChangeRecords::PathLocalId>());
-            entry->SetPathName(rowset.GetValue<Schema::SchemeChangeRecords::PathName>());
+            entry->SetPath(rowset.GetValue<Schema::SchemeChangeRecords::Path>());
             entry->SetObjectType(rowset.GetValue<Schema::SchemeChangeRecords::ObjectType>());
             entry->SetStatus(rowset.GetValue<Schema::SchemeChangeRecords::Status>());
             entry->SetUserSID(rowset.GetValue<Schema::SchemeChangeRecords::UserSID>());
             entry->SetSchemaVersion(rowset.GetValue<Schema::SchemeChangeRecords::SchemaVersion>());
-            entry->SetCompletedAt(rowset.GetValue<Schema::SchemeChangeRecords::CompletedAt>());
+            entry->SetCompletedAtUs(rowset.GetValue<Schema::SchemeChangeRecords::CompletedAtUs>());
             entry->SetPlanStep(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PlanStep>(0));
             entry->SetBodySize(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::BodySize>(0));
 
@@ -176,8 +176,8 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        TString subscriberId = record.GetSubscriberId();
-        ui64 upToOrder = record.GetUpToOrder();
+        const TString& subscriberId = record.GetSubscriberId();
+        const ui64 upToOrder = record.GetUpToOrder();
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -192,7 +192,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             return true;
         }
 
-        ui64 currentOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
+        const ui64 currentOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
 
         ui64 newOrder = Max(currentOrder, upToOrder);
 
@@ -276,7 +276,7 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        TString subscriberId = record.GetSubscriberId();
+        const TString& subscriberId = record.GetSubscriberId();
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -353,7 +353,7 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        TString subscriberId = record.GetSubscriberId();
+        const TString& subscriberId = record.GetSubscriberId();
 
         NIceDb::TNiceDb db(txc.DB);
 

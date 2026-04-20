@@ -101,12 +101,12 @@ struct TSchemeChangeRecordEntry {
     ui32 OperationType = 0;
     ui64 PathOwnerId = 0;
     ui64 PathLocalId = 0;
-    TString PathName;
+    TString Path;
     ui32 ObjectType = 0;
     ui32 Status = 0;
     TString UserSID;
     ui64 SchemaVersion = 0;
-    ui64 CompletedAt = 0;
+    ui64 CompletedAtUs = 0;
     NKikimrSchemeOp::TModifyScheme Body;
 };
 
@@ -141,12 +141,12 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
         entry.OperationType = proto.GetOperationType();
         entry.PathOwnerId = proto.GetPathId().GetOwnerId();
         entry.PathLocalId = proto.GetPathId().GetLocalId();
-        entry.PathName = proto.GetPathName();
+        entry.Path = proto.GetPath();
         entry.ObjectType = proto.GetObjectType();
         entry.Status = proto.GetStatus();
         entry.UserSID = proto.GetUserSID();
         entry.SchemaVersion = proto.GetSchemaVersion();
-        entry.CompletedAt = proto.GetCompletedAt();
+        entry.CompletedAtUs = proto.GetCompletedAtUs();
         if (proto.GetBodySize() > 0) {
             ordersWithBody.push_back(proto.GetOrder());
         }

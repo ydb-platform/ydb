@@ -878,12 +878,12 @@ public:
         TTxId TxId = InvalidTxId;
         TTxState::ETxType TxType = TTxState::TxInvalid;
         TPathId PathId;
-        TString PathName;
+        TString Path;
         NKikimrSchemeOp::EPathType ObjectType = NKikimrSchemeOp::EPathTypeInvalid;
         NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
         TString UserSid;
         ui64 SchemaVersion = 0;
-        TInstant CompletedAt;
+        TInstant CompletedAtUs;
         TStepId PlanStep = InvalidStepId;
         TString Body;  // serialized NKikimrSchemeOp::TModifyScheme
     };

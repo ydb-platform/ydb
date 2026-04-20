@@ -90,7 +90,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        TString subscriberId = record.GetSubscriberId();
+        const TString& subscriberId = record.GetSubscriberId();
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -105,7 +105,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             return true;
         }
 
-        ui64 newOrder = Self->NextSchemeChangeOrder;
+        const ui64 newOrder = Self->NextSchemeChangeOrder;
         const TInstant now = TInstant::Now();
 
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(

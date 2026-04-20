@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         // Should only see T1 record, not T2
         bool foundT2 = false;
         for (int i = 0; i < (int)fetch2->Record.EntriesSize(); ++i) {
-            if (fetch2->Record.GetEntries(i).GetPathName() == "T2") {
+            if (fetch2->Record.GetEntries(i).GetPath() == "T2") {
                 foundT2 = true;
             }
         }

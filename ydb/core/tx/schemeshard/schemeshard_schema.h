@@ -2337,19 +2337,19 @@ struct Schema : NIceDb::Schema {
         struct OperationType : Column<3, NScheme::NTypeIds::Uint32> {};
         struct PathOwnerId :   Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct PathLocalId :   Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct PathName :      Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Path :          Column<6, NScheme::NTypeIds::Utf8> {};
         struct ObjectType :    Column<7, NScheme::NTypeIds::Uint32> {};
         struct Status :        Column<8, NScheme::NTypeIds::Uint32> {};
         struct UserSID :       Column<9, NScheme::NTypeIds::Utf8> {};
         struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
-        struct CompletedAt :   Column<11, NScheme::NTypeIds::Uint64> {};
+        struct CompletedAtUs : Column<11, NScheme::NTypeIds::Uint64> {};
         struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
         struct BodySize :      Column<13, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Order>;
         using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
-                                      PathName, ObjectType, Status, UserSID, SchemaVersion,
-                                      CompletedAt, PlanStep, BodySize>;
+                                      Path, ObjectType, Status, UserSID, SchemaVersion,
+                                      CompletedAtUs, PlanStep, BodySize>;
     };
 
     struct SchemeChangeRecordDetails : Table<135> {

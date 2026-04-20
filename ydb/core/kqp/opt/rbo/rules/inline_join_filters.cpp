@@ -41,9 +41,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
 
     auto innerJoin = MakeIntrusive<TOpJoin>(join->GetLeftInput(), join->GetRightInput(), join->Pos, "Inner", join->JoinKeys);
     auto filterExpr = MakeConjunction(join->JoinFilters);
-    if (join->JoinKind == "LeftOnly") {
-        filterExpr = MakeNegation(filterExpr);
-    }
+    //if (join->JoinKind == "LeftOnly") {
+    //    filterExpr = MakeNegation(filterExpr);
+    //}
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
 

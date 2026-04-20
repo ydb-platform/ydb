@@ -5247,34 +5247,51 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char topic[] = "tableMode";
 
-        ui32 partitionCount = 2;
+        ui32 partitionCount = 4;
         CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
 
         WriteTopicMessage(topic, "data", 0, /* local */ true);  // wrong schema
-        WriteTopicMessage(topic, "{\"key\": \"data\"}", 1, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data1\"}", 1, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 2, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data3\"}", 3, /* local */ true);
 
         Sleep(TDuration::Seconds(1));
 
-        const TString text = fmt::format(R"(
+        TString text = fmt::format(R"(
             SELECT 
                 SystemMetadata('partition_id') as partition_id,
                 key as data
             FROM `{topic}`
             WITH (
                 FORMAT = "json_each_row",
-                SCHEMA = (
-                    key String NOT NULL
-                )
+                SCHEMA = (key String NOT NULL)
             )
-            WHERE 
-                SystemMetadata('partition_id') = 1;)",
+            WHERE SystemMetadata('partition_id') = 1 or SystemMetadata('partition_id') = 3)",
             "topic"_a = topic
         );
 
         const auto& result1 = ExecQuery(text);
-        CheckScriptResult(result1[0], 2, 1, [&](TResultSetParser& resultSet) {
+        CheckScriptResult(result1[0], 2, 2, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(0).GetUint64() == 1 || resultSet.ColumnParser(0).GetUint64() == 3);
+            UNIT_ASSERT(resultSet.ColumnParser(1).GetString() == "data1" || resultSet.ColumnParser(1).GetString() == "data3");
+        });
+
+        text = fmt::format(R"(
+            SELECT 
+                SystemMetadata('partition_id') as partition_id,
+                key as data
+            FROM `{topic}`
+            WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (key String NOT NULL)
+            )
+            WHERE SystemMetadata('partition_id') = 1 and key = "data1")",
+            "topic"_a = topic
+        );
+        const auto& result2 = ExecQuery(text);
+        CheckScriptResult(result2[0], 2, 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "data");
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "data1");
         });
     }
 }

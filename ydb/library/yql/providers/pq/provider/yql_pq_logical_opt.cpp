@@ -338,22 +338,39 @@ public:
 
         YQL_CLOG(INFO, ProviderPq) << "topicPartitionsCount " << topicPartitionsCount;
 
+        TString sharedReadingPridicateSerializedProto;
+         // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
+        if (UseSharedReadingForTopic(dqPqTopicSource)) {
+            NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+            if (sharedReadingPredicate.IsEmpty()) {
+                return node;
+            }
 
-        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        if (predicate.IsEmpty()) {
+            TStringBuilder err;
+            NYql::NConnector::NApi::TPredicate predicateProto;
+            if (!NYql::SerializeFilterPredicate(ctx, sharedReadingPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+                ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                return node;
+            }
+            YQL_ENSURE(predicateProto.SerializeToString(&sharedReadingPridicateSerializedProto));
+        }
+
+        auto settings = TPushdownSettings();
+        settings.EnableMember("_yql_sys_partition_id");
+        NPushdown::TPredicateNode partitionIdPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
+
+        if (partitionIdPredicate.IsEmpty()) {
             return node;
         }
+        
         auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
-
-         auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
+        auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
             .Args({"_yql_sys_partition_id"})
             .Body<TExprApplier>()
-                .Apply(predicate.ExprNode.Cast())
+                .Apply(partitionIdPredicate.ExprNode.Cast())
                 .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
                 .Build()
             .Done();
-
-         YQL_LOG(TRACE) << "Push filter lambda: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
 
         TExprNode::TPtr filteredPathList = ctx.Builder(node.Pos())
             .Callable("EvaluateExpr")
@@ -397,30 +414,18 @@ public:
             .Build();
 
 
-        // // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
-        // if (!UseSharedReadingForTopic(dqPqTopicSource)) {
-        //     return node;
-        // }
-
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
 
-        // NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        // if (predicate.IsEmpty()) {
-        //     return node;
-        // }
+        if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
+            
 
-        TStringBuilder err;
-        NYql::NConnector::NApi::TPredicate predicateProto;
-        if (!NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter222. Lambda is already not empty";
             return node;
         }
 
-        TString serializedProto;
-        YQL_ENSURE(predicateProto.SerializeToString(&serializedProto));
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
 
         if (maybeExtractMembers) {
@@ -432,8 +437,7 @@ public:
                         .InitFrom(dqSourceWrap)
                         .Input<TDqPqTopicSource>()
                             .InitFrom(dqPqTopicSource)
-                            .FilterPredicate().Value(serializedProto).Build()
-                           // .RowType(filteredPathList)
+                            .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
                             .Partitions(filteredPathList)
                             .Build()
                         .Build()
@@ -446,8 +450,7 @@ public:
                 .InitFrom(dqSourceWrap)
                 .Input<TDqPqTopicSource>()
                     .InitFrom(dqPqTopicSource)
-                    .FilterPredicate().Value(serializedProto).Build()
-                    //.RowType(filteredPathList)
+                    .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
                     .Partitions(filteredPathList)
                     .Build()
                 .Build()

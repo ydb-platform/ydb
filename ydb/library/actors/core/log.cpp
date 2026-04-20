@@ -1,5 +1,4 @@
 #include "log.h"
-#include <ydb/core/util/struct_log/json_writer.h>
 
 static_assert(int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG), "expect int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG)");
 static_assert(int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT), "expect int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT)");
@@ -80,9 +79,14 @@ namespace {
             return TLogRecord(Priority, Buf.Data(), Buf.Filled());
         }
     };
+
+    static const NKikimr::NStructLog::TJsonKeyValueWriter::TNameSet BusyJsonKeyNames{
+        "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
+        "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
 }
 
 namespace NActors {
+
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -91,6 +95,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
+        , StructJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -102,6 +107,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
+        , StructJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -113,6 +119,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
+        , StructJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -124,6 +131,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
+        , StructJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -621,10 +629,7 @@ namespace NActors {
                 }
 
                 if (structMessage.Defined()) {
-                    static const NKikimr::NStructLog::TJsonKeyValueWriter::TNameSet busy{
-                        "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
-                        "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
-                    NKikimr::NStructLog::TJsonWriter(j, busy).Write(structMessage.GetRef(), true);
+                    StructJsonWriter.Write(j, structMessage.GetRef(), true);
                 }
                 j.EndObject();
                 auto logRecord = j.Str();

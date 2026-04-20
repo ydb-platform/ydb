@@ -124,5 +124,4 @@ template<> struct TNativeTypeSupport<float> : public TFloatingTypeSupport<float>
 template<> struct TNativeTypeSupport<double> : public TFloatingTypeSupport<double>{};
 template<> struct TNativeTypeSupport<long double> : public TFloatingTypeSupport<long double>{};
 
-//
 }

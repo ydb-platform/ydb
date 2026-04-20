@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     TString GetMessageJsonString(const TStructuredMessage& message) {
         NJsonWriter::TBuf jsonWriter;
-        TJsonWriter(jsonWriter).Write(message);
+        TJsonWriter().Write(jsonWriter, message);
         return jsonWriter.Str();
     }
 

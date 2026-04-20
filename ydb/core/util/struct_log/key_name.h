@@ -64,7 +64,7 @@ public:
     TKeyName& operator=(const TKeyName& value) = default;
     TKeyName& operator=(TKeyName&& value) = default;
 
-    bool empty() const {
+    bool IsEmpty() const {
         if (CompileTime != nullptr) {
             return CompileTime[0] == 0;
         }

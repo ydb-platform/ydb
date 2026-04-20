@@ -1225,6 +1225,12 @@ TCoLambda PrepareJoinSide(
     TExprContext& ctx) {
 
     TCoArgument inputArg{ctx.NewArgument(pos, "flow")};
+
+    THashSet<TStringBuf> remapNames;
+    for (const auto& key : remap) {
+        remapNames.insert(std::get<1>(key).Value());
+    }
+
     auto preprocess = ctx.Builder(inputArg.Pos())
         .Callable("Map")
             .Add(0, inputArg.Ptr())
@@ -1234,6 +1240,9 @@ TCoLambda PrepareJoinSide(
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 i = 0U;
                         for (const auto& colName : columns) {
+                            if (remapNames.contains(colName.first)) {
+                                continue;
+                            }
                             parent.List(i++)
                                 .Atom(0, colName.first)
                                 .Callable(1, "Member")
@@ -1340,6 +1349,9 @@ TExprBase DqBuildHashJoin(
     const auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
     YQL_ENSURE(joinType != "Cross"sv);
 
+    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
+    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
+
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
 
@@ -1371,7 +1383,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleRightSide = !join.ShuffleRightSideBy() || !join.ShuffleRightSideBy().Cast().Empty() || !shuffleElimination;
     THashMap<TString, TString> leftColumnRemap;
     THashMap<TString, TString> rightColumnRemap;
-    if (shuffleLeftSide && shuffleRightSide /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */) {
+    if ((shuffleLeftSide && shuffleRightSide) /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */
+        || useBlockHashJoin /* block hash join peephole needs aligned types; remap must happen regardless of shuffle */) {
         for (ui32 i = 0U; i < rightJoinKeys.size() && !badKey; ++i) {
             const auto keyType1 = leftStructType->FindItemType(leftJoinKeys[i]);
             const auto keyType2 = rightStructType->FindItemType(rightJoinKeys[i]);
@@ -1387,14 +1400,24 @@ TExprBase DqBuildHashJoin(
 
             if (commonType) {
                 if (!IsSameAnnotation(*keyType1, *commonType)) {
-                    TString rename = (TString("_yql_dq_key_left_") + ToString(i));
-                    leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
-                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                    const bool skipCastForBlockJoin = useBlockHashJoin
+                        && keyType1->GetKind() == ETypeAnnotationKind::Optional
+                        && IsSameAnnotation(*keyType1->Cast<TOptionalExprType>()->GetItemType(), *commonType);
+                    if (!skipCastForBlockJoin) {
+                        TString rename = (TString("_yql_dq_key_left_") + ToString(i));
+                        leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
+                        remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                    }
                 }
                 if (!IsSameAnnotation(*keyType2, *commonType)) {
-                    TString rename = TString("_yql_dq_key_right_") + ToString(i);
-                    rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
-                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                    const bool skipCastForBlockJoin = useBlockHashJoin
+                        && keyType2->GetKind() == ETypeAnnotationKind::Optional
+                        && IsSameAnnotation(*keyType2->Cast<TOptionalExprType>()->GetItemType(), *commonType);
+                    if (!skipCastForBlockJoin) {
+                        TString rename = TString("_yql_dq_key_right_") + ToString(i);
+                        rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
+                        remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                    }
                 }
             } else
                 badKey = true;
@@ -1455,7 +1478,8 @@ TExprBase DqBuildHashJoin(
         bool canPushRightLambdaToStage = false;
 
         if (!remapLeft.empty()) {
-            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filter || rightKind, joinKeys, ctx);
+            const bool filterLeft = useBlockHashJoin ? false : (filter || rightKind);
+            auto lambda = PrepareJoinSide<true>(connLeft.Pos(), leftNames, leftJoinKeys, remapLeft, filterLeft, joinKeys, ctx);
             if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
                 remaps.emplace_back(connLeft, std::move(lambda));
                 canPushLeftLambdaToStage = true;
@@ -1465,7 +1489,8 @@ TExprBase DqBuildHashJoin(
         }
 
         if (!remapRight.empty()) {
-            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filter || leftKind, joinKeys, ctx);
+            const bool filterRight = useBlockHashJoin ? false : (filter || leftKind);
+            auto lambda = PrepareJoinSide<false>(connRight.Pos(), rightNames, rightJoinKeys, remapRight, filterRight, joinKeys, ctx);
             if (!IsDqDependsOnStageOutput(join.RightInput(), connLeft.Output().Stage(), FromString<ui32>(connLeft.Output().Index().Value()))) {
                 remaps.emplace_back(connRight, std::move(lambda));
                 canPushRightLambdaToStage = true;
@@ -1692,9 +1717,6 @@ TExprBase DqBuildHashJoin(
             flags = maybeFlags.Cast().Ref().ChildrenList();
         }
     }
-
-    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
-    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
 
     TExprNode::TPtr hashJoin;
     switch (mode) {

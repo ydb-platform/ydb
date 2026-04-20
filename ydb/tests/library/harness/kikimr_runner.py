@@ -78,8 +78,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.http_proxy_port = None
-        self.kafka_api_port = port_allocator.kafka_api_port
-        print("KikimrNode kafka_api_port=", self.kafka_api_port)
+        if configurator.kafka_proxy_enabled:
+            self.kafka_api_port = port_allocator.kafka_api_port
         if not configurator.simple_config and configurator.http_proxy_enabled:
             self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
@@ -117,7 +117,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "stdout_file": "/dev/stdout",
                 "stderr_file": "/dev/stderr"
                 }
-        print("daemon command=", self.command)
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs) # вот тут посмотреть, как передаются и используется порты. И тут порт аллокатор
 
     def is_port_listening(self, port):
@@ -249,7 +248,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             )
 
         if self.kafka_api_port is not None:
-            print("Node kafka_api_port=", self.kafka_api_port)
             command.append(
                 "--kafka-port=%s" % self.kafka_api_port,
             )
@@ -477,7 +475,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
 
         binary_path = self.__configurator.get_binary_path(0)
-        print("BINARY PATH=", binary_path)
         full_command = [binary_path]
         if connect_to_server:
             full_command += ["--server", server]

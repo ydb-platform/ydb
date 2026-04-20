@@ -59,7 +59,6 @@ class StressFixture:
     def _create_serverless_databases(self):
         timeout_seconds = 30
         self.shared_database_name = "/Root/shared_db"
-        # logger.info("setup ydb_hostel_db %s", database)
 
         self.cluster.remove_database(
             self.shared_database_name,
@@ -73,27 +72,9 @@ class StressFixture:
             },
             timeout_seconds=timeout_seconds
         )
-        # encryption_key?
+
         database_nodes = self.cluster.register_and_start_slots(self.shared_database_name, count=3, encryption_key=None)
         self.cluster.wait_tenant_up(self.shared_database_name)
-
-        # try:
-        #     yield shared_database_name
-        # finally:
-        #     logger.info("destroy ydb_hostel_db for %s", database)
-
-        #     self.cluster.remove_database(
-        #         database,
-        #         timeout_seconds=timeout_seconds
-        #     )
-
-        #     self.cluster.unregister_and_stop_slots(database_nodes)
-        # self.cluster.create_hostel_database(
-        #     database_name=self.shared_database_name,
-        #     storage_pool_units_count={
-        #         "ssd": 1,  # или "rot" в зависимости от конфигурации
-        #     }
-        # )
 
         self.serverless_database_name = "/Root/serverless_db"
 
@@ -114,19 +95,3 @@ class StressFixture:
                 "database_id": "DATABASE_ID_VAL",
             },
         )
-
-        # try:
-        #     yield database
-        # finally:
-        #     logger.info("destroy ydb_serverless_db for %s", database)
-        #     self.cluster.remove_database(
-        #         database,
-        #         timeout_seconds=timeout_seconds
-        #     )
-        #     self.cluster.create_serverless_database(
-        #         database_name=self.serverless_database_name,
-        #         hostel_db=self.shared_database_name
-        #     )
-
-        # self.cluster.wait_tenant_up(self.shared_database_name)
-        # self.cluster.wait_tenant_up(self.serverless_database_name)

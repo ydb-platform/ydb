@@ -587,14 +587,22 @@ public:
         }
 
         auto cgi = ev->Get()->Cgi();
-        if (ev->Get()->GetMethod() == HTTP_METHOD_POST) {
-            if (const auto& path = cgi.Get("restoreBackup")) {
+        if (const auto& path = cgi.Get("restoreBackup")) {
+            if (ev->Get()->GetMethod() == HTTP_METHOD_POST) {
                 if (RestoreState == ERestoreState::NotStarted) {
                     bool skipChecksum = cgi.Has("skipChecksumValidation");
                     bool dryRun = cgi.Has("dryRun");
                     StartRestore(path, {}, skipChecksum, dryRun);
                 }
-            }
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                    "HTTP/1.1 405 Method Not Allowed\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Allow: POST\r\n"
+                    "\r\n"
+                    "restoreBackup requires POST"));
+                return true;
+            } 
         }
 
         TStringStream str;

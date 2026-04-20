@@ -37,6 +37,27 @@ TParsedTokenList Tokenize(const TString& query) {
 #include "sql_ut_common.h"
 
 Y_UNIT_TEST_SUITE(QuerySplit) {
+
+TVector<TString> Statements(const TString& query) {
+    google::protobuf::Arena Arena;
+
+    NSQLTranslation::TTranslationSettings settings;
+    settings.AnsiLexer = false;
+    settings.Arena = &Arena;
+
+    TVector<TString> statements;
+    NYql::TIssues issues;
+
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+
+    UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
+
+    return statements;
+}
+
 Y_UNIT_TEST(Simple) {
     TString query = R"(
         ;
@@ -64,21 +85,7 @@ Y_UNIT_TEST(Simple) {
 
         )";
 
-    google::protobuf::Arena Arena;
-
-    NSQLTranslation::TTranslationSettings settings;
-    settings.AnsiLexer = false;
-    settings.Arena = &Arena;
-
-    TVector<TString> statements;
-    NYql::TIssues issues;
-
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-
-    UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
+    auto statements = Statements(query);
 
     UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
 
@@ -95,6 +102,14 @@ Y_UNIT_TEST(Simple) {
         -- Comment 6
         };)");
 }
+
+Y_UNIT_TEST(Bad1Bad2) {
+    TString query = " select1; select2;";
+
+    auto statements = Statements(query);
+    UNIT_ASSERT_VALUES_EQUAL(statements.size(), 0);
+}
+
 } // Y_UNIT_TEST_SUITE(QuerySplit)
 
 Y_UNIT_TEST_SUITE(ColumnCompression) {

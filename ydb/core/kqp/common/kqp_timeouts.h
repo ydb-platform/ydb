@@ -1,9 +1,12 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <util/datetime/base.h>
 
+namespace NKikimrConfig {
+    class TQueryServiceConfig;
+    class TTableServiceConfig;
+}
 
 namespace NKikimr::NKqp {
 

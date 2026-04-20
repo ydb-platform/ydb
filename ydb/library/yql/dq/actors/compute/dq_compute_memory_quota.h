@@ -27,7 +27,7 @@ namespace NYql::NDq {
 
     class TDqMemoryQuota {
     public:
-        TDqMemoryQuota(::NMonitoring::TDynamicCounters::TCounterPtr& mkqlMemoryQuota, ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, bool canAllocateExtraMemory, NActors::TActorSystem* actorSystem)
+        TDqMemoryQuota(::NMonitoring::TDynamicCounters::TCounterPtr& mkqlMemoryQuota, ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, NActors::TActorSystem* actorSystem)
             : MkqlMemoryQuota(mkqlMemoryQuota)
             , InitialMkqlMemoryLimit(initialMkqlMemoryLimit)
             , MkqlMemoryLimit(initialMkqlMemoryLimit)
@@ -35,7 +35,6 @@ namespace NYql::NDq {
             , TxId(txId)
             , TaskId(taskId)
             , ProfileStats(profileStats ? MakeHolder<TProfileStats>() : nullptr)
-            , CanAllocateExtraMemory(canAllocateExtraMemory)
             , ActorSystem(actorSystem) {
 
             Y_ABORT_UNLESS(MemoryLimits.MemoryQuotaManager->AllocateQuota(MkqlMemoryLimit));
@@ -49,17 +48,14 @@ namespace NYql::NDq {
         }
 
         void TrySetIncreaseMemoryLimitCallback(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
-            if (CanAllocateExtraMemory) {
-                alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
-                    RequestExtraMemory(required - limit, alloc);
-                });
-            }
+            alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
+                RequestExtraMemory(required - limit, alloc);
+            });
         }
 
         // This callback is created for testing purposes and will be enabled only with spilling.
         // Most likely this callback will be removed after KIKIMR-21481.
         void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
-            if (!CanAllocateExtraMemory) return;
             const ui64 limitRSS = std::numeric_limits<ui64>::max();
             const ui64 criticalRSSValue = limitRSS / 100 * 80;
 
@@ -125,10 +121,6 @@ namespace NYql::NDq {
             }
         }
 
-        bool GetCanAllocateExtraMemory() const {
-            return CanAllocateExtraMemory;
-        }
-
         ui64 GetHardMemoryLimit() const {
             return MemoryLimits.MkqlProgramHardMemoryLimit;
         }
@@ -180,7 +172,6 @@ namespace NYql::NDq {
         const TTxId TxId;
         const ui64 TaskId;
         THolder<TProfileStats> ProfileStats;
-        const bool CanAllocateExtraMemory;
         NActors::TActorSystem* ActorSystem;
     };
 } // namespace NYql::NDq

@@ -111,6 +111,7 @@ message TPersQueuePartitionRequest {
         optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
 
         optional bytes ChoosePartitionKey = 20; // Bytes that are used to choose partition for the message
+        optional string MessageDeduplicationId = 21; // Deduplication id for the message
     }
 
     message TCmdUpdateWriteTimestamp {

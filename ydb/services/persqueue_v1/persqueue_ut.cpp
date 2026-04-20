@@ -5680,7 +5680,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(SchemeOperationsTest) {
         NPersQueue::TTestServer server;
-        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR, NKikimrServices::PQ_ALTER_TOPIC});
         TString topic1 = "rt3.dc1--acc--topic1";
         TString topic3 = "rt3.dc1--acc--topic3";
         server.AnnoyingClient->CreateTopic(topic1, 1);
@@ -5779,7 +5779,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::AlterTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), statusCode, response.operation().DebugString());
         };
 
         Ydb::Topic::AlterTopicRequest request;
@@ -6103,7 +6103,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::DropTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
             server.AnnoyingClient->RemoveTopic(topic3);
         }
 
@@ -6119,7 +6119,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::DropTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR, response.ShortDebugString());
         }
 
         server.AnnoyingClient->CreateTopic("rt3.dc1--acc--topic5", 1); //ensure creation

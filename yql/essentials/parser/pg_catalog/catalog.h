@@ -477,6 +477,13 @@ const TExtensionDesc& LookupExtension(ui32 extensionIndex);
 ui32 LookupExtensionByName(const TString& name);
 ui32 LookupExtensionByInstallName(const TString& installName);
 
+class TOperatorNotFoundException : public yexception {};
+class TOperatorAmbiguityException : public yexception {};
+class TProcNotFoundException : public yexception {};
+class TProcAmbiguityException : public yexception {};
+class TAggregateNotFoundException : public yexception {};
+class TAggregateAmbiguityException : public yexception {};
+
 } // namespace NYql::NPg
 
 template <>

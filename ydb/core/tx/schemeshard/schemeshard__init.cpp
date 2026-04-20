@@ -1,14 +1,15 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/util/pb.h>
 
 namespace NKikimr {
@@ -851,7 +852,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -866,7 +867,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::FSSettings>("")
         );
     }
 
@@ -2682,6 +2684,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     pqInfo->ParentPartitionIds.insert(rowset.GetValue<Schema::PersQueues::AdjacentParent>());
                 }
 
+                if (rowset.HaveValue<Schema::PersQueues::CreationTimestampSeconds>()) {
+                    pqInfo->CreationTimestamp = TInstant::Seconds(rowset.GetValue<Schema::PersQueues::CreationTimestampSeconds>());
+                }
+
                 auto it = Self->Topics.find(pathId);
                 Y_ABORT_UNLESS(it != Self->Topics.end());
                 Y_ABORT_UNLESS(it->second);
@@ -3174,7 +3180,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStream::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStream::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStream::State>())
-                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStream::UserSIDs>(false));
+                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStream::UserSIDs>(false))
+                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStream::TraceIds>(false));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3221,7 +3228,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithSchemaChanges(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::SchemaChanges>(false))
                     .WithAwsRegion(rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>())
                     .WithState(rowset.GetValue<Schema::CdcStreamAlterData::State>())
-                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::UserSIDs>(false));
+                    .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::UserSIDs>(false))
+                    .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::TraceIds>(false));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -4018,6 +4026,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool enableChecksums = std::get<8>(rec);
                 bool enablePermissions = std::get<9>(rec);
                 TString changefeedUnderlyingTopics = std::get<10>(rec);
+                TString fsSerializedSettings = std::get<11>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -4036,6 +4045,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 } else if (s3SerializedSettings) {
                     auto settings = tableInfo->BackupSettings.MutableS3Settings();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
+                } else if (fsSerializedSettings) {
+                    auto settings = tableInfo->BackupSettings.MutableFSSettings();
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
                 } else {
                     Y_ABORT("Unknown settings");
                 }

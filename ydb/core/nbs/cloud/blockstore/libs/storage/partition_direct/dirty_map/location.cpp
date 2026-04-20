@@ -321,7 +321,12 @@ bool TLocationMask::HasDDisk() const
 
 bool TLocationMask::OnlyDDisk() const
 {
-    return (Mask != 0) && ((Mask & AllDDisks) == Mask);
+    return (Mask & AllDDisks) == Mask;
+}
+
+bool TLocationMask::OnlyDDiskAndNotEmpty() const
+{
+    return (Mask != 0) && OnlyDDisk();
 }
 
 bool TLocationMask::HasPBuffer() const
@@ -331,7 +336,12 @@ bool TLocationMask::HasPBuffer() const
 
 bool TLocationMask::OnlyPBuffer() const
 {
-    return (Mask != 0) && (Mask & AllPBuffers) == Mask;
+    return (Mask & AllPBuffers) == Mask;
+}
+
+bool TLocationMask::OnlyPBufferAndNotEmpty() const
+{
+    return (Mask != 0) && OnlyPBuffer();
 }
 
 std::optional<ELocation> TLocationMask::GetLocation(size_t tryNumber) const

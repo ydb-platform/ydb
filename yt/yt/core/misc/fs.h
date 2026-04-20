@@ -64,6 +64,9 @@ std::string GetRealPath(const std::string& path);
 //! Checks that given path is relative and points somewhere inside the root directory.
 bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path);
 
+//! Returns |true| if a given path is an absolute
+bool IsAbsolutePath(const std::string& path);
+
 //! Combines two strings into a path. Returns second path if it is absolute.
 std::string CombinePaths(const std::string& path1, const std::string& path2);
 

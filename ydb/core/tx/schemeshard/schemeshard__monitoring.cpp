@@ -1,9 +1,9 @@
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>

@@ -10,11 +10,12 @@ import pytz
 from clickhouse_connect import common
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy
+from clickhouse_connect.driver.parser import parse_callable
 from clickhouse_connect.json_impl import any_to_json
 
 BS = '\\'
 must_escape = (BS, '\'', '`', '\t', '\n')
-external_bind_re = re.compile(r'{.+:.+}')
+external_bind_re = re.compile(r'\{(\w+):([^}]+)\}')
 
 
 class DT64Param:
@@ -49,6 +50,42 @@ def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, An
     return query % tuple(format_query_value(v, server_tz) for v in parameters)
 
 
+def _extract_tz_from_type(type_str: str) -> Optional[tzinfo]:
+    """Extract timezone from a ClickHouse type hint like DateTime64(6, 'UTC').
+
+    Handles LowCardinality/Nullable wrappers and container types
+    (Array, Tuple, Map). Returns None if no timezone is found or parsing fails.
+    """
+    try:
+        base = type_str.strip()
+        if base.startswith("LowCardinality"):
+            base = base[15:-1]
+        if base.startswith("Nullable"):
+            base = base[9:-1]
+
+        base_name, values, _ = parse_callable(base)
+
+        if base_name in ("DateTime", "DateTime64"):
+            for v in values:
+                if isinstance(v, str) and v.startswith("'") and v.endswith("'"):
+                    try:
+                        return pytz.timezone(v[1:-1])
+                    except pytz.UnknownTimeZoneError:
+                        return None
+            return None
+
+        if values:
+            for v in values:
+                if isinstance(v, str):
+                    tz = _extract_tz_from_type(v)
+                    if tz is not None:
+                        return tz
+
+        return None
+    except Exception:  # pylint: disable=broad-exception-caught
+        return None
+
+
 # pylint: disable=too-many-locals,too-many-branches
 def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
                server_tz: Optional[tzinfo] = None) -> Tuple[str, Dict[str, str]]:
@@ -74,10 +111,23 @@ def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]]
                     k = k[:-3]
                     v = [DT64Param(x) for x in v]
             final_params[k] = v
-        if external_bind_re.search(query) is None:
+        matches = external_bind_re.findall(query)
+        if not matches:
             query, bound_params = finalize_query(query, final_params, server_tz), {}
         else:
-            bound_params = {f'param_{k}': format_bind_value(v, server_tz) for k, v in final_params.items()}
+            param_types = {}
+            for name, type_str in matches:
+                if name not in param_types:
+                    param_types[name] = type_str
+            bound_params = {}
+            for k, v in final_params.items():
+                tz = server_tz
+                type_str = param_types.get(k)
+                if type_str is not None:
+                    hint_tz = _extract_tz_from_type(type_str)
+                    if hint_tz is not None:
+                        tz = hint_tz
+                bound_params[f"param_{k}"] = format_bind_value(v, tz)
     else:
         query, bound_params = finalize_query(query, parameters, server_tz), {}
     if binary_binds:

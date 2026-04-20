@@ -3,22 +3,25 @@
 import functools
 import itertools
 import logging
-import six
 import subprocess
+import tempfile
+import time
+import warnings
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
+
 from ydb.tests.library.nemesis.remote_execution import execute_command_with_output_on_hosts
 
 
 logger = logging.getLogger()
 
 
-if six.PY2:
-    FileNotFoundError = IOError
+# ---------------------------------------------------------------------------
+# Base SafetyWarden
+# ---------------------------------------------------------------------------
 
 
-class SafetyWarden(object):
-    __metaclass__ = ABCMeta
+class SafetyWarden(metaclass=ABCMeta):
 
     def __init__(self, name):
         super(SafetyWarden, self).__init__()
@@ -48,6 +51,82 @@ class AggregateSafetyWarden(SafetyWarden):
                 warden.list_of_safety_violations()
             )
         return all_safety_violations
+
+
+# ---------------------------------------------------------------------------
+# CommandExecutor — strategy for running shell commands
+# ---------------------------------------------------------------------------
+
+
+class CommandExecutor(metaclass=ABCMeta):
+    """Protocol: execute a shell command and return ``(retcode, list_of_lines)``."""
+
+    @abstractmethod
+    def execute_command(self, command, timeout=60):
+        """
+        Execute *command* (list of strings) and return ``(retcode, lines)``.
+
+        Args:
+            command: Command as a list of tokens (may contain shell pipes as literal ``|`` tokens).
+            timeout: Maximum seconds to wait.
+
+        Returns:
+            Tuple of ``(return_code, list_of_output_lines)``.
+        """
+        pass
+
+
+class LocalCommandExecutor(CommandExecutor):
+    """Run a command locally via ``subprocess.Popen`` (no SSH)."""
+
+    def execute_command(self, command, timeout=60):
+        shell_cmd = " ".join(command)
+        logger.info("LocalCommandExecutor: running %s", shell_cmd)
+        list_of_lines = []
+        try:
+            with tempfile.TemporaryFile() as f_out, tempfile.TemporaryFile() as f_err:
+                process = subprocess.Popen(shell_cmd, shell=True, stdout=f_out, stderr=f_err)
+                start = time.time()
+                while time.time() < start + timeout:
+                    process.poll()
+                    if process.returncode is not None:
+                        break
+                    time.sleep(0.5)
+                else:
+                    process.kill()
+                    process.wait()
+
+                f_out.flush()
+                f_out.seek(0)
+                list_of_lines = [line.decode("utf-8", errors="replace") for line in f_out.readlines()]
+        except Exception as exc:
+            logger.error("LocalCommandExecutor: failed: %s", exc)
+            return 1, []
+
+        return process.returncode, list_of_lines
+
+
+class RemoteCommandExecutor(CommandExecutor):
+    """Run a command on remote hosts via SSH (wraps ``execute_command_with_output_on_hosts``)."""
+
+    def __init__(self, list_of_hosts, username=None):
+        self._list_of_hosts = list_of_hosts
+        self._username = username
+
+    def execute_command(self, command, timeout=60):
+        logger.info(
+            "RemoteCommandExecutor: executing on hosts=%s, command=%s",
+            self._list_of_hosts, command,
+        )
+        ret_code, output = execute_command_with_output_on_hosts(
+            self._list_of_hosts, command, username=self._username, per_host_timeout=timeout,
+        )
+        return ret_code, output
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def split_in_chunks(list_of_lines, chunk_size):
@@ -98,26 +177,34 @@ def construct_list_of_grep_pattern_arguments(list_of_markers):
     ))
 
 
-class AbstractRemoteCommandExecutionSafetyWarden(SafetyWarden):
+# ---------------------------------------------------------------------------
+# CommandBasedSafetyWarden — composition-based replacement
+# ---------------------------------------------------------------------------
 
-    def __init__(self, name, list_of_hosts, remote_command, username=None, split_line_size=0):
-        super(AbstractRemoteCommandExecutionSafetyWarden, self).__init__(name)
-        self.__list_of_hosts = list_of_hosts
-        self.__remote_command = remote_command
-        self.__username = username
-        self.__split_line_size = split_line_size
+
+class CommandBasedSafetyWarden(SafetyWarden):
+    """
+    Safety warden that delegates command execution to a ``CommandExecutor``.
+
+    Subclasses build the command; the executor decides *how* to run it
+    (locally, via SSH, etc.).
+    """
+
+    def __init__(self, name, executor, command, split_line_size=0):
+        super(CommandBasedSafetyWarden, self).__init__(name)
+        self._executor = executor
+        self._command = command
+        self._split_line_size = split_line_size
 
     def list_of_safety_violations(self):
         logger.info(
-            "{me} executing on hosts = {hosts}, command = {command}".format(
-                me=self, hosts=self.__list_of_hosts, command=self.__remote_command
+            "{me} executing command = {command}".format(
+                me=self, command=self._command,
             )
         )
-        ret_code, output = execute_command_with_output_on_hosts(
-            self.__list_of_hosts, self.__remote_command, username=self.__username
-        )
-        if self.__split_line_size > 1:
-            output = split_in_chunks(output, self.__split_line_size)
+        ret_code, output = self._executor.execute_command(self._command)
+        if self._split_line_size > 1:
+            output = split_in_chunks(output, self._split_line_size)
 
         if output:
             return output
@@ -125,12 +212,50 @@ class AbstractRemoteCommandExecutionSafetyWarden(SafetyWarden):
             return []
 
 
-class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
-    def __init__(self, targets, log_file_name, list_of_markers, lines_after=10, username=None, only_count=False, cut=True):
-        name = "GrepLogFileForMarkersSafetyWarden for markers = {markers} on targets = {targets}".format(
-            markers=list_of_markers, targets=targets
+# ---------------------------------------------------------------------------
+# Deprecated shim for backward compatibility
+# ---------------------------------------------------------------------------
+
+
+class AbstractRemoteCommandExecutionSafetyWarden(SafetyWarden):
+    """
+    .. deprecated::
+        Use ``CommandBasedSafetyWarden`` with an explicit ``CommandExecutor`` instead.
+
+    Backward-compatible shim that auto-creates a ``RemoteCommandExecutor``
+    from ``list_of_hosts`` and ``username``.
+    """
+
+    def __init__(self, name, list_of_hosts, remote_command, username=None, split_line_size=0):
+        warnings.warn(
+            "AbstractRemoteCommandExecutionSafetyWarden is deprecated; "
+            "use CommandBasedSafetyWarden with an explicit CommandExecutor",
+            DeprecationWarning,
+            stacklevel=2,
         )
-        remote_command = (
+        super(AbstractRemoteCommandExecutionSafetyWarden, self).__init__(name)
+        self._delegate = CommandBasedSafetyWarden(
+            name=name,
+            executor=RemoteCommandExecutor(list_of_hosts, username=username),
+            command=remote_command,
+            split_line_size=split_line_size,
+        )
+
+    def list_of_safety_violations(self):
+        return self._delegate.list_of_safety_violations()
+
+
+# ---------------------------------------------------------------------------
+# Concrete command-building wardens (composition-based)
+# ---------------------------------------------------------------------------
+
+
+class GrepLogFileForMarkers(CommandBasedSafetyWarden):
+    def __init__(self, executor, log_file_name, list_of_markers, lines_after=10, only_count=False, cut=True):
+        name = "GrepLogFileForMarkersSafetyWarden for markers = {markers}".format(
+            markers=list_of_markers,
+        )
+        command = (
             [
                 'grep',
                 '-A', str(lines_after),
@@ -141,7 +266,7 @@ class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
             ]
         )
         if cut:
-            remote_command.extend(
+            command.extend(
                 [
                     '|',
                     'cut',
@@ -151,27 +276,27 @@ class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
             )
 
         if only_count:
-            remote_command.extend(
+            command.extend(
                 [
                     '|', 'wc', '-l'
                 ]
             )
         super(GrepLogFileForMarkers, self).__init__(
-            name, targets, remote_command=remote_command, username=username, split_line_size=lines_after
+            name, executor, command=command, split_line_size=lines_after,
         )
 
 
-class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSafetyWarden):
+class GrepGzippedLogFilesForMarkersSafetyWarden(CommandBasedSafetyWarden):
     def __init__(
-            self, list_of_hosts, log_file_pattern, list_of_markers, lines_after=1, username=None,
+            self, executor, log_file_pattern, list_of_markers, lines_after=1,
             modification_days=1, only_count=False, cut=True
     ):
-        name = "GrepGzippedLogFilesForMarkersSafetyWarden for markers = {markers} on targets = {targets}".format(
-            markers=list_of_markers, targets=list_of_hosts
+        name = "GrepGzippedLogFilesForMarkersSafetyWarden for markers = {markers}".format(
+            markers=list_of_markers,
         )
 
         if modification_days > 0:
-            remote_command = [
+            command = [
                 'find',
                 log_file_pattern,
                 '-type',
@@ -183,22 +308,22 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSa
                 'zcat',
             ]
         else:
-            remote_command = [
+            command = [
                 'zcat',
                 log_file_pattern,
             ]
 
-        remote_command.extend([
+        command.extend([
             '|',
             'grep',
             '-A', str(lines_after),
         ])
 
-        remote_command.extend(
+        command.extend(
             construct_list_of_grep_pattern_arguments(list_of_markers)
         )
         if cut:
-            remote_command.extend(
+            command.extend(
                 [
                     '|',
                     'cut',
@@ -208,23 +333,23 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSa
             )
 
         if only_count:
-            remote_command.extend(
+            command.extend(
                 [
                     '|', 'wc', '-l'
                 ]
             )
 
         super(GrepGzippedLogFilesForMarkersSafetyWarden, self).__init__(
-            name, list_of_hosts, remote_command=remote_command, username=username, split_line_size=lines_after
+            name, executor, command=command, split_line_size=lines_after,
         )
 
 
-class GrepDMesgForPatternsSafetyWarden(AbstractRemoteCommandExecutionSafetyWarden):
-    def __init__(self, list_of_hosts, list_of_markers, lines_after=1, username=None):
-        name = "GrepDMesgForPatternsSafetyWarden for markers = {markers} on targets = {targets}".format(
-            markers=list_of_markers, targets=list_of_hosts
+class GrepDMesgForPatternsSafetyWarden(CommandBasedSafetyWarden):
+    def __init__(self, executor, list_of_markers, lines_after=1):
+        name = "GrepDMesgForPatternsSafetyWarden for markers = {markers}".format(
+            markers=list_of_markers,
         )
-        remote_command = [
+        command = [
             'dmesg', '-T',
             '|',
             'grep',
@@ -232,8 +357,13 @@ class GrepDMesgForPatternsSafetyWarden(AbstractRemoteCommandExecutionSafetyWarde
         ] + construct_list_of_grep_pattern_arguments(list_of_markers)
 
         super(GrepDMesgForPatternsSafetyWarden, self).__init__(
-            name, list_of_hosts, remote_command=remote_command, username=username, split_line_size=lines_after
+            name, executor, command=command, split_line_size=lines_after,
         )
+
+
+# ---------------------------------------------------------------------------
+# Standalone wardens (not command-based)
+# ---------------------------------------------------------------------------
 
 
 class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):

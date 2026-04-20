@@ -66,14 +66,8 @@ protected:
         return 0;
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
-        AFL_VERIFY(false);
-        return nullptr;
-    }
-
     virtual TMinMax DoGetMinMaxScalars() const override {
-        AFL_VERIFY(false);
-        return {};
+        Y_ABORT("Not implemented");
     }
 
     virtual TLocalDataAddress DoGetLocalData(

@@ -1136,7 +1136,7 @@ bool TWinCumeDist::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    YQL_ENSURE(Args_.size() == 0);
+    YQL_ENSURE(Args_.empty());
     TVector<TNodePtr> optionsElements;
     if (ctx.AnsiCurrentRow) {
         optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TNodeFlags::Default)}));
@@ -1159,7 +1159,7 @@ TWinNTile::TWinNTile(TPosition pos, const TString& opName, i32 minArgs, i32 maxA
 }
 
 bool TWinNTile::DoInit(TContext& ctx, ISource* src) {
-    if (Args_.size() >= 1 && !Args_[0]->Init(ctx, FakeSource_.Get())) {
+    if (!Args_.empty() && !Args_[0]->Init(ctx, FakeSource_.Get())) {
         return false;
     }
 
@@ -1184,7 +1184,7 @@ bool TWinLeadLag::DoInit(TContext& ctx, ISource* src) {
     if (!TWinAggrEmulation::DoInit(ctx, src)) {
         return false;
     }
-    if (Args_.size() >= 1) {
+    if (!Args_.empty()) {
         Args_[0] = BuildLambda(Pos_, Y("row"), Args_[0]);
     }
     return true;
@@ -3112,7 +3112,7 @@ TUdfNode::TUdfNode(TPosition pos, const TVector<TNodePtr>& args)
     : INode(pos)
     , Args_(args)
 {
-    if (Args_.size()) {
+    if (!Args_.empty()) {
         // If there aren't any named args, args are passed as vector of positional args,
         // else Args has length 2: tuple for positional args and struct for named args,
         // so let's construct tuple of args there. Other type checks will within DoInit call.
@@ -3124,7 +3124,7 @@ TUdfNode::TUdfNode(TPosition pos, const TVector<TNodePtr>& args)
 
 bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
-    if (Args_.size() < 1) {
+    if (Args_.empty()) {
         ctx.Error(Pos_) << "Udf: expected at least one argument";
         return false;
     }

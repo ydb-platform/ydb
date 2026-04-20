@@ -93,6 +93,8 @@ protected:
 
     virtual TIntrusivePtr<NYT::IReaderImplBase> MakeMkqlJobReader() = 0;
 
+    virtual void ChangeMkqlIOSpecIfNeeded();
+
     void Do();
 
 protected:

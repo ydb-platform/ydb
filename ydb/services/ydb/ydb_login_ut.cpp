@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
 #include <ydb/core/testlib/test_client.h>
@@ -24,8 +25,8 @@ namespace {
 
 class TLoginClientConnection {
 public:
-    TLoginClientConnection(bool isLoginAuthenticationEnabled = true)
-        : Server(InitAuthSettings(isLoginAuthenticationEnabled))
+    TLoginClientConnection(bool isLoginAuthenticationEnabled = true, bool hideAuthenticationFailureReasons = false)
+        : Server(InitAuthSettings(isLoginAuthenticationEnabled, hideAuthenticationFailureReasons))
         , Connection(GetDriverConfig(Server.GetPort()))
         , Client(Connection)
     {}
@@ -104,15 +105,21 @@ public:
     }
 
 private:
-    NKikimrConfig::TAppConfig InitAuthSettings(bool isLoginAuthenticationEnabled = true) {
+    NKikimrConfig::TAppConfig InitAuthSettings(bool isLoginAuthenticationEnabled = true,
+        bool hideAuthenticationFailureReasons = false)
+    {
         NKikimrConfig::TAppConfig appConfig;
-        auto authConfig = appConfig.MutableAuthConfig();
 
-        authConfig->SetUseBlackBox(false);
-        authConfig->SetUseLoginProvider(true);
-        authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(RootToken);
+        auto& authConfig = *appConfig.MutableAuthConfig();
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(true);
+        authConfig.SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
+
+        auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenRequirement(true);
+        securityConfig.AddAdministrationAllowedSIDs(RootToken);
+        securityConfig.SetHideAuthenticationFailureReasons(hideAuthenticationFailureReasons);
+
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
@@ -187,13 +194,23 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.Stop();
     }
 
-    Y_UNIT_TEST(InvalidPassword) {
-        TLoginClientConnection loginConnection;
+    Y_UNIT_TEST_TWIN(InvalidPassword, HideAuthenticationFailureReasons) {
+        TLoginClientConnection loginConnection(true, HideAuthenticationFailureReasons);
         loginConnection.CreateUser(User, Password);
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = "WrongPassword"});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid password");
+
+        static constexpr char error[] = "Invalid password";
+        const auto exceptionDoesntContain = [](const auto& e) {
+            return e.AsStrBuf().find(error) == std::string::npos;
+        };
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_EXCEPTION_SATISFIES(loginProvider->GetAuthInfo(), yexception, exceptionDoesntContain);
+        } else {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, error);
+        }
 
         std::string hash = R"(
             {
@@ -208,17 +225,32 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
 
         factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
         loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid password");
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_EXCEPTION_SATISFIES(loginProvider->GetAuthInfo(), yexception, exceptionDoesntContain);
+        } else {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, error);
+        }
 
         loginConnection.Stop();
     }
 
-    Y_UNIT_TEST(UnknownUser) {
-        TLoginClientConnection loginConnection;
+    Y_UNIT_TEST_TWIN(UnknownUser, HideAuthenticationFailureReasons) {
+        TLoginClientConnection loginConnection(true, HideAuthenticationFailureReasons);
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'user'");
+
+        static constexpr char error[] = "Cannot find user 'user'";
+        const auto exceptionDoesntContain = [](const auto& e) {
+            return e.AsStrBuf().find(error) == std::string::npos;
+        };
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_EXCEPTION_SATISFIES(loginProvider->GetAuthInfo(), yexception, exceptionDoesntContain);
+        } else {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, error);
+        }
 
         loginConnection.CreateUser(User, Password);
 
@@ -232,7 +264,12 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
 
         factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
         loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'user'");
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_EXCEPTION_SATISFIES(loginProvider->GetAuthInfo(), yexception, exceptionDoesntContain);
+        } else {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, error);
+        }
 
         loginConnection.Stop();
     }

@@ -1,7 +1,5 @@
 #include "mlp_storage.h"
 
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/packedtypes/longs.h>

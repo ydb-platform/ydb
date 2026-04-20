@@ -93,14 +93,14 @@ void TReadRequestExecutor::Run()
                                            VChunkConfig.GetHostIndex(*location),
                                            hint.VChunkRange,
                                            Request->Sglist,
-                                           NWilson::TTraceId(TraceId))
+                                           TraceId)
                                      : DirectBlockGroup->ReadBlocksFromPBuffer(
                                            VChunkConfig.VChunkIndex,
                                            VChunkConfig.GetHostIndex(*location),
                                            hint.Lsn,
                                            hint.VChunkRange,
                                            Request->Sglist,
-                                           NWilson::TTraceId(TraceId));
+                                           TraceId);
     future.Subscribe(std::move(onReadResponse));
 }
 

@@ -43,8 +43,9 @@ TString GenerateRandomPassword(const NLogin::TPasswordComplexity& complexity) {
         password.push_back(specialChars[RandomNumber<size_t>(specialChars.size())]);
     }
 
+    size_t minLength = std::max(complexity.MinLength, static_cast<size_t>(8));
     // Fill remaining positions with random chars from all allowed categories
-    if (password.size() < complexity.MinLength) {
+    if (password.size() < minLength) {
 
         TVector<char> pool;
         pool.insert(pool.end(), lowerLetters, lowerLetters + lowerCount);
@@ -52,7 +53,7 @@ TString GenerateRandomPassword(const NLogin::TPasswordComplexity& complexity) {
         pool.insert(pool.end(), digits, digits + digitsCount);
         pool.insert(pool.end(), specialChars.begin(), specialChars.end());
 
-        while (password.size() < complexity.MinLength) {
+        while (password.size() < minLength) {
             password.push_back(pool[RandomNumber<size_t>(pool.size())]);
         }
     }

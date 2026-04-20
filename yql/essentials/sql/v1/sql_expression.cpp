@@ -409,7 +409,7 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
 
     const bool noSpaceForInt32 = value >> 31;
     const bool noSpaceForInt64 = value >> 63;
-    if (suffix == "") {
+    if (suffix.empty()) {
         bool implicitType = true;
         if (noSpaceForInt64) {
             return new TLiteralNumberNode<ui64>(ctx.Pos(), "Uint64", ToString(value), implicitType);
@@ -2770,7 +2770,7 @@ TNodeResult TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
     }
 
     Ctx_.IncrementMonCounter("sql_features", hasUnnamed ? "SimpleTuple" : "SimpleStruct");
-    return (hasUnnamed || expectTuple || exprs.size() == 0)
+    return (hasUnnamed || expectTuple || exprs.empty())
                ? Wrap(BuildTuple(pos, exprs))
                : Wrap(BuildStructure(pos, exprs));
 }

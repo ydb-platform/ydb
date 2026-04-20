@@ -14,5 +14,5 @@ After optimization:
   (return (Collect (NarrowMap (ToFlow (WideMap (FromFlow (ExpandMap (ToFlow (BlockSelf '0)) $3)) $4)) (lambda '($9 $10) (AsStruct '($2 $10) '('column0 $9))))))
 )))))
 )
-Elapsed: <DURATION>s
-Bench score: <SCORE>
+Benchmark completed: <ITERATIONS> iterations for <DURATION>s
+Bench score: <SCORE>ms (mean wall clock: <WALL-CLOCK>ms, cv: <CV>%)

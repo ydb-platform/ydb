@@ -301,6 +301,27 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
     }
+
+    Y_UNIT_TEST(GetExecutorPoolStateWithoutHarmonizerUsesMinAndMaxLimits) {
+        TBasicExecutorPoolConfig config;
+        config.Threads = 4;
+        config.MinThreadCount = 1;
+        config.DefaultThreadCount = 2;
+        config.MaxThreadCount = 4;
+
+        TBasicExecutorPool executorPool(config, nullptr, nullptr);
+
+        TExecutorPoolState state;
+        state.PossibleMaxLimit = -1;
+        state.MaxLimit = -1;
+
+        executorPool.GetExecutorPoolState(state);
+
+        UNIT_ASSERT_VALUES_EQUAL(state.CurrentLimit, executorPool.GetThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.MinLimit, executorPool.GetMinThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.MaxLimit, executorPool.GetMaxThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.PossibleMaxLimit, state.MaxLimit);
+    }
 }
 
 Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {

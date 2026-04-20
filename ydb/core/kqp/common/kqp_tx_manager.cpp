@@ -191,11 +191,11 @@ public:
         State = ETransactionState::ERROR;
     }
 
-    void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
+    void SetPartitioning(const TTableId tableId, const TPartitioning::TCPtr& partitioning) override {
         TablePartitioning[tableId] = partitioning;
     }
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const override {
+    TPartitioning::TCPtr GetPartitioning(const TTableId tableId) const override {
         auto iterator = TablePartitioning.find(tableId);
         if (iterator != std::end(TablePartitioning)) {
             return iterator->second;
@@ -679,7 +679,7 @@ private:
 
     THashSet<ui32> ParticipantNodes;
 
-    THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
+    THashMap<TTableId, TPartitioning::TCPtr> TablePartitioning;
 
     bool AllowVolatile = false;
     bool ReadOnly = true;

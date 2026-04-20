@@ -78,6 +78,7 @@ struct TScopedNbsService: TDisableCopyMove
     storageConfig->SetPersistentBufferDDiskPoolName(
         PersistentBufferDDiskPoolName);
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
+    storageConfig->SetVChunkSize(DefaultVChunkSize);
 
     return TScopedNbsService(nbsConfig);
 }

@@ -8,7 +8,10 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_direct_replication_request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_pb_replication_request.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -30,19 +33,24 @@ TVChunk::TVChunk(
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
+    ui64 vChunkSize,
     TDuration writeHandoffDelay,
-    TDuration traceSamplePeriod)
+    TDuration traceSamplePeriod,
+    NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
     , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
     , BlockSize(DefaultBlockSize)
-    , BlocksCount(VChunkSize / BlockSize)
+    , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHandoffDelay(writeHandoffDelay)
     , TraceSamplePeriod(traceSamplePeriod)
-{}
+    , Counters(counters)
+{
+    Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
+}
 
 TVChunk::~TVChunk() = default;
 
@@ -310,7 +318,8 @@ void TVChunk::DoReadBlocksLocal(
 
     auto future = requestExecutor->GetFuture();
     future.Subscribe(
-        [promise = std::move(promise),
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
          span,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TFuture<TReadRequestExecutor::TResponse>& f) mutable
@@ -318,6 +327,12 @@ void TVChunk::DoReadBlocksLocal(
             Y_ABORT_UNLESS(threadChecker.Check());
 
             auto value = UnsafeExtractValue(f);
+
+            if (auto self = weakSelf.lock()) {
+                bool ok = !HasError(value.Error);
+                self->Counters.RequestFinished(EVChunkOperation::Read, ok);
+            }
+
             promise.SetValue(
                 TReadBlocksLocalResponse{.Error = std::move(value.Error)});
         });
@@ -338,23 +353,44 @@ void TVChunk::DoWriteBlocksLocal(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
-        ActorSystem,
-        VChunkConfig,
-        DirectBlockGroup,
-        vchunkRange,
-        std::move(callContext),
-        std::move(request),
-        lsn,
-        span->GetTraceId(),
-        WriteHandoffDelay);
+    std::shared_ptr<TBaseWriteRequestExecutor> writeExecutor;
+    switch (writeMode) {
+        case EWriteMode::PBufferReplication:
+            writeExecutor =
+                std::make_shared<TWriteWithPbReplicationRequestExecutor>(
+                    ActorSystem,
+                    VChunkConfig,
+                    DirectBlockGroup,
+                    vchunkRange,
+                    std::move(callContext),
+                    std::move(request),
+                    lsn,
+                    span->GetTraceId(),
+                    WriteHandoffDelay,
+                    pbufferReplyTimeout);
+            break;
+        case EWriteMode::DirectPBuffersFilling:
+            writeExecutor =
+                std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
+                    ActorSystem,
+                    VChunkConfig,
+                    DirectBlockGroup,
+                    vchunkRange,
+                    std::move(callContext),
+                    std::move(request),
+                    lsn,
+                    span->GetTraceId(),
+                    WriteHandoffDelay);
+            break;
+    }
+
     auto future = writeExecutor->GetFuture();
     future.Subscribe(
         [weakSelf = weak_from_this(),
          vchunkRange,
          promise = std::move(promise),
          span]   //
-        (const TFuture<TWriteRequestExecutor::TResponse>& f) mutable
+        (const TFuture<TBaseWriteRequestExecutor::TResponse>& f) mutable
         {
             auto self = weakSelf.lock();
             if (!self) {
@@ -370,13 +406,13 @@ void TVChunk::DoWriteBlocksLocal(
         });
 
     span->Event("Run");
-    writeExecutor->Run(writeMode, pbufferReplyTimeout);
+    writeExecutor->Run();
 }
 
 void TVChunk::OnWriteBlocksResponse(
     TTracedPromise<TWriteBlocksLocalResponse> promise,
     TBlockRange64 range,
-    const TWriteRequestExecutor::TResponse& response,
+    const TBaseWriteRequestExecutor::TResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -394,10 +430,14 @@ void TVChunk::OnWriteBlocksResponse(
             response.CompletedWrites);
     }
 
+    bool ok = !HasError(response.Error);
+    Counters.RequestFinished(EVChunkOperation::Write, ok);
+
     promise.SetValue(TWriteBlocksLocalResponse{.Error = response.Error});
 
     span->EndOk();
 
+    UpdatePendingCounters();
     DoFlush();
 }
 
@@ -440,6 +480,14 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
         response.FlushOk,
         response.FlushFailed);
 
+    for (size_t i = 0; i < response.FlushOk.size(); ++i) {
+        Counters.RequestFinished(EVChunkOperation::Flush, true);
+    }
+    for (size_t i = 0; i < response.FlushFailed.size(); ++i) {
+        Counters.RequestFinished(EVChunkOperation::Flush, false);
+    }
+
+    UpdatePendingCounters();
     DoErase();
 }
 
@@ -483,6 +531,33 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
         response.Location,
         response.EraseOk,
         response.EraseFailed);
+
+    for (size_t i = 0; i < response.EraseOk.size(); ++i) {
+        Counters.RequestFinished(EVChunkOperation::Erase, true);
+    }
+    for (size_t i = 0; i < response.EraseFailed.size(); ++i) {
+        Counters.RequestFinished(EVChunkOperation::Erase, false);
+    }
+
+    UpdatePendingCounters();
+}
+
+void TVChunk::UpdatePendingCounters()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    Counters.UpdatePending(
+        EVChunkOperation::Flush,
+        BlocksDirtyMap.GetFlushPendingCount());
+    Counters.UpdatePending(
+        EVChunkOperation::Erase,
+        BlocksDirtyMap.GetErasePendingCount());
+    Counters.UpdateMinLsn(
+        EVChunkOperation::Flush,
+        BlocksDirtyMap.GetMinFlushPendingLsn());
+    Counters.UpdateMinLsn(
+        EVChunkOperation::Erase,
+        BlocksDirtyMap.GetMinErasePendingLsn());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

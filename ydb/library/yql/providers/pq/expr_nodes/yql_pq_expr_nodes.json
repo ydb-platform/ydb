@@ -60,7 +60,8 @@
                 {"Index": 5, "Name": "Compression", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "LimitHint", "Type": "TExprBase"},
                 {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 8, "Name": "Watermark", "Type": "TCoLambda", "Optional": true}
+                {"Index": 8, "Name": "Watermark", "Type": "TExprBase", "Optional": true},
+                {"Index": 9, "Name": "UserSchemaColumns", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

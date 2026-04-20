@@ -8,7 +8,9 @@ SRCS(
     correlated_filter_pullup.cpp
     expand_cbo_tree.cpp
     extract_join_expressions.cpp
+    fuse_filters.cpp
     inline_cbo_tree.cpp
+    inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
     peephole_predicate.cpp
@@ -17,6 +19,7 @@ SRCS(
     push_filter_under_map.cpp
     push_limit_into_sort.cpp
     push_map.cpp
+    push_ranges.cpp
     push_olap_filter.cpp
     push_olap_projection.cpp
     remove_extra_renames_stage.cpp

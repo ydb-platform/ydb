@@ -96,6 +96,8 @@ message TDqPqTopicSource {
     google.protobuf.Duration MaxPartitionReadSkew = 28;
     uint64 ReadSessionBufferBytes = 29;
     google.protobuf.Duration PartitionsBalancingIdleTimeout = 30;
+    repeated string UserSchemaColumns = 31;
+    bool StopAtCurrentEndOffsets = 32;
 }
 
 message TDqPqTopicSink {

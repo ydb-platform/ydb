@@ -12,6 +12,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_secret.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/stream/format.h>
@@ -749,9 +751,40 @@ int TDescribeLogic::PrintPathResponse(const TString& path, const NScheme::TDescr
         return DescribeExternalTable(path, format);
     case NScheme::ESchemeEntryType::SysView:
         return DescribeSystemView(path, format);
+    case NScheme::ESchemeEntryType::Secret:
+        return DescribeSecret(path, format);
     default:
         return DescribeEntryDefault(entry, options);
     }
+}
+
+int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
+    NSecret::TSecretClient secretClient(Driver);
+
+    auto secretResult = secretClient.DescribeSecret(path).GetValueSync();
+    if (!secretResult.IsSuccess()) {
+        Out << secretResult.GetIssues().ToString() << Endl;
+        return EXIT_FAILURE;
+    }
+
+    if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
+        return PrintSecretResponsePretty(secretResult);
+    }
+    if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+    }
+
+    Ydb::Secret::DescribeSecretResult msg;
+    secretResult.SerializeTo(msg.mutable_self());
+    msg.set_version(static_cast<i64>(secretResult.GetVersion()));
+
+    return PrintProtoJsonBase64(msg, Out);
+}
+
+int TDescribeLogic::PrintSecretResponsePretty(const NSecret::TDescribeSecretResult& result) const {
+    Out << "Version: " << result.GetVersion() << Endl;
+    return EXIT_SUCCESS;
 }
 
 int TDescribeLogic::DescribeEntryDefault(NScheme::TSchemeEntry entry, const TDescribeOptions& options) {

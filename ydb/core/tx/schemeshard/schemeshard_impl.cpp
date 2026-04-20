@@ -16,6 +16,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -2010,7 +2011,8 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStream::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State),
-        NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs)
+        NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs),
+        NIceDb::TUpdate<Schema::CdcStream::TraceIds>(alterData->TraceIds)
     );
 
     db.Table<Schema::CdcStreamAlterData>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -2038,7 +2040,8 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State),
-        NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs)
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::TraceIds>(alterData->TraceIds)
     );
 }
 
@@ -3210,6 +3213,11 @@ void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardI
                 NIceDb::TUpdate<Schema::PersQueues::Parent>(parent),
                 NIceDb::TUpdate<Schema::PersQueues::AdjacentParent>(adjacentParent));
 
+    if (partitionInfo.CreationTimestamp) {
+        db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(
+            NIceDb::TUpdate<Schema::PersQueues::CreationTimestampSeconds>(partitionInfo.CreationTimestamp.Seconds()));
+    }
+
     if (partitionInfo.KeyRange) {
         if (partitionInfo.KeyRange->FromBound) {
             db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(
@@ -3869,6 +3877,7 @@ void TSchemeShard::PersistBackupSettings(
 
     PERSIST_BACKUP_SETTINGS(YTSettings)
     PERSIST_BACKUP_SETTINGS(S3Settings)
+    PERSIST_BACKUP_SETTINGS(FSSettings)
 
 #undef PERSIST_BACKUP_SETTINGS
 }

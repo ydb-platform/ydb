@@ -53,6 +53,8 @@ public:
         , Database(settings.GetDatabase())
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
+        , MaxInFlightReads(MaxInFlightReadsStreamLookup())
+        , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -313,6 +315,7 @@ private:
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
+        SentResultsAvailable = false;
 
         if (ResolveShardsInProgress) {
             finished = false;
@@ -323,12 +326,9 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        auto overloaded = StreamLookupWorker->IsOverloaded(MaxRowsProcessing);
-        if (!overloaded.has_value()) {
+        // Fetch input rows if we have less than max in flight reads in the scheduled queue.
+        if (StreamLookupWorker->ScheduledRequestsCount() < MaxInFlightReads) {
             FetchInputRows();
-        } else {
-            CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
-                << overloaded.value_or("empty"));
         }
 
         if (Partitioning) {
@@ -340,9 +340,16 @@ private:
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        if (hasPendingResults) {
+        // If we have no new reads and no pending results, we can fetch input rows again.
+        bool noNewReads = (
+            Partitioning && Reads.InFlightReads() + StreamLookupWorker->ScheduledRequestsCount() == 0
+            && LastFetchStatus == NUdf::EFetchStatus::Ok);
+        if (hasPendingResults || noNewReads) {
             // has more results
-            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            if (!SentResultsAvailable) {
+                Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+                SentResultsAvailable = true;
+            }
         }
 
         finished = inputRowsFinished && allReadsFinished && allRowsProcessed;
@@ -424,7 +431,10 @@ private:
 
         ProcessInputRows();
 
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        if (!SentResultsAvailable) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            SentResultsAvailable = true;
+        }
     }
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -589,7 +599,10 @@ private:
             shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()),
             &guard.GetMutex()->Ref()
         ));
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        if (!SentResultsAvailable) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            SentResultsAvailable = true;
+        }
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -638,11 +651,9 @@ private:
         if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
                 auto guard = BindAllocator();
-                auto requests = StreamLookupWorker->RebuildRequest(read.Id, ReadId);
-                for (auto& request : requests) {
-                    StartTableRead(read.ShardId, std::move(request));
-                }
+                StreamLookupWorker->RebuildRequest(read.ShardId, read.Id, ReadId);
                 Reads.erase(read);
+                ScheduleNextReads();
             } else {
                 RetryTableRead(read);
             }
@@ -653,6 +664,7 @@ private:
         auto guard = BindAllocator();
 
         NUdf::TUnboxedValue row;
+        auto allocState = &guard.GetMutex()->Ref();
 
         YQL_ENSURE(!Input.IsInvalid());
         if (Input.IsFinish() || !Input.HasValue()) {
@@ -660,8 +672,17 @@ private:
             return;
         }
 
+        size_t fetchCount = 0;
+        i64 bytesBefore = allocState->GetAllocated();
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
+            ++fetchCount;
+            // Avoid fetching too many rows at once: limit both the number of rows and
+            // the allocator growth since the start of this fetch loop. GetAllocated()
+            // is only a heuristic for memory pressure here, not a precise retained-memory metric.
+            if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
+                break;
+            }
         }
     }
 
@@ -670,8 +691,17 @@ private:
 
         auto guard = BindAllocator();
 
-        auto requests = StreamLookupWorker->BuildRequests(Partitioning, ReadId);
-        for (auto& [shardId, request] : requests) {
+        StreamLookupWorker->BuildRequests(Partitioning, ReadId);
+        ScheduleNextReads();
+    }
+
+    void ScheduleNextReads() {
+        while(Reads.InFlightReads() < MaxInFlightReads) {
+            auto [shardId, request] = StreamLookupWorker->PopNextRequest();
+            if (!request) {
+                break;
+            }
+
             StartTableRead(shardId, std::move(request));
         }
     }
@@ -784,11 +814,9 @@ private:
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
-            auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, ReadId);
-            for (auto& request : requests) {
-                StartTableRead(failedRead.ShardId, std::move(request));
-            }
+            StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, ReadId);
             Reads.erase(failedRead);
+            ScheduleNextReads();
         } else {
             CA_LOG_D("Schedule retry atempt for readId: " << failedRead.Id << " after " << delay);
             TlsActivationContext->Schedule(
@@ -877,8 +905,9 @@ private:
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const ui64 QuerySpanId;
     TReads Reads;
+    bool SentResultsAvailable = false;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TVector<NKikimrDataEvents::TLock> Locks;
@@ -900,6 +929,8 @@ private:
     size_t TotalBytesQuota = 0;
     ui64 MaxTotalBytesQuota = 0;
     size_t MaxRowsProcessing = 0;
+    ui64 MaxInFlightReads = 50;
+    ui64 MaxBytesPerFetch = 256_MB;
     size_t MaxBytesDefaultQuota = 0;
     size_t MaxRowsDefaultQuota = 0;
 

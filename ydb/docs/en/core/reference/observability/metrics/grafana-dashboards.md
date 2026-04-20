@@ -26,6 +26,64 @@ General database dashboard by categories:
 
 Download the [dboverview.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dboverview.json) file with the **DB overview** dashboard.
 
+## YDB Essential Metrics {#ydbessentials}
+
+A dashboard for monitoring key database metrics.
+
+### Health {#ydbessentials-health}
+
+This section contains panels showing the state of cluster and database components.
+
+| Name | Description |
+|---|---|
+| Nodes count | Number of running YDB nodes, in units |
+| Nodes Uptime | Uptime of each node since startup; helps detect restarts and unstable nodes, in seconds |
+| VDisks count | Number of available VDisks in the cluster, in units |
+
+### Saturation {#ydbessentials-saturation}
+
+This section contains panels showing database resource utilization.
+
+| Name | Description |
+|---|---|
+| CPU by thread pool (dynnodes) | CPU consumption by dynamic nodes broken down by [execution pools](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), in CPU cores |
+| CPU utilization (dynnodes) | CPU utilization by dynamic nodes broken down by [execution pools](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), in % |
+| Elapsed Time vs CPU Time | Ratio of real elapsed operation time (`ElapsedMicrosec`) to CPU time (`CpuMicrosec`) by node. Persisting value above 100% means sessions spend time waiting rather than actively executing; this is typically caused by I/O waits or CPU overcommit on the hypervisor side. |
+| RSS size by node | Amount of RAM (Resident set size) consumed by each dynamic node, with cgroup memory limits, in bytes |
+| Storage usage | Total logical database size and its limit (if set), in bytes |
+| Overloaded shard count | Number of DataShards experiencing [CPU overload](../../../troubleshooting/performance/schemas/overloaded-shards.md), grouped by CPU load range (from 50% to 100%), in units |
+
+### Traffic {#ydbessentials-traffic}
+
+This section provides panels for analyzing the database workload.
+
+| Name | Description |
+|---|---|
+| Queries per second by latency buckets | Number of queries per second broken down by latency ranges (from 1 ms to +∞). Each range is highlighted with a separate color — from green for fast queries to purple for slow ones. Helps assess latency distribution and overall RPS, in req/s |
+| Transactions per second by latency buckets | Number of transactions per second broken down by latency ranges (from 1 ms to +∞). Each range is highlighted with a separate color — from green for fast transactions to purple for slow ones. Helps assess latency distribution and overall TPS, in tx/s |
+| Rows read, uploaded, updated, deleted | Number of table row operations per second: reads, inserts, updates, and deletes, in ops/s |
+| Session count by dynnode | Number of active sessions on each dynamic node, in units |
+
+### Latency {#ydbessentials-latency}
+
+This section contains panels showing query and transaction execution time.
+
+| Name | Description |
+|---|---|
+| Query latency percentiles (ms) | Query execution time percentiles p50, p90, p95, p99, in milliseconds |
+| Transaction latency percentiles (ms) | Transaction execution time percentiles p50, p90, p95, p99, in milliseconds |
+
+### Errors {#ydbessentials-errors}
+
+This section contains panels representing error rate.
+
+| Name | Description |
+|---|---|
+| YQL Issues per second | Number of YQL query execution errors broken down by error type, in errors/s |
+| GRPC response errors per second | Number of gRPC responses with errors broken down by status, in errors/s |
+
+Download the [ydb-essentials.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/ydb-essentials.json) file with the **YDB Essential Metrics** dashboard.
+
 ## Actors {#actors}
 
 CPU utilization in an actor system.
@@ -132,3 +190,39 @@ The dashboard includes the following filters:
 | Hive node | Node where the database Hive is running. |
 
 Download the [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.
+
+## Topic {#topic}
+
+Dasboard displays metrics for the topic selected in the corresponding dashboard filter.
+
+| Name | Description |
+|---|---|
+| Total incoming records (bytes) per second | Number of bytes per second written to the topic using `Ydb::TopicService::StreamWrite` |
+| Total incoming records (count) per second | Number of messages per second written using `Ydb::TopicService::StreamWrite` |
+| Write latency | Time from when a message is created until it is written to the topic. Percentage of messages whose write latency falls within thresholds: <100 ms, <200 ms, etc. |
+| Partition throttling | Time spent waiting for write quota to become available. Percentage of messages whose throttling time falls within thresholds: <1 ms, <5 ms, etc. |
+| Partition quota usage | Utilization of the topic partitions’ write quotas, % |
+| Write sessions active | Number of open write sessions to the topic |
+| Write sessions created | Number of write sessions to the topic created per second |
+
+Download the [topic.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic.json) file with the **Topic** dashboard.
+
+## Topic — Consumer {#topic-consumer}
+
+Dasboard displays metrics for the topic and consumer selected in the corresponding dashboard filters.
+
+| Name | Description |
+|---|---|
+| Total incoming records (bytes) per second | Number of bytes per second written to the topic using `Ydb::TopicService::StreamWrite` |
+| Total outgoing records (bytes) per second | Number of bytes per second read from the topic by the consumer using `Ydb::TopicService::StreamRead` |
+| Total incoming records (count) per second | Number of messages per second written using `Ydb::TopicService::StreamWrite` |
+| Total outgoing records (count) per second | Number of messages per second read from the topic by the consumer using `Ydb::TopicService::StreamRead` |
+| End-to-end latency | Time from when a message is created to when it is read by the consumer. Percentage of messages whose end-to-end latency falls within thresholds: <100 ms, <200 ms, etc. |
+| Read latency max | The maximum (across all partitions) difference between the current time and the write time of the most recently written message, ms |
+| Unread messages max | The maximum difference (across all partitions) between the latest offset in the partition and the last read offset, in messages |
+| Read idle time max | Maximum idle time (how long the topic partition was not read by the consumer) for all partitions, ms |
+| Uncommitted messages max | The maximum (across all partitions) difference between the latest partition offset and the last committed offset, in messages |
+| Committed read lag max | The maximum (across all partitions) difference between the current time and the write time of the last committed message, ms |
+| Partition sessions started | Number of topic read sessions started by the consumer per second |
+
+Download the [topic-consumer.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic-consumer.json) file with the **Topic — Consumer** dashboard.

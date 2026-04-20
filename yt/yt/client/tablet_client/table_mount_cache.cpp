@@ -127,8 +127,9 @@ TErrorOr<TTabletInfoPtr> TTableMountInfo::GetRandomMountedTablet() const
 
     if (MountedTablets.empty()) {
         auto error = TError(NTabletClient::EErrorCode::TabletNotMounted,
-            "Table %v has no mounted tablets",
-            Path);
+            "%v %v has no mounted tablets",
+            IsHunkStorage() ? "Hunk storage" : "Table",
+            IsHunkStorage() ? PhysicalPath : Path);
         if (!Tablets.empty()) {
             // NB: For cache invalidation.
             error <<= TErrorAttribute("tablet_id", Tablets[0]->TabletId);

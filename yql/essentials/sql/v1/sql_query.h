@@ -64,25 +64,6 @@ private:
     TSourcePtr Build(const TRule_set_clause_list& stmt);
     TSourcePtr Build(const TRule_multiple_column_assignment& stmt);
 
-    template <class TNode>
-    void ParseStatementName(const TNode& node, TString& internalStatementName, TString& humanStatementName) {
-        internalStatementName.clear();
-        humanStatementName.clear();
-        const auto& descr = AltDescription(node);
-        TVector<TString> parts;
-        Split(descr, "_", parts);
-        Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
-        parts.pop_back();
-        for (auto& part : parts) {
-            part.to_upper(0, 1);
-            internalStatementName += part;
-            if (!humanStatementName.empty()) {
-                humanStatementName += ' ';
-            }
-            humanStatementName += to_upper(part);
-        }
-    }
-
     const bool TopLevel_;
     const bool AllowTopLevelPragmas_;
 };

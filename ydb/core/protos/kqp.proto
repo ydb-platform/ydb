@@ -914,6 +914,8 @@ message TKqpFullTextSourceSettings {
     message TKqpQuerySettings {
         repeated TKqpColumnMetadataProto Columns = 1;
         optional string Query = 2;
+        // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
+        repeated bytes Tokens = 3;
     }
 
     message TIndexTable {

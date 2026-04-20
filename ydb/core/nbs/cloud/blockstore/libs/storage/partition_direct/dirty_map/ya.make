@@ -4,8 +4,9 @@ GENERATE_ENUM_SERIALIZATION(dirty_map.h)
 GENERATE_ENUM_SERIALIZATION(location.h)
 
 SRCS(
-    location.cpp
     dirty_map.cpp
+    inflight_info.cpp
+    location.cpp
     range_locker.cpp
 )
 

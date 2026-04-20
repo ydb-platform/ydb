@@ -106,7 +106,7 @@ Released on September 1, 2025. To update to version **2.25.0**, select the [Down
 * Added the `--start-offset` option to the `{{ ydb-cli }} topic read` [command](./reference/ydb-cli/topic-read.md), which specifies a starting position for reading from the selected partition.
 * **_(Requires server v25.3+)_** Added a new paths approach in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md) with the new `--include` option instead of the `--item` option.
 * **_(Requires server v25.3+)_** Added support for encryption features in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3` [commands](./reference/ydb-cli/export-import/export-s3.md).
-* **_(Requires server v25.3+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster bridge` commands to manage a cluster in the bridge mode: `list`, `switchover`, `failover`, `takedown`, `rejoin`.
+* **_(Requires server v25.3+)_** **_(Experimental)_** Added the [`{{ ydb-cli }} admin cluster bridge`](./reference/ydb-cli/commands/bridge/index.md) commands to manage a cluster in [bridge mode](./concepts/bridge.md): `list`, `switchover`, `failover`, `takedown`, `rejoin`.
 
 ### Improvements
 
@@ -422,7 +422,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
 
-* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/import.md#pg-convert).
+* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](./postgresql/import.md#pg-convert).
 
 ## Version 2.7.0 {#2-7-0}
 
@@ -430,7 +430,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 ### Features
 
-* Added the [ydb tools pg-convert](postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+* Added the [ydb tools pg-convert](./postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 * Added the `{{ ydb-cli }} workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 * Added new `{{ ydb-cli }} scheme permissions list` command to list permissions.
 * In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.

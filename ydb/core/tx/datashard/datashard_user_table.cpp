@@ -326,6 +326,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     IsBackup = descr.GetIsBackup();
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    UniqueIndexKeySize = descr.GetUniqueIndexKeySize();
 
     CheckSpecialColumns();
 

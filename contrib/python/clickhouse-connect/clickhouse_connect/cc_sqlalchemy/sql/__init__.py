@@ -5,6 +5,10 @@ from sqlalchemy.sql.selectable import FromClause, Select
 
 from clickhouse_connect.driver.binding import quote_identifier
 
+# Dialect name used for non-rendering statement hints that only serve to
+# differentiate cache keys when FINAL/SAMPLE modifiers are applied.
+_CH_MODIFIER_DIALECT = "_ch_modifier"
+
 
 def full_table(table_name: str, schema: Optional[str] = None) -> str:
     if table_name.startswith('(') or '.' in table_name or not schema:
@@ -16,38 +20,61 @@ def format_table(table: Table):
     return full_table(table.name, table.schema)
 
 
-def final(select_stmt: Select, table: Optional[FromClause] = None) -> Select:
-    """
-    Apply the ClickHouse FINAL modifier to a select statement.
-
-    Args:
-        select_stmt: The SQLAlchemy Select statement to modify.
-        table: Optional explicit table/alias to apply FINAL to. When omitted the
-            method will use the single FROM element present on the select. A
-            ValueError is raised if the statement has no FROMs or more than one
-            FROM element and table is not provided.
-
-    Returns:
-        A new Select that renders the FINAL modifier for the target table.
-    """
+def _resolve_target(select_stmt: Select, table: Optional[FromClause], method_name: str) -> FromClause:
+    """Resolve the target FROM clause for ClickHouse modifiers (FINAL/SAMPLE)."""
     if not isinstance(select_stmt, Select):
-        raise TypeError("final() expects a SQLAlchemy Select instance")
+        raise TypeError(f"{method_name}() expects a SQLAlchemy Select instance")
 
     target = table
     if target is None:
         froms = select_stmt.get_final_froms()
         if not froms:
-            raise ValueError("final() requires a table to apply the FINAL modifier.")
+            raise ValueError(f"{method_name}() requires a table to apply the {method_name.upper()} modifier.")
         if len(froms) > 1:
             raise ValueError(
-                "final() is ambiguous for statements with multiple FROM clauses. Specify the table explicitly."
+                f"{method_name}() is ambiguous for statements with multiple FROM clauses. "
+                "Specify the table explicitly."
             )
         target = froms[0]
 
     if not isinstance(target, FromClause):
         raise TypeError("table must be a SQLAlchemy FromClause when provided")
 
-    return select_stmt.with_hint(target, "FINAL")
+    return target
+
+
+def _target_cache_key(target: FromClause) -> str:
+    """Stable string identifying a FROM target for cache key differentiation."""
+    if hasattr(target, "fullname"):
+        return target.fullname
+    return target.name
+
+
+# pylint: disable=protected-access
+def final(select_stmt: Select, table: Optional[FromClause] = None) -> Select:
+    """Apply the ClickHouse FINAL modifier to a select statement.
+
+    FINAL forces ClickHouse to merge data parts before returning results,
+    guaranteeing fully collapsed rows for ReplacingMergeTree, CollapsingMergeTree,
+    and similar engines.
+
+    Args:
+        select_stmt: The SELECT statement to modify.
+        table: The target table to apply FINAL to. Required when the query
+            joins multiple tables, optional when there is a single FROM target.
+    """
+    target = _resolve_target(select_stmt, table, "final")
+    ch_final = getattr(select_stmt, "_ch_final", set())
+
+    if target in ch_final:
+        return select_stmt
+
+    # with_statement_hint creates a generative copy and adds a non-rendering
+    # hint that participates in the statement cache key.
+    hint_key = _target_cache_key(target)
+    new_stmt = select_stmt.with_statement_hint(f"FINAL:{hint_key}", dialect_name=_CH_MODIFIER_DIALECT)
+    new_stmt._ch_final = ch_final | {target}
+    return new_stmt
 
 
 def _select_final(self: Select, table: Optional[FromClause] = None) -> Select:
@@ -58,39 +85,27 @@ def _select_final(self: Select, table: Optional[FromClause] = None) -> Select:
 
 
 def sample(select_stmt: Select, sample_value: Union[str, int, float], table: Optional[FromClause] = None) -> Select:
-    """
-    Apply ClickHouse SAMPLE clause to a select statement.
-    Reference: https://clickhouse.com/docs/sql-reference/statements/select/sample
+    """Apply the ClickHouse SAMPLE modifier to a select statement.
+
     Args:
-        select_stmt: The SQLAlchemy Select statement to modify.
-        sample_value: Controls the sampling behavior. Accepts three forms:
-            - A float in (0, 1) for proportional sampling (e.g., 0.1 for ~10% of data).
-            - A positive integer for row-count sampling (e.g., 10000000 for ~10M rows).
-            - A string for fraction or offset notation (e.g., "1/10" or "1/10 OFFSET 1/2").
-        table: Optional explicit table to apply SAMPLE to. When omitted the
-            method will use the single FROM element present on the select. A
-            ValueError is raised if the statement has no FROMs or more than one
-            FROM element and table is not provided.
-
-    Returns:
-        A new Select that renders the SAMPLE clause for the target table.
+        select_stmt: The SELECT statement to modify.
+        sample_value: The sample expression. Can be a float between 0 and 1
+            for a fractional sample (e.g. 0.1 for 10%), an integer for an
+            approximate row count, or a string for SAMPLE expressions like
+            '1/10 OFFSET 1/2'.
+        table: The target table to sample. Required when the query joins
+            multiple tables, optional when there is a single FROM target.
     """
-    if not isinstance(select_stmt, Select):
-        raise TypeError("sample() expects a SQLAlchemy Select instance")
+    target = _resolve_target(select_stmt, table, "sample")
 
-    target_table = table
-    if target_table is None:
-        froms = select_stmt.get_final_froms()
-        if not froms:
-            raise ValueError("sample() requires a FROM clause to apply the SAMPLE modifier.")
-        if len(froms) > 1:
-            raise ValueError("sample() is ambiguous for statements with multiple FROM clauses. Specify the table explicitly.")
-        target_table = froms[0]
-
-    if not isinstance(target_table, FromClause):
-        raise TypeError("table must be a SQLAlchemy FromClause when provided")
-
-    return select_stmt.with_hint(target_table, f"SAMPLE {sample_value}")
+    hint_key = _target_cache_key(target)
+    new_stmt = select_stmt.with_statement_hint(
+        f"SAMPLE:{hint_key}:{sample_value}", dialect_name=_CH_MODIFIER_DIALECT
+    )
+    ch_sample = dict(getattr(select_stmt, "_ch_sample", {}))
+    ch_sample[target] = sample_value
+    new_stmt._ch_sample = ch_sample
+    return new_stmt
 
 
 def _select_sample(self: Select, sample_value: Union[str, int, float], table: Optional[FromClause] = None) -> Select:

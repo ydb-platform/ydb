@@ -4,96 +4,121 @@ When using this method, the authentication mode and its parameters are defined b
 
 By setting one of the following environment variables, you can control the authentication method:
 
-* `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path/to/sa_key_file>`: Use a service account file in Yandex Cloud.
-* `YDB_ANONYMOUS_CREDENTIALS="1"`: Use anonymous authentication. Relevant for testing against a Docker container with {{ ydb-short-name }}.
-* `YDB_METADATA_CREDENTIALS="1"`: Use the metadata service inside Yandex Cloud (a Yandex function or a VM).
-* `YDB_ACCESS_TOKEN_CREDENTIALS=<access_token>`: Use token-based authentication.
+* `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path/to/sa_key_file>` — use a service account key file in Yandex Cloud.
+* `YDB_ANONYMOUS_CREDENTIALS="1"` — use anonymous authentication. Useful for testing against a Docker container with {{ ydb-short-name }}.
+* `YDB_METADATA_CREDENTIALS="1"` — use the metadata service inside Yandex Cloud (Yandex Cloud Function or VM).
+* `YDB_ACCESS_TOKEN_CREDENTIALS=<access_token>` — use token-based authentication.
 
-Below are examples of the code for authentication using environment variables in different {{ ydb-short-name }} SDKs.
+Below are examples of authentication using environment variables in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
-    environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+  - Native SDK
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      environ.WithEnvironCredentials(ctx),
+    ```go
+    package main
+
+    import (
+      "context"
+      "os"
+
+      environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        environ.WithEnvironCredentials(ctx),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
-    environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      environ.WithEnvironCredentials(ctx),
+      environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        environ.WithEnvironCredentials(ctx),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString) {
-      AuthProvider authProvider = new EnvironAuthProvider();
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString) {
+        AuthProvider authProvider = new EnvironAuthProvider();
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- Node.js
+  - JDBC
+
+    ```java
+    public void work() throws SQLException {
+        // No explicit credentials: the driver reads YDB_* environment variables in the order
+        // described in [Authentication](../../reference/ydb-sdk/auth.md#env)
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", new Properties())) {
+            doWork(connection);
+        }
+    }
+    ```
+
+    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL; credentials from the environment are picked up the same way as in the example above (for example via `spring.datasource.url`).
+
+  {% endlist %}
+
+- JavaScript
 
   ```typescript
     import { Driver, getCredentialsFromEnv } from 'ydb-sdk';
@@ -111,38 +136,37 @@ Below are examples of the code for authentication using environment variables in
     }
   ```
 
+
 - Python
 
-  ```python
+  {% list tabs %}
+
+  - Native SDK
+
+    {% include [auth-env](../../_includes/python/auth-env.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-env](../../_includes/python/async/auth-env.md) %}
+
+  - SQLAlchemy
+
+    ```python
     import os
+    import sqlalchemy as sa
     import ydb
 
-    with ydb.Driver(
-        connection_string=os.environ["YDB_CONNECTION_STRING"],
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=5)
-        ...
-  ```
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": ydb.credentials_from_env_variables()
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
 
-- Python (asyncio)
-
-  ```python
-    import os
-    import ydb
-    import asyncio
-
-    async def ydb_init():
-        async with ydb.aio.Driver(
-            endpoint=os.environ["YDB_ENDPOINT"],
-            database=os.environ["YDB_DATABASE"],
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            await driver.wait()
-            ...
-
-    asyncio.run(ydb_init())
-  ```
+  {% endlist %}
 
 - PHP
 

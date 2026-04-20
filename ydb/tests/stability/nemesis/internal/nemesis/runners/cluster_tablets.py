@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import traceback
 from typing import ClassVar, List, Optional
 
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
@@ -38,8 +39,8 @@ class ClusterKillTabletByTypeNemesis(MonitoredAgentActor):
             self._logger.info(
                 "Found %d tablets of type %s", len(self._tablet_ids), self._tablet_type
             )
-        except Exception as e:
-            self._logger.error("prepare_state failed: %s", e)
+        except Exception:
+            self._logger.error("prepare_state failed: %s", traceback.format_exc())
             self._disabled = True
 
     def inject_fault(self, payload=None) -> None:
@@ -55,6 +56,7 @@ class ClusterKillTabletByTypeNemesis(MonitoredAgentActor):
                 self._logger.info("=== INJECT_FAULT SUCCESS ===")
             except Exception as e:
                 self._logger.error("tablet_kill failed: %s", e)
+                raise
         else:
             self._prepare_state()
             if self._tablet_ids:
@@ -155,8 +157,8 @@ class ClusterChangeTabletGroupNemesis(MonitoredAgentActor):
         try:
             response = self._grpc_client().tablet_state(self._tablet_type)
             self._tablet_ids = [info.TabletId for info in response.TabletStateInfo]
-        except Exception as e:
-            self._logger.error("prepare_state failed: %s", e)
+        except Exception:
+            self._logger.error("prepare_state failed: %s", traceback.format_exc())
             self._disabled = True
 
     def inject_fault(self, payload=None) -> None:
@@ -170,6 +172,7 @@ class ClusterChangeTabletGroupNemesis(MonitoredAgentActor):
                 self.on_success_inject_fault()
             except Exception as e:
                 self._logger.error("change_tablet_group failed: %s", e)
+                raise
         else:
             self._prepare_state()
             if self._tablet_ids:
@@ -208,6 +211,7 @@ class ClusterBulkChangeTabletGroupNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("bulk change tablet group failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload

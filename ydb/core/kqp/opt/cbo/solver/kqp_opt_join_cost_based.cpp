@@ -9,6 +9,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <chrono>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql::NNodes;
@@ -22,7 +24,7 @@ using NYql::NDq::BuildAtom;
 /*
  * Collects EquiJoin inputs with statistics for cost based optimization
  */
-bool DqCollectJoinRelationsWithStats(
+bool KqpCollectJoinRelationsWithStats(
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     TKqpStatsStore& kqpStats,
     const TCoEquiJoin& equiJoin,
@@ -371,10 +373,11 @@ private:
             assigner.Assign(*OrderingsFSM);
         }
 
+        auto hardTimeout = std::chrono::milliseconds(OptimizerSettings_.CBOHardTimeout);
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
-            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
+            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, hardTimeout);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, hardTimeout);
         } else {
             static_assert(false, "No such DPHyp implementation");
         }
@@ -424,7 +427,20 @@ private:
             return joinTree;
         }
 
-        auto bestJoinOrder = solver.Solve(hints);
+        std::shared_ptr<TJoinOptimizerNodeInternal> bestJoinOrder;
+        try {
+            bestJoinOrder = solver.Solve(hints);
+        } catch (const std::exception& e) {
+            YQL_CLOG(WARN, CoreDq) << "CBO hard timeout exceeded, falling back to default join order: " << e.what();
+            ExprCtx.AddWarning(YqlIssue(
+                {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
+                TStringBuilder() << "Cost based optimizer timed out and was disabled for this query. "
+                                 << "Use PRAGMA ydb.CBOHardTimeout='"
+                                 << OptimizerSettings_.CBOHardTimeout << "' or higher to extend the time budget."
+            ));
+            ComputeStatistics(joinTree, this->Pctx);
+            return joinTree;
+        }
         if (postEnumerationShuffleElimination) {
             Y_ENSURE(OrderingsFSM != nullptr);
 
@@ -614,7 +630,7 @@ void CollectInterestingOrderingsFromJoinTree(
     YQL_CLOG(TRACE, CoreDq) << "Collected EquiJoin interesting ordering idxes: " << JoinSeq(", ", interestingOrderingIdxes);
 }
 
-TExprBase DqOptimizeEquiJoinWithCosts(
+TExprBase KqpOptimizeEquiJoinWithCosts(
     const TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
@@ -627,7 +643,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
     int dummyEquiJoinCounter = 0;
-    return DqOptimizeEquiJoinWithCosts(
+    return KqpOptimizeEquiJoinWithCosts(
         node,
         ctx,
         typesCtx,
@@ -642,7 +658,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     );
 }
 
-TExprBase DqOptimizeEquiJoinWithCosts(
+TExprBase KqpOptimizeEquiJoinWithCosts(
     const TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
@@ -682,7 +698,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // The arguments of the EquiJoin are 1..n-2, n-2 is the  join tree
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
-    if (!DqCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, providerCollect)){
+    if (!KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, providerCollect)){
         ctx.AddWarning(
             YqlIssue(ctx.GetPosition(equiJoin.Pos()), TIssuesIds::CBO_MISSING_TABLE_STATS,
             "Cost Based Optimizer could not be applied to this query: couldn't load statistics"

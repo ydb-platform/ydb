@@ -23,24 +23,32 @@ using namespace NYql::NDq;
 using namespace NYql::NHopping;
 using namespace NYql::NNodes;
 
+namespace NYql::NDq::NHopping {
+
 namespace {
 
 TExprNode::TPtr WrapToShuffle(
     const TKeysDescription& keysDescription,
     const TCoAggregate& aggregate,
     const TDqConnection& input,
-    TExprContext& ctx)
+    TExprContext& ctx,
+    const TOptimizeTransformerBase::TGetParents& getParents)
 {
+    if (!IsSingleConsumerConnection(input, *getParents())) {
+        return nullptr;
+    }
+
     auto pos = aggregate.Pos();
 
     TDqStageBase mappedInput = input.Output().Stage();
+    TString inputIndex(input.Output().Index());
     if (keysDescription.NeedPickle()) {
         mappedInput = Build<TDqStage>(ctx, pos)
             .Inputs()
                 .Add<TDqCnMap>()
                     .Output()
                         .Stage(input.Output().Stage())
-                        .Index(input.Output().Index())
+                        .Index().Build(inputIndex)
                         .Build()
                     .Build()
                 .Build()
@@ -53,12 +61,13 @@ TExprNode::TPtr WrapToShuffle(
             .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, pos))
             .Done();
+        inputIndex = "0";
     }
 
     return Build<TDqCnHashShuffle>(ctx, pos)
         .Output()
             .Stage(mappedInput)
-            .Index().Value("0").Build()
+            .Index().Build(inputIndex)
             .Build()
         .KeyColumns()
             .Add(keysDescription.GetKeysList(ctx, pos))
@@ -70,6 +79,7 @@ TExprNode::TPtr WrapToShuffle(
 TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const TExprBase node,
     TExprContext& ctx,
+    const TOptimizeTransformerBase::TGetParents& getParents,
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
@@ -191,7 +201,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         auto wrappedInput = input.Ptr();
         if (!keysDescription.MemberKeys.empty()) {
             // Shuffle input connection by keys
-            wrappedInput = WrapToShuffle(keysDescription, aggregate, input, ctx);
+            wrappedInput = WrapToShuffle(keysDescription, aggregate, input, ctx, getParents);
             if (!wrappedInput) {
                 return nullptr;
             }
@@ -224,19 +234,18 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     }
 }
 
-} // namespace
-
-namespace NYql::NDq::NHopping {
+} // anonymous namespace
 
 TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     const TExprBase node,
     TExprContext& ctx,
+    const TOptimizeTransformerBase::TGetParents& getParents,
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
     bool defaultWatermarksMode)
 {
-    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode);
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, getParents, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode);
     if (!result) {
         return result;
     }

@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     ydb/public/sdk/cpp/src/client/arrow
     ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/topic
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
 )

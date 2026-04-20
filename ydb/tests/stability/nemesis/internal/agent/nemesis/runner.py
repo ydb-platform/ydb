@@ -1,4 +1,3 @@
-import inspect
 import io
 import logging
 import threading
@@ -8,21 +7,12 @@ import traceback
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import NEMESIS_EXECUTION_LOGGER
 
 
-def _invoke_fault(method, payload):
-    """Call inject/extract; tools-library actors use no-arg methods, app actors use optional payload."""
-    sig = inspect.signature(method)
-    if len(sig.parameters) <= 1:
-        method()
-    else:
-        method({} if payload is None else payload)
-
-
 def _invoke_inject(runner, payload):
-    _invoke_fault(runner.inject_fault, payload)
+    runner.inject_fault({} if payload is None else payload)
 
 
 def _invoke_extract(runner, payload):
-    _invoke_fault(runner.extract_fault, payload)
+    runner.extract_fault({} if payload is None else payload)
 
 
 class NemesisManager:

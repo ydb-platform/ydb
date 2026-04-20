@@ -189,6 +189,7 @@ struct TYqlOperationOptions {
     TMaybe<TString> Url;
     TMaybe<TString> AttrsYson;
     TMaybe<NYT::TNode> ParametersYson;
+    TMaybe<TString> ProjectSlug;
 };
 
 class TColumnOrder {

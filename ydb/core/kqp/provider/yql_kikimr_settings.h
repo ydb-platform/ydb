@@ -69,6 +69,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
     NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
     NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
+    NCommon::TConfSetting<bool, Static> DqHashCombineExportTypeInfo;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NKikimr::NKqp::TOptimizerHints, Static> OptimizerHints;
@@ -99,6 +100,7 @@ public:
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
     NCommon::TConfSetting<ui32, Static> CBOTimeout;
+    NCommon::TConfSetting<ui32, Static> CBOHardTimeout;
     NCommon::TConfSetting<ui32, Static> ShuffleEliminationJoinNumCutoff;
 
     NCommon::TConfSetting<ui32, Static> MaxTasksPerStage;
@@ -211,6 +213,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;
+    bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
 };
 

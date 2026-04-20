@@ -27,4 +27,5 @@ message TSource {
     bool AsyncDecoding = 14;
     NYql.NConnector.NApi.TPredicate Predicate = 15;
     bool AsyncDecompressing = 16;
+    repeated string UserSchemaColumns = 17;
 }

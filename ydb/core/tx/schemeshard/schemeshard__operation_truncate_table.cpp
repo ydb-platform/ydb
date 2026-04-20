@@ -7,8 +7,6 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-
 namespace {
 
 using namespace NKikimr;

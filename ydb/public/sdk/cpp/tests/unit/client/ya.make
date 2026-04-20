@@ -1,4 +1,5 @@
 RECURSE(
+    build_info
     connection_string
     coordination
     discovery_mutator
@@ -7,6 +8,7 @@ RECURSE(
     endpoints
     iam
     oauth2_token_exchange
+    observability
     params
     result
     table

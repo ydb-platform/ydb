@@ -9,7 +9,7 @@ namespace {
 template <typename T>
 bool GenericTryFloatFromString(TStringBuf buf, T& value) {
     value = 0;
-    if (!buf.size()) {
+    if (buf.empty()) {
         return false;
     }
 

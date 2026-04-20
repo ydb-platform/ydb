@@ -256,12 +256,6 @@ struct TComputeRuntimeSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     TMaybe<TReportStatsSettings> ReportStatsSettings;
 
-    // see kqp_rm.h
-    // 0 - disable extra memory allocation
-    // 1 - allocate via memory pool ScanQuery
-    // 2 - allocate via memory pool DataQuery
-    ui32 ExtraMemoryAllocationPool = 0;
-
     bool FailOnUndelivery = true;
     bool UseSpilling = false;
 

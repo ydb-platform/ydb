@@ -2,6 +2,7 @@ LIBRARY(common)
 
 SRCS(
     aws.cpp
+    build_info.cpp
     cert_format_converter.cpp
     client_command_options.cpp
     colors.cpp
@@ -69,6 +70,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/secret
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types

@@ -141,15 +141,6 @@ public:
                 (executer, executerId),
                 (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 
-        NRm::EKqpMemoryPool memoryPool;
-        if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
-            memoryPool = NRm::EKqpMemoryPool::ScanQuery;
-        } else if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::DATA) {
-            memoryPool = NRm::EKqpMemoryPool::DataQuery;
-        } else {
-            memoryPool = NRm::EKqpMemoryPool::Unspecified;
-        }
-
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
 
@@ -189,7 +180,6 @@ public:
                 .SerializedGUCSettings = serializedGUCSettings,
                 .NumberOfTasks = tasksCount,
                 .OutputChunkMaxSize = msg.GetOutputChunkMaxSize(),
-                .MemoryPool = memoryPool,
                 .WithSpilling = runtimeSettings.GetUseSpilling(),
                 .StatsMode = runtimeSettings.GetStatsMode(),
                 .WithProgressStats = runtimeSettings.GetWithProgressStats(),

@@ -163,6 +163,7 @@ class ClusterSafelyCleanupDisksNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except subprocess.CalledProcessError as e:
             self._logger.error("SafelyCleanupDisks failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload

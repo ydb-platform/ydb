@@ -628,7 +628,8 @@ namespace NKikimr {
         }
 
         TRope GetBuffer() const {
-            return Record.HasBuffer() ? TRope(Record.GetBuffer()) : GetPayload(0);
+            Y_ABORT_UNLESS(GetPayloadCount() == 1);
+            return GetPayload(0);
         }
 
         void StorePayload(TRope&& buffer, bool checksumming);
@@ -653,7 +654,7 @@ namespace NKikimr {
                 errorReason = "TEvVPut rejected by VDisk. MsgQoS is undefined";
             } else if (!Record.MutableMsgQoS()->HasExtQueueId()) {
                 errorReason = "TEvVPut rejected by VDisk. ExtQueueId is undefined";
-            } else if (GetPayloadCount() == 0 && !Record.HasBuffer()) {
+            } else if (GetPayloadCount() == 0) {
                 errorReason = "TEvVPut rejected by VDisk. Payload empty and no buffer provided";
             } else {
                 return true;
@@ -663,7 +664,7 @@ namespace NKikimr {
         }
 
         TString ToString() const override {
-            return ToString(Record);
+            return ToString(*this);
         }
 
         static void OutMsgQos(const NKikimrBlobStorage::TMsgQoS &qos, TStringStream &str) {
@@ -733,10 +734,10 @@ namespace NKikimr {
             str << "}";
         }
 
-        static TString ToString(const NKikimrBlobStorage::TEvVPut &record) {
+        static TString ToString(const TEvBlobStorage::TEvVPut& ev) {
+            const auto& record = ev.Record;
             TStringStream str;
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-            const TString &data = record.GetBuffer();
             str << "{ID# " << id.ToString() << " FDS# " << record.GetFullDataSize();
             if (record.GetIgnoreBlock()) {
                 str << " IgnoreBlock";
@@ -748,13 +749,14 @@ namespace NKikimr {
                 str << " ";
                 TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
             }
-            str << " DataSize# " << data.size();
-            if (data.size() > 16) {
-                str << " Data# <too_large>";
+            const size_t size = ev.GetBufferBytes();
+            str << " DataSize# " << size << " Data# ";
+            if (size > 16) {
+                str << "<too_large>";
             } else {
                 TString encoded;
-                Base64Encode(data, encoded);
-                str << " Data# " << encoded;
+                Base64Encode(ev.GetBuffer().ConvertToString(), encoded);
+                str << encoded;
             }
             str << "}";
             return str.Str();
@@ -886,7 +888,8 @@ namespace NKikimr {
         TRope GetItemBuffer(ui64 itemIdx) const;
 
         void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie, bool issueKeepFlag, bool ignoreBlock,
-                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId, bool checksumming) {
+                bool isZeroEntry, std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId,
+                bool checksumming) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
@@ -900,6 +903,9 @@ namespace NKikimr {
             }
             if (ignoreBlock) {
                 item->SetIgnoreBlock(true);
+            }
+            if (isZeroEntry) {
+                item->SetIsZeroEntry(true);
             }
             if (extraBlockChecks) {
                 for (const auto& [tabletId, generation] : *extraBlockChecks) {
@@ -941,12 +947,14 @@ namespace NKikimr {
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 str << " ID# " << id.ToString();
                 str << " FullDataSize# " << item.GetFullDataSize();
-                TString data = GetItemBuffer(itemIdx).ConvertToString();
-                str << " DataSize# " << data.size();
-                if (data.size() > 16) {
-                    str << " Data# <too_large>";
+                const size_t size = GetBufferBytes(itemIdx);
+                str << " DataSize# " << size << " Data# ";
+                if (size > 16) {
+                    str << "<too_large>";
                 } else {
-                    str << " Data# " << data;
+                    TString encoded;
+                    Base64Encode(GetItemBuffer(itemIdx).ConvertToString(), encoded);
+                    str << encoded;
                 }
                 if (item.HasCookie()) {
                     str << " Cookie# " << item.GetCookie();

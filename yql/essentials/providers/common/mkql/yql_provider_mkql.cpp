@@ -1567,7 +1567,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             rightItemType = rightItemType->Cast<TListExprType>()->GetItemType();
         }
 
-        std::vector<ui32> leftKeyColumns, leftRenames, rightRenames;
+        std::vector<ui32> leftKeyColumns;
+        std::vector<ui32> leftRenames;
+        std::vector<ui32> rightRenames;
         switch (const auto& inputItemType = GetSeqItemType(*node.Head().GetTypeAnn()); inputItemType.GetKind()) {
             case ETypeAnnotationKind::Struct: {
                 const auto inputStructType = inputItemType.Cast<TStructExprType>();
@@ -1672,7 +1674,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         const auto joinKind = GetJoinKind(node, node.Child(3)->Content());
 
-        std::vector<ui32> leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops;
+        std::vector<ui32> leftKeyColumns;
+        std::vector<ui32> leftKeyDrops;
+        std::vector<ui32> rightKeyColumns;
+        std::vector<ui32> rightKeyDrops;
         node.Child(4)->ForEachChild([&](const TExprNode& child) { leftKeyColumns.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
         node.Child(5)->ForEachChild([&](const TExprNode& child) { leftKeyDrops.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
         node.Child(6)->ForEachChild([&](const TExprNode& child) { rightKeyColumns.emplace_back(*GetFieldPosition(*rightItemType, child.Content())); });
@@ -1692,7 +1697,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         const auto& outputItemType = GetSeqItemType(*node.GetTypeAnn());
 
-        std::vector<ui32> leftKeyColumns, rightKeyColumns, leftRenames, rightRenames;
+        std::vector<ui32> leftKeyColumns;
+        std::vector<ui32> rightKeyColumns;
+        std::vector<ui32> leftRenames;
+        std::vector<ui32> rightRenames;
         const auto& leftItemType = GetSeqItemType(*node.Child(0)->GetTypeAnn());
         const auto& rightItemType = GetSeqItemType(*node.Child(shift)->GetTypeAnn());
 
@@ -1738,7 +1746,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         const auto joinKind = GetJoinKind(node, node.Child(1)->Content());
 
-        std::vector<ui32> leftColumns, rightColumns, requiredColumns, keyColumns;
+        std::vector<ui32> leftColumns;
+        std::vector<ui32> rightColumns;
+        std::vector<ui32> requiredColumns;
+        std::vector<ui32> keyColumns;
         ui32 tableIndexFieldPos;
         switch (const auto& inputItemType = GetSeqItemType(*node.Head().GetTypeAnn()); inputItemType.GetKind()) {
             case ETypeAnnotationKind::Struct: {
@@ -2541,7 +2552,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto dict2 = MkqlBuildExpr(*node.Child(1), ctx);
         const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
 
-        bool multi1 = true, multi2 = true;
+        bool multi1 = true;
+        bool multi2 = true;
         if (node.ChildrenSize() > 3) {
             node.Tail().ForEachChild([&](const TExprNode& flag) {
                 if (const auto& content = flag.Content(); content == "LeftUnique") {

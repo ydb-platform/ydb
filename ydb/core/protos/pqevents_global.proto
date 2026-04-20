@@ -37,6 +37,7 @@ message TUpdateBalancerConfig { //for schemeshard use only
         repeated uint32 ParentPartitionIds = 6;
         repeated uint32 ChildPartitionIds = 7;
         optional uint64 CreateVersion = 8;
+        optional uint64 CreationTimestampSeconds = 9;
     }
 
     repeated TPartition Partitions = 6;
@@ -305,4 +306,21 @@ message TEvBalancingSubscribeNotify {
     optional string Topic = 3;
     optional string Consumer = 4;
     optional EStatus Status = 5;
+}
+
+message TEvCheckMessageDeduplicationRequest {
+    optional uint32 PartitionId = 1;
+    optional uint32 Generation = 2;
+    repeated string MessageDeduplicationId = 3;
+}
+
+message TEvCheckMessageDeduplicationResponse {
+    optional uint32 PartitionId = 1;
+    optional uint32 Generation = 2;
+    message TMessageDeduplicationResult {
+        optional bool IsDuplicate = 1;
+        optional uint64 Offset = 2;
+    }
+    optional EStatus Status = 3;
+    map<string, TMessageDeduplicationResult> Result = 4;
 }

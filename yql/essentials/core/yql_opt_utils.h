@@ -58,6 +58,24 @@ bool IsEmptyContainer(const TExprNode& node);
 const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type);
 const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type);
 
+template<typename T>
+TExprNode::TPtr RemoveMembers(TPositionHandle pos, const TExprNode::TPtr& structNode, const T& members, TExprContext& ctx) {
+    return ctx.Builder(pos)
+            .Callable("RemoveMembers")
+                .Add(0, structNode)
+                .List(1)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        size_t i = 0;
+                        for (auto name : members) {
+                            parent.Atom(i++, name);
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+            .Build();
+}
+
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name);
 TExprNode::TPtr FilterSettings(const TExprNode& settings, const THashSet<TStringBuf>& names, TExprContext& ctx);
 bool HasSetting(const TExprNode& settings, const TStringBuf& name);

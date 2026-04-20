@@ -37,7 +37,7 @@ To diagnose the system clock drift, use the following methods:
 
     {% note info %}
 
-    For more information, see [{#T}](../../../reference/ydb-sdk/health-check-api.md)
+    For more information, see [Health Check API](../../../reference/ydb-sdk/health-check-api.md)
 
     {% endnote %}
 

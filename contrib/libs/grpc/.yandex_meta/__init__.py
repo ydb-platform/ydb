@@ -131,13 +131,10 @@ grpc = CMakeNinjaNixProject(
     license="Apache-2.0",
     keep_paths=[
         "src/core/lib/security/security_connector/add_arcadia_root_certs.*",
-        # Keep original ya.make for now
-        "src/proto/grpc/core/ya.make",
         "src/proto/grpc/channelz/ya.make",
         "src/proto/grpc/health/v1/ya.make",
         "src/proto/grpc/reflection/v1/ya.make",
         "src/proto/grpc/reflection/v1alpha/ya.make",
-        "src/proto/grpc/status/ya.make",
     ],
     ignore_targets=[
         "check_epollexclusive",
@@ -206,15 +203,10 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/event_engine/windows/iocp.h",
         "src/core/lib/event_engine/socket_notifier.h",
         "src/core/lib/event_engine/poller.h",
-        # Copy all .proto files except for grpc/testing
+        # Copy necessary .proto files only
         "src/proto/grpc/channelz/**/*.proto",
-        "src/proto/grpc/core/**/*.proto",
-        "src/proto/grpc/gcp/**/*.proto",
         "src/proto/grpc/health/**/*.proto",
-        "src/proto/grpc/lb/**/*.proto",
-        "src/proto/grpc/lookup/**/*.proto",
         "src/proto/grpc/reflection/**/*.proto",
-        "src/proto/grpc/status/**/*.proto",
     ],
     copy_sources_except=[
         # Proto library with testing services

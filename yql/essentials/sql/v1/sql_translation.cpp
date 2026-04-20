@@ -3725,7 +3725,8 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
         }
         case TRule_type_name_composite_TBlock1::kAlt13: {
             auto& callableType = block.GetAlt13().GetRule_type_name_callable1();
-            TMaybe<std::pair<TVector<TNodePtr>, bool>> requiredArgs, optionalArgs;
+            TMaybe<std::pair<TVector<TNodePtr>, bool>> requiredArgs;
+            TMaybe<std::pair<TVector<TNodePtr>, bool>> optionalArgs;
             bool namedArgsStarted = false;
             size_t optionalArgsCount = 0;
             if (callableType.HasBlock4()) {

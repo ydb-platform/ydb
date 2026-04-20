@@ -21,6 +21,24 @@ public:
         return Script->GetStep(CurrentStepIdx)->GetName();
     }
 
+    TString GetPrevName() const {
+        if (CurrentStepIdx > 0) {
+            return Script->GetStep(CurrentStepIdx - 1)->GetName();
+        }
+        return TString();
+    }
+
+    TString GetTracingName() const {
+        if (CurrentStepIdx > 0) {
+            return GetPrevName() + " - " + GetName();
+        }
+        return GetName();
+    }
+
+    ui32 GetStepIndex() const {
+        return CurrentStepIdx;
+    }
+
     TString DebugString() const {
         return Script->GetStep(CurrentStepIdx)->DebugString();
     }

@@ -10,7 +10,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
@@ -130,6 +129,8 @@ protected:
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TUploadStatus UploadStatus;
 
+    const bool DisableChangeCollection;
+
     TBuildScanUpload(ui64 buildIndexId,
                      const TString& databaseName,
                      const TString& target,
@@ -138,7 +139,8 @@ protected:
                      const TActorId& progressActorId,
                      const TSerializedTableRange& range,
                      const TUserTable& tableInfo,
-                     const TIndexBuildScanSettings& scanSettings)
+                     const TIndexBuildScanSettings& scanSettings,
+                     bool disableChangeCollection)
         : TBase(&TThis::StateWork)
         , ScanSettings(scanSettings)
         , BuildIndexId(buildIndexId)
@@ -150,7 +152,8 @@ protected:
         , KeyColumnIds(tableInfo.KeyColumnIds)
         , KeyTypes(tableInfo.KeyColumnTypes)
         , TableRange(tableInfo.Range)
-        , RequestedRange(range) {
+        , RequestedRange(range)
+        , DisableChangeCollection(disableChangeCollection) {
     }
 
     template <typename TAddRow>
@@ -406,7 +409,8 @@ private:
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/,
-            true /*writeToIndexImplTable*/);
+            true /*writeToIndexImplTable*/,
+            DisableChangeCollection);
 
         Uploader = this->Register(actor, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
@@ -427,7 +431,7 @@ public:
                     TProtoColumnsCRef targetDataColumns,
                     const TUserTable& tableInfo,
                     const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings)
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings, false)
         , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
@@ -461,7 +465,7 @@ public:
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
                       const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings) {
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings, true) {
         Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;

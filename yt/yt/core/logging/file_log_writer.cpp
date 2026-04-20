@@ -31,12 +31,27 @@ YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 constexpr size_t BufferSize = 64_KB;
 constexpr TStringBuf LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
 
+TString SanitizeFileName(TStringBuf fileName)
+{
+    TString result;
+    result.reserve(fileName.size());
+    for (auto ch : fileName) {
+        if (ch == '/') {
+            result.push_back('_');
+        } else {
+            result.push_back(ch);
+        }
+    }
+    return result;
+}
+
 TString FormatFileName(const TString& fileNamePattern)
 {
     TPatternFormatter formatter;
     formatter
         .SetProperty("process_id", ToString(GetCurrentProcessId()))
-        .SetProperty("process_name", GetCurrentProcessName());
+        .SetProperty("process_name", SanitizeFileName(GetCurrentProcessName()))
+        .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessName()));
     return formatter.Format(fileNamePattern);
 }
 

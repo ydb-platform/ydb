@@ -150,29 +150,6 @@
  
      /* pass NULL as the config: config is read from command line arguments,
         environment variables, configuration files */
---- a/PC/pyconfig.h.in (index)
-+++ b/PC/pyconfig.h.in (working tree)
-@@ -306,10 +306,6 @@
- #       endif
- #endif
- 
--#ifdef _DEBUG
--#       define Py_DEBUG
--#endif
--
- 
- #ifdef MS_WIN32
- 
-@@ -460,7 +456,9 @@
- /* #define WITH_READLINE 1 */
- 
- /* Use Python's own small-block memory-allocator. */
-+#ifndef address_sanitizer_enabled
- #define WITH_PYMALLOC 1
-+#endif
- 
- /* Define if you want to compile in mimalloc memory allocator. */
- #define WITH_MIMALLOC 1
 --- a/Python/initconfig.c	(index)
 +++ b/Python/initconfig.c	(working tree)
 @@ -163,7 +163,7 @@ int Py_InspectFlag = 0; /* Needed to determine whether to exit at SystemExit */

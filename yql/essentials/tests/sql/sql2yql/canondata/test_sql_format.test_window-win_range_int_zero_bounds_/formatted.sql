@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 -- Test that different zero types (int, uint8, float) all produce the same result
 -- With 0 preceding/following, each row should only count itself (count = 1)

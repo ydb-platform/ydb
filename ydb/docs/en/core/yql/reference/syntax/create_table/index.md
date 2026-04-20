@@ -15,6 +15,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
+  [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
@@ -303,6 +304,7 @@ When creating row-oriented tables, it is possible to specify:
 
 * [A secondary index](secondary_index.md).
 * [A vector index](vector_index.md).
+* [A fulltext index](fulltext_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
 * [Creating a table filled with query results](as_select.md).

@@ -673,7 +673,8 @@ private:
 TString GetFormattedStmt(const TStringBuf& stmt) {
     TString result;
     result.reserve(stmt.length());
-    size_t pos = 0, next_pos = TStringBuf::npos;
+    size_t pos = 0;
+    size_t next_pos = TStringBuf::npos;
 
     while (TStringBuf::npos != (next_pos = stmt.find('\n', pos))) {
         if (0 < next_pos - pos) {
@@ -687,11 +688,11 @@ TString GetFormattedStmt(const TStringBuf& stmt) {
         result += stmt.substr(pos);
     }
 
-    if (0 < result.length() && '\n' == result.back()) {
+    if (!result.empty() && '\n' == result.back()) {
         result.pop_back();
     }
 
-    if (0 < result.length() && '\r' == result.back()) {
+    if (!result.empty() && '\r' == result.back()) {
         result.pop_back();
     }
 
@@ -773,7 +774,7 @@ TString FormatFloat(const TString& value, std::function<TString(const TString&)>
     static const TString Minf = "-Infinity";
 
     try {
-        return (value == "")       ? ""
+        return (value.empty())     ? ""
                : (value == "Nan")  ? Nan
                : (value == "Inf")  ? Inf
                : (value == "-Inf") ? Minf

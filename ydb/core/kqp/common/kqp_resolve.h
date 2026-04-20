@@ -224,37 +224,6 @@ private:
 
 NUdf::TUnboxedValue MakeDefaultValueByType(NKikimr::NMiniKQL::TType* type);
 
-TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues);
-
-template<typename TList, typename TRangeFunc>
-size_t FindKeyPartitionIndex(const TVector<TCell>& key, const TList& partitions,
-    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TRangeFunc& rangeFunc)
-{
-    auto it = std::lower_bound(partitions.begin(), partitions.end(), key,
-        [&keyColumnTypes, &rangeFunc](const auto& partition, const auto& key) {
-            const auto& range = rangeFunc(partition);
-            const int cmp = CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
-                range.IsInclusive || range.IsPoint, true, keyColumnTypes);
-
-            return (cmp < 0);
-        });
-
-    MKQL_ENSURE_S(it != partitions.end());
-
-    return std::distance(partitions.begin(), it);
-}
-
-template<typename TList, typename TRangeFunc>
-size_t FindKeyPartitionIndex(const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NUdf::TUnboxedValue& value,
-     const TList& partitions, const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TVector<ui32>& keyColumnIndices,
-     const TRangeFunc& rangeFunc)
-{
-    auto key = MakeKeyCells(value, keyColumnTypes, keyColumnIndices, typeEnv, /* copyValues */ true);
-
-    return FindKeyPartitionIndex(key, partitions, keyColumnTypes, rangeFunc);
-}
-
 using TSerializedPointOrRange = std::variant<TSerializedCellVec, TSerializedTableRange>;
 
 struct TPartitionWithRange {

@@ -77,6 +77,10 @@ size_t UpdateMapFromBlocks(std::unordered_map<std::string, std::vector<ui64>>& m
 
     size_t numRows = 0;
 
+    if (datumKey.kind() != arrow::Datum::ARRAY) {
+        UNIT_ASSERT_C(false, "Key column block must be an array, not a chunked array or anything else; actual kind index is " << static_cast<int>(datumKey.kind()));
+    }
+
     for (const auto& chunk : datumKey.chunks()) {
         auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
         UNIT_ASSERT(barray != nullptr);

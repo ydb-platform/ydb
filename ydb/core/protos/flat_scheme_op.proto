@@ -360,6 +360,9 @@ message TTableDescription {
     optional TDropCdcStream DropSrcCdcStream = 48;
     // Coordinated schema version for backup operations - persisted with AlterData
     optional uint64 CoordinatedSchemaVersion = 49;
+
+    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
+    optional uint32 UniqueIndexKeySize = 50;
 }
 
 message TCompressionOptions {
@@ -1090,6 +1093,7 @@ message TCdcStreamDescription {
     optional TCdcStreamScanProgress ScanProgress = 11;
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
+    optional bool TraceIds = 14;
 }
 
 message TCreateCdcStream {
@@ -1455,6 +1459,7 @@ message TPersQueueGroupAllocate {
         optional NKikimrPQ.ETopicPartitionStatus Status = 6;
         repeated uint32 ParentPartitionIds = 7;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
+        optional uint64 CreationTimestampSeconds = 11;
     }
 
     optional string Name = 1;
@@ -1485,6 +1490,7 @@ message TPersQueueGroupDescription {
         optional NKikimrPQ.ETopicPartitionStatus Status = 4;
         repeated uint32 ParentPartitionIds = 5;
         repeated uint32 ChildPartitionIds = 6;
+        optional uint64 CreationTimestampSeconds = 7;
     }
 
     optional string Name = 1; // mandatory
@@ -2281,6 +2287,12 @@ message TToken {
     optional string TokenSecretName = 2;
 }
 
+message TIamImpersonate {
+    optional string ServiceAccountId = 1;
+    optional string InitialTokenSecretName = 2;
+    optional string ResourceId = 3;
+}
+
 message TAuth {
     oneof identity {
         TNoneAuth None = 3;
@@ -2289,6 +2301,7 @@ message TAuth {
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
         TToken Token = 8 [(Ydb.sensitive) = true];
+        TIamImpersonate Iam = 9;
     }
 }
 

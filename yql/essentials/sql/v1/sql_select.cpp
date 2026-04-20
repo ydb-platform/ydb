@@ -789,7 +789,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     if (!source) {
         return nullptr;
     }
-    if (node.GetBlock4().size()) {
+    if (!node.GetBlock4().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock4()) {
             sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), unorderedSubquery));
@@ -903,7 +903,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     if (!source) {
         return {};
     }
-    if (node.GetBlock3().size()) {
+    if (!node.GetBlock3().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock3()) {
             sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), true));
@@ -1015,7 +1015,8 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     const auto hints = Ctx_.PullHintForToken(selectPos);
-    TColumnsSets uniqueSets, distinctSets;
+    TColumnsSets uniqueSets;
+    TColumnsSets distinctSets;
     for (const auto& hint : hints) {
         if (const auto& name = to_lower(hint.Name); name == "unique") {
             uniqueSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
@@ -1084,7 +1085,8 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     /// \todo merge gtoupByExpr and groupBy in one
-    TVector<TNodePtr> groupByExpr, groupBy;
+    TVector<TNodePtr> groupByExpr;
+    TVector<TNodePtr> groupBy;
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec;
     bool compactGroupBy = false;
     TString groupBySuffix;

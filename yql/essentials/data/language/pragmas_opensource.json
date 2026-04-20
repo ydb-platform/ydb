@@ -597,6 +597,9 @@
     "name": "yt.TmpFolder"
   },
   {
+    "name": "yt.TmpSecurity"
+  },
+  {
     "name": "yt.TopSortMaxLimit"
   },
   {

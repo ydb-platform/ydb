@@ -1,6 +1,8 @@
 #include "config.h"
 #include <util/string/builder.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 bool TConfig::DeserializeFromProto(const NKikimrConfig::TGroupedMemoryLimiterConfig& config) {

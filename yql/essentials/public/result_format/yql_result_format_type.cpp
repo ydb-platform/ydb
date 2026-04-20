@@ -11,7 +11,7 @@ NYT::TNode MakeDataType(const TString& name) {
 
 void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor) {
     CHECK(typeNode.IsList());
-    CHECK(typeNode.AsList().size() >= 1);
+    CHECK(!typeNode.AsList().empty());
     CHECK(typeNode.AsList()[0].IsString());
     const auto& name = typeNode.AsList()[0].AsString();
     if (name == "VoidType") {

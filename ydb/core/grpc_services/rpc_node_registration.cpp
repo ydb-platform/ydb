@@ -175,12 +175,7 @@ public:
 
 private:
     bool CheckAccess() {
-        if (Request->GetInternalToken()) {
-            return IsTokenAllowed(Request->GetInternalToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
-        }
-        // No token at this stage means that token is not required
-        // and access should be granted
-        return true;
+        return IsTokenAllowed(Request->GetInternalToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
     }
 
     static void CopyNodeInfo(Ydb::Discovery::NodeInfo* dst, const NKikimrNodeBroker::TNodeInfo& src) {

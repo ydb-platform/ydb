@@ -1149,7 +1149,8 @@ TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrF
 
 std::pair<TExprNode::TPtr, bool> FindSharedNode(const TExprNode::TPtr& firstRoot, const TExprNode::TPtr& secondRoot, const TExprVisitPtrFunc& predicate)
 {
-    TNodeSet nodes, visited;
+    TNodeSet nodes;
+    TNodeSet visited;
     VisitExpr(firstRoot, [&nodes, &predicate] (const TExprNode::TPtr& node) {
         if (predicate(node)) {
             nodes.insert(node.Get());

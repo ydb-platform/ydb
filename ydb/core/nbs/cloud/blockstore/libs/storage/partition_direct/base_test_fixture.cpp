@@ -39,7 +39,8 @@ void TBaseFixture::Init()
         "disk-1",
         DefaultBlockSize,
         65536,
-        1024);
+        1024,
+        DefaultVChunkSize);
     DirtyMap.UpdateConfig(DDiskMask.Include(PBuffersMask), {});
 
     DirectBlockGroup = std::make_shared<TDirectBlockGroupMock>();
@@ -48,7 +49,7 @@ void TBaseFixture::Init()
          ui8 hostIndex,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
-         NWilson::TTraceId traceId)
+         const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
 
@@ -69,7 +70,7 @@ void TBaseFixture::Init()
          ui8 hostIndex,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
-         NWilson::TTraceId traceId)
+         const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
 

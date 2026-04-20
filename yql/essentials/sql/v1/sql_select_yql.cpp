@@ -1110,7 +1110,7 @@ private:
         }
 
         bool isAscending;
-        if (direction == "") {
+        if (direction.empty()) {
             isAscending = true;
         } else if (direction == "asc") {
             isAscending = true;

@@ -9,6 +9,8 @@
 #include "udf_version.h"
 #include "udf_type_printer.h"
 
+#include <yql/essentials/public/langver/yql_langver.h>
+
 #include <util/generic/yexception.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -22,7 +24,7 @@ concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeIn
     { T::DeclareSignature(name, userType, builder, typesOnly) } -> std::convertible_to<bool>;
 };
 
-template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
+template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF, bool SupportsPolyArgs = false>
 class TLangVerForked {
 private:
     Y_HAS_SUBTYPE(TBlockType);
@@ -45,6 +47,21 @@ public:
     static const TStringRef& Name() {
         Y_ENSURE(TLegacyUDF::Name() == TActualUDF::Name());
         return TActualUDF::Name();
+    }
+
+    static TString BuildPolyArgs() {
+        if (!SupportsPolyArgs) {
+            return {};
+        }
+
+        TStringBuilder builder;
+        auto verStr = *FormatLangVersion(V);
+        builder << "[[{cmd=ver;value=\"";
+        builder << verStr;
+        builder << "\"};{ver=\"";
+        builder << verStr;
+        builder << "\"}];[[];{}]]";
+        return builder;
     }
 
     static bool DeclareSignature(
@@ -393,6 +410,7 @@ template <CUDF... TUdfs>
 class TSimpleUdfModuleHelper: public IUdfModule {
     Y_HAS_SUBTYPE(TTypeAwareMarker);
     Y_HAS_SUBTYPE(TBlockType);
+    Y_HAS_MEMBER(BuildPolyArgs);
 
 public:
     void CleanupOnTerminate() const override {
@@ -404,6 +422,15 @@ public:
         if (THasTTypeAwareMarker<TUdfType>::value) {
             r->SetTypeAwareness();
         }
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
+        if constexpr (THasBuildPolyArgs<TUdfType>::value) {
+            auto str = TUdfType::BuildPolyArgs();
+            if (str.size() > 0) {
+                r->SetPolyArgs(str);
+            }
+        }
+#endif
 
         if constexpr (THasTBlockType<TUdfType>::value) {
             if constexpr (!std::is_same_v<typename TUdfType::TBlockType, void>) {

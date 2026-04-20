@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         auto complete = Copier->Start();
 
         // Should transfer all ranges. One-by-one.
-        for (size_t i = 0; i < VChunkSize / CopyRangeSize; ++i) {
+        for (size_t i = 0; i < DefaultVChunkSize / CopyRangeSize; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
 
             // expectedRange should be locked for reading and copying.
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              ui8 hostIndex,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
-             NWilson::TTraceId traceId)
+             const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              ui8 hostIndex,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
-             NWilson::TTraceId traceId)
+             const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);

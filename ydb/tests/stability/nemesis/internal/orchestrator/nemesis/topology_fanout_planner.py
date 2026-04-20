@@ -19,7 +19,7 @@ import uuid
 from typing import ClassVar
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import load_external_cluster_optional
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
 
@@ -78,7 +78,7 @@ class DataCenterFanoutPlanner(NemesisPlannerBase):
     def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
         if not hosts:
             return []
-        cluster = load_external_cluster_optional()
+        cluster = require_external_cluster()
         if cluster is None:
             return []
         dc_map = self._ensure_dc_cycle(cluster)
@@ -161,7 +161,7 @@ class BridgePileFanoutPlanner(NemesisPlannerBase):
     def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
         if not hosts:
             return []
-        cluster = load_external_cluster_optional()
+        cluster = require_external_cluster()
         if cluster is None:
             return []
         pile_map = self._build_pile_map(cluster)

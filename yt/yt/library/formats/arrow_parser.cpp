@@ -1965,18 +1965,17 @@ public:
         auto numColumns = batch->num_columns();
         auto numRows = batch->num_rows();
 
-        if (Options_.EnableMemoryLimit) {
+        if (Options_.MaxAllocationBytes) {
             // Guard against crafted Arrow IPC streams that claim a huge number of rows with
             // minimal body data (e.g. NullType columns have zero-size bodies).
             // Note: this is distinct from TLimitingArrowMemoryPool — that pool limits Arrow's
             // own internal allocations, while rowsValues below is our own allocation via C++ new,
             // which does not go through Arrow's memory pool.
-            constexpr ui64 MaxBatchAllocationBytes = 2_GB;
-            if (static_cast<ui64>(numRows) * static_cast<ui64>(numColumns) * sizeof(TUnversionedValue) > MaxBatchAllocationBytes) {
+            if (static_cast<ui64>(numRows) * static_cast<ui64>(numColumns) * sizeof(TUnversionedValue) > static_cast<ui64>(*Options_.MaxAllocationBytes)) {
                 THROW_ERROR_EXCEPTION("Arrow record batch is too large: %v columns x %v rows would allocate more than %v bytes",
                     numColumns,
                     numRows,
-                    MaxBatchAllocationBytes);
+                    *Options_.MaxAllocationBytes);
             }
         }
 
@@ -2114,11 +2113,9 @@ class TArrowParser
     : public IParser
 {
 public:
-    static constexpr i64 DefaultMaxAllocationBytes = 16_GB;
-
     explicit TArrowParser(IValueConsumer* valueConsumer, const TArrowParserOptions& options = {})
         : Listener_(std::make_shared<TListener>(valueConsumer, options))
-        , MemoryPool_(options.EnableMemoryLimit ? DefaultMaxAllocationBytes : std::numeric_limits<int64_t>::max())
+        , MemoryPool_(options.MaxAllocationBytes.value_or(std::numeric_limits<int64_t>::max()))
         , Decoder_(MakeDecoder())
     { }
 

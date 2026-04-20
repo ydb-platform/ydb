@@ -2685,7 +2685,7 @@ public:
                 return false;
             }
         } else {
-            if (Args_.size() < 1 || Args_.size() > 2) {
+            if (Args_.empty() || Args_.size() > 2) {
                 ctx.Error(Pos_) << ModuleName_ << " script declaration requires one or two parameters";
                 return false;
             }
@@ -2823,7 +2823,7 @@ private:
             return false;
         }
 
-        if (Args_.size() > 0) {
+        if (!Args_.empty()) {
             ctx.Error(Pos_) << GetOpName() << " requires exactly 0 arguments";
             return false;
         }
@@ -4095,7 +4095,7 @@ TNodeResult BuildBuiltinFunc(
         }
 
         if (normalizedName == "aggregationfactory") {
-            if (args.size() < 1 || !args[0]->GetLiteral("String")) {
+            if (args.empty() || !args[0]->GetLiteral("String")) {
                 return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "AGGREGATION_FACTORY requries a function name")));
             }
 
@@ -4275,7 +4275,8 @@ TNodeResult BuildBuiltinFunc(
         } else if (normalizedName == "visit" || normalizedName == "visitordefault") {
             bool withDefault = normalizedName == "visitordefault";
             TNodePtr variant;
-            TVector<TNodePtr> labels, handlers;
+            TVector<TNodePtr> labels;
+            TVector<TNodePtr> handlers;
             TMaybe<TNodePtr> dflt;
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;

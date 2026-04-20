@@ -761,6 +761,17 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         return nullptr;
     }
 
+    if (op.GetUniqueIndexKeySize()) {
+        if (op.GetUniqueIndexKeySize() >= keyColIds.size()) {
+            errStr = TStringBuilder()
+                << "Too many unique key prefix columns"
+                << ": " << op.GetUniqueIndexKeySize()
+                << ", max: " << (keyColIds.size()-1);
+            return nullptr;
+        }
+        alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
+    }
+
     if (source) {
         // key columns reorder or deletion is not supported
         const TVector<ui32>& oldColIds = source->KeyColumnIds;

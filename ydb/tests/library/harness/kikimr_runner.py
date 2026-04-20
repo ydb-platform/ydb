@@ -161,6 +161,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return self.__working_dir
 
     @property
+    def ydbd_log_file_path(self):
+        """Absolute path passed to ydbd --log-file-name when use_log_files is set; otherwise None."""
+        return self.__log_file_name
+
+    @property
     def binary_path(self):
         return self.__binary_path
 

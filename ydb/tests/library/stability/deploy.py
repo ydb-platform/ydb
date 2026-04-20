@@ -2,7 +2,6 @@ from collections import defaultdict
 import json
 import random
 import subprocess
-import urllib.error
 import urllib.request
 import allure
 import logging
@@ -487,10 +486,19 @@ class StressUtilDeployer:
             logging.error(nemesis_log[-1])
             return False
 
+        # When both paths are provided, cluster_path is the cluster YAML
+        # (config.hosts, config.bridge_config) and yaml_config is the
+        # database template (domains).  The nemesis CLI expects:
+        #   --yaml-config-location  → cluster YAML (cluster_path / config.yaml)
+        #   --database-config-location → database template (yaml_config / databases.yaml)
+        database_config_location = self.yaml_config if self.yaml_config and self.cluster_path else None
+
         cmd = (
             f"{nemesis_binary} install "
             f"--yaml-config-location {yaml_config_location}"
         )
+        if database_config_location:
+            cmd += f" --database-config-location {database_config_location}"
         if self.static_location:
             cmd += f" --static-location {self.static_location}"
         nemesis_log.append(f"Nemesis binary: {nemesis_binary}")

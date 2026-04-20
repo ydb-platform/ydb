@@ -182,6 +182,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
 struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr Request;
     THolder<TEvSchemeShard::TEvAckSchemeChangeRecordsResult> Result;
+    bool ReactiveCleanupCapHit = false;
 
     TTxAckSchemeChangeRecords(TSchemeShard* self, TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev)
         : TTransactionBase(self)
@@ -215,6 +216,8 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             newCursor = Self->NextSchemeChangeSequenceId;
         }
 
+        const ui64 oldMinCursor = Self->GetMinSubscriberCursor();
+
         const TInstant now = TInstant::Now();
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(newCursor),
@@ -226,6 +229,38 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
+        // Reactive cleanup: if this ack moved the global min cursor forward,
+        // delete newly-acked records inline (up to a cap) so overflow capacity
+        // is restored without waiting for the background sweep.
+        const ui64 newMinCursor = Self->GetMinSubscriberCursor();
+        if (newMinCursor > oldMinCursor) {
+            const ui64 reactiveCleanupCap = 1000;
+            ui64 deletedCount = 0;
+
+            auto logRowset = db.Table<Schema::SchemeChangeRecords>()
+                .GreaterOrEqual(oldMinCursor + 1)
+                .Select();
+            if (!logRowset.IsReady()) {
+                return false;
+            }
+            while (!logRowset.EndOfSet()) {
+                ui64 seqId = logRowset.GetValue<Schema::SchemeChangeRecords::SequenceId>();
+                if (seqId > newMinCursor) {
+                    break;
+                }
+                if (deletedCount >= reactiveCleanupCap) {
+                    ReactiveCleanupCapHit = true;
+                    break;
+                }
+                db.Table<Schema::SchemeChangeRecords>().Key(seqId).Delete();
+                db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Delete();
+                ++deletedCount;
+                if (!logRowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
         Result->Record.SetNewCursor(newCursor);
 
@@ -234,14 +269,20 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
-        ctx.Schedule(TDuration::Seconds(5),
-            new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
+        if (ReactiveCleanupCapHit) {
+            // More records to drain; trigger background sweep immediately.
+            ctx.Send(ctx.SelfID,
+                new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
+        }
+        // Otherwise rely on the 1-hour background timer rescheduled by the
+        // cleanup tx itself as a safety net.
     }
 };
 
 struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvUnregisterSubscriber::TPtr Request;
     THolder<TEvSchemeShard::TEvUnregisterSubscriberResult> Result;
+    bool ReactiveCleanupCapHit = false;
 
     TTxUnregisterSubscriber(TSchemeShard* self, TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev)
         : TTransactionBase(self)
@@ -266,8 +307,41 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
             return true;
         }
 
+        const ui64 oldMinCursor = Self->GetMinSubscriberCursor();
+
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Delete();
         Self->Subscribers.erase(subscriberId);
+
+        // Reactive cleanup: removing a slow subscriber may jump the global
+        // min cursor forward. Delete newly-stale records inline up to a cap.
+        const ui64 newMinCursor = Self->GetMinSubscriberCursor();
+        if (newMinCursor > oldMinCursor) {
+            const ui64 reactiveCleanupCap = 1000;
+            ui64 deletedCount = 0;
+
+            auto logRowset = db.Table<Schema::SchemeChangeRecords>()
+                .GreaterOrEqual(oldMinCursor + 1)
+                .Select();
+            if (!logRowset.IsReady()) {
+                return false;
+            }
+            while (!logRowset.EndOfSet()) {
+                ui64 seqId = logRowset.GetValue<Schema::SchemeChangeRecords::SequenceId>();
+                if (seqId > newMinCursor) {
+                    break;
+                }
+                if (deletedCount >= reactiveCleanupCap) {
+                    ReactiveCleanupCapHit = true;
+                    break;
+                }
+                db.Table<Schema::SchemeChangeRecords>().Key(seqId).Delete();
+                db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Delete();
+                ++deletedCount;
+                if (!logRowset.Next()) {
+                    return false;
+                }
+            }
+        }
 
         Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
 
@@ -276,8 +350,10 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
-        ctx.Schedule(TDuration::Seconds(5),
-            new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
+        if (ReactiveCleanupCapHit) {
+            ctx.Send(ctx.SelfID,
+                new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
+        }
     }
 };
 

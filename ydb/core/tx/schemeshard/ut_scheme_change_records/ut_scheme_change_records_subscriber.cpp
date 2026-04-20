@@ -188,7 +188,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
     }
 
-    Y_UNIT_TEST(CleanupTriggeredAfterAck) {
+    Y_UNIT_TEST(AckDeletesAckedRecordsInline) {
+        // Phase 3 invariant: Ack tx deletes records (up to ReactiveCleanupCap)
+        // in the same transaction. No manual wakeup / background sweep needed.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -205,26 +207,19 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-        // Fetch all records
         TAutoPtr<IEventHandle> fetchHandle;
         auto fetch = FetchSchemeChangeRecords(runtime, "cleanup:sub", 0, 100, fetchHandle);
         UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
         UNIT_ASSERT(fetch->Record.EntriesSize() >= 3);
         ui64 lastSeq = fetch->Record.GetLastSequenceId();
 
-        // Ack all -- this schedules cleanup after 5s
         TAutoPtr<IEventHandle> ackHandle;
         AckSchemeChangeRecords(runtime, "cleanup:sub", lastSeq, ackHandle);
 
-        // Manually trigger cleanup instead of waiting for timer
-        auto sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
-            new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
-
-        // ReadSchemeChangeRecords dispatches events, so the cleanup tx
-        // (sent before the read) will execute first
+        // No manual TEvWakeupToRunSchemeChangeRecordsCleanup forwarded:
+        // records must be gone from the table as a side effect of the ack.
         auto entries = ReadSchemeChangeRecords(runtime);
         UNIT_ASSERT_C(entries.empty(),
-            "Records should be cleaned up after ack, got " << entries.size());
+            "Records should be deleted inline by ack, got " << entries.size());
     }
 }

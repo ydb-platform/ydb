@@ -59,6 +59,7 @@ namespace NActors {
 
             virtual void Output(IOutputStream& out) const = 0;
             virtual EContentType GetContentType() const = 0;
+            virtual TString GetNonce() const { return {}; }
         };
 
         // Ready to output HTML in TString
@@ -78,9 +79,14 @@ namespace NActors {
                 return ContentType;
             }
 
+            TString GetNonce() const override {
+                return Nonce;
+            }
+
             const TString Answer;
             const int SubRequestId;
             const EContentType ContentType;
+            TString Nonce;
         };
 
         struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> {
@@ -98,6 +104,8 @@ namespace NActors {
             TString PathInfo() const;
             TCgiParameters Cgi() const;
             HTTP_METHOD GetMethod() const;
+            TString GetHeader(TStringBuf name) const;
+            TString GetCookie(TStringBuf name) const;
 
             TString ToStringHeader() const override {
                 return "TEvRemoteHttpInfo";
@@ -128,26 +136,20 @@ namespace NActors {
             }
 
             TString Html;
+            TString Nonce;
 
             TString ToStringHeader() const override {
                 return "TEvRemoteHttpInfoRes";
             }
 
-            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
-                return serializer->WriteString(&Html);
-            }
-
-            ui32 CalculateSerializedSize() const override {
-                return Html.size();
-            }
+            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override;
+            ui32 CalculateSerializedSize() const override;
 
             bool IsSerializable() const override {
                 return true;
             }
 
-            static TEvRemoteHttpInfoRes* Load(const TEventSerializedData* bufs) {
-                return new TEvRemoteHttpInfoRes(bufs->GetString());
-            }
+            static TEvRemoteHttpInfoRes* Load(const TEventSerializedData* bufs);
         };
 
         struct TEvRemoteJsonInfoRes: public NActors::TEventBase<TEvRemoteJsonInfoRes, RemoteJsonInfoRes> {
@@ -216,6 +218,8 @@ namespace NActors {
 
 
         TString BuildActorsLink(const TString& path, const TCgiParameters& currentParams, const std::initializer_list<std::pair<TString, TString>> newParams);
+
+        TString GenerateCspNonce();
 
     }
 

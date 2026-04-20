@@ -49,7 +49,7 @@ public:
         char* ptr = Ptr_.load(std::memory_order::relaxed);
         ptr = ptr ? ptr : Buffer_;
 
-        if (::strncmp(ptr, value.data(), value.length()) == 0) {
+        if (TStringBuf(ptr) == value) {
             // No changes; just return.
             return;
         }

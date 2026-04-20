@@ -603,7 +603,8 @@ namespace NKikimr {
 
                 NGcOpt::TKeepFlagStat keepFlagStat;
                 if (IsFresh) {
-                    keepFlagStat.Needed = true;
+                    // we need this record only if it does contain DoNotKeep flag and there is Keep flag somewhere else
+                    keepFlagStat.Needed = subsDoNotKeep != 0 && subsKeep < wholeKeep;
                 } else {
                     keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
                 }

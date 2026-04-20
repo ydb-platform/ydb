@@ -192,7 +192,6 @@ namespace NKikimr {
         {}
     };
 
-
     ////////////////////////////////////////////////////////////////////////////
     // TSyncerScheduler
     ////////////////////////////////////////////////////////////////////////////
@@ -222,7 +221,10 @@ namespace NKikimr {
         TActiveActors ActiveActors;
         const TDuration SyncTimeInterval;
         TActorId CommitterId;
+        TActorId NotifyId;
         bool Scheduled;
+        THashSet<ui32> StartupDataSyncPeers;
+        bool StartupDataSyncDoneReported = false;
         std::shared_ptr<TSjCtx> JobCtx;
 
         bool FullSyncGatherMode = false;
@@ -243,6 +245,12 @@ namespace NKikimr {
                 public TEventLocal<TEvFullSyncGatherTimeout, EvFullSyncGatherTimeout> {};
         };
 
+        void ReportStartupDataSyncDone(const TActorContext& ctx) {
+            if (!StartupDataSyncDoneReported) {
+                StartupDataSyncDoneReported = true;
+                ctx.Send(NotifyId, new TEvStartupDataSyncDone);
+            }
+        }
 
         void ActualizeUnsyncedDisksNum() {
             unsigned unsyncedDisks = 0;
@@ -262,8 +270,11 @@ namespace NKikimr {
                 if (!x.Myself) {
                     Y_DEBUG_ABORT_UNLESS(x.Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
                     SchedulerQueue.push(&x);
+                    StartupDataSyncPeers.insert(x.OrderNumber);
                 }
             }
+
+            ActualizeUnsyncedDisksNum();
 
             // if we haven't found any neighbors to sync with, notify skeleton
             if (SchedulerQueue.empty()) {
@@ -271,6 +282,10 @@ namespace NKikimr {
             } else {
                 // start sync immediately
                 Schedule(ctx);
+            }
+
+            if (StartupDataSyncPeers.empty()) {
+                ReportStartupDataSyncDone(ctx);
             }
         }
 
@@ -300,6 +315,10 @@ namespace NKikimr {
             auto interval = fullRecovery ? TDuration::Seconds(0) : SyncTimeInterval;
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
+            const ui32 orderNumber = GInfo->GetOrderNumber(task.VDiskId);
+            if (StartupDataSyncPeers.erase(orderNumber) && StartupDataSyncPeers.empty()) {
+                ReportStartupDataSyncDone(ctx);
+            }
             SchedulerQueue.push(&(*SyncerData->Neighbors)[vDiskId]);
             Schedule(ctx);
         }
@@ -527,7 +546,8 @@ namespace NKikimr {
         TSyncerScheduler(const TIntrusivePtr<TSyncerContext> &sc,
                          const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                          const TIntrusivePtr<TSyncerData> &syncerData,
-                         const TActorId &committerId)
+                         const TActorId &committerId,
+                         const TActorId &notifyId)
             : TActorBootstrapped<TSyncerScheduler>()
             , SyncerContext(sc)
             , GInfo(info)
@@ -536,6 +556,7 @@ namespace NKikimr {
             , ActiveActors()
             , SyncTimeInterval(SyncerContext->Config->SyncTimeInterval)
             , CommitterId(committerId)
+            , NotifyId(notifyId)
             , Scheduled(false)
             , JobCtx(TSjCtx::Create(SyncerContext, GInfo))
         {}
@@ -548,8 +569,9 @@ namespace NKikimr {
     IActor* CreateSyncerSchedulerActor(const TIntrusivePtr<TSyncerContext> &sc,
                                        const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                                        const TIntrusivePtr<TSyncerData> &syncerData,
-                                       const TActorId &committerId) {
-        return new TSyncerScheduler(sc, info, syncerData, committerId);
+                                       const TActorId &committerId,
+                                       const TActorId &notifyId) {
+        return new TSyncerScheduler(sc, info, syncerData, committerId, notifyId);
     }
 
 } // NKikimr

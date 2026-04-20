@@ -848,7 +848,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
 
     THashMap<TString, ui32> nameToId;
     ui32 nextColumnId = 1;
-    for (auto&& col : tableDesc.GetSchema().GetColumns()) {
+    for (const auto& col : tableDesc.GetSchema().GetColumns()) {
         nameToId[col.GetName()] = nextColumnId++;
     }
 

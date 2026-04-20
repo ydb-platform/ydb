@@ -108,6 +108,7 @@ namespace NActors::NTracing {
         header.NodeId = nodeId;
         header.HeaderSize = static_cast<ui32>(dictBuf.Size());
         header.EventCount = chunk.Events.size();
+        header.StartTimestampUs = chunk.StartTimestampUs;
 
         TBuffer result;
         result.Reserve(sizeof(header) + dictBuf.Size() + chunk.Events.size() * sizeof(TTraceEvent));
@@ -143,6 +144,7 @@ namespace NActors::NTracing {
         }
 
         nodeId = header.NodeId;
+        chunk.StartTimestampUs = header.StartTimestampUs;
 
         const char* dictEnd = ptr + header.HeaderSize;
         if (dictEnd > end) {

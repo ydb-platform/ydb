@@ -6,8 +6,10 @@
 #include <util/datetime/base.h>
 #include <util/system/thread.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 namespace NActors::NTracing {
@@ -52,7 +54,10 @@ namespace NActors::NTracing {
         }
 
         void AddEvent(TThreadBuffer* buf, TTraceEvent event, ui8 threadIdx) {
-            event.Timestamp = TInstant::Now().MicroSeconds();
+            const ui64 nowUs = TInstant::Now().MicroSeconds();
+            const ui64 startUs = StartTimestampUs.load(std::memory_order_relaxed);
+            const ui64 delta = (nowUs > startUs) ? (nowUs - startUs) : 0;
+            event.DeltaUs = static_cast<ui32>(std::min<ui64>(delta, std::numeric_limits<ui32>::max()));
             event.Flags = threadIdx;
             ui64 pos = buf->WritePos.fetch_add(1, std::memory_order_release);
             buf->Events[pos % BufferSize] = event;
@@ -66,7 +71,7 @@ namespace NActors::NTracing {
         }
 
         TTraceChunk GetTraceChunk() {
-            ui64 startTimestamp = StartTimestamp.load(std::memory_order_acquire);         
+            const ui64 startTimestampUs = StartTimestampUs.load(std::memory_order_acquire);
             TVector<TTraceEvent> events;
             ui32 usedBuffers = NextBufferIdx.load(std::memory_order_acquire);
             usedBuffers = std::min<ui32>(usedBuffers, MaxThreads);
@@ -78,15 +83,11 @@ namespace NActors::NTracing {
                 ui64 pos = buf.WritePos.load(std::memory_order_acquire);
                 if (pos == 0) continue;
 
-                ui64 total = pos;
-                ui64 first = (total > BufferSize) ? total - BufferSize : 0;
-                ui64 safeEnd = (total > 0) ? total - 1 : 0;
+                ui64 first = (pos > BufferSize) ? pos - BufferSize : 0;
+                ui64 safeEnd = pos - 1;
 
                 for (ui64 j = first; j < safeEnd; ++j) {
-                    const auto& event = buf.Events[j % BufferSize];
-                    if (event.Timestamp >= startTimestamp) {
-                        events.push_back(event);
-                    }
+                    events.push_back(buf.Events[j % BufferSize]);
                 }
 
                 for (const auto& [typeIndex, typeName] : buf.EventNames) {
@@ -103,6 +104,7 @@ namespace NActors::NTracing {
             }
 
             return {
+                .StartTimestampUs = startTimestampUs,
                 .ActivityDict = BuildActivityDict(),
                 .EventNamesDict = std::move(eventNames),
                 .ThreadPoolDict = std::move(threadPoolDict),
@@ -110,8 +112,16 @@ namespace NActors::NTracing {
             };
         }
 
+        void ResetBuffers() {
+            ui32 used = NextBufferIdx.load(std::memory_order_acquire);
+            used = std::min<ui32>(used, MaxThreads);
+            for (ui32 i = 0; i < used; ++i) {
+                Buffers[i]->WritePos.store(0, std::memory_order_release);
+            }
+        }
+
         void RecordStartTimestamp() {
-            StartTimestamp.store(TInstant::Now().MicroSeconds(), std::memory_order_release);
+            StartTimestampUs.store(TInstant::Now().MicroSeconds(), std::memory_order_release);
         }
 
     private:
@@ -132,7 +142,7 @@ namespace NActors::NTracing {
         size_t MaxThreads;
         std::vector<std::unique_ptr<TThreadBuffer>> Buffers;
         std::atomic<ui32> NextBufferIdx{0};
-        std::atomic<ui64> StartTimestamp{0};
+        std::atomic<ui64> StartTimestampUs{0};
 
         TAdaptiveLock ThreadPoolDictLock;
         THashMap<ui32, TString> ThreadPoolNames;
@@ -229,10 +239,12 @@ namespace NActors::NTracing {
 
         bool Start() override {
             auto expected = ETracerState::Idle;
-            if (!State.compare_exchange_strong(expected, ETracerState::Recording)) {
+            if (!State.compare_exchange_strong(expected, ETracerState::Starting)) {
                 return false;
             }
+            TracerImpl.ResetBuffers();
             TracerImpl.RecordStartTimestamp();
+            State.store(ETracerState::Recording, std::memory_order_release);
             return true;
         }
 

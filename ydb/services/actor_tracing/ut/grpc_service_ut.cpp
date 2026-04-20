@@ -131,7 +131,6 @@ Y_UNIT_TEST_SUITE(ActorTracingGRpcService) {
             bool hasReceive = false;
             bool hasNew = false;
             for (const auto& ev : chunk.Events) {
-                UNIT_ASSERT(ev.Timestamp > 0);
                 auto type = static_cast<NActors::NTracing::ETraceEventType>(ev.Type);
                 switch (type) {
                     case NActors::NTracing::ETraceEventType::SendLocal:

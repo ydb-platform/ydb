@@ -18,22 +18,23 @@ using namespace NActors::NTracing;
 Y_UNIT_TEST_SUITE(TracerTest) {
 
     Y_UNIT_TEST(EventSize) {
-        UNIT_ASSERT_VALUES_EQUAL(sizeof(TTraceEvent), 40u);
+        UNIT_ASSERT_VALUES_EQUAL(sizeof(TTraceEvent), 36u);
     }
 
     Y_UNIT_TEST(SerializeDeserializeRoundTrip) {
         TTraceChunk chunk;
+        chunk.StartTimestampUs = 1700000000000000ULL;
         chunk.ActivityDict = {{0, "ACTOR_A"}, {3, "ACTOR_B"}, {10, "ACTOR_C"}};
         chunk.EventNamesDict = {{100, "TEvRequest"}, {200, "TEvResponse"}};
 
         TTraceEvent ev1{};
-        ev1.Timestamp = 1000000;
+        ev1.DeltaUs = 1000000;
         ev1.Actor1 = 42;
         ev1.Type = static_cast<ui8>(ETraceEventType::New);
         chunk.Events.push_back(ev1);
 
         TTraceEvent ev2{};
-        ev2.Timestamp = 1000010;
+        ev2.DeltaUs = 1000010;
         ev2.Actor1 = 1;
         ev2.Actor2 = 42;
         ev2.Aux = 100;
@@ -42,7 +43,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         chunk.Events.push_back(ev2);
 
         TTraceEvent ev3{};
-        ev3.Timestamp = 1000020;
+        ev3.DeltaUs = 1000020;
         ev3.Actor1 = 1;
         ev3.Actor2 = 42;
         ev3.Aux = 100;
@@ -52,13 +53,13 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         chunk.Events.push_back(ev3);
 
         TTraceEvent ev4{};
-        ev4.Timestamp = 1000030;
+        ev4.DeltaUs = 1000030;
         ev4.Actor1 = 42;
         ev4.Type = static_cast<ui8>(ETraceEventType::Die);
         chunk.Events.push_back(ev4);
 
         TTraceEvent ev5{};
-        ev5.Timestamp = 1000040;
+        ev5.DeltaUs = 1000040;
         ev5.Actor1 = 0x22222222;
         ev5.Actor2 = 42;
         ev5.Aux = 100;
@@ -75,6 +76,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         UNIT_ASSERT(DeserializeTrace(buf, restored, nodeId));
 
         UNIT_ASSERT_VALUES_EQUAL(nodeId, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(restored.StartTimestampUs, chunk.StartTimestampUs);
         UNIT_ASSERT_VALUES_EQUAL(restored.ActivityDict.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(restored.EventNamesDict.size(), 2u);
@@ -84,6 +86,8 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[2].Type, static_cast<ui8>(ETraceEventType::ReceiveLocal));
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[3].Type, static_cast<ui8>(ETraceEventType::Die));
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Type, static_cast<ui8>(ETraceEventType::ForwardLocal));
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[0].DeltaUs, 1000000u);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].DeltaUs, 1000040u);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[1].HandlePtr, 0x11111111ull);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].HandlePtr, 0x11111111ull);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Actor1, 0x22222222ull);
@@ -235,7 +239,6 @@ Y_UNIT_TEST_SUITE(TracerTest) {
 
         size_t sendCount = 0, receiveCount = 0, newCount = 0;
         for (const auto& ev : chunk.Events) {
-            UNIT_ASSERT_C(ev.Timestamp > 0, "Event has zero timestamp");
             auto type = static_cast<ETraceEventType>(ev.Type);
             switch (type) {
                 case ETraceEventType::SendLocal:
@@ -375,7 +378,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
             "Expected ForwardLocal remap to connect received old handle with sent new handle");
     }
 
-    Y_UNIT_TEST(EventsFilteredByStartTimestamp) {
+    Y_UNIT_TEST(BuffersResetOnStart) {
         THolder<TActorSystemSetup> setup(new TActorSystemSetup());
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
@@ -396,20 +399,17 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         UNIT_ASSERT(tracer->Start());
         auto pongActorId = actorSystem.Register(new TPongActor());
         TManualEvent done1;
-        auto pingActorId = actorSystem.Register(new TPingActor(pongActorId, done1, 5));
+        auto pingActorId = actorSystem.Register(new TPingActor(pongActorId, done1, 20));
         actorSystem.Send(pingActorId, new TEvents::TEvBootstrap());
         done1.WaitT(TDuration::Seconds(5));
 
         tracer->Stop();
         auto chunk1 = tracer->GetTraceData();
         UNIT_ASSERT_C(!chunk1.Events.empty(), "First session should have events");
+        const size_t session1Count = chunk1.Events.size();
+        const ui64 session1Start = chunk1.StartTimestampUs;
+        UNIT_ASSERT_C(session1Start != 0, "Session 1 StartTimestampUs must be populated");
 
-        ui64 maxTimestampFromFirstSession = 0;
-        for (const auto& ev : chunk1.Events) {
-            maxTimestampFromFirstSession = std::max(maxTimestampFromFirstSession, ev.Timestamp);
-        }
-
-        ui64 secondStartTimestamp = TInstant::Now().MicroSeconds();
         Sleep(TDuration::MilliSeconds(10));
 
         UNIT_ASSERT(tracer->Start());
@@ -422,20 +422,19 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         auto chunk2 = tracer->GetTraceData();
         UNIT_ASSERT_C(!chunk2.Events.empty(), "Second session should have events");
 
-        for (const auto& ev : chunk2.Events) {
-            UNIT_ASSERT_C(ev.Timestamp >= secondStartTimestamp - 1000000,
-                "Event timestamp " << ev.Timestamp << " should be >= second Start timestamp " 
-                << secondStartTimestamp << " (diff: " << (secondStartTimestamp - ev.Timestamp) << ")");
-        }
+        UNIT_ASSERT_C(chunk2.StartTimestampUs > session1Start,
+            "Session 2 StartTimestampUs (" << chunk2.StartTimestampUs
+            << ") should be later than session 1 (" << session1Start << ")");
+
+        UNIT_ASSERT_C(chunk2.Events.size() < session1Count,
+            "Session 2 chunk size (" << chunk2.Events.size()
+            << ") must be smaller than session 1 (" << session1Count
+            << "); looks like buffers were not reset on Start()");
 
         for (const auto& ev : chunk2.Events) {
-            UNIT_ASSERT_C(ev.Timestamp > maxTimestampFromFirstSession,
-                "Event from first session (timestamp " << ev.Timestamp 
-                << " <= " << maxTimestampFromFirstSession << ") should not be in chunk2");
+            UNIT_ASSERT_C(ev.DeltaUs < 10u * 1000u * 1000u,
+                "Event DeltaUs " << ev.DeltaUs << " unreasonably large for session 2");
         }
-
-        UNIT_ASSERT_C(chunk2.Events.size() >= 6,
-            "Second chunk should contain events from second session, got " << chunk2.Events.size());
 
         actorSystem.Stop();
         actorSystem.Cleanup();

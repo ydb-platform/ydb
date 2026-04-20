@@ -21,6 +21,7 @@ namespace NActors {
             Idle = 0,
             Recording = 1,
             Fetching = 2,
+            Starting = 3,
         };
 
         class IActorTracer : TNonCopyable {

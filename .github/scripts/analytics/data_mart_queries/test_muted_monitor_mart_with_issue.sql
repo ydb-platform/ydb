@@ -54,7 +54,7 @@ $mfu = (
         requested_at AS mfu_since,
         window_days AS mfu_window_days,
         requested_at + 2 * window_days * Interval("P1D") AS mfu_expires_at
-    FROM `test_results/analytics/mute_manual_unmute`
+    FROM `test_mute/fast_unmute_active`
 );
 
 SELECT

@@ -24,8 +24,8 @@
               "issues": "github_data/issues",
               "pull_requests": "github_data/pull_requests",
               "digest_queue": "test_results/analytics/digest_queue",
-              "mute_manual_unmute": "test_results/analytics/mute_manual_unmute",
-              "mute_fast_unmute_grace": "test_results/analytics/mute_fast_unmute_grace"
+              "fast_unmute_active": "test_mute/fast_unmute_active",
+              "fast_unmute_grace": "test_mute/fast_unmute_grace"
 
           }
       },

@@ -126,11 +126,11 @@ def merge_mute_aggregate_with_fast_unmute_grace(
 
 
 def load_fast_unmute_grace_map(ydb_wrapper, branch, build_type):
-    """Rows in ``mute_fast_unmute_grace`` for the mute ladder after a fast-track exit."""
+    """Rows in ``fast_unmute_grace``: widening mute threshold after a test left fast-unmute."""
     try:
-        table_path = ydb_wrapper.get_table_path('mute_fast_unmute_grace')
+        table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
     except KeyError:
-        logging.info('mute_fast_unmute_grace not registered in ydb_qa_config — ladder disabled')
+        logging.info('fast_unmute_grace not registered in ydb_qa_config — ladder disabled')
         return {}
 
     branch_esc = str(branch).replace("'", "''")
@@ -144,7 +144,7 @@ def load_fast_unmute_grace_map(ydb_wrapper, branch, build_type):
     try:
         rows = ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_grace_load')
     except Exception as exc:
-        logging.warning('Failed to load mute_fast_unmute_grace: %s', exc)
+        logging.warning('Failed to load fast_unmute_grace: %s', exc)
         return {}
 
     out = {}
@@ -160,7 +160,7 @@ def delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, test_strings)
     if not test_strings:
         return
     try:
-        table_path = ydb_wrapper.get_table_path('mute_fast_unmute_grace')
+        table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
     except KeyError:
         return
 
@@ -189,9 +189,9 @@ def delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, test_strings)
 def load_manual_unmute_full_names(ydb_wrapper, branch, build_type):
     """Return the set of full_name registered for manual fast-unmute on this (branch, build_type)."""
     try:
-        table_path = ydb_wrapper.get_table_path('mute_manual_unmute')
+        table_path = ydb_wrapper.get_table_path('fast_unmute_active')
     except KeyError:
-        logging.info('mute_manual_unmute not registered in ydb_qa_config — manual fast-unmute disabled')
+        logging.info('fast_unmute_active not registered in ydb_qa_config — manual fast-unmute disabled')
         return set()
 
     branch_escaped = str(branch).replace("'", "''")
@@ -205,7 +205,7 @@ def load_manual_unmute_full_names(ydb_wrapper, branch, build_type):
     try:
         rows = ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_load_full_names')
     except Exception as exc:
-        logging.warning('Failed to load mute_manual_unmute: %s — manual fast-unmute disabled', exc)
+        logging.warning('Failed to load fast_unmute_active: %s — manual fast-unmute disabled', exc)
         return set()
     return {row['full_name'] for row in rows if row.get('full_name')}
 
@@ -681,7 +681,7 @@ def apply_and_add_mutes(
 
         # 2a. Manual fast-unmute candidates.
         # A test is considered under manual fast-unmute when its full_name is
-        # registered in the `mute_manual_unmute` YDB table (populated when a
+        # registered in `fast_unmute_active` (populated when a
         # user manually closes the mute issue). Such tests are evaluated on a
         # shorter window and smaller min_runs threshold, so they get unmuted
         # sooner when stable.

@@ -4,13 +4,14 @@
 
 When a user manually closes a mute issue as Completed, every test listed in
 that issue that is currently still muted gets a row in the YDB table
-`mute_manual_unmute`. While a row exists, `create_new_muted_ya.py` evaluates
+``fast_unmute_active``. While a row exists, `create_new_muted_ya.py` evaluates
 the test against a shorter unmute window (see `mute_config.json`) instead of
 the default one. Rows are cleaned up when the test is either unmuted, fails
 during the fast window, or the window expires.
 
 Usage:
     python3 manual_unmute.py sync
+    python3 manual_unmute.py sync -v   # DEBUG: why each issue/test was skipped
 """
 
 import argparse
@@ -49,6 +50,9 @@ _LABEL_ID_CACHE = {}
 
 # GitHub ``__typename`` is ``User`` for PAT-based bot accounts; skip known bot logins (M2).
 BOT_LOGINS = frozenset({'ydbot', 'github-actions'})
+
+# Verbose (`sync -v`) touches only this logger so ydb/grpc stay at INFO (no RPC spam).
+_LOG = logging.getLogger('manual_unmute')
 
 
 COMMENT_ENTER = """🚀 **Fast-unmute started**
@@ -543,14 +547,30 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         issue_number_raw = issue.get('issue_number')
         issue_id = issue.get('issue_id')
         if issue_number_raw is None or not issue_id:
+            _LOG.debug(
+                'enter: skip candidate without issue_number/issue_id: number=%r id=%r',
+                issue_number_raw,
+                issue_id,
+            )
             continue
         issue_number = int(issue_number_raw)
 
         closer = closers.get(issue_number) or {}
         if closer.get('type') != 'User':
+            _LOG.debug(
+                'enter: skip #%s: closer is not User (login=%r type=%r)',
+                issue_number,
+                closer.get('login'),
+                closer.get('type'),
+            )
             continue
         login = (closer.get('login') or '').lower()
         if login in BOT_LOGINS:
+            _LOG.debug(
+                'enter: skip #%s: closer login %r is bot-denylisted',
+                issue_number,
+                login,
+            )
             continue
 
         parsed = parse_body(issue.get('body') or '')
@@ -558,6 +578,7 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         branches = parsed.branches or ['main']
         build_type = parsed.build_type or DEFAULT_BUILD_TYPE
         if not tests:
+            _LOG.debug('enter: skip #%s: no tests parsed from issue body', issue_number)
             continue
 
         issue_rows = []
@@ -569,9 +590,22 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                         ydb_wrapper, tests_monitor_path, branch, build_type
                     )
                 if full_name not in muted_cache[cache_key]:
+                    _LOG.debug(
+                        'enter: skip #%s test %r: not currently muted on branch=%r build_type=%r',
+                        issue_number,
+                        full_name,
+                        branch,
+                        build_type,
+                    )
                     continue
                 row_key = (full_name, branch, build_type)
                 if row_key in existing:
+                    _LOG.debug(
+                        'enter: skip #%s test %r: row already in fast_unmute_active %s',
+                        issue_number,
+                        full_name,
+                        row_key,
+                    )
                     continue
                 issue_rows.append({
                     'full_name': full_name,
@@ -583,6 +617,13 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                 })
 
         if not issue_rows:
+            _LOG.debug(
+                'enter: skip #%s: zero rows after filtering (parsed tests=%s branches=%s build_type=%s)',
+                issue_number,
+                sorted(tests),
+                branches,
+                build_type,
+            )
             continue
 
         upsert_rows(ydb_wrapper, table_path, issue_rows)
@@ -634,7 +675,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
     delete_count = 0
     grace_table_path = None
     try:
-        grace_table_path = ydb_wrapper.get_table_path('mute_fast_unmute_grace')
+        grace_table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
         create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
     except KeyError:
         pass
@@ -764,13 +805,13 @@ def _fetch_issue_node_ids(issue_numbers):
 def sync(ydb_wrapper):
     config = load_config()
 
-    table_path = ydb_wrapper.get_table_path('mute_manual_unmute')
+    table_path = ydb_wrapper.get_table_path('fast_unmute_active')
     issues_table_path = ydb_wrapper.get_table_path('issues')
     tests_monitor_path = ydb_wrapper.get_table_path('tests_monitor')
 
     create_manual_unmute_table(ydb_wrapper, table_path)
     try:
-        grace_table_path = ydb_wrapper.get_table_path('mute_fast_unmute_grace')
+        grace_table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
         create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
     except KeyError:
         grace_table_path = None
@@ -810,8 +851,19 @@ def main():
 
     parser = argparse.ArgumentParser(description='Manual fast-unmute state machine')
     subparsers = parser.add_subparsers(dest='mode', required=True)
-    subparsers.add_parser('sync', help='Enter new rows and clean up stale/failed/unmuted rows')
-    parser.parse_args()
+    sync_parser = subparsers.add_parser(
+        'sync',
+        help='Enter new rows and clean up stale/failed/unmuted rows',
+    )
+    sync_parser.add_argument(
+        '-v',
+        '--verbose',
+        action='store_true',
+        help='Log enter-phase skip reasons (does not enable ydb/grpc DEBUG)',
+    )
+    args = parser.parse_args()
+    if getattr(args, 'verbose', False):
+        _LOG.setLevel(logging.DEBUG)
 
     with YDBWrapper() as ydb_wrapper:
         if not ydb_wrapper.check_credentials():

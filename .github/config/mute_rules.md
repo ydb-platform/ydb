@@ -70,7 +70,7 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 Once you have fixed the tests tracked by a mute-issue, you can skip the default 7-day unmute wait by **manually closing the issue as Completed**. The `python3 .github/scripts/tests/manual_unmute.py sync` step on the next workflow run will:
 
 1. Detect CLOSED+COMPLETED issues closed by a human (not by the bot).
-2. For every test listed in the issue that is still muted, register a per-test row in the `mute_manual_unmute` YDB table.
+2. For every test listed in the issue that is still muted, register a per-test row in the `fast_unmute_active` YDB table (`test_mute/fast_unmute_active`).
 3. Reopen the issue and post a comment explaining what is happening.
 
 While a test is registered in that table, `create_new_muted_ya.py` evaluates it against a **shorter unmute window** defined in [mute_config.json](./mute_config.json):

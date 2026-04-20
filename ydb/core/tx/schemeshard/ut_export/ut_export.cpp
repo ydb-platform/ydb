@@ -2029,7 +2029,7 @@ partitioning_settings {
             UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
             const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
             THashSet<TString> found;
-            for (auto&& ix : schema.GetIndexes()) {
+            for (const auto& ix : schema.GetIndexes()) {
                 found.insert(ix.GetName());
             }
 

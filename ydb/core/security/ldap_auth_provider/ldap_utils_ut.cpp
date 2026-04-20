@@ -1,4 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/strbuf.h>
 #include "ldap_utils.h"
 
 namespace NKikimr {
@@ -64,13 +65,8 @@ Y_UNIT_TEST_SUITE(TLdapUtilsSearchFilterCreatorTest) {
     Y_UNIT_TEST(EscapeSpecialCharsInDefaultUidFilter) {
         NKikimrProto::TLdapAuthentication settings;
         TSearchFilterCreator filterCreator(settings);
-        TString login("u");
-        login += '*';
-        login += '(';
-        login += ')';
-        login += '\\';
-        login += '\0';
-        login += 'x';
+        static constexpr char LOGIN_BYTES[] = {'u', '*', '(', ')', '\\', '\0', 'x'};
+        const TString login(TStringBuf(LOGIN_BYTES, sizeof(LOGIN_BYTES)));
         const TString filter = filterCreator.GetFilter(login);
         UNIT_ASSERT_STRINGS_EQUAL(R"(uid=u\2a\28\29\5c\00x)", filter);
     }

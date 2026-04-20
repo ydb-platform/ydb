@@ -334,6 +334,12 @@ Y_UNIT_TEST_SUITE(StructLog) {
         YDBLOG_UPDATE_CONTEXT({"v2", 2});
         TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1, v2:int32=2");
 
+        YDBLOG_UPDATE_CONTEXT({"v3", 3});
+        TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1, v2:int32=2, v3:int32=3");
+
+        YDBLOG_REMOVE_CONTEXT("v1", "v2");
+        TEST_MESSAGE(TLogStack::GetTop(), "v3:int32=3");
+
         TLogStack::Pop();
         TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
 
@@ -411,6 +417,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}), R"({"value":{"subValue1":1,"subValue2":2}})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), R"({})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":1,"subValue2":2})");
+
+        // subMessage name conflict
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1})}), R"({"value":1,"_value":{"value":1}})");
     }
 }
 }

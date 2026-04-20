@@ -5,7 +5,7 @@
 #include "native_types_mapping.h"
 
 #include <algorithm>
-#include <cstdint>
+#include <initializer_list>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -166,6 +166,12 @@ public:
         auto index = GetValueIndex(name);
         if (index.has_value()) {
             AttachedValues.erase(begin(AttachedValues) + index.value());
+        }
+    }
+
+    void RemoveValues(const std::initializer_list<TString>& names) {
+        for(auto name: names) {
+            RemoveValue(name);
         }
     }
 

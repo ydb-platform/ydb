@@ -62,10 +62,6 @@ public:
     void* operator new(std::size_t sz) = delete;
     void* operator new[](std::size_t sz) = delete;
 
-    static TStructuredMessage& PushBuildMessage();
-    static TStructuredMessage& GetBuildMessage();
-    static TStructuredMessage PopBuildMessage();
-
     class TGuard {
     public:
         TGuard() {
@@ -86,6 +82,13 @@ public:
     protected:
         bool Poped{false};
     };
+
+protected:
+
+    static TStructuredMessage& PushBuildMessage();
+    static TStructuredMessage& GetBuildMessage();
+    static TStructuredMessage PopBuildMessage();
+
 };
 
 #define YDBLOG_CREATE_MESSAGE(...) [&]() -> TStructuredMessage { \

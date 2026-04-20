@@ -2555,6 +2555,9 @@ private:
             if (const auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
                 dqSourceLookupCn.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast()));
             }
+            if (const auto maybeFullscanLimit = streamLookup.FullscanLimit()) {
+                dqSourceLookupCn.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast()));
+            }
 
             for (const auto& key : streamLookup.LeftJoinKeyNames()) {
                 *dqSourceLookupCn.AddLeftJoinKeyNames() = leftLabel ? RemoveJoinAliases(key) : key;

@@ -3522,6 +3522,7 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
     TExprNode::TPtr maxDelayedRows;
     TExprNode::TPtr isMultiget;
     TExprNode::TPtr isMultiMatches;
+    TExprNode::TPtr fullscanLimit;
     if (const auto maybeOptions = join.JoinAlgoOptions()) {
         for (auto&& option: maybeOptions.Cast()) {
             auto&& name = option.Name().Value();
@@ -3532,6 +3533,8 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
             } else if (name == "MaxDelayedRows"sv) {
                 maxDelayedRows = option.Value().Cast().Ptr();
             } else if (name == "MultiGet"sv) {
+                isMultiget = option.Value().Cast().Ptr();
+            } else if (name == "FullscanLimit"sv) {
                 isMultiget = option.Value().Cast().Ptr();
             }
         }
@@ -3557,7 +3560,6 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
             return {};
         }
         isMultiMatches = ctx.NewAtom(pos, true);
-        isMultiget = ctx.NewAtom(pos, false);
     }
 
     auto rightInput = join.RightInput().Ptr();
@@ -3580,12 +3582,24 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         .MaxCachedRows(maxCachedRows)
         .MaxDelayedRows(maxDelayedRows);
 
+    if (fullscanLimit && !isMultiMatches) { // gaps are not allowed in optional
+        isMultiMatches = ctx.NewAtom(pos, false);
+    }
+
+    if (isMultiMatches && !isMultiget) { // ditto
+        isMultiget = ctx.NewAtom(pos, false);
+    }
+
     if (isMultiget) {
         cn.IsMultiget(isMultiget);
     }
 
     if (isMultiMatches) {
         cn.IsMultiMatches(isMultiMatches);
+    }
+
+    if (fullscanLimit) {
+        cn.FullscanLimit(fullscanLimit);
     }
 
     auto lambda = Build<TCoLambda>(ctx, pos)

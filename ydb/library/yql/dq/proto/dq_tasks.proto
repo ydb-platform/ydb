@@ -210,6 +210,7 @@ message TDqInputTransformLookupSettings {
     uint64 MaxDelayedRows = 11;
     bool IsMultiget = 12;
     bool IsMultiMatches = 13;
+    optional uint64 FullscanLimit = 14;
 }
 
 message TDqTask {

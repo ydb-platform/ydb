@@ -44,17 +44,27 @@ public:
     }
     TUnboxedKeyValueLruCacheWithTtl(const TUnboxedKeyValueLruCacheWithTtl&) = delete; // to prevent unintentional copy of a large object
 
+    template <bool opportunistic = false>
     void Update(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& value, std::chrono::time_point<std::chrono::steady_clock>&& expiration) {
         if (auto it = Map_.find(key); it != Map_.end()) {
-            Touch(it->second);
+            if (!opportunistic) {
+                Touch(it->second);
+            }
             auto& entry = *it->second;
             entry.Value = std::move(value);
             entry.Expiration = std::move(expiration);
         } else {
             if (Map_.size() == MaxSize_) {
+                if (opportunistic) {
+                    return;
+                }
                 RemoveLeastRecentlyUsedEntry();
             }
-            UsageList_.emplace_back(key, std::move(value), std::move(expiration));
+            if (opportunistic) {
+                UsageList_.emplace_front(key, std::move(value), std::move(expiration));
+            } else {
+                UsageList_.emplace_back(key, std::move(value), std::move(expiration));
+            }
             Map_.emplace_hint(it, std::move(key), --UsageList_.end());
         }
     }
@@ -95,6 +105,11 @@ public:
     size_t Size() const {
         Y_ABORT_UNLESS(Map_.size() == UsageList_.size());
         return Map_.size();
+    }
+
+    void Clear() {
+        Map_.erase(Map_.begin(), Map_.end());
+        UsageList_.clear();
     }
 
 private:

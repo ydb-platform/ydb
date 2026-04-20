@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
@@ -54,6 +55,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , ThrottlingMinLogChunkCount(100, 1, 100000)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
+    , MaxInProgressStartupCatchupCount(0, 0, 1000)
+    , MaxInProgressStartupCatchupPerPDiskCount(0, 0, 1000)
+    , MaxInProgressLocalRecoveryCount(0, 0, 1000)
+    , MaxInProgressLocalRecoveryPerPDiskCount(0, 0, 1000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
@@ -395,6 +400,10 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ThrottlingMinLogChunkCount, "VDiskControls.ThrottlingMinLogChunkCount");
         icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, "VDiskControls.ThrottlingMaxLogChunkCount");
 
+        icb->RegisterSharedControl(MaxInProgressStartupCatchupCount, "VDiskControls.MaxInProgressStartupCatchupCount");
+        icb->RegisterSharedControl(MaxInProgressStartupCatchupPerPDiskCount, "VDiskControls.MaxInProgressStartupCatchupPerPDiskCount");
+        icb->RegisterSharedControl(MaxInProgressLocalRecoveryCount, "VDiskControls.MaxInProgressLocalRecoveryCount");
+        icb->RegisterSharedControl(MaxInProgressLocalRecoveryPerPDiskCount, "VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount");
         icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
 
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
@@ -453,6 +462,12 @@ void TNodeWarden::Bootstrap() {
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageLocalRecoveryBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressLocalRecoveryCount, MaxInProgressLocalRecoveryPerPDiskCount)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageStartupCatchupBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressStartupCatchupCount, MaxInProgressStartupCatchupPerPDiskCount)));
 
     actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
         CreateSyncBrokerActor(MaxInProgressSyncCount)));

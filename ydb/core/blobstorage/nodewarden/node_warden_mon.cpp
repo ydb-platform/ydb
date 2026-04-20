@@ -17,6 +17,12 @@ void TNodeWarden::Handle(NMon::TEvHttpInfo::TPtr &ev) {
     if (cgi.Get("page") == "distconf") {
         TActivationContext::Send(ev->Forward(DistributedConfigKeeperId));
         return;
+    } else if (cgi.Get("page") == "localrecoverybroker") {
+        TActivationContext::Send(ev->Forward(MakeBlobStorageLocalRecoveryBrokerID()));
+        return;
+    } else if (cgi.Get("page") == "startupcatchupbroker") {
+        TActivationContext::Send(ev->Forward(MakeBlobStorageStartupCatchupBrokerID()));
+        return;
     }
 
     TStringBuf pathInfo = ev->Get()->Request.GetPathInfo();
@@ -101,6 +107,12 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             DIV() {
                 out << "<a href=\"?page=distconf\">Distributed Config Keeper</a>";
             }
+        }
+
+        TAG(TH3) { out << "Brokers"; }
+        DIV() {
+            out << "<a href=\"?page=localrecoverybroker\">Local Recovery Broker</a><br>";
+            out << "<a href=\"?page=startupcatchupbroker\">Startup Catchup Broker</a>";
         }
 
         TAG(TH3) { out << "StorageConfig"; }

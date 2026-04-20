@@ -22,9 +22,6 @@ class StressFixture:
         self.config = KikimrConfigGenerator(
             binary_paths=self.all_binary_paths,
             erasure=erasure,
-            # enable_grpc_proxy=True,
-            # enable_console=True,
-            # enable_cms=True,
             **kwargs,
         )
 

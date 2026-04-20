@@ -88,7 +88,6 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
  }
 
 bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
-    KAFKA_LOG_D("Starting sasl plain auth");
     return TryParseAuthDataTo(ClientAuthData, ctx);
 }
 
@@ -175,7 +174,6 @@ void TKafkaSaslAuthActor::HandleLoginResult(const NYql::TIssue& issue, const std
     if (errorMessage.empty()) {
         errorMessage = Ydb::StatusIds_StatusCode_Name(status);
     }
-    KAFKA_LOG_D("error message: " << errorMessage);
     SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", errorMessage, ctx);
 }
 

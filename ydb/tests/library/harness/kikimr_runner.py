@@ -117,7 +117,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "stdout_file": "/dev/stdout",
                 "stderr_file": "/dev/stderr"
                 }
-        daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs) # вот тут посмотреть, как передаются и используется порты. И тут порт аллокатор
+        daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
 
     def is_port_listening(self, port):
         """Check if the port is listening after node startup"""

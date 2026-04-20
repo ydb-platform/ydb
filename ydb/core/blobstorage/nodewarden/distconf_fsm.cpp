@@ -162,6 +162,9 @@ namespace NKikimr::NStorage {
             case TEvGather::kProposeStorageConfig:
                 return ProcessProposeStorageConfig(res->MutableProposeStorageConfig());
 
+            case TEvGather::kDemandRetroTrace:
+                return;
+
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
         }
@@ -602,7 +605,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case TEvScatter::kDemandRetroTrace:
-                Perform(task.Request.GetDemandRetroTrace(), task);
+                Perform(task.Response.MutableDemandRetroTrace(), task.Request.GetDemandRetroTrace(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -725,7 +728,8 @@ namespace NKikimr::NStorage {
         IssueScatterTask(TScatterTaskOriginFsm{}, std::move(task));
     }
 
-    void TDistributedConfigKeeper::Perform(const TEvScatter::TDemandRetroTrace& request, TScatterTask& /*task*/) {
+    void TDistributedConfigKeeper::Perform(TEvGather::TDemandRetroTrace* /*response*/,
+            const TEvScatter::TDemandRetroTrace& request, TScatterTask& /*task*/) {
         std::vector<NWilson::TTraceId> traceIds;
         for (const auto& proto : request.GetTraceId()) {
             NWilson::TTraceId traceId(proto);

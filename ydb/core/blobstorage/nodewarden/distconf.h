@@ -488,7 +488,7 @@ namespace NKikimr::NStorage {
         void PerformScatterTask(TScatterTask& task);
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
-        void Perform(const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
+        void Perform(TEvGather::TDemandRetroTrace *response, const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
 

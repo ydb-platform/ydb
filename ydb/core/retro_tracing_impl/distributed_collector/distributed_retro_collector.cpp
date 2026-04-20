@@ -83,7 +83,6 @@ private:
         }
 
         SendToDistConf();
-        ConvertAndSend(NRetroTracing::GetSpansOfTraces(std::exchange(PendingTraceIds, {})));
         EvictExpiredEntries(NActors::TMonotonic::Now());
     }
 

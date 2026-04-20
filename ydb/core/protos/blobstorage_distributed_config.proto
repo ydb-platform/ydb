@@ -155,12 +155,16 @@ message TEvNodeConfigGather {
         repeated TStatus Status = 1;
     }
 
+    message TDemandRetroTrace {
+    }
+
     optional uint64 Cookie = 1;
     optional bool Aborted = 4;
 
     oneof Response {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
+        TDemandRetroTrace DemandRetroTrace = 5;
     }
 }
 

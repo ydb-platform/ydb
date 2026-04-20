@@ -168,6 +168,7 @@ ALTER TABLE articles DROP INDEX ft_index;
 
 ## Limitations {#limitations}
 
+* Tables with fulltext indexes only support `Uint64` primary keys.
 * `BulkUpsert` isn't supported for tables with fulltext indexes.
 * Fulltext index access must be specified explicitly using `VIEW IndexName`.
 * Only one text column can be indexed (per fulltext index). Use `COVER` for additional columns.

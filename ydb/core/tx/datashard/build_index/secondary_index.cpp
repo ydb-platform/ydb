@@ -583,16 +583,10 @@ public:
 
     void Complete(const TActorContext& ctx) {
         if (!ShouldSkip) {
-            if (!Self->StateReportPipe) {
-                NTabletPipe::TClientConfig clientConfig;
-                clientConfig.RetryPolicy = Self->SchemeShardPipeRetryPolicy;
-                Self->StateReportPipe = ctx.Register(
-                    NTabletPipe::CreateClient(ctx.SelfID, Self->CurrentSchemeShardId, clientConfig));
-            }
             auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
             copy->Record = Ev->Get()->Record;
             Self->PendingBuildIndexFinalResponses[BuildId] = std::move(copy);
-            NTabletPipe::SendData(ctx, Self->StateReportPipe, Ev->Release().Release());
+            Self->SendPendingBuildIndexFinalResponses(ctx);
         }
     }
 

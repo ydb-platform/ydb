@@ -292,6 +292,7 @@ void TDataShard::Die(const TActorContext& ctx) {
 
     NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BuildIndexPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe);
 
@@ -1627,14 +1628,9 @@ void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperati
 
 void TDataShard::SendPendingBuildIndexFinalResponses(const TActorContext& ctx) {
     for (auto& [buildId, response] : PendingBuildIndexFinalResponses) {
-        if (!StateReportPipe) {
-            NTabletPipe::TClientConfig clientConfig;
-            clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
-            StateReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
-        }
         auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
         copy->Record = response->Record;
-        NTabletPipe::SendData(ctx, StateReportPipe, copy.Release());
+        SendViaSchemeshardPipe(ctx, CurrentSchemeShardId, BuildIndexPipe, std::move(copy));
     }
 }
 
@@ -3625,6 +3621,13 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         if (ev->Get()->Status != NKikimrProto::OK) {
             StateReportPipe = TActorId();
             ReportState(ctx, State);
+        }
+        return;
+    }
+
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            BuildIndexPipe = TActorId();
             SendPendingBuildIndexFinalResponses(ctx);
         }
         return;
@@ -3694,6 +3697,11 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
     if (ev->Get()->ClientId == StateReportPipe) {
         StateReportPipe = TActorId();
         ReportState(ctx, State);
+        return;
+    }
+
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        BuildIndexPipe = TActorId();
         SendPendingBuildIndexFinalResponses(ctx);
         return;
     }

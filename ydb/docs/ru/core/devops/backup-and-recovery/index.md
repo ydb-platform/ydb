@@ -8,7 +8,7 @@
 
 {{ ydb-short-name }} предоставляет несколько решений для выполнения резервного копирования и восстановления. Концептуальную информацию и сравнение методов резервного копирования см. в [концепциях резервного копирования](../concepts/backup.md).
 
-{% include [_includes/backup_and_recovery/options_overlay.md](_includes/backup_and_recovery/options_overlay.md) %}
+{% include [_includes/backup_and_recovery/options_overlay.md](../_includes/backup_and_recovery/options_overlay.md) %}
 
 ## {{ ydb-short-name }} CLI {#cli}
 
@@ -20,7 +20,7 @@
 - `{{ ydb-cli }} admin database dump` — для резервного копирования базы данных
 - `{{ ydb-cli }} tools dump` — для резервного копирования отдельных схемных объектов или директорий
 
-Узнать больше об этих командах можно в [{#T}](../reference/ydb-cli/export-import/tools-dump.md).
+Узнать больше об этих командах можно в [{#T}](../../reference/ydb-cli/export-import/tools-dump.md).
 
 Для выполнения восстановления из файловой резервной копии применяются команды:
 
@@ -28,17 +28,17 @@
 - `{{ ydb-cli }} admin database restore` — для восстановления базы данных из резервной копии
 - `{{ ydb-cli }} tools restore` — для восстановления отдельных схемных объектов или директорий из резервной копии
 
-Узнать больше об этих командах можно в [{#T}](../reference/ydb-cli/export-import/tools-restore.md).
+Узнать больше об этих командах можно в [{#T}](../../reference/ydb-cli/export-import/tools-restore.md).
 
 ### S3-совместимое хранилище {#s3}
 
-Для выполнения резервного копирования в S3-совместимое хранилище (например, [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html))  применяется команда `{{ ydb-cli }} export s3`. Перейдите [по ссылке](../reference/ydb-cli/export-import/export-s3.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения резервного копирования в S3-совместимое хранилище (например, [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html))  применяется команда `{{ ydb-cli }} export s3`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/export-s3.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
-Для выполнения восстановления из резервной копии, созданной в S3-совместимом хранилище, применяется команда `{{ ydb-cli }} import s3`. Перейдите [по ссылке](../reference/ydb-cli/export-import/import-s3.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения восстановления из резервной копии, созданной в S3-совместимом хранилище, применяется команда `{{ ydb-cli }} import s3`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/import-s3.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
 {% note info %}
 
-Скорость операций резервного копирования и восстановления в/из S3-совместимого хранилища подобрана таким образом, чтобы минимизировать влияние на пользовательскую нагрузку. Для управления скоростью операций настройте лимиты для соответствующей очереди [брокера ресурсов](../reference/configuration/resource_broker_config.md#resource-broker-config).
+Скорость операций резервного копирования и восстановления в/из S3-совместимого хранилища подобрана таким образом, чтобы минимизировать влияние на пользовательскую нагрузку. Для управления скоростью операций настройте лимиты для соответствующей очереди [брокера ресурсов](../../reference/configuration/resource_broker_config.md#resource-broker-config).
 
 {% endnote %}
 
@@ -48,17 +48,16 @@
 
 {% endnote %}
 
-## Коллекции резервных копий {#backup-collections}
+{% include [_includes/backup_and_recovery/cli_overlay.md](../_includes/backup_and_recovery/cli_overlay.md) %}
 
-Коллекции резервных копий обеспечивают инкрементальное резервное копирование и восстановление на момент времени для производственных нагрузок. Концептуальную информацию и детали архитектуры см. в [Коллекциях резервных копий](../concepts/datamodel/backup-collection.md).
+{% include [_includes/backup_and_recovery/others_overlay.md](../_includes/backup_and_recovery/others_overlay.md) %}
 
-Коллекции резервных копий рекомендуются для производственных сред с регулярным расписанием резервного копирования и больших наборов данных, где инкрементальные изменения значительно меньше общего объёма. Для более простых сценариев (разовые миграции, среды разработки, небольшие базы данных) рассмотрите использование [export/import](#s3) или [dump/restore](#files).
+## Резервное копирование системных таблеток {#system-tablet-backup}
 
-Пошаговые инструкции по настройке и использованию коллекций резервных копий см. в:
+Механизм резервного копирования системных таблеток, таких как [Hive](../../concepts/glossary.md#hive), [BSController](../../concepts/glossary.md#ds-controller) и [SchemeShard](../../concepts/glossary.md#scheme-shard), обеспечивает инкрементальное копирование метаданных кластера на локальную файловую систему кластера.
 
-- [Коллекциях резервных копий](../concepts/datamodel/backup-collection.md) — архитектура, концепции и ограничения
-- [Рецептах для коллекций резервных копий](../recipes/backup-collections/index.md) — типовые сценарии и примеры
+Этот механизм предназначен для восстановления метаданных кластера, когда другие способы восстановления недоступны — например, резервная копия базы данных отсутствует или объём базы данных слишком велик для восстановления из резервной копии за приемлемое время. Механизм позволяет восстановить метаданные в существующем кластере без необходимости пересоздавать кластер и восстанавливать базы данных из резервных копий.
 
-{% include [_includes/backup_and_recovery/cli_overlay.md](_includes/backup_and_recovery/cli_overlay.md) %}
+Если есть возможность восстановить кластер с помощью команд [export/import](#s3) или [dump/restore](#files), рекомендуется использовать эти способы.
 
-{% include [_includes/backup_and_recovery/others_overlay.md](_includes/backup_and_recovery/others_overlay.md) %}
+Подробная информация, включая руководство по восстановлению, доступна в разделе [{#T}](./system-tablet-backup.md).

@@ -46,7 +46,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& pqConfig,
         const TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
     ) {
-
+        // TODO remove this function
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), pqConfig);
         if (consumerName.empty()) {
             return TMsgPqCodes(TStringBuilder() << "consumer with empty name is forbidden", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);

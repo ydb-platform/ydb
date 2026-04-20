@@ -109,11 +109,6 @@ private:
         modifyScheme.SetAllowAccessToPrivatePaths(true);
 
         auto* config = modifyScheme.MutableAlterPersQueueGroup();
-        config->CopyFrom(TopicInfo.Info->Description);
-
-        // keep previous values or set in ModifyPersqueueConfig
-        config->ClearTotalGroupCount();
-        config->MutablePQTabletConfig()->ClearPartitionKeySchema();
 
         {
             auto applyIf = modifyScheme.AddApplyIf();
@@ -151,6 +146,7 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
         if (errorCode == Ydb::StatusIds::SUCCESS) {
             ModifyScheme = {};
         }

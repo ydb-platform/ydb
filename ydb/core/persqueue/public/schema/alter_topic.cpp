@@ -359,9 +359,16 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     TResult ApplyChanges(
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
         const bool isCdcStream
     ) override {
+
+        targetConfig.CopyFrom(sourceConfig);
+
+        // keep previous values or set in ModifyPersqueueConfig
+        targetConfig.ClearTotalGroupCount();
+        targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
+
         return ApplyChangesInt(Request, targetConfig, isCdcStream);
     }
 

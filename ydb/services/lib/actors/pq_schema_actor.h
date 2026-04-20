@@ -81,6 +81,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                                             TString& error, const NKikimrPQ::TPQConfig& pqConfig,
                                             const EOperation operation = EOperation::Create);
 
+    // TODO remove this function. use AddConsumer instead
     TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig *config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,

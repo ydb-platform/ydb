@@ -1,4 +1,4 @@
-#include "ddisk_actor_pdisk_ut.inl"
+#include "ddisk_actor_pdisk_ut.h"
 
 Y_UNIT_TEST_SUITE(TDDiskActorSyncWithPersistentBuffer) {
     Y_UNIT_TEST(EmptySegments) {

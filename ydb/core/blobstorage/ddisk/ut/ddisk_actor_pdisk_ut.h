@@ -1,3 +1,5 @@
+#pragma once
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>

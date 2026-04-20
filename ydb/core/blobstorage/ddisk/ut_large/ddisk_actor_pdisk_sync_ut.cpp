@@ -1,4 +1,4 @@
-#include <ydb/core/blobstorage/ddisk/ut/ddisk_actor_pdisk_ut.inl>
+#include <ydb/core/blobstorage/ddisk/ut/ddisk_actor_pdisk_ut.h>
 
 Y_UNIT_TEST_SUITE(TDDiskActorPDiskSyncTest) {
     Y_UNIT_TEST(Large_4Tablets_32VChunks_FullBlocks_1Segment) {

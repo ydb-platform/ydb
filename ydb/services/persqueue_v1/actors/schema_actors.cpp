@@ -307,21 +307,6 @@ void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 }
 
 
-
-// TPQAlterTopicActor::TPQAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request, const TString& localCluster)
-//     : TBase(request, request->GetProtoRequest()->path())
-//     , LocalCluster(localCluster)
-// {
-//     Y_ASSERT(request);
-// }
-
-// void TPQAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-// {
-//     TBase::Bootstrap(ctx);
-//     SendProposeRequest(ctx);
-//     Become(&TPQAlterTopicActor::StateWork);
-// }
-
 void TPQCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                             const TString& workingDir, const TString& name)
 {
@@ -381,21 +366,6 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
     }
 }
 
-
-
-// void TPQAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-//                                             const TString& workingDir, const TString& name) {
-//     NKikimrSchemeOp::TModifyScheme &modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-//     modifyScheme.SetWorkingDir(workingDir);
-//     TString error;
-//     auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error, workingDir,
-//                                          proposal.Record.GetDatabaseName(), LocalCluster);
-//     if (!error.empty()) {
-//         Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
-
-//         return RespondWithCode(status);
-//     }
-// }
 
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopicRequest* request)

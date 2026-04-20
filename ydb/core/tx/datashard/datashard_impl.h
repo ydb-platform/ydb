@@ -1481,6 +1481,8 @@ class TDataShard
 
     void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev);
 
+    void Handle(TEvents::TEvUndelivered::TPtr& ev);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -3199,7 +3201,7 @@ private:
     TIntrusiveList<TGlobalTxIdAwaiter> GlobalTxIdAwaiters;
     TVector<ui64> GlobalTxIdCache;
 
-    NKqp::NScheduler::TSchedulableReadFactoryPtr SchedulableReadFactory;
+    std::optional<NKqp::NScheduler::TSchedulableReadFactoryPtr> SchedulableReadFactory;
     THashMap<NKqp::NScheduler::NHdrf::TPoolId, NKqp::NScheduler::TSchedulableReadPtr> SchedulableReads;
 
 public:
@@ -3300,6 +3302,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             hFunc(NKqp::NScheduler::TEvReadFactoryResponse, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()

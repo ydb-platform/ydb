@@ -4954,6 +4954,13 @@ void TDataShard::Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev) {
     CheckMediatorStateRestored();
 }
 
+void TDataShard::Handle(TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Get()->SourceType == NKqp::NScheduler::TEvGetReadFactory::EventType) {
+        SchedulableReadFactory = nullptr;
+        CheckMediatorStateRestored();
+    }
+}
+
 } // NDataShard
 
 TString TEvDataShard::TEvRead::ToString() const {

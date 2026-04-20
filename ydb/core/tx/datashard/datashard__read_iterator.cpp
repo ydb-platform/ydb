@@ -3775,10 +3775,10 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         isHeadRead = false;
     }
 
-    if (record.HasPoolId()) {
+    if (record.HasPoolId() && SchedulableReadFactory) {
         auto readIt = SchedulableReads.find(record.GetPoolId());
         if (readIt == SchedulableReads.end()) {
-            readIt = SchedulableReads.emplace(record.GetPoolId(), SchedulableReadFactory->Get(record.GetPoolId())).first;
+            readIt = SchedulableReads.emplace(record.GetPoolId(), (*SchedulableReadFactory)->Get(record.GetPoolId())).first;
             Y_ENSURE(readIt->second);
         }
     }

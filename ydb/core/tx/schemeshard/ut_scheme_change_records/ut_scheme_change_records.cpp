@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
         auto result = ReadSchemeChangeRecordsFull(runtime);
         UNIT_ASSERT(!result.Entries.empty());
-        UNIT_ASSERT_VALUES_EQUAL(result.MinInFlightPlanStep, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(result.WatermarkPlanStep, 0u);
     }
 
     Y_UNIT_TEST(WatermarkReflectsInFlightPlanStep) {
@@ -587,9 +587,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         // Read notification log -- Table2 should be present, Table1 still in-flight
         auto result = ReadSchemeChangeRecordsFull(runtime);
 
-        UNIT_ASSERT_C(result.MinInFlightPlanStep > 0,
-            "MinInFlightPlanStep should be > 0 while Table1 is still in-flight, got: "
-                << result.MinInFlightPlanStep);
+        UNIT_ASSERT_C(result.WatermarkPlanStep > 0,
+            "WatermarkPlanStep should be > 0 while Table1 is still in-flight, got: "
+                << result.WatermarkPlanStep);
 
         for (auto& ev : heldEvents) {
             runtime.Send(ev.Release());
@@ -598,9 +598,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         env.TestWaitNotification(runtime, firstTxId);
 
         auto result2 = ReadSchemeChangeRecordsFull(runtime);
-        UNIT_ASSERT_VALUES_EQUAL_C(result2.MinInFlightPlanStep, 0u,
-            "MinInFlightPlanStep should be 0 after all ops complete, got: "
-                << result2.MinInFlightPlanStep);
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.WatermarkPlanStep, 0u,
+            "WatermarkPlanStep should be 0 after all ops complete, got: "
+                << result2.WatermarkPlanStep);
     }
 
     Y_UNIT_TEST(CreateTableWithIndexProducesMultipleRecords) {

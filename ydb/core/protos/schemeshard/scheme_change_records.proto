@@ -53,7 +53,10 @@ message TEvFetchSchemeChangeRecordsResult {
     repeated TSchemeChangeRecord Entries = 3;
     bool HasMore = 5;
     uint64 SkippedEntries = 6;
-    uint64 MinInFlightPlanStep = 7;
+    // Minimum PlanStep among in-flight operations at fetch time.
+    // Subscribers using PlanStep-based ordering should treat records
+    // with PlanStep >= WatermarkPlanStep as not yet safe to process.
+    uint64 WatermarkPlanStep = 7;
 }
 
 message TEvAckSchemeChangeRecords {

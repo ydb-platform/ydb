@@ -142,18 +142,18 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         Result->Record.SetHasMore(hasMore);
         Result->Record.SetSkippedEntries(skippedEntries);
 
-        ui64 minInFlightPlanStep = 0;
+        ui64 watermarkPlanStep = 0;
         for (const auto& [opId, txState] : Self->TxInFlight) {
             if (txState.PlanStep != InvalidStepId
                 && txState.State != TTxState::Done
                 && txState.State != TTxState::Aborted) {
                 ui64 ps = ui64(txState.PlanStep.GetValue());
-                if (minInFlightPlanStep == 0 || ps < minInFlightPlanStep) {
-                    minInFlightPlanStep = ps;
+                if (watermarkPlanStep == 0 || ps < watermarkPlanStep) {
+                    watermarkPlanStep = ps;
                 }
             }
         }
-        Result->Record.SetMinInFlightPlanStep(minInFlightPlanStep);
+        Result->Record.SetWatermarkPlanStep(watermarkPlanStep);
 
         return true;
     }

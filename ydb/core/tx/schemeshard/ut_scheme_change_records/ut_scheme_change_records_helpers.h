@@ -112,7 +112,7 @@ struct TSchemeChangeRecordEntry {
 
 struct TSchemeChangeRecordsReadResult {
     TVector<TSchemeChangeRecordEntry> Entries;
-    ui64 MinInFlightPlanStep = 0;
+    ui64 WatermarkPlanStep = 0;
 };
 
 inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
@@ -129,7 +129,7 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
     auto* fetch = FetchSchemeChangeRecords(runtime, tempSubId, 0, 1000, fetchHandle);
 
     TSchemeChangeRecordsReadResult result;
-    result.MinInFlightPlanStep = fetch->Record.GetMinInFlightPlanStep();
+    result.WatermarkPlanStep = fetch->Record.GetWatermarkPlanStep();
 
     TVector<ui64> seqIdsWithBody;
     for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {

@@ -374,7 +374,6 @@
       import struct
       import ydb
 
-
       def convert_vector_to_bytes(vector: list[float]) -> bytes:
           b = struct.pack("f" * len(vector), *vector)
           return b + b"\x01"
@@ -960,152 +959,110 @@
 
 - Python
 
-    {% cut "asyncio" %}
+    {% list tabs %}
 
-    ```python
-    import ydb
+    - Native SDK
 
-    async def add_vector_index(
-        pool: ydb.aio.QuerySessionPool,
-        driver: ydb.aio.Driver,
-        table_name: str,
-        index_name: str,
-        strategy: str,
-        dimension: int,
-        levels: int = 2,
-        clusters: int = 128,
-    ):
-        temp_index_name = f"{index_name}__temp"
-        query = f"""
-        ALTER TABLE `{table_name}`
-        ADD INDEX {temp_index_name}
-        GLOBAL USING vector_kmeans_tree
-        ON (embedding)
-        WITH (
-            {strategy},
-            vector_type="Float",
-            vector_dimension={dimension},
-            levels={levels},
-            clusters={clusters},
-            overlap_clusters=3
-        );
-        """
+        ```python
+        import ydb
 
-        await pool.execute_with_retries(query)
-        await driver.table_client.alter_table(
-            f"{driver._driver_config.database}/{table_name}",
-            rename_indexes=[
-                ydb.RenameIndexItem(
-                    source_name=temp_index_name,
-                    destination_name=f"{index_name}",
-                    replace_destination=True,
-                ),
-            ],
-        )
+        def add_vector_index(
+            pool: ydb.QuerySessionPool,
+            driver: ydb.Driver,
+            table_name: str,
+            index_name: str,
+            strategy: str,
+            dimension: int,
+            levels: int = 2,
+            clusters: int = 128,
+        ):
+            temp_index_name = f"{index_name}__temp"
+            query = f"""
+            ALTER TABLE `{table_name}`
+            ADD INDEX {temp_index_name}
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {strategy},
+                vector_type="Float",
+                vector_dimension={dimension},
+                levels={levels},
+                clusters={clusters},
+                overlap_clusters=3
+            );
+            """
 
-      ```python
-      import ydb
+            pool.execute_with_retries(query)
+            driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
 
-    {% endcut %}
+            pool.execute_with_retries(query)
+            driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
 
-    ```python
-    def add_vector_index(
-        pool: ydb.QuerySessionPool,
-        driver: ydb.Driver,
-        table_name: str,
-        index_name: str,
-        strategy: str,
-        dimension: int,
-        levels: int = 2,
-        clusters: int = 128,
-    ):
-        temp_index_name = f"{index_name}__temp"
-        query = f"""
-        ALTER TABLE `{table_name}`
-        ADD INDEX {temp_index_name}
-        GLOBAL USING vector_kmeans_tree
-        ON (embedding)
-        WITH (
-            {strategy},
-            vector_type="Float",
-            vector_dimension={dimension},
-            levels={levels},
-            clusters={clusters},
-            overlap_clusters=3
-        );
-        """
-
-        pool.execute_with_retries(query)
-        driver.table_client.alter_table(
-            f"{driver._driver_config.database}/{table_name}",
-            rename_indexes=[
-                ydb.RenameIndexItem(
-                    source_name=temp_index_name,
-                    destination_name=f"{index_name}",
-                    replace_destination=True,
-                ),
-            ],
-        )
-
-          pool.execute_with_retries(query)
-          driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
-
-          print(f"Table index {index_name} created.")
-      ```
+            print(f"Table index {index_name} created.")
+        ```
 
     - Native SDK (Asyncio)
 
-      ```python
-      import ydb
+        ```python
+        import ydb
 
-      async def add_vector_index(
-          pool: ydb.aio.QuerySessionPool,
-          driver: ydb.aio.Driver,
-          table_name: str,
-          index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
-      ):
-          temp_index_name = f"{index_name}__temp"
-          query = f"""
-          ALTER TABLE `{table_name}`
-          ADD INDEX {temp_index_name}
-          GLOBAL USING vector_kmeans_tree
-          ON (embedding)
-          WITH (
-              {strategy},
-              vector_type="Float",
-              vector_dimension={dimension},
-              levels={levels},
-              clusters={clusters}
-          );
-          """
+        async def add_vector_index(
+            pool: ydb.aio.QuerySessionPool,
+            driver: ydb.aio.Driver,
+            table_name: str,
+            index_name: str,
+            strategy: str,
+            dimension: int,
+            levels: int = 2,
+            clusters: int = 128,
+        ):
+            temp_index_name = f"{index_name}__temp"
+            query = f"""
+            ALTER TABLE `{table_name}`
+            ADD INDEX {temp_index_name}
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {strategy},
+                vector_type="Float",
+                vector_dimension={dimension},
+                levels={levels},
+                clusters={clusters}
+            );
+            """
 
-          await pool.execute_with_retries(query)
-          await driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
+            await pool.execute_with_retries(query)
+            await driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
 
-          print(f"Table index {index_name} created.")
-      ```
+            print(f"Table index {index_name} created.")
+        ```
 
     {% endlist %}
 

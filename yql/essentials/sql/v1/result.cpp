@@ -12,7 +12,7 @@ bool Unwrap(TSQLStatus status) {
 }
 
 std::unexpected<ESQLError> UnsupportedYqlSelect(TContext& ctx, TStringBuf message) {
-    if (ctx.GetYqlSelectMode() == EYqlSelectMode::Force) {
+    if (ctx.GetYqlSelectMode() == EYqlSelect::Force) {
         ctx.Error() << "YqlSelect unsupported: " << message;
     }
 

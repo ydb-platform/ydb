@@ -10,6 +10,7 @@
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/new.h>
@@ -186,14 +187,14 @@ TYPED_TEST(TRefCountedTrackerTest, MultithreadedRefCounted)
     auto obj1 = create();
 
     auto queue = New<TActionQueue>();
-    BIND([&] {
+    WaitFor(BIND([&] {
         auto obj2 = create();
         EXPECT_EQ(countBase + 2u, GetAllocatedCount<TypeParam>());
         EXPECT_EQ(2u, GetAliveCount<TypeParam>());
     })
         .AsyncVia(queue->GetInvoker())
-        .Run()
-        .BlockingGet();
+        .Run())
+        .ThrowOnError();
     queue->Shutdown();
 
     EXPECT_EQ(countBase + 2u, GetAllocatedCount<TypeParam>());

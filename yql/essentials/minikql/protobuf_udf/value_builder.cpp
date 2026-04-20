@@ -86,7 +86,7 @@ static TUnboxedValuePod CreateEnumValue(
             return valueBuilder->NewString(desc->full_name()).Release();
     }
 
-    Y_UNREACHABLE();
+    Y_ENSURE(false, "Unreachable");
 }
 
 static TUnboxedValuePod CreateSingleField(

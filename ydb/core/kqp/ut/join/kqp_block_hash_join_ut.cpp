@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                         Bytes(R # 10e12)
                     ';
             )";
-            TString blocks = UseBlockHashJoin ? "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n" : "";
+	    TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"" + TString(UseBlockHashJoin ? "true" : "false") + "\";";
             TString select = R"(
                 SELECT L.*
                 FROM `left_table` AS L

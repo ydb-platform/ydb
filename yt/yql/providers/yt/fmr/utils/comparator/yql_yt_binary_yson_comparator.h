@@ -3,7 +3,6 @@
 
 #include <util/generic/yexception.h>
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {

@@ -75,6 +75,42 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { CoordinationClient } from '@ydbjs/coordination'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  const client = new CoordinationClient(driver)
+
+  await using session = await client.createSession('/local/my-app')
+  await using lock = await session.mutex('job-lock').lock()
+  await doWork(lock.signal)
+
+  // For long lived applications
+
+  for await (let session of client.openSession('/local/my-app')) {
+    let mutex = session.mutex('job-lock')
+
+    try {
+      // Blocks until the lock is acquired.
+      await using lock = await mutex.lock()
+
+      await doWork(lock.signal)
+    } catch {
+      if (session.signal.aborted) continue // session expired, retry
+      throw error
+    }
+
+    break
+  }
+  ```
+
 - Java
 
   ```java
@@ -92,5 +128,42 @@
       }
   }
   ```
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, NodeConfigBuilder, SessionOptionsBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .client()?;
+      client.wait().await?;
+
+      let mut coordination_client = client.coordination_client();
+      coordination_client
+          .create_node(
+              "/local/my_lock_node".into(),
+              NodeConfigBuilder::default().build()?,
+          )
+          .await?;
+
+      let session = coordination_client
+          .create_session(
+              "/local/my_lock_node".into(),
+              SessionOptionsBuilder::default().build()?,
+          )
+          .await?;
+
+      session.create_semaphore("resource", 1, vec![]).await?;
+      let _lease = session.acquire_semaphore("resource".into(), 1).await?;
+      // критическая секция
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

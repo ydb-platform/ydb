@@ -79,6 +79,8 @@ protected:
 
     TIntrusivePtr<NYT::IReaderImplBase> MakeMkqlJobReader() override;
 
+    void ChangeMkqlIOSpecIfNeeded() override;
+
 private:
     void FillQueueFromSingleInputTable(ui64 tableIndex);
     void FillQueueFromInputTablesUnordered();

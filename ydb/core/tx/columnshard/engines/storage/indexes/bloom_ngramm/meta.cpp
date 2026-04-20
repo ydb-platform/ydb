@@ -2,6 +2,7 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
@@ -11,14 +12,15 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/bitmap.h>
-#include <util/string/ascii.h>
+
+#include <climits>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TNGrammBuilder {
 private:
     const ui32 HashesCount;
-    const bool CaseSensitive;
+    TCaseStringNormalizer StringNormalizer;
 
     template <ui32 CharsRemained>
     class THashesBuilder {
@@ -136,30 +138,19 @@ private:
             AFL_VERIFY(false);
         }
     };
-    TBuffer LowerStringBuffer;
 
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-        , CaseSensitive(caseSensitive)
-    {
+        , StringNormalizer(caseSensitive) {
     }
 
     template <class TAction>
     void BuildNGramms(
         const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize, TAction& pred) {
-        if (CaseSensitive) {
-            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
-                (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
-        } else {
-            LowerStringBuffer.Clear();
-            LowerStringBuffer.Resize(dataSize);
-            for (ui32 i = 0; i < dataSize; ++i) {
-                LowerStringBuffer.Data()[i] = AsciiToLower(data[i]);
-            }
-            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
-                (const ui8*)LowerStringBuffer.Data(), dataSize, HashesCount, nGrammSize, op, pred);
-        }
+        const TStringBuf normalized = StringNormalizer.Normalize(TStringBuf(data, dataSize));
+        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+            (const ui8*)normalized.data(), normalized.size(), HashesCount, nGrammSize, op, pred);
     }
 
     template <class TFiller>
@@ -188,12 +179,9 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
-        if (CaseSensitive) {
-            BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
-        } else {
-            const TString lowerString = to_lower(userReq);
-            BuildNGramms(lowerString.data(), lowerString.size(), op, nGrammSize, fillData);
-        }
+        const TStringBuf normalized = StringNormalizer.Normalize(userReq);
+        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+            (const ui8*)normalized.data(), normalized.size(), HashesCount, nGrammSize, op, fillData);
     }
 };
 
@@ -258,7 +246,7 @@ public:
         if (ExtSize == Size) {
             TVectorInserterPower2<Size> inserter;
             filler(inserter);
-            return Meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+            return Meta->GetBitsStorageConstructor()->SerializeToString(inserter.ExtractBits());
         } else {
             return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
         }
@@ -280,10 +268,83 @@ public:
 };
 }   // namespace
 
+namespace {
+
+template <class TBuilder, class TFiller>
+void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor,
+    const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
+    for (reader.Start(); reader.IsCorrect();) {
+        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        for (auto&& r : reader) {
+            dataExtractor->VisitAll(
+                r.GetCurrentChunk(),
+                [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
+                    builder.FillNGrammHashes(nGrammSize, arr, filler);
+                },
+                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                    auto view = data.GetScalarOptional();
+                    if (!view.has_value()) {
+                        return;
+                    }
+
+                    builder.BuildNGramms(view->data(), view->size(), {}, nGrammSize, filler);
+                });
+        }
+
+        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
+    }
+}
+
+}   // namespace
+
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount, CaseSensitive);
+
+    if (!UseOldSizing) {
+        static constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
+        static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
+        static constexpr ui64 MaxChunkCount = MaxBitsSize / BitsPerUi64;
+
+        TVectorInserter maxInserter(MaxBitsSize);
+        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxInserter);
+
+        auto maxBits = maxInserter.ExtractBits();
+        const ui64 setBitsCount = maxBits.Count();
+
+        const double m = static_cast<double>(MaxBitsSize);
+        const double k = static_cast<double>(HashesCount);
+        const double ratio = static_cast<double>(setBitsCount) / m;
+        const double estimatedUniqueCount = (ratio >= 1.0)
+            ? m / k
+            : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
+
+        const double requestedBitsSizeDouble = std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(FalsePositiveProbability, 1.0 / k)));
+        const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
+        const ui32 targetSize = std::min<ui64>(MaxBitsSize, std::bit_ceil(requestedBitsSize));
+        const size_t targetChunkCount = targetSize / BitsPerUi64;
+
+        const ui64* srcChunks = maxBits.GetChunks();
+        std::vector<ui64> folded(targetChunkCount, 0);
+        for (size_t i = 0; i < MaxChunkCount; ++i) {
+            folded[i % targetChunkCount] |= srcChunks[i];
+        }
+
+        TDynBitMap resultBits;
+        resultBits.Reserve(targetSize);
+        for (size_t i = 0; i < targetChunkCount; ++i) {
+            ui64 chunk = folded[i];
+            const size_t base = i * BitsPerUi64;
+            while (chunk) {
+                resultBits.Set(base + CountTrailingZeroBits(chunk));
+                chunk &= chunk - 1;
+            }
+        }
+
+        TString indexData = GetBitsStorageConstructor()->SerializeToString(std::move(resultBits));
+        return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    }
 
     ui32 size = FilterSizeBytes * 8;
     if ((size & (size - 1)) == 0) {
@@ -295,6 +356,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     } else {
         size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1) / RecordsCount));
     }
+
     size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {
         for (reader.Start(); reader.IsCorrect();) {
@@ -310,12 +372,15 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                         if (!view.has_value()) {
                             return;
                         }
+
                         builder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, inserter);
                     });
             }
+
             reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
         }
     };
+
     TString indexData;
     if ((size & (size - 1)) == 0) {
         if (size == 1024) {
@@ -337,12 +402,12 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     if (!indexData) {
         TVectorInserter inserter(size);
         doFillFilter(inserter);
-        indexData = GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+        indexData = GetBitsStorageConstructor()->SerializeToString(inserter.ExtractBits());
     }
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());

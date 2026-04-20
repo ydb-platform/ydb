@@ -5,19 +5,18 @@
 #include <ydb/core/grpc_services/service_scheme.h>
 #include <ydb/core/grpc_services/service_topic.h>
 #include "ydb/core/kafka_proxy/actors/actors.h"
-#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include "ydb/public/lib/base/msgbus_status.h"
-#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include "ydb/services/persqueue_v1/actors/persqueue_utils.h"
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
@@ -61,19 +60,15 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
         }
     }
 
     void Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx);
-    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void SendAuthRequest(const NActors::TActorContext& ctx);
     void CreateConsumerGroupIfNecessary(const TString& topicName,
@@ -100,7 +95,6 @@ private:
     std::unordered_map<ui32, TString> AlterTopicCookieToName;
     std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     TActorId AuthInitActor;
-    std::shared_ptr<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper> Kqp;
     EKafkaErrors Error = NONE_ERROR;
 
     static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {

@@ -61,6 +61,12 @@ a: 3
                 UNIT_ASSERT(e.Errors().ysize() == 1);
             }
         }
+        {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                NFyaml::TDocument::Parse("#"),
+                NFyaml::TFyamlEx,
+                "Failed to build YAML document from string");
+        }
     }
 
     Y_UNIT_TEST(Out) {

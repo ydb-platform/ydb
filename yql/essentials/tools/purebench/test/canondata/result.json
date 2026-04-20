@@ -1,4 +1,76 @@
 {
+    "test.test_purebench_inc[auto-blocks]": [
+        {
+            "uri": "file://test.test_purebench_inc_auto-blocks_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_inc_auto-blocks_/err"
+        }
+    ],
+    "test.test_purebench_inc[no-blocks]": [
+        {
+            "uri": "file://test.test_purebench_inc_no-blocks_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_inc_no-blocks_/err"
+        }
+    ],
+    "test.test_purebench_inc[use-blocks]": [
+        {
+            "uri": "file://test.test_purebench_inc_use-blocks_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_inc_use-blocks_/err"
+        }
+    ],
+    "test.test_purebench_inc_for_42[auto-blocks]": [
+        {
+            "uri": "file://test.test_purebench_inc_for_42_auto-blocks_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_inc_for_42_auto-blocks_/err"
+        }
+    ],
+    "test.test_purebench_inc_for_42[no-blocks]": [
+        {
+            "uri": "file://test.test_purebench_inc_for_42_no-blocks_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_inc_for_42_no-blocks_/err"
+        }
+    ],
+    "test.test_purebench_inc_for_42[use-blocks]": [
+        {
+            "uri": "file://test.test_purebench_inc_for_42_use-blocks_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_inc_for_42_use-blocks_/err"
+        }
+    ],
+    "test.test_purebench_langver[2025.04]": [
+        {
+            "uri": "file://test.test_purebench_langver_2025.04_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_langver_2025.04_/err"
+        }
+    ],
+    "test.test_purebench_langver[noarg]": [
+        {
+            "uri": "file://test.test_purebench_langver_noarg_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_langver_noarg_/err"
+        }
+    ],
+    "test.test_purebench_langver[unknown]": [
+        {
+            "uri": "file://test.test_purebench_langver_unknown_/out"
+        },
+        {
+            "uri": "file://test.test_purebench_langver_unknown_/err"
+        }
+    ],
     "test.test_purebench_smoke[blocks]": [
         {
             "uri": "file://test.test_purebench_smoke_blocks_/out"

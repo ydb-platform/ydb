@@ -959,8 +959,8 @@ protected:
                 RetryingWriteToSocket = false;
                 auto& request = PendingRequestsQueue.front();
                 auto& header = request->Header;
-                OnRequestProcessed(request);
                 KAFKA_LOG_D("Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
+                OnRequestProcessed(request);
                 ProcessReplyQueue(ctx);
 
                 if (!CloseConnection && Step == INFLIGHT_CHECK) {

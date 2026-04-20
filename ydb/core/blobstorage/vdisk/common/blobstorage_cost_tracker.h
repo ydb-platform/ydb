@@ -231,7 +231,7 @@ public:
     ui64 GetCost(const TEvBlobStorage::TEvVPut& ev) const {
         const auto &record = ev.Record;
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
-        const ui64 size = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
+        const ui64 size = ev.GetBufferBytes();
 
         NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
         if (handleType == NPriPut::Log) {

@@ -333,6 +333,12 @@ public:
     }
 
     void SetParametersYson(const TString& parameters);
+
+    void SetProjectSlug(const TString& slug) {
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+        OperationOptions_.ProjectSlug = slug;
+    }
+
     // should be used after Compile phase
     bool ExtractQueryParametersMetadata();
 
@@ -429,8 +435,7 @@ private:
 private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode();
-    void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-                                   NSQLTranslation::TTranslationSettings*& currentSettings);
+    void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings);
 
     const TString IssueReportTarget_;
 

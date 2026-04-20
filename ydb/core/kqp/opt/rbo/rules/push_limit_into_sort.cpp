@@ -12,6 +12,10 @@ TIntrusivePtr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const TIntr
     }
 
     auto limit = CastOperator<TOpLimit>(input);
+    if (limit->HasOffset()) {
+        return input;
+    }
+
     if (limit->GetInput()->Kind != EOperator::Sort) {
         return input;
     }

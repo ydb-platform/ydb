@@ -100,6 +100,11 @@ public:
             return result;
     }
 
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
+        const auto& sortedMergeParams = std::get<TSortedMergeOperationParams>(params);
+        return {sortedMergeParams.Output.FmrTableId.Id};
+    }
+
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         TSortedMergeTaskParams& sortedMergeTaskParams = std::get<TSortedMergeTaskParams>(context.Task->TaskParams);

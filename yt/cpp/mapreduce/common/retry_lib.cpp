@@ -233,6 +233,12 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
             return config->RetryInterval;
         }
     }
+
+    // Temporary workaround
+    if (errorResponse.GetError().ContainsText("Cannot resolve multiproxy target cluster")) {
+        return TDuration::Seconds(60);
+    }
+
     return Nothing();
 }
 

@@ -84,6 +84,7 @@ public:
 
     struct TFunctionProperties {
         bool IsTypeAwareness = false;
+        TMaybe<TString> PolyArgs;
     };
 
     using TFunctionsMap = std::map<TString, TFunctionProperties>;
@@ -137,7 +138,8 @@ bool SplitModuleAndFuncName(
 TString FullName(const TStringBuf& module, const TStringBuf& func);
 
 inline TStringBuf ModuleName(const TStringBuf& name) {
-    TStringBuf moduleName, _;
+    TStringBuf moduleName;
+    TStringBuf _;
     if (SplitModuleAndFuncName(name, moduleName, _)) {
         return moduleName;
     }

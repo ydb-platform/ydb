@@ -9,6 +9,7 @@ PEERDIR(
     contrib/python/boto3
     contrib/python/moto
     contrib/python/pyarrow
+    library/python/port_manager
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common

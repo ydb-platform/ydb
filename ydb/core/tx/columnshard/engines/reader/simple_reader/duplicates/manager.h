@@ -1,7 +1,7 @@
 #pragma once
 
+#include "borders_flow_controller.h"
 #include "common.h"
-#include "context.h"
 #include "events.h"
 #include "filters.h"
 #include "private_events.h"
@@ -36,42 +36,14 @@ private:
     const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
-    NArrow::NMerger::TMergePartialStream Merger;
-    TFiltersBuilder FiltersBuilder;
-    
-    struct TBorderInfo {
-        std::vector<ui64> Start;
-        std::vector<ui64> Finish;
-    };
-    std::map<NArrow::TSimpleRow, TBorderInfo> Borders;
-    THashSet<ui64> CurrentPortions;
-    THashSet<ui64> ProcessedPortions;
-    std::map<NArrow::TSimpleRow, ui32> WaitingBorders;
-    std::optional<NArrow::TSimpleRow> PreviousBorder;
-    
-    std::optional<NArrow::TSimpleRow> LastBorder;
 
-    std::unordered_map<ui64, NArrow::TColumnFilter> ReadyFilters; // PortionId -> TColumnFilter
+    TBordersFlowController BordersFlowController;
+    TFiltersStore FiltersStore;
     std::shared_ptr<TAtomicCounter> AbortionFlag;
-    ui64 PrevRowsAdded = 0;
-    ui64 PrevRowsSkipped = 0;
-    std::unordered_set<ui64> ExclusivePortions;
 
 private:
-    static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
-        NArrow::TGeneralContainer batch(1);
-        IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
-    };
-
-    static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
-        THashMap<ui64, TPortionInfo::TConstPtr> portionsStore;
-        for (const auto& portion: portions) {
-            AFL_VERIFY(portionsStore.emplace(portion->GetPortionId(), portion).second);
-        }
-        return std::make_shared<TPortionStore>(std::move(portionsStore));
-    }
-
+    static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId);
+    static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions);
     bool IsExclusiveInterval(const ui64 portionId) const;
 
 private:
@@ -80,7 +52,8 @@ private:
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
-            hFunc(TEvIntervalConstructionResult, Handle);
+            hFunc(TEvBordersConstructionResult, Handle);
+            hFunc(TEvMergeBordersResult, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -88,32 +61,11 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
-    void Handle(const TEvIntervalConstructionResult::TPtr&);
-    void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
-        Counters->OnLeftBorders(-1 * static_cast<i64>(Borders.size()));
-        Counters->OnWaitingBorders(-1 * static_cast<i64>(WaitingBorders.size()));
-        AbortAndPassAway("aborted by actor system");
-    }
-
-    void AbortAndPassAway(const TString& error) {
-        AbortionFlag->Inc();
-        FiltersBuilder.Abort(error);
-        PassAway();
-    }
-
-    std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
-        std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
-        for (const auto& columnId : PKColumns->GetColumnIds()) {
-            fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
-        }
-        for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
-            fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
-        }
-        return fieldsByColumn;
-    }
-    
-private:
-    void BuildExclusivePortions();
+    void Handle(const TEvBordersConstructionResult::TPtr&);
+    void Handle(const TEvMergeBordersResult::TPtr&);
+    void Handle(const NActors::TEvents::TEvPoison::TPtr&);
+    void AbortAndPassAway(const TString& error);
+    std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const;
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);

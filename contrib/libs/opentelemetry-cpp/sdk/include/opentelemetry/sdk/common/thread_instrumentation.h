@@ -71,7 +71,13 @@ namespace common
 class ThreadInstrumentation
 {
 public:
-  ThreadInstrumentation()          = default;
+  ThreadInstrumentation() = default;
+
+  ThreadInstrumentation(const ThreadInstrumentation &)            = delete;
+  ThreadInstrumentation(ThreadInstrumentation &&)                 = delete;
+  ThreadInstrumentation &operator=(const ThreadInstrumentation &) = delete;
+  ThreadInstrumentation &operator=(ThreadInstrumentation &&)      = delete;
+
   virtual ~ThreadInstrumentation() = default;
 
 /*

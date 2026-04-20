@@ -3,6 +3,7 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_column_group_helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 
+#include <yql/essentials/utils/log/log.h>
 #include <util/stream/mem.h>
 #include <util/generic/hash_set.h>
 
@@ -49,31 +50,23 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     if (SerializedColumnGroupsSpec_.empty()) {
         GroupNamesToRead_.push_back(TString());
     } else {
-        THashSet<TString> allNeeded;
-        for (const auto& c : NeededColumns_) {
-            allNeeded.insert(c);
-        }
-        for (const auto& c : KeyColumns_) {
-            allNeeded.insert(c);
-        }
-
         const auto spec = GetColumnGroupsFromSpec(SerializedColumnGroupsSpec_);
-        THashSet<TString> groupNames;
 
-        auto findGroupForColumn = [&spec](const TString& col) -> TString {
+        if (NeededColumns_.empty()) {
             for (const auto& [groupName, cols] : spec.ColumnGroups) {
-                if (cols.contains(col)) {
-                    return groupName;
-                }
+                GroupNamesToRead_.push_back(groupName);
             }
-            return spec.DefaultColumnGroupName;
-        };
+            GroupNamesToRead_.push_back(spec.DefaultColumnGroupName);
+        } else {
+            THashSet<TString> allNeeded(NeededColumns_.begin(), NeededColumns_.end());
+            allNeeded.insert(KeyColumns_.begin(), KeyColumns_.end());
 
-        for (const auto& col : allNeeded) {
-            groupNames.insert(findGroupForColumn(col));
+            THashSet<TString> groupNames;
+            for (const auto& col : allNeeded) {
+                groupNames.insert(FindGroupForColumn(col, spec));
+            }
+            GroupNamesToRead_.assign(groupNames.begin(), groupNames.end());
         }
-
-        GroupNamesToRead_.assign(groupNames.begin(), groupNames.end());
     }
 
     SetMinChunkInNewRange();
@@ -85,6 +78,15 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
 }
 
 TTableDataServiceBlockIterator::~TTableDataServiceBlockIterator() = default;
+
+TString TTableDataServiceBlockIterator::FindGroupForColumn(const TString& col, const TParsedColumnGroupSpec& spec) {
+    for (const auto& [groupName, cols] : spec.ColumnGroups) {
+        if (cols.contains(col)) {
+            return groupName;
+        }
+    }
+    return spec.DefaultColumnGroupName;
+}
 
 void TTableDataServiceBlockIterator::SetMinChunkInNewRange() {
     if (CurrentRange_ < TableRanges_.size()) {
@@ -101,6 +103,8 @@ bool TTableDataServiceBlockIterator::TrySchedulePrefetch() {
             entry.Futures.reserve(GroupNamesToRead_.size());
             for (const auto& gname : GroupNamesToRead_) {
                 const TString dataChunkId = GetTableDataServiceChunkId(PrefetchChunk_, gname);
+                YQL_CLOG(DEBUG, FastMapReduce) << "TTableDataServiceBlockIterator::Prefetch: group=" << group
+                    << " chunkId=" << dataChunkId << " (gname='" << gname << "' chunk=" << PrefetchChunk_ << ")";
                 entry.Futures.push_back(TableDataService_->Get(group, dataChunkId));
             }
             PrefetchQueue_.push_back(std::move(entry));
@@ -192,7 +196,7 @@ bool TTableDataServiceBlockIterator::NextBlock(TIndexedBlock& out) {
         if (groupYsons.size() == 1 && NeededColumns_.empty()) {
             unionYson = std::move(groupYsons[0]);
         } else {
-            unionYson = GetYsonUnion(groupYsons, NeededColumns_);
+            unionYson = GetYsonUnionRaw(groupYsons, NeededColumns_);
         }
 
         TParserFragmentListIndex parser(unionYson, KeyColumns_);

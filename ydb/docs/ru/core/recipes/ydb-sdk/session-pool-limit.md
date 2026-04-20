@@ -146,4 +146,33 @@
 
   {% endlist %}
 
+- C#
+
+  В {{ ydb-short-name }} C# SDK параметры пула сессий задаются через строку подключения:
+
+  ```C#
+  using Ydb.Sdk.Ado;
+
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;MaxPoolSize=500;MinPoolSize=10;SessionIdleTimeout=60");
+  ```
+
+  * `MaxPoolSize` — максимальный размер пула сессий (по умолчанию 100)
+  * `MinPoolSize` — минимальное число сессий, удерживаемых в пуле (по умолчанию 0)
+  * `SessionIdleTimeout` — время простоя сессии в секундах до её закрытия (по умолчанию 300)
+
+  Для Entity Framework и linq2db используйте тот же connectionString.
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}

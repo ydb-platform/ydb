@@ -280,7 +280,7 @@ void InferStatisticsForKqpTable(
 void InferStatisticsForSteamLookup(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* /*typeCtx*/,
-    const TKqpOptimizeContext kqpCtx,
+    const TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);

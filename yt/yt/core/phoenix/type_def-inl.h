@@ -581,7 +581,10 @@ public:
         } else if (MissingHandler_) {
             MissingHandler_(This_, Context_);
         } else {
-            This_->*Member = {};
+            // NB(coteeq): Don't default initialize fields that cannot be default-initialized.
+            if constexpr (requires { This_->*Member = {}; }) {
+                This_->*Member = {};
+            }
         }
     }
 
@@ -912,7 +915,10 @@ public:
     {
         auto* descriptor = AddField<TagValue>();
         descriptor->MissingHandler = [] (TThis* this_, TContext& /*context*/) {
-            this_->*Member = {};
+            // NB(coteeq): Don't default initialize fields that cannot be default-initialized.
+            if constexpr (requires { this_->*Member = {}; }) {
+                this_->*Member = {};
+            }
         };
         return TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TDefaultSerializer>(descriptor);
     }

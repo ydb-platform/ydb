@@ -8,6 +8,7 @@
 #include <yt/yql/providers/yt/gateway/lib/user_files.h>
 
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/url_mapper/yql_yt_url_mapper.h>
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 
@@ -15,7 +16,9 @@
 #include <yql/essentials/core/file_storage/file_storage.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
 #include <library/cpp/yson/node/node.h>
+#include <library/cpp/retry/retry.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
 
@@ -94,6 +97,7 @@ public:
     bool DisableAnonymousClusterAccess_;
     bool Hidden = false;
     IMetricsRegistryPtr Metrics;
+    IYtAccessProvider::TPtr YtAccessProvider;
     TOperationProgress::EOpBlockStatus BlockStatus = TOperationProgress::EOpBlockStatus::None;
     THashMap<TString, TString> JobFilesDumpPaths;  // yt job basename -> dump path
 };
@@ -184,8 +188,29 @@ public:
     [[nodiscard]]
     NThreading::TFuture<bool> LookupQueryCacheAsync() {
         if (QueryCacheItem) {
-            SetNodeExecProgress("Awaiting cache");
-            return QueryCacheItem->LookupAsync(Session_->Queue_);
+            YQL_ENSURE(Session_->UseSecureTmp_);
+
+            auto future = NThreading::MakeFuture();
+            if (Session_->UseSecureTmp_->load() && Options_.Config()->_SecureTmpRoot.Get(Cluster_)) {
+                auto logCtx = NYql::NLog::CurrentLogContextPath();
+                future = Session_->Async([this, logCtx] {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                    try {
+                        PrepareSecureTmpFolder();
+                        return NThreading::MakeFuture();
+                    } catch (...) {
+                        YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                        return NThreading::MakeErrorFuture<void>(std::current_exception());
+                    }
+                });
+            }
+
+            return future.Apply([this](const NThreading::TFuture<void>& f) {
+                f.GetValue();
+
+                SetNodeExecProgress("Awaiting cache");
+                return QueryCacheItem->LookupAsync(Session_->Queue_);
+            });
         }
         return NThreading::MakeFuture(false);
     }
@@ -253,7 +278,115 @@ public:
         });
     }
 
+    void PrepareSecureTmpFolder() {
+        YQL_ENSURE(Session_->UseSecureTmp_);
+        if (!Session_->UseSecureTmp_->load() || !Options_.Config()->_SecureTmpRoot.Get(Cluster_)) {
+            return;
+        }
+
+        NThreading::TFuture<void> future;
+        with_lock(Session_->SecureTmpFolderPreparationsMutex_) {
+            auto& futureRef = Session_->SecureTmpFolderPreparationsByCluster_[Cluster_];
+            // Check for ongoing request for cluster
+            if (!futureRef.Initialized()) {
+                auto logCtx = NYql::NLog::CurrentLogContextPath();
+                futureRef = Session_->Async([this, logCtx] {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                    try {
+                        ExecPrepareSecureTmpFolder();
+                        return NThreading::MakeFuture();
+                    } catch (...) {
+                        YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                        return NThreading::MakeErrorFuture<void>(std::current_exception());
+                    }
+                });
+            }
+
+            future = futureRef;
+        }
+
+        future.GetValueSync();
+    }
+
     TOptions Options_;
+
+private:
+    void ExecPrepareSecureTmpFolder() {
+        YQL_ENSURE(!Session_->OperationOptions_.ProjectSlug, "Secure tmp for projects is not supported yet");
+
+        auto secureTmpPath = NYT::AddPathPrefix(
+            GetTablesTmpFolder(*Options_.Config(), Cluster_, Session_->UseSecureTmp_, Session_->OperationOptions_),
+            NYT::TConfig::Get()->Prefix
+        );
+
+        const auto waitForAclDelay = Options_.Config()->_SecureTmpWaitForAclDelay.Get();
+        const auto waitForAclMaxAttempts = Options_.Config()->_SecureTmpWaitForAclMaxAttempts.Get();
+        YQL_ENSURE(waitForAclDelay && waitForAclMaxAttempts);
+        const auto attributes = Options_.Config()->_SecureTmpAttributes.Get().GetOrElse(NYT::TNode::CreateMap());
+
+        auto entry = GetEntry();
+        entry->Client->Create(secureTmpPath, NYT::NT_MAP, NYT::TCreateOptions().IgnoreExisting(true).Attributes(attributes));
+
+        auto retryPolicy = IRetryPolicy<bool>::GetFixedIntervalPolicy(
+            /*retryClassFunction=*/ [](bool hasAccess) {
+                return hasAccess ? ERetryErrorClass::NoRetry : ERetryErrorClass::ShortRetry;
+            },
+            /*delay=*/ *waitForAclDelay,
+            /*longRetryDelay=*/ *waitForAclDelay,
+            /*maxRetries=*/ *waitForAclMaxAttempts,
+            /*maxTime=*/ TDuration::Max()
+        );
+
+        bool accessRequested = false;
+        bool hasAccess = DoWithRetryOnRetCode<bool>([&]() {
+            auto checkReadWrite = [&](const TString& user) {
+                auto read = entry->Client->CheckPermission(user, NYT::EPermission::Read, secureTmpPath);
+                auto write = entry->Client->CheckPermission(user, NYT::EPermission::Write, secureTmpPath);
+                return read.Action == NYT::ESecurityAction::Allow && write.Action == NYT::ESecurityAction::Allow;
+            };
+
+            YQL_ENSURE(Session_->OperationOptions_.AuthenticatedUser);
+            bool hasReadWrite = checkReadWrite(*Session_->OperationOptions_.AuthenticatedUser);
+            if (hasReadWrite) {
+                YQL_CLOG(INFO, ProviderYt) << "Using secure tmp folder " << secureTmpPath;
+                return true;
+            }
+
+            // User doesn't have permissions on secure tmp
+            if (!accessRequested) {
+                if constexpr (NPrivate::THasPublicId<TOptions>::value) {
+                    SetNodeExecProgress("Waiting for secure temporary folder");
+                }
+
+                RequestSecureTmpAccess(EIdentityType::User, secureTmpPath).GetValueSync();
+                YQL_CLOG(INFO, ProviderYt) << "Requested permissions for secure tmp folder";
+                accessRequested = true;
+            }
+
+            YQL_CLOG(INFO, ProviderYt) << "Waiting for secure tmp folder ACL";
+            return false;
+        }, retryPolicy);
+
+        if (!hasAccess) {
+            YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_SECURE_DATA_IN_COMMON_TMP)
+                << "Failed to create secure tmp folder on cluster " << Cluster_ << ". Aborting query to prevent sensitive data leak";
+        }
+    }
+
+    NThreading::TFuture<void> RequestSecureTmpAccess(EIdentityType type, const TString& path) {
+        auto logCtx = NYql::NLog::CurrentLogContextPath();
+        return Session_->Async([this, logCtx, type, &path] {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+            try {
+                YQL_CLOG(INFO, ProviderYt) << "Requesting permissions for secure tmp " << path << " for " << type << " for cluster " << Cluster_;
+                YtAccessProvider->RequestAccess(Clusters_->GetYtName(Cluster_), type, path, Session_->UserName_, Session_->OperationOptions_);
+                return NThreading::MakeFuture();
+            } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                return NThreading::MakeErrorFuture<void>(std::current_exception());
+            }
+        });
+    }
 };
 
 } // NNative

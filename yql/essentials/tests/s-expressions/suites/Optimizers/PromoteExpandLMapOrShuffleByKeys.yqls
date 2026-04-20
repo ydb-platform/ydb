@@ -1,0 +1,26 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config '"OptimizerFlags" '"PromoteExpandLMapOrShuffleByKeys"))
+
+(let input (AsList
+  (Int32 '1)
+  (Int32 '2)
+  (Int32 '3)
+  (Int32 '4)
+))
+
+(let lmap1 (LMap input (lambda '(stream)
+  (FromFlow (Map (ToFlow stream) (lambda '(item) (+ item (Int32 '1)))))
+)))
+
+(let map (Map lmap1 (lambda '(item) (* item item))))
+
+(let lmap2 (LMap map (lambda '(stream)
+  (FromFlow (Map (ToFlow stream) (lambda '(item) (* item (Int32 '2)))))
+)))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) lmap2 '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

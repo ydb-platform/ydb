@@ -328,7 +328,13 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
 
         joinKeys.push_back(std::make_pair(leftKey, rightKey));
     }
-    return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys);
+
+    TVector<TExpression> joinFilters;
+    for (auto f : opJoin.JoinFilters()) {
+        joinFilters.push_back(TExpression(f.Lambda().Ptr(), &Ctx));
+    }
+
+    return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters);
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
@@ -343,7 +349,12 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node)
     const auto opLimit = TKqpOpLimit(node);
     const auto input = ExprNodeToOperator(opLimit.Input().Ptr());
     TExpression count(opLimit.Count().Ptr(), &Ctx);
-    return MakeIntrusive<TOpLimit>(input, node->Pos(), count, EOpPhase::NotDefined);
+    auto maybeOffset = opLimit.Offset();
+    if (maybeOffset) {
+        TExpression offset(maybeOffset.Cast().Ptr(), &Ctx);
+        return MakeIntrusive<TOpLimit>(input, node->Pos(), count, offset, EOpPhase::Undefined);
+    }
+    return MakeIntrusive<TOpLimit>(input, node->Pos(), count, EOpPhase::Undefined);
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {

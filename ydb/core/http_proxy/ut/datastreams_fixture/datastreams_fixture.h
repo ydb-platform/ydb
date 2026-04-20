@@ -139,7 +139,7 @@ public:
 
     NJson::TJsonMap CreateQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, res.Body);
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
         if (expectedHttpCode == 200) {
@@ -159,6 +159,8 @@ public:
 
     NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200);
 
+    NJson::TJsonMap SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries = 10);
+
     NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
     }
@@ -175,17 +177,8 @@ public:
         return json;
     }
 
-    NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 5) {
-        for (ui32 i = 0; i < retries; ++i) {
-            auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
-            if (expectedHttpCode == 200) {
-                UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
-                return json;
-            }
-            Sleep(TDuration::Seconds(1));
-        }
-        UNIT_FAIL("Failed to send message, max retries reached");
-        return {};
+    NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 20) {
+        return SendJsonRequestWithRetries("SendMessage", request, expectedHttpCode, retries);
     }
 
     NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {

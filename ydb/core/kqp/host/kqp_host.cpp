@@ -692,6 +692,113 @@ const TTypedUnboxedValue* ValidateParameter(const TString& name, const TTypeAnno
     return parameter;
 }
 
+// EvaluateExpr nodes containing parameter references cannot be evaluated at compile time
+// because parameter values are not available in the evaluation context for DDL queries.
+// However, secret values can be set in SQL statements with parameters.
+// This transformer unwraps the first EvaluateExpr node, if it's presented, before expression evaluation
+// so the existing parameter-at-execution-time flow could handle them.
+class TSecretValueExprTransformer {
+public:
+    TSecretValueExprTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
+        : QueryCtx(queryCtx) {}
+
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = false;
+
+        auto& queryCtx = QueryCtx;
+        return OptimizeExpr(input, output,
+            [&queryCtx](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                if (!IsSecretStatement(*node)) {
+                    return node;
+                }
+
+                const auto& settings = *node->Child(WriteSettingsChildIndex);
+                const auto [evaluateExprNode, evaluateExprNodeIdx] = FindFirstEvaluateExprInValueExpr(settings);
+                if (!evaluateExprNode) {
+                    return node;
+                }
+
+                if (!evaluateExprNode->Head().IsCallable("Parameter")) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(evaluateExprNode->Pos()),
+                        TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Only string or single string parameter is supported as secret value"));
+                    return {};
+                }
+
+                const TString paramName(evaluateExprNode->Head().Child(0)->Content());
+                RegisterParameterIfNeeded(queryCtx, paramName);
+
+                return UnwrapEvaluateExpr(*node, settings, *evaluateExprNode, evaluateExprNodeIdx, ctx);
+            }, ctx, optSettings);
+    }
+
+    static TAutoPtr<IGraphTransformer> Sync(TIntrusivePtr<TKikimrQueryContext> queryCtx) {
+        return CreateFunctorTransformer(TSecretValueExprTransformer(queryCtx));
+    }
+
+private:
+    static bool IsSecretStatement(const TExprNode& node) {
+        if (!node.IsCallable("Write!") || node.ChildrenSize() <= WriteSettingsChildIndex) {
+            return false;
+        }
+        const auto& key = *node.Child(2);
+        return key.ChildrenSize() > 0 &&
+               key.Child(0)->ChildrenSize() > 0 &&
+               key.Child(0)->Child(0)->Content() == "secret";
+    }
+
+    static std::pair<const TExprNode*, ui32> FindFirstEvaluateExprInValueExpr(const TExprNode& settings) {
+        for (ui32 i = 0; i < settings.ChildrenSize(); ++i) {
+            const auto& node = *settings.Child(i);
+            if (node.ChildrenSize() < 2 || node.Child(0)->Content() != "value_expr") {
+                continue;
+            }
+            const auto* expr = node.Child(1);
+            if (expr->IsCallable("EvaluateExpr") && expr->ChildrenSize() == 1) {
+                return {expr, i};
+            }
+
+            break; // We need only the first EvaluateExpr
+        }
+        return {nullptr, 0};
+    }
+
+    static void RegisterParameterIfNeeded(
+        TIntrusivePtr<TKikimrQueryContext>& queryCtx,
+        const TString& paramName)
+    {
+        if (!queryCtx->PrepareOnly || !queryCtx->PreparingQuery) {
+            return;
+        }
+        for (const auto& param : queryCtx->PreparingQuery->GetParameters()) {
+            if (param.GetName() == paramName) {
+                return;
+            }
+        }
+        auto& paramDesc = *queryCtx->PreparingQuery->AddParameters();
+        paramDesc.SetName(paramName);
+        auto guard = queryCtx->QueryData->TypeEnv().BindAllocator();
+        auto* utf8Type = NKikimr::NMiniKQL::TDataType::Create(
+            NYql::NUdf::TDataType<NYql::NUdf::TUtf8>::Id,
+            queryCtx->QueryData->TypeEnv());
+        NKikimr::NMiniKQL::ExportTypeToProto(utf8Type, *paramDesc.MutableType());
+    }
+
+    static TExprNode::TPtr UnwrapEvaluateExpr(
+        const TExprNode& writeNode, const TExprNode& settings, const TExprNode& evaluateExprNode,
+        const ui32 evaluateExprNodeIdx, TExprContext& ctx)
+    {
+        auto newTuple = ctx.ChangeChild(*settings.Child(evaluateExprNodeIdx), 1, evaluateExprNode.HeadPtr());
+        auto newSettings = ctx.ChangeChild(settings, evaluateExprNodeIdx, std::move(newTuple));
+        return ctx.ChangeChild(writeNode, WriteSettingsChildIndex, std::move(newSettings));
+    }
+
+private:
+    static constexpr ui32 WriteSettingsChildIndex = 4;
+    TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+};
+
 class TCollectParametersTransformer {
 public:
     TCollectParametersTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
@@ -1485,7 +1592,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetFromConfig(SessionCtx->Config());
+            .SetFromConfig(SessionCtx->Config())
+            .SetYqlSelect(settings.YqlSelect);
         auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         if (!compileResult.QueryExpr) {
             return nullptr;
@@ -1572,7 +1680,8 @@ private:
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
                 .SetUsePgParser(settings.UsePgParser)
-                .SetFromConfig(SessionCtx->Config());
+                .SetFromConfig(SessionCtx->Config())
+                .SetYqlSelect(settings.YqlSelect);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
 
             if (compileResult.NeedToSplit) {
@@ -1766,6 +1875,7 @@ private:
         auto transformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
+            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddIOAnnotation()
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
@@ -2059,6 +2169,7 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
+            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
@@ -2120,6 +2231,7 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
             .AddPreTypeAnnotation()
+            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)

@@ -15,8 +15,8 @@ private:
 
 public:
     TRepliesAdapter(const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector, const TString& storageId)
-        : ErrorCollector(std::move(errorCollector))
-        , StorageId(std::move(storageId)) {
+        : ErrorCollector(errorCollector)
+        , StorageId(storageId) {
     }
 
     virtual std::unique_ptr<IEventBase> RebuildReplyEvent(

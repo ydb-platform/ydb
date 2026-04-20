@@ -1,0 +1,17 @@
+/* syntax version 1 */
+/* postgres can not */
+SELECT
+    NULL IS DISTINCT FROM NULL,
+    NULL IS NOT DISTINCT FROM NULL,
+    Opaque(NULL) IS DISTINCT FROM NULL,
+    Opaque(NULL) IS NOT DISTINCT FROM NULL,
+    Opaque(NULL) IS DISTINCT FROM Opaque(NULL),
+    Opaque(NULL) IS NOT DISTINCT FROM Opaque(NULL)
+;
+
+SELECT
+    NULL IS NULL,
+    NULL IS NOT NULL,
+    Opaque(NULL) IS NULL,
+    Opaque(NULL) IS NOT NULL
+;

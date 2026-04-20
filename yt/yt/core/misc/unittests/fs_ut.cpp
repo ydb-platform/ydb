@@ -201,7 +201,7 @@ TEST_F(TSpliceAsyncTest, TestReadFileSimple)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -226,14 +226,14 @@ TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename2_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -269,7 +269,7 @@ TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -296,7 +296,7 @@ TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -327,14 +327,14 @@ TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         pipeRead2,
         TFile(Filename2_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -374,7 +374,7 @@ TEST_F(TSpliceAsyncTest, TestWriteFileCancelFuture)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 

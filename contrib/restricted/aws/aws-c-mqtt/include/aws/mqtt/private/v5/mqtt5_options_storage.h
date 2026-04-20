@@ -102,7 +102,7 @@ struct aws_mqtt5_operation_puback {
 
     struct aws_mqtt5_packet_puback_storage options_storage;
 
-    struct aws_mqtt5_manual_puback_completion_options completion_options;
+    struct aws_mqtt5_manual_publish_acknowledgement_completion_options completion_options;
 };
 
 struct aws_mqtt5_operation_disconnect {
@@ -275,7 +275,7 @@ AWS_MQTT_API void aws_mqtt5_packet_publish_view_log(
 AWS_MQTT_API struct aws_mqtt5_operation_puback *aws_mqtt5_operation_puback_new(
     struct aws_allocator *allocator,
     const struct aws_mqtt5_packet_puback_view *puback_options,
-    const struct aws_mqtt5_manual_puback_completion_options *completion_options);
+    const struct aws_mqtt5_manual_publish_acknowledgement_completion_options *completion_options);
 
 AWS_MQTT_API void aws_mqtt5_packet_puback_view_log(
     const struct aws_mqtt5_packet_puback_view *puback_view,

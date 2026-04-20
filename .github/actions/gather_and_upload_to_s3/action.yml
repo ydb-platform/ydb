@@ -1,0 +1,111 @@
+name: 'Gather and upload binaries to S3'
+description: 'Download built binary artifacts and upload them to S3'
+inputs:
+  version:
+    description: 'Version string for S3 directory structure'
+    required: true
+  s3-bucket:
+    description: 'S3 bucket name'
+    required: true
+  s3-key-id:
+    description: 'S3 access key ID'
+    required: true
+  s3-key-secret:
+    description: 'S3 secret key'
+    required: true
+  build-linux-amd:
+    description: 'Whether linux-amd was built'
+    required: false
+    default: 'true'
+  build-linux-arm:
+    description: 'Whether linux-arm was built'
+    required: false
+    default: 'true'
+  build-darwin-amd:
+    description: 'Whether darwin-amd was built'
+    required: false
+    default: 'true'
+  build-darwin-arm:
+    description: 'Whether darwin-arm was built'
+    required: false
+    default: 'true'
+  build-windows-amd:
+    description: 'Whether windows-amd was built'
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: Prepare directory for linux-amd binary
+      if: ${{ inputs.build-linux-amd == 'true' }}
+      shell: bash
+      run: mkdir -p ${{ inputs.version }}/linux/amd64
+    - name: Prepare directory for linux-arm binary
+      if: ${{ inputs.build-linux-arm == 'true' }}
+      shell: bash
+      run: mkdir -p ${{ inputs.version }}/linux/arm64
+    - name: Prepare directory for darwin-amd binary
+      if: ${{ inputs.build-darwin-amd == 'true' }}
+      shell: bash
+      run: mkdir -p ${{ inputs.version }}/darwin/amd64
+    - name: Prepare directory for darwin-arm binary
+      if: ${{ inputs.build-darwin-arm == 'true' }}
+      shell: bash
+      run: mkdir -p ${{ inputs.version }}/darwin/arm64
+    - name: Prepare directory for windows-amd binary
+      if: ${{ inputs.build-windows-amd == 'true' }}
+      shell: bash
+      run: mkdir -p ${{ inputs.version }}/windows/amd64/unsigned
+    - name: Copy linux-amd binary
+      if: ${{ inputs.build-linux-amd == 'true' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-amd-binary
+        path: ${{ inputs.version }}/linux/amd64/
+    - name: Copy linux-arm binary
+      if: ${{ inputs.build-linux-arm == 'true' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-arm-binary
+        path: ${{ inputs.version }}/linux/arm64/
+    - name: Copy darwin amd64 binary
+      if: ${{ inputs.build-darwin-amd == 'true' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: darwin-amd-binary
+        path: ${{ inputs.version }}/darwin/amd64/
+    - name: Copy darwin arm64 binary
+      if: ${{ inputs.build-darwin-arm == 'true' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: darwin-arm-binary
+        path: ${{ inputs.version }}/darwin/arm64/
+    - name: Copy windows-amd binary (unsigned)
+      if: ${{ inputs.build-windows-amd == 'true' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-amd-binary
+        path: ${{ inputs.version }}/windows/amd64/unsigned/
+    - name: Print resulting file hierarchy
+      shell: bash
+      run: find ${{ inputs.version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+    - name: Download s3
+      shell: bash
+      run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
+    - name: Unzip s3
+      shell: bash
+      run: tar -xf s3cmd-2.4.0.tar.gz
+    - name: Install s3
+      shell: bash
+      run: |
+        cd s3cmd-2.4.0
+        sudo python3 setup.py install
+        cd ..
+    - name: Upload to S3
+      shell: bash
+      env:
+        S3_HOST: "storage.yandexcloud.net"
+        S3_BUCKET: ${{ inputs.s3-bucket }}
+        S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
+        S3_REGION: ru-central1
+      run: s3cmd --access_key=${{ inputs.s3-key-id }} --secret_key=${{ inputs.s3-key-secret }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ inputs.version }} "s3://$S3_BUCKET/release/"

@@ -225,7 +225,7 @@ public:
                 }
             }
         }
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, NUdf::TUnboxedValue& current, TComputationContext& ctx) const {

@@ -291,7 +291,7 @@ THolder<IComputationGraph> BuildGraph(
     if (useDqImpl) {
         if (useFlow) {
             pgmReturn = pb.FromFlow(pb.DqHashAggregate(
-                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
                 Spilling,
                 lambdaKey,
                 lambdaInit,
@@ -308,7 +308,7 @@ THolder<IComputationGraph> BuildGraph(
         }
     } else if (Spilling) {
         pgmReturn = pb.FromFlow(pb.WideLastCombinerWithSpilling(
-            pb.ToFlow(TRuntimeNode(streamCallable, false)),
+            pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
             lambdaKey,
             lambdaInit,
             lambdaUpdate,
@@ -316,7 +316,7 @@ THolder<IComputationGraph> BuildGraph(
         ));
     } else {
         pgmReturn = pb.FromFlow(pb.WideCombiner(
-            pb.ToFlow(TRuntimeNode(streamCallable, false)),
+            pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
             memLimit,
             lambdaKey,
             lambdaInit,

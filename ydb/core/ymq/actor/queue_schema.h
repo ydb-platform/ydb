@@ -23,7 +23,8 @@ class TCreateQueueSchemaActorV2
     : public TActorBootstrapped<TCreateQueueSchemaActorV2>
 {
 public:
-     TCreateQueueSchemaActorV2(const TQueuePath& path,
+     TCreateQueueSchemaActorV2(const TString& accountName,
+                               const TQueuePath& path,
                                const TCreateQueueRequest& req,
                                const TActorId& sender,
                                const TString& requestId,
@@ -119,6 +120,7 @@ private:
     static TString GenerateCommitQueueParamsQuery();
 
 private:
+    const TString AccountName_;
     const TQueuePath QueuePath_;
     const TCreateQueueRequest Request_;
     const TActorId Sender_;

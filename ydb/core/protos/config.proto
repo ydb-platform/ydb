@@ -25,6 +25,7 @@ import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
+import "ydb/core/protos/long_tx_service_config.proto";
 import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
@@ -290,7 +291,7 @@ message TDomainsConfig {
 
         message TUser {
             optional string Name = 1;
-            optional string Password = 2;
+            optional string Password = 2 [(Ydb.sensitive) = true];
         }
 
         message TGroup {
@@ -305,6 +306,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinSecurity = 19;
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
+        optional bool HideAuthenticationFailureReasons = 22 [default = true];
     }
 
     repeated TDomain Domain = 1;
@@ -1699,6 +1701,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 300,
             DefaultValue: 0 }];
+        optional uint64 HullCompFreeSpaceThresholdPerMille = 41 [(ControlOptions) = {
+            Description: "Garbage threshold for FreeSpace compaction strategy. This value is divided by 1000 and converted to double. Zero value entirely disables the FreeSpace compaction strategy.",
+            MinValue: 0,
+            MaxValue: 100000,
+            DefaultValue: 2000 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -2224,6 +2231,15 @@ message TImmediateControlsConfig {
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
     optional TBootstrapperControls BootstrapperControls = 20;
+
+    message TQuoterControls {
+        optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {
+            Description: "Quoter proxy protocol version (0 = legacy, 1 = dual channel)",
+            MinValue: 0,
+            MaxValue: 10,
+            DefaultValue: 1 }];
+    }
+    optional TQuoterControls QuoterControls = 21;
 };
 
 message TMeteringConfig {
@@ -2888,6 +2904,7 @@ message TKafkaProxyConfig {
     optional string Cert = 8 [(Ydb.sensitive) = true];
     optional string Key = 9 [(Ydb.sensitive) = true];
     optional string CA = 17 [(Ydb.sensitive) = true];
+    optional bool EnableSelfSignedCerts = 19 [default = false];
     optional bool MtlsEnable = 18 [default = false];
 
     optional uint64 MaxMessageSize = 4 [default = 16777216];
@@ -3004,6 +3021,14 @@ message TSystemTabletBackupConfig {
     repeated fixed64 ExcludeTabletIds = 2;
     optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
     optional uint64 MaxBackupsLimit = 4 [default = 3];
+    optional uint64 ChangelogInFlightBytesLimit = 5 [default = 536870912]; // 512 MB
+
+    enum EFailBehaviour {
+        RETRY_BACKUP = 0;
+        TABLET_RESTART = 1;
+    }
+    optional EFailBehaviour FailBehaviour = 6 [default = RETRY_BACKUP];
+    optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
 }
 
 message TClusterDiagnosticsConfig {
@@ -3138,6 +3163,8 @@ message TAppConfig {
     optional TNbsConfig NbsConfig = 119;
 
     optional TTliConfig TliConfig = 120;
+
+    optional TLongTxServiceConfig LongTxServiceConfig = 121;
 }
 
 message TYdbVersion {

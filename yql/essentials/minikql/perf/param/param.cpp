@@ -5,8 +5,6 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
-#include <util/datetime/cputimer.h>
-
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NUdf;

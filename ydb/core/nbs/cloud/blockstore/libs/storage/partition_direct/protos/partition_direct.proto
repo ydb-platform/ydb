@@ -7,16 +7,20 @@ import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
 package NYdb.NBS.PartitionDirect.NProto;
 option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
 
-message TDBGConnectionsIds {
-    message TDDiskConnectionIds {
+message TDirectBlockGroupConnections {
+    message TConnection {
         NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
     }
-    repeated TDDiskConnectionIds DDiskConnectionIds = 1;
+    repeated TConnection Connections = 1;
+}
+
+message TDirectBlockGroupsConnections {
+    repeated TDirectBlockGroupConnections DirectBlockGroupConnections = 1;
 }
 
 message TTabletInfo {
     NYdb.NBS.NProto.TStorageServiceConfig StorageConfig = 1;
     NKikimrBlockStore.TVolumeConfig VolumeConfig = 2;
-    repeated TDBGConnectionsIds DBGConnectionsIds = 3;
+    TDirectBlockGroupsConnections DirectBlockGroupsConnections = 3;
 }

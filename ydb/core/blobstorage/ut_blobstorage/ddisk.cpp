@@ -1,14 +1,13 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/protos/config.pb.h>
 
 Y_UNIT_TEST_SUITE(DDisk) {
 
     struct TDDiskTestContext {
-        TEnvironmentSetup Env{{
-                .NodeCount = 8,
-                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            }};
+        TEnvironmentSetup Env;
 
         const ui32 BlockSize = 4096;
         ui32 SurfaceSize;
@@ -28,7 +27,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
         int LetterIndex = 0;
         const TString Letters = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        TDDiskTestContext(ui32 surfaceSize = 64_KB) {
+        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB)
+            : Env({
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+                .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
+                    NYdb::NBS::NProto::TPBufferConfig pbCfg;
+                    pbCfg.SetMaxInMemoryCache(inMemCache);
+                    cfg.PBufferConfig = pbCfg;
+                }
+            }) {
             SurfaceSize = surfaceSize;
             SurfaceBlocks = SurfaceSize / BlockSize;
             Env.CreateBoxAndPool();
@@ -205,6 +213,15 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(Edge, false);
             UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             return res->Get()->Record.GetFreeSpace();
+        }
+
+        ui32 GetPBInMemoryCacheSize() {
+            Cerr << "get persistent buffer info \n";
+
+            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo());
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvPersistentBufferInfo>(Edge, false);
+            return res->Get()->InMemoryCacheSize;
         }
 
         void ReadPB(ui32 repeat = 1) {
@@ -553,15 +570,32 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.ChangeTestingNode(node);
         for (ui32 i = 1; i < 2000; ++i) {
             f.WritePB(0, 128); // Max size records to overfill in memory buffer
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
         }
         for (ui32 i = 1; i < 1000; ++i) {
             f.ReadPB(2);
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
         }
         f.RestartNode();
         f.ListPB();
         for (ui32 i = 1; i < 1000; ++i) {
             f.ReadPB(2);
+            ui32 size = f.GetPBInMemoryCacheSize();
+            UNIT_ASSERT(size > 0 && size <= 128_MB);
         }
     }
 
+    Y_UNIT_TEST(PersistentBufferCustomConfig) {
+        TDDiskTestContext f(1_MB, 1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 _ : xrange(100)) {
+            f.WritePB(0, 128);
+        }
+        ui32 cacheSize = f.GetPBInMemoryCacheSize();
+        UNIT_ASSERT(cacheSize == 1_MB);
+    }
 }

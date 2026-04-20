@@ -8,17 +8,16 @@
 
 namespace NYql::NWindow {
 
-template <typename TRangeType>
+template <typename TRangeType, bool WithSortedColumnNames>
 class TCoreWinFramesCollectorParams {
 public:
-    TCoreWinFramesCollectorParams(TCoreWinFrameCollectorBounds<TRangeType> bounds, ESortOrder sortOrder, TString sortColumnName)
+    TCoreWinFramesCollectorParams(TCoreWinFrameCollectorBounds<TRangeType, WithSortedColumnNames> bounds, ESortOrder sortOrder)
         : Bounds_(std::move(bounds))
         , SortOrder_(sortOrder)
-        , SortColumnName_(std::move(sortColumnName))
     {
     }
 
-    const TCoreWinFrameCollectorBounds<TRangeType>& GetBounds() const {
+    const TCoreWinFrameCollectorBounds<TRangeType, WithSortedColumnNames>& GetBounds() const {
         return Bounds_;
     }
 
@@ -26,14 +25,9 @@ public:
         return SortOrder_;
     }
 
-    TStringBuf GetSortColumnName() const {
-        return SortColumnName_;
-    }
-
 private:
-    TCoreWinFrameCollectorBounds<TRangeType> Bounds_;
+    TCoreWinFrameCollectorBounds<TRangeType, WithSortedColumnNames> Bounds_;
     ESortOrder SortOrder_;
-    TString SortColumnName_;
 };
 
 } // namespace NYql::NWindow

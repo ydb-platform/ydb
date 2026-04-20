@@ -102,6 +102,7 @@ message TReqHeartbeat
 
 message TRspHeartbeat
 {
+    optional bool force_update_config = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

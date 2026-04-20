@@ -20,6 +20,10 @@ YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
 
 extern const TJobTraceId NullJobTraceId;
 
+YT_DEFINE_STRONG_TYPEDEF(TCollectiveId, TGuid);
+
+extern const TCollectiveId NullCollectiveId;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // NB: Please keep the range of values small as this type

@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <library/cpp/json/writer/json.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -22,7 +23,7 @@ enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filt
 
 // clang-format off
 #define PHASE_ENUM(X) \
-    X(NotDefined)     \
+    X(Undefined)     \
     X(Intermediate)   \
     X(Final)
 
@@ -45,6 +46,10 @@ enum EPrintPlanOptions: ui32 {
 };
 // clang-format on
 
+enum EPlanToJsonOptions: ui32 {
+    BasicInfo = 0x01
+};
+
 enum EOrderEnforcerAction : ui32 { REQUIRE, MAINTAIN };
 enum EOrderEnforcerReason : ui32 { USER, INTERNAL };
 
@@ -53,6 +58,8 @@ struct TOrderEnforcer {
     EOrderEnforcerReason Reason;
     TVector<TSortElement> SortElements;
 };
+
+enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 
 /**
  * Per-operator physical plan properties
@@ -137,7 +144,10 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) = 0;
 
+    virtual TString GetExplainName() const = 0;
     virtual TString ToString(TExprContext& ctx) = 0;
+
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags);
 
     bool IsSingleConsumer() const {
         return Parents.size() <= 1;
@@ -231,6 +241,7 @@ public:
         return {};
     }
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "EmptySource"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -240,13 +251,13 @@ class TOpRead: public IOperator {
 public:
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos);
-    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
-            TPositionHandle pos);
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+            const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "TableFullScan"; }
+
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     bool NeedsMap() const;
@@ -255,14 +266,22 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     NYql::EStorageType GetTableStorageType() const;
 
+    TExprNode::TPtr GetRanges() const { return Ranges; }
+    TExprNode::TPtr GetTable() const { return TableCallable; }
+
     // TODO: make it private members, we should not access it directly
     TString Alias;
     TVector<TString> Columns;
     TVector<TInfoUnit> OutputIUs;
     NYql::EStorageType StorageType;
+
+    // TODO: put it in read settings.
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
     TExprNode::TPtr Limit;
+    TExprNode::TPtr Ranges;
+    std::optional<TExpression> OriginalPredicate;
+    ESortDir SortDir{ESortDir::None};
 };
 
 class TMapElement {
@@ -306,6 +325,8 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Map"; }
+
     bool IsOrdered() const {
         return Ordered;
     }
@@ -331,6 +352,7 @@ public:
     void SetDependencyPairs(const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "AddDependencies"; }
     
 
     TVector<TInfoUnit> Dependencies;
@@ -345,6 +367,8 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Project"; }
+
 
     TVector<TInfoUnit> ProjectList;
 };
@@ -372,6 +396,8 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Aggregate"; }
+
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -391,6 +417,8 @@ public:
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Filter"; }
+
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
@@ -398,6 +426,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     TExpression GetFilterExpression() const { return FilterExpr; }
 
@@ -410,18 +439,25 @@ class TOpJoin: public IBinaryOperator {
 public:
     TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
             const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+
+    TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
+            const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Join"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+    TVector<TExpression> JoinFilters;
 };
 
 class TOpUnionAll: public IBinaryOperator {
@@ -429,6 +465,7 @@ public:
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "UnionAll"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -439,12 +476,17 @@ public:
 class TOpLimit: public IUnaryOperator {
 public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase);
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+             std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Limit"; }
+
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
     EOpPhase GetLimitPhase() const {
@@ -452,25 +494,49 @@ public:
     }
 
     TExpression GetLimitCond() const { return LimitCond; }
+    bool HasOffset() const { return OffsetCond.has_value(); }
+    std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
 
     // Make private.
     TExpression LimitCond;
 private:
-    EOpPhase LimitPhase;
+    std::optional<TExpression> OffsetCond;
+    EOpPhase LimitPhase{EOpPhase::Undefined};
 };
 
 class TOpSort: public IUnaryOperator {
 public:
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements,
             std::optional<TExpression> limitCond = std::nullopt);
+    TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TSortElement>& sortElements,
+            std::optional<TExpression> limitCond, const EOpPhase sortPhase);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    EOpPhase GetSortPhase() const {
+        return SortPhase;
+    }
+    void SetSortPhase(const EOpPhase phase) {
+        SortPhase = phase;
+    }
+    TVector<TSortElement> GetSortElements() const {
+        return SortElements;
+    }
+    TVector<TSortElement>& GetSortElements() {
+        return SortElements;
+    }
+    bool IsTopSort() const { return LimitCond.has_value(); }
+    
+    virtual TString GetExplainName() const override { return "Sort"; }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;
+
+private:
+    EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
 /***
@@ -489,6 +555,8 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "CBOTree"; }
+
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -557,6 +625,8 @@ public:
     TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Root"; }
+
     void ComputeParents();
     IGraphTransformer::TStatus ComputeTypes(TRBOContext& ctx);
 
@@ -573,6 +643,9 @@ public:
     TOpIterator end() {
         return TOpIterator(nullptr);
     }
+
+    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;

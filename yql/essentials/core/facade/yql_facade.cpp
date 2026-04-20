@@ -473,28 +473,7 @@ TProgram::TProgram(
         }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanWrite() && GatewaysConfig_) {
-            TGatewaysConfig cleaned;
-            if (GatewaysConfig_->HasYt()) {
-                cleaned.MutableYt()->CopyFrom(GatewaysConfig_->GetYt());
-            }
-
-            if (GatewaysConfig_->HasFs()) {
-                cleaned.MutableFs()->CopyFrom(GatewaysConfig_->GetFs());
-            }
-
-            if (GatewaysConfig_->HasYqlCore()) {
-                cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
-            }
-
-            if (GatewaysConfig_->HasSqlCore()) {
-                cleaned.MutableSqlCore()->CopyFrom(GatewaysConfig_->GetSqlCore());
-            }
-
-            if (GatewaysConfig_->HasDq()) {
-                cleaned.MutableDq()->CopyFrom(GatewaysConfig_->GetDq());
-            }
-
-            auto data = cleaned.SerializeAsString();
+            auto data = GatewaysConfig_->SerializeAsString();
             QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
         }
 
@@ -770,27 +749,26 @@ bool HasFullCapture(const IQReaderPtr& reader) {
     return fullCaptureItem.Defined();
 }
 
-void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-                                         NSQLTranslation::TTranslationSettings*& currentSettings)
+void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings)
 {
     if (QContext_.CanWrite()) {
         auto clusterMappingsNode = NYT::TNode::CreateMap();
-        for (const auto& c : currentSettings->ClusterMapping) {
+        for (const auto& c : settings.ClusterMapping) {
             clusterMappingsNode(c.first, c.second);
         }
 
         auto sqlFlagsNode = NYT::TNode::CreateList();
-        for (const auto& f : currentSettings->Flags) {
+        for (const auto& f : settings.Flags) {
             sqlFlagsNode.Add(f);
         }
 
         // clang-format off
         auto dataNode = NYT::TNode()
             ("ClusterMapping", clusterMappingsNode)
-            ("V0Behavior", ui64(currentSettings->V0Behavior))
-            ("V0WarnAsError", currentSettings->V0WarnAsError->Allow())
-            ("DqDefaultAuto", currentSettings->DqDefaultAuto->Allow())
-            ("BlockDefaultAuto", currentSettings->BlockDefaultAuto->Allow())
+            ("V0Behavior", ui64(settings.V0Behavior))
+            ("V0WarnAsError", settings.V0WarnAsError->Allow())
+            ("DqDefaultAuto", settings.DqDefaultAuto->Allow())
+            ("BlockDefaultAuto", settings.BlockDefaultAuto->Allow())
             ("SqlFlags", sqlFlagsNode);
         // clang-format on
 
@@ -803,17 +781,16 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         }
 
         auto dataNode = NYT::NodeFromYsonString(loaded->Value);
-        loadedSettings.ClusterMapping.clear();
+        settings.ClusterMapping.clear();
         for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
-            loadedSettings.ClusterMapping[c.first] = c.second.AsString();
+            settings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
-        loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
-        loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
-        loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
-        loadedSettings.IsReplay = true;
-        currentSettings = &loadedSettings;
+        settings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
+        settings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
+        settings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
+        settings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
+        settings.IsReplay = true;
     }
 }
 
@@ -903,16 +880,13 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     SyntaxVersion_ = settings.SyntaxVersion;
     NYql::TWarningRules warningRules;
     HandleSourceCode();
-    NSQLTranslation::TTranslationSettings outerSettings = settings;
-    NSQLTranslation::TTranslationSettings* currentSettings = &outerSettings;
-    NSQLTranslation::TTranslationSettings loadedSettings;
-    loadedSettings.PgParser = settings.PgParser;
+    NSQLTranslation::TTranslationSettings currentSettings = settings;
     if (QContext_) {
-        HandleTranslationSettings(loadedSettings, currentSettings);
+        HandleTranslationSettings(currentSettings);
     }
 
-    SqlFlags_ = currentSettings->Flags;
-    currentSettings->LangVer = LangVer_;
+    SqlFlags_ = currentSettings.Flags;
+    currentSettings.LangVer = LangVer_;
 
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
@@ -926,7 +900,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator());
 
-    return FillParseResult(SqlToYql(translators, SourceCode_, *currentSettings, &warningRules), &warningRules);
+    return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);
 }
 
 TProgram::TStatus TProgram::TestPartialTypecheck() {
@@ -935,9 +909,10 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
     Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
 
     TIssues issues;
-    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+    auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
         return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
-    })
+    },
+                                    /*typeParser=*/{}, /*typeWriter=*/{})
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "type_ann_impl.h"
-#include "type_ann_impl.h"
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>

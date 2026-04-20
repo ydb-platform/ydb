@@ -15,6 +15,7 @@ SRCS(
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_scheme_ut.cpp
+    kqp_secrets_ut.cpp
     kqp_scheme_fulltext_ut.cpp
     kqp_scheme_type_info_ut.cpp
     kqp_user_management_ut.cpp
@@ -28,6 +29,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     ydb/public/sdk/cpp/src/client/arrow
     ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/topic
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
 )

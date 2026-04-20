@@ -90,7 +90,7 @@
 
   {% endlist %}
 
-- Node.js
+- JavaScript
 
   {% include [auth-static](../../_includes/nodejs/auth-static.md) %}
 
@@ -127,22 +127,29 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;User=user;Password=password");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: new StaticCredentialsProvider(user, password)
-  );
+- Rust
 
-  await using var driver = await Driver.CreateInitialized(config);
+  ```rust
+  use ydb::{ClientBuilder, StaticCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(StaticCredentials::new(
+          std::env::var("YDB_USER")?,
+          std::env::var("YDB_PASSWORD")?,
+          http::Uri::from_static("grpc://localhost:2136"),
+          "local".into(),
+      ))
+      .client()?;
   ```
 
 - PHP

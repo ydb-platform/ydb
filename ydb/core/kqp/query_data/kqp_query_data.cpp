@@ -11,6 +11,7 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -345,6 +346,36 @@ TQueryData::TTypedUnboxedValue* TQueryData::GetParameterUnboxedValuePtr(const TS
     return &it->second;
 }
 
+bool TQueryData::TryGetParameterAsString(const TString& name, TString& outValue, TString& outError) const {
+    auto it = UnboxedData.find(name);
+    if (it == UnboxedData.end()) {
+        outError = TStringBuilder() << "Parameter " << name << " is required";
+        return false;
+    }
+    TType* type = it->second.first;
+    // remove all optionals
+    NUdf::TUnboxedValue unboxedValue = it->second.second;
+    while (type->IsOptional()) {
+        type = static_cast<const TOptionalType*>(type)->GetItemType();
+        if (!unboxedValue.HasValue()) {
+            outError = TStringBuilder() << "Parameter " << name << " must not be NULL";
+            return false;
+        }
+        unboxedValue = unboxedValue.GetOptionalValue();
+    }
+
+    if (!type->IsData()) {
+        outError = TStringBuilder() << "Parameter " << name << " must be String or Utf8";
+        return false;
+    }
+    const auto schemeType = static_cast<const TDataType*>(type)->GetSchemeType();
+    if (schemeType != NUdf::TDataType<NUdf::TUtf8>::Id && schemeType != NUdf::TDataType<char*>::Id) {
+        outError = TStringBuilder() << "Parameter " << name << " must be String or Utf8";
+        return false;
+    }
+    outValue = TString(unboxedValue.AsStringRef());
+    return true;
+}
 
 const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
     if (UnboxedData.find(name) == UnboxedData.end())

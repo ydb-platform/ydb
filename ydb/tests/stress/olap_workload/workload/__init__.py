@@ -7,6 +7,7 @@ from ydb.tests.stress.olap_workload.workload.type.tables_create_drop import Work
 from ydb.tests.stress.olap_workload.workload.type.insert_delete import WorkloadInsertDelete
 from ydb.tests.stress.olap_workload.workload.type.transactions import WorkloadTransactions
 from ydb.tests.stress.olap_workload.workload.type.rename_tables import WorkloadRenameTables
+from ydb.tests.stress.olap_workload.workload.type.encodings import WorkloadEncodings
 
 
 class WorkloadRunner:
@@ -37,6 +38,7 @@ class WorkloadRunner:
             WorkloadInsertDelete(self.client, self.name, stop),
             WorkloadTransactions(self.client, self.name, stop),
             WorkloadRenameTables(self.client, self.name, stop, 10),
+            WorkloadEncodings(self.client, self.name, stop),
         ]
         for w in workloads:
             w.start()

@@ -9,6 +9,7 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/core/ymq/actor/events.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -24,6 +25,7 @@ public:
 
 private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr&);
+    void Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr&);
     STFUNC(StateDescribe);
 
     void CreateWriter();
@@ -48,6 +50,11 @@ private:
 
 private:
     TDLQMoverSettings Settings;
+    TString TopicName;
+
+    TString SQSUserName;
+    TString SQSFolderId;
+    TString SQSQueueName;
 
     TString ProducerId;
     std::deque<TDLQMessage> Queue;

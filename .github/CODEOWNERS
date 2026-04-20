@@ -40,6 +40,7 @@
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown @ydb-platform/fq
+/ydb/library/yql/providers/dq @ydb-platform/yql
 /ydb/library/yql/providers/generic @ydb-platform/fq
 /ydb/library/yql/providers/pq @ydb-platform/fq
 /ydb/library/yql/providers/s3 @ydb-platform/fq
@@ -92,6 +93,8 @@
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
+/ydb/core/tx/schemeshard/index @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index_build @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
@@ -117,8 +120,9 @@
 /ydb/core/security @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
-/ydb/library/login @ydb-platform/Security
 /ydb/library/aclib @ydb-platform/Security
+/ydb/library/login @ydb-platform/Security
+/ydb/library/security @ydb-platform/Security
 /ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
 /ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security
 /ydb/core/sys_view/common/registry.h @ydb-platform/Security

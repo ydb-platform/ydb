@@ -145,6 +145,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
     featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
+    featureFlags.SetEnableLocalBloomFilterIndex(settings.EnableLocalBloomFilterIndex);
 
     Settings->SetFeatureFlags(featureFlags);
 
@@ -162,6 +163,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
     tableServiceConfig = settings.TableServiceConfig;
     tableServiceConfig.SetEnableTempTablesForUser(true);
+
+    auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+    securityConfig.SetHideAuthenticationFailureReasons(false);
 
     Settings->SetAppConfig(appConfig);
 

@@ -53,6 +53,13 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     ui64 flags,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error);
 

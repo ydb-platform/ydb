@@ -8,7 +8,6 @@
 #include "mirror_describer_factory.h"
 
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
@@ -253,6 +252,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             ap->MutableChildPartitionIds()->Reserve(p.GetChildPartitionIds().size());
             for (const auto children : p.GetChildPartitionIds()) {
                 ap->MutableChildPartitionIds()->AddAlreadyReserved(children);
+            }
+            if (p.HasCreationTimestampSeconds()) {
+                ap->SetCreationTimestampSeconds(p.GetCreationTimestampSeconds());
             }
         }
     }

@@ -173,9 +173,10 @@ TPartitionResult PartitionInputTablesIntoTasks(
 
     auto [gottenFmrTasks, fmrPartitionStatus] = partitioner.PartitionFmrTablesIntoTasks(fmrInputTables);
     if (!fmrPartitionStatus) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: failed to partition fmr input tables into tasks";
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition fmr input tables into tasks"
         }};
     }
@@ -189,9 +190,11 @@ TPartitionResult PartitionInputTablesIntoTasks(
     }
     auto settings = ytPartitionSettings;
     if (settings.MaxParts <= gottenFmrTasks.size()) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: max parts exceeded for yt input tables (fmrTasks="
+            << gottenFmrTasks.size() << ", maxParts=" << ytPartitionSettings.MaxParts << ")";
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition yt input tables into tasks: max parts exceeded"
         }};
     }
@@ -199,9 +202,10 @@ TPartitionResult PartitionInputTablesIntoTasks(
     Y_ENSURE(settings.PartitionMode == NYT::ETablePartitionMode::Unordered);
     auto [gottenYtTasks, ytPartitionStatus] = ytCoordinatorService->PartitionYtTables(ytInputTables, clusterConnections, settings);
     if (!ytPartitionStatus) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: failed to partition yt input tables into tasks";
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition yt input tables into tasks"
         }};
     }

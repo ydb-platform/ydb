@@ -6758,6 +6758,138 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
     }
 
+    Y_UNIT_TEST(AlterTableBloomFilterPrefixes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto getPartitionConfig = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        // Create table with 2 PK columns
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Initially no bloom filter prefixes
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+        }
+
+        // Add prefix bloom filter on first PK column
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        }
+
+        // Add another prefix with custom FPP — should accumulate [1, 2]
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 2 FalsePositiveProbability: 0.05 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.05, 1e-9);
+        }
+
+        // Disable KEY_BLOOM_FILTER — should clear all prefixes
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+
+    }
+
+    Y_UNIT_TEST(CreateTableWithBloomFilterPrefixes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto getPartitionConfig = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        // Create table with bloom filter prefix and custom FPP from the start
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.02 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.02, 1e-9);
+        }
+
+        // Alter to add second prefix — should accumulate [1, 2]
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 2 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        }
+
+        // Disable — should clear all
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+    }
+
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

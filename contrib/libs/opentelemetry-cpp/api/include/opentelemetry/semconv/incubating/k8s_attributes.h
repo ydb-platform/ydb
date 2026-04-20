@@ -511,6 +511,126 @@ static constexpr const char *kK8sResourcequotaResourceName = "k8s.resourcequota.
 static constexpr const char *kK8sResourcequotaUid = "k8s.resourcequota.uid";
 
 /**
+  The annotation placed on the Service, the @code <key> @endcode being the annotation name, the
+  value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An annotation
+  @code prometheus.io/scrape @endcode with value @code true @endcode SHOULD be recorded as the @code
+  k8s.service.annotation.prometheus.io/scrape @endcode attribute with value @code "true"
+  @endcode.</li> <li>An annotation @code data @endcode with empty string value SHOULD be recorded as
+  the @code k8s.service.annotation.data @endcode attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sServiceAnnotation = "k8s.service.annotation";
+
+/**
+  The address type of the service endpoint.
+  <p>
+  The network address family or type of the endpoint.
+  This attribute aligns with the @code addressType @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">K8s
+  EndpointSlice</a>. It is used to differentiate metrics when a Service is backed by multiple
+  address types (e.g., in dual-stack clusters).
+ */
+static constexpr const char *kK8sServiceEndpointAddressType = "k8s.service.endpoint.address_type";
+
+/**
+  The condition of the service endpoint.
+  <p>
+  The current operational condition of the service endpoint.
+  An endpoint can have multiple conditions set at once (e.g., both @code serving @endcode and @code
+  terminating @endcode during rollout). This attribute aligns with the condition fields in the <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">K8s
+  EndpointSlice</a>.
+ */
+static constexpr const char *kK8sServiceEndpointCondition = "k8s.service.endpoint.condition";
+
+/**
+  The zone of the service endpoint.
+  <p>
+  The zone where the endpoint is located, typically corresponding to a failure domain.
+  This attribute aligns with the @code zone @endcode field of endpoints in the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">K8s
+  EndpointSlice</a>. It enables zone-aware monitoring of service endpoint distribution and supports
+  features like <a
+  href="https://kubernetes.io/docs/concepts/services-networking/topology-aware-routing/">Topology
+  Aware Routing</a>. <p> If the zone is not populated (e.g., nodes without the @code
+  topology.kubernetes.io/zone @endcode label), the attribute value will be an empty string.
+ */
+static constexpr const char *kK8sServiceEndpointZone = "k8s.service.endpoint.zone";
+
+/**
+  The label placed on the Service, the @code <key> @endcode being the label name, the value being
+  the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code app @endcode
+  with value @code my-service @endcode SHOULD be recorded as the @code k8s.service.label.app
+  @endcode attribute with value @code "my-service" @endcode.</li> <li>A label @code data @endcode
+  with empty string value SHOULD be recorded as the @code k8s.service.label.data @endcode attribute
+  with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sServiceLabel = "k8s.service.label";
+
+/**
+  The name of the Service.
+ */
+static constexpr const char *kK8sServiceName = "k8s.service.name";
+
+/**
+  Whether the Service publishes not-ready endpoints.
+  <p>
+  Whether the Service is configured to publish endpoints before the pods are ready.
+  This attribute is typically used to indicate that a Service (such as a headless
+  Service for a StatefulSet) allows peer discovery before pods pass their readiness probes.
+  It aligns with the @code publishNotReadyAddresses @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/#ServiceSpec">K8s
+  ServiceSpec</a>.
+ */
+static constexpr const char *kK8sServicePublishNotReadyAddresses =
+    "k8s.service.publish_not_ready_addresses";
+
+/**
+  The selector key-value pair placed on the Service, the @code <key> @endcode being the selector
+  key, the value being the selector value. <p> These selectors are used to correlate with pod
+  labels. Each selector key-value pair becomes a separate attribute. <p> Examples: <ul> <li>A
+  selector @code app=my-app @endcode SHOULD be recorded as the @code k8s.service.selector.app
+  @endcode attribute with value @code "my-app" @endcode.</li> <li>A selector @code version=v1
+  @endcode SHOULD be recorded as the @code k8s.service.selector.version @endcode attribute with
+  value @code "v1" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sServiceSelector = "k8s.service.selector";
+
+/**
+  The traffic distribution policy for the Service.
+  <p>
+  Specifies how traffic is distributed to endpoints for this Service.
+  This attribute aligns with the @code trafficDistribution @endcode field of the
+  <a href="https://kubernetes.io/docs/reference/networking/virtual-ips/#traffic-distribution">K8s
+  ServiceSpec</a>. Known values include @code PreferSameZone @endcode (prefer endpoints in the same
+  zone as the client) and
+  @code PreferSameNode @endcode (prefer endpoints on the same node, fallback to same zone, then
+  cluster-wide). If this field is not set on the Service, the attribute SHOULD NOT be emitted. When
+  not set, Kubernetes distributes traffic evenly across all endpoints cluster-wide.
+ */
+static constexpr const char *kK8sServiceTrafficDistribution = "k8s.service.traffic_distribution";
+
+/**
+  The type of the Kubernetes Service.
+  <p>
+  This attribute aligns with the @code type @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/#ServiceSpec">K8s
+  ServiceSpec</a>.
+ */
+static constexpr const char *kK8sServiceType = "k8s.service.type";
+
+/**
+  The UID of the Service.
+ */
+static constexpr const char *kK8sServiceUid = "k8s.service.uid";
+
+/**
   The annotation placed on the StatefulSet, the @code <key> @endcode being the annotation name, the
   value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>A label @code
   replicas @endcode with value @code 1 @endcode SHOULD be recorded as the @code
@@ -748,6 +868,68 @@ static constexpr const char *kShutdown = "Shutdown";
 static constexpr const char *kUnexpectedAdmissionError = "UnexpectedAdmissionError";
 
 }  // namespace K8sPodStatusReasonValues
+
+namespace K8sServiceEndpointAddressTypeValues
+{
+/**
+  IPv4 address type
+ */
+static constexpr const char *kIpv4 = "IPv4";
+
+/**
+  IPv6 address type
+ */
+static constexpr const char *kIpv6 = "IPv6";
+
+/**
+  FQDN address type
+ */
+static constexpr const char *kFqdn = "FQDN";
+
+}  // namespace K8sServiceEndpointAddressTypeValues
+
+namespace K8sServiceEndpointConditionValues
+{
+/**
+  The endpoint is ready to receive new connections.
+ */
+static constexpr const char *kReady = "ready";
+
+/**
+  The endpoint is currently handling traffic.
+ */
+static constexpr const char *kServing = "serving";
+
+/**
+  The endpoint is in the process of shutting down.
+ */
+static constexpr const char *kTerminating = "terminating";
+
+}  // namespace K8sServiceEndpointConditionValues
+
+namespace K8sServiceTypeValues
+{
+/**
+  ClusterIP service type
+ */
+static constexpr const char *kClusterIp = "ClusterIP";
+
+/**
+  NodePort service type
+ */
+static constexpr const char *kNodePort = "NodePort";
+
+/**
+  LoadBalancer service type
+ */
+static constexpr const char *kLoadBalancer = "LoadBalancer";
+
+/**
+  ExternalName service type
+ */
+static constexpr const char *kExternalName = "ExternalName";
+
+}  // namespace K8sServiceTypeValues
 
 namespace K8sVolumeTypeValues
 {

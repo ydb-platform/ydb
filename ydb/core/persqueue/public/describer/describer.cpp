@@ -1,6 +1,6 @@
 #include "describer.h"
 
-#define LOG_PREFIX "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
+#define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
 #define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 #define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 #define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
@@ -23,6 +23,8 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
+        RetryWithSyncVersion = Settings.ForceSyncVersion;
+        UsedSyncVersion = Settings.ForceSyncVersion;
         DoRequest(TopicPaths);
     }
 
@@ -44,7 +46,9 @@ public:
         };
 
         for (const auto& topic : topicPath) {
-            addEntry(topic);
+            auto normalizedPath = NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
+            PathToOriginalPath[normalizedPath] = topic;
+            addEntry(normalizedPath);
         }
 
         Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeRequest.release()));
@@ -59,8 +63,9 @@ public:
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
             const auto& entry = result->ResultSet[i];
             auto realPath = CanonizePath(NKikimr::JoinPath(entry.Path));
+            Y_ASSERT(PathToOriginalPath.contains(realPath));
+            auto originalPath = PathToOriginalPath[realPath];
 
-            auto originalPath = realPath;
             auto it = CDCPaths.find(realPath);
             if (it != CDCPaths.end()) {
                 originalPath = it->second;
@@ -82,7 +87,7 @@ public:
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                         LOG_D("Path '" << realPath << "' is a CDC");
-                        CDCPaths[TStringBuilder() << originalPath << "/streamImpl"] = originalPath;
+                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = originalPath;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
@@ -97,15 +102,18 @@ public:
                             if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
                                 LOG_D("Path '" << realPath << "' UNAUTHORIZED");
                                 Result[originalPath] = TTopicInfo{
-                                    .Status = EStatus::UNAUTHORIZED
+                                    .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
+                                            ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
                                 };
                             } else {
                                 LOG_D("Path '" << realPath << "' SUCCESS");
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
+                                    .CdcStream = CDCPaths.contains(realPath),
                                     .CreateStep = entry.CreateStep,
                                     .Info = entry.PQGroupInfo,
+                                    .Self = entry.Self,
                                     .SecurityObject = entry.SecurityObject
                                 };
                             }
@@ -172,6 +180,8 @@ private:
     const TString DatabasePath;
     const std::unordered_set<TString> TopicPaths;
     const TDescribeSettings Settings;
+    // normalized path -> original path
+    std::unordered_map<TString, TString> PathToOriginalPath;
 
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
@@ -195,6 +205,7 @@ Ydb::StatusIds::StatusCode Convert(const EStatus status) {
         case EStatus::NOT_TOPIC:
             return Ydb::StatusIds::NOT_FOUND;
         case EStatus::UNAUTHORIZED:
+        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
             return Ydb::StatusIds::UNAUTHORIZED;
         case EStatus::UNKNOWN_ERROR:
             return Ydb::StatusIds::INTERNAL_ERROR;
@@ -207,7 +218,9 @@ TString Description(const TString& topicPath, const EStatus status) {
             return TStringBuilder() << "The topic '" << topicPath << "' has been successfully described";
         case EStatus::NOT_FOUND:
         case EStatus::UNAUTHORIZED:
-            return TStringBuilder() << "You do not have access or the '" << topicPath << "' does not exist";
+            return TStringBuilder() << "You do not have access permissions or the '" << topicPath << "' does not exist";
+        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+            return TStringBuilder() << "You do not have access permissions to the '" << topicPath << "' topic";
         case EStatus::NOT_TOPIC:
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
         case EStatus::UNKNOWN_ERROR:

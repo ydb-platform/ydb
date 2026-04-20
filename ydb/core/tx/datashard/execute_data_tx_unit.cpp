@@ -77,7 +77,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx, tx->GetUserSID())) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx, tx->GetUserCtx())) {
             case ERestoreDataStatus::Ok:
                 break;
 

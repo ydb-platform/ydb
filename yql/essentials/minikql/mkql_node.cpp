@@ -1022,7 +1022,7 @@ TNode* TListLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     }
 
     TRuntimeNode* allocatedItems = nullptr;
-    if (newList.size()) {
+    if (!newList.empty()) {
         allocatedItems = static_cast<TRuntimeNode*>(env.AllocateBuffer(newList.size() * sizeof(*allocatedItems)));
         for (ui32 i = 0; i < newList.size(); ++i) {
             allocatedItems[i] = newList[i];
@@ -1602,7 +1602,8 @@ bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ign
         return false;
     }
 
-    TCallablePayload parsedPayload(Payload_), parsedPayloadToCompare(typeToCompare.Payload_);
+    TCallablePayload parsedPayload(Payload_);
+    TCallablePayload parsedPayloadToCompare(typeToCompare.Payload_);
     for (size_t index = 0; index < typeToCompare.ArgumentsCount_; ++index) {
         if (parsedPayload.GetArgumentName(index) != parsedPayloadToCompare.GetArgumentName(index)) {
             return false;

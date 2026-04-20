@@ -3,7 +3,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -180,12 +179,7 @@ public:
         return DoIsOverloaded();
     }
 
-    ui64 GetBadPortionsLimit() const {
-        if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
-            return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();
-        }
-        return 2 * GetNodePortionsCountLimit();
-    }
+    ui64 GetBadPortionsLimit() const;
 
     ui64 GetNodePortionsCountLimit() const {
         return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
@@ -314,9 +308,7 @@ public:
         return NodePortionsCountLimit;
     }
 
-    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
-    }
+    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault();
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
         auto result = TFactory::MakeHolder(defaultCompactionName);

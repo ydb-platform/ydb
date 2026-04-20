@@ -1,3 +1,12 @@
+
+## 2.31.0 ##
+
+* Added the `--no-producer-id-track` option to `ydb workload topic run write|full` to disable ProducerId tracking in transactions when using `--use-tx`.
+* Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
+
+## 2.30.0 ##
+
+* Added the `direct-read` option to the `ydb workload topic` command
 * Added the `ydb config completion` command to generate shell completion scripts for bash and zsh.
 * Added the `ydb export nfs` and `ydb import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
 * Added `--compact` option to `ydb workload tpcc import` command.

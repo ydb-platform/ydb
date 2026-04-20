@@ -224,14 +224,6 @@ public:
         }
     }
 
-    void FreeExecutionUnits(ui32 cnt) {
-        if (cnt == 0) {
-            return;
-        }
-
-        ExecutionUnitsResource.fetch_add(cnt);
-    }
-
     TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) override
     {
         const ui64 txId = tx->TxId;
@@ -247,28 +239,29 @@ public:
             }
         }
 
+        if (resources.ExternalMemory) {
+            ExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
+        }
+
+        if (Y_UNLIKELY(resources.Memory == 0)) {
+            tx->Allocated(task, resources);
+            return result;
+        }
+
         Y_DEFER {
             if (!result) {
                 if (resources.ExecutionUnits) {
-                    FreeExecutionUnits(resources.ExecutionUnits);
+                    // return allocated resource to free pool
+                    ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
+                }
+                if (resources.ExternalMemory) {
+                    // decrease amount of external memory allocated
+                    ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
                 }
             }
         };
 
-        if (Y_UNLIKELY(resources.Memory == 0)) {
-            return result;
-        }
-
         bool hasScanQueryMemory = true;
-
-        bool isFirstAllocationRequest = (resources.ExecutionUnits > 0 && resources.MemoryPool == EKqpMemoryPool::DataQuery);
-        if (isFirstAllocationRequest) {
-            TKqpResourcesRequest newRequest = resources;
-            newRequest.MoveToFreeTier();
-            tx->Allocated(task, newRequest);
-            ExternalDataQueryMemory.fetch_add(newRequest.ExternalMemory);
-            return result;
-        }
 
         with_lock (Lock) {
             if (Y_UNLIKELY(!ResourceBroker)) {
@@ -364,7 +357,7 @@ public:
 
     void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) override {
         if (resources.ExecutionUnits) {
-            FreeExecutionUnits(resources.ExecutionUnits);
+            ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
         }
 
         Y_ABORT_UNLESS(resources.Memory <= task->ScanQueryMemory);
@@ -439,11 +432,11 @@ public:
 
     TKqpLocalNodeResources GetLocalResources() const override {
         TKqpLocalNodeResources result;
-        result.Memory.fill(0);
 
         with_lock (Lock) {
             result.ExecutionUnits = ExecutionUnitsResource.load();
-            result.Memory[EKqpMemoryPool::ScanQuery] = TotalMemoryResource->Available();
+            result.Memory = TotalMemoryResource->Available();
+            result.ExternalMemory = ExternalDataQueryMemory.load();
         }
 
         return result;
@@ -963,7 +956,7 @@ private:
             payload.SetUsedMemory(0);
             payload.SetExecutionUnits(0);
             auto* pool = payload.MutableMemory()->Add();
-            pool->SetPool(EKqpMemoryPool::ScanQuery);
+            pool->SetPool(1); // legacy ScanQuery pool id
             pool->SetAvailable(0);
         } else {
             with_lock (ResourceManager->Lock) {
@@ -973,7 +966,7 @@ private:
 
                 payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
                 auto* pool = payload.MutableMemory()->Add();
-                pool->SetPool(EKqpMemoryPool::ScanQuery);
+                pool->SetPool(1); // legacy ScanQuery pool id
                 pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
             }
         }

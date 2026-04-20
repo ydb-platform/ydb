@@ -12,9 +12,7 @@ pkgs: attrs: with pkgs; with attrs; rec {
     fetchSubmodules = true;
   };
 
-  patches = [
-    ./unversion-protoc.patch
-  ];
+  patches = [];
 
   buildInputs = [
     # FIXME: import protobuf against abseil-cpp from buildInputs

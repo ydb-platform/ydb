@@ -578,6 +578,11 @@ namespace NKikimr::NBsController {
             for (auto&& [base, overlay] : state.PDisks.Diff()) {
                 if (!overlay->second) {
                     db.Table<Schema::PDiskMetrics>().Key(overlay->first.GetKey()).Delete();
+                } else if (!base) {
+                    Y_ABORT_UNLESS(overlay->second);
+                    if (const auto& m = overlay->second->PersistedMetrics; m.ByteSizeLong()) {
+                        db.Table<Schema::PDiskMetrics>().Key(overlay->first.GetKey()).Update<Schema::PDiskMetrics::Metrics>(m);
+                    }
                 }
             }
 
@@ -1150,6 +1155,7 @@ namespace NKikimr::NBsController {
             pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);
             pb->MutablePDiskMetrics()->ClearPDiskId();
+            pb->MutablePDiskMetrics()->SetUpdateTimestamp(pdisk.MetricsUpdateTimestamp.GetValue());
             pb->SetExpectedSerial(pdisk.ExpectedSerial);
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);

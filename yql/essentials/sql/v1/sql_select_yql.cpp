@@ -189,7 +189,7 @@ private:
             case TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
                 return true;
             case TRule_select_kind_parenthesis::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -261,7 +261,7 @@ private:
             case TRule_select_or_expr::kAltSelectOrExpr2:
                 return Unsupported("tuple_or_expr at UNION/EXCEPT/INTERSECT context");
             case TRule_select_or_expr::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -272,7 +272,7 @@ private:
             case TRule_exists_expr_TBlock3::kAlt2:
                 return Build(block.GetAlt2().GetRule_values_stmt1());
             case TRule_exists_expr_TBlock3::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -291,7 +291,7 @@ private:
                 return Build(alt, state, smartParenthesis);
             }
             case TRule_select_or_expr::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -340,7 +340,7 @@ private:
             case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt3:
                 return Build(block.GetAlt3().GetRule_select_core1(), std::move(select));
             case NSQLv1Generated::TRule_select_kind_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -499,7 +499,7 @@ private:
             case NSQLv1Generated::TRule_result_column::kAltResultColumn2:
                 return Build(rule.GetAlt_result_column2());
             case NSQLv1Generated::TRule_result_column::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -611,7 +611,7 @@ private:
             case TRule_join_op::kAltJoinOp2:
                 return Build(rule.GetAlt_join_op2());
             case TRule_join_op::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -633,7 +633,7 @@ private:
                 YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), CROSS));
                 return EYqlJoinKind::Cross;
             case TRule_join_op_TAlt2_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         const auto& alt1 = block.GetAlt1();
@@ -667,7 +667,7 @@ private:
                     YQL_ENSURE(IS_TOKEN(block.GetAlt4().GetToken1().GetId(), FULL));
                     return Unsupported("FULL");
                 case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
         }
 
@@ -686,7 +686,7 @@ private:
             case TRule_join_constraint::kAltJoinConstraint2:
                 return Unsupported("USING pure_column_or_named_list");
             case TRule_join_constraint::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -756,7 +756,7 @@ private:
             case NSQLv1Generated::TRule_single_source::kAltSingleSource3:
                 return Build(rule.GetAlt_single_source3().GetRule_values_stmt2());
             case NSQLv1Generated::TRule_single_source::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -809,7 +809,7 @@ private:
                     isAnonymous,
                     isClusterExplicit);
             case TRule_table_ref_TBlock3::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -942,7 +942,7 @@ private:
             case TRule_grouping_element::kAltGroupingElement5:
                 return Unsupported("hopping_window_specification");
             case TRule_grouping_element::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -1110,7 +1110,7 @@ private:
         }
 
         bool isAscending;
-        if (direction == "") {
+        if (direction.empty()) {
             isAscending = true;
         } else if (direction == "asc") {
             isAscending = true;
@@ -1158,7 +1158,7 @@ private:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             }
             case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -1178,7 +1178,7 @@ private:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             }
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -1314,7 +1314,7 @@ NYql::TLangVersion YqlSelectLangVersion() {
 }
 
 std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf message) {
-    if (ctx.GetYqlSelectMode() == EYqlSelectMode::Force) {
+    if (ctx.GetYqlSelectMode() == EYqlSelect::Force) {
         ctx.Error() << "YqlSelect unsupported: " << message;
     }
 

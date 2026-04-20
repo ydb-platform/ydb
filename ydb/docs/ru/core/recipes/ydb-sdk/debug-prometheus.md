@@ -87,10 +87,26 @@
 
 - Java
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

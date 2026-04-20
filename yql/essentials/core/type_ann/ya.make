@@ -29,12 +29,14 @@ PEERDIR(
     yql/essentials/core/issue
     yql/essentials/core/issue/protos
     yql/essentials/core/sql_types
+    yql/essentials/core/poly_args
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/common/provider
     yql/essentials/parser/pg_catalog
     yql/essentials/core/sql_types
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/langver
+    yql/essentials/public/udf_meta
     library/cpp/yson/node
 )
 

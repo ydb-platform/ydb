@@ -24,9 +24,12 @@ public:
    * Construct a new indexer for a given scale.
    */
   explicit Base2ExponentialHistogramIndexer(int32_t scale = 0);
-  Base2ExponentialHistogramIndexer(const Base2ExponentialHistogramIndexer &other) = default;
-  Base2ExponentialHistogramIndexer &operator=(const Base2ExponentialHistogramIndexer &other) =
-      default;
+
+  Base2ExponentialHistogramIndexer(const Base2ExponentialHistogramIndexer &)            = default;
+  Base2ExponentialHistogramIndexer(Base2ExponentialHistogramIndexer &&)                 = default;
+  Base2ExponentialHistogramIndexer &operator=(const Base2ExponentialHistogramIndexer &) = default;
+  Base2ExponentialHistogramIndexer &operator=(Base2ExponentialHistogramIndexer &&)      = default;
+  ~Base2ExponentialHistogramIndexer()                                                   = default;
 
   /**
    * Compute the index for the given value.

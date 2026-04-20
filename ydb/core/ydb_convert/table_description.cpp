@@ -4,8 +4,11 @@
 #include "ydb_convert.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
@@ -105,6 +108,33 @@ std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) 
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 
+bool ValidateRenameIndexRequest(
+    const Ydb::Table::RenameIndexItem& rename,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error
+) {
+    if (rename.source_name().empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Source index name must not be empty";
+        return false;
+    }
+
+    if (rename.destination_name().empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Destination index name must not be empty";
+        return false;
+    }
+
+    if (rename.source_name() == rename.destination_name()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Source and destination index names must differ";
+        return false;
+    }
+
+    return true;
+}
+
+
 }
 
 
@@ -176,6 +206,68 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     tableIndex->CopyFrom(req->add_indexes(0));
 
     return true;
+}
+
+// For DataShard LocalBloomFilter: converts ADD INDEX ... LOCAL USING bloom_filter into
+// ESchemeOpAlterTable that sets ByKeyFilterPrefixes in the partition config.
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    std::pair<TString, TString> pathPair;
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(path);
+    } catch (const std::exception&) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid table path";
+        return false;
+    }
+
+    modifyScheme->SetWorkingDir(pathPair.first);
+    modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+    auto* tableDesc = modifyScheme->MutableAlterTable();
+    tableDesc->SetName(pathPair.second);
+
+    // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
+    // When duplicated, the last FPP wins.
+    TMap<ui32, double> bloomPrefixes;
+    for (const auto& index : req->add_indexes()) {
+        if (index.type_case() != Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+            continue;
+        }
+        if (index.index_columns().empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "Bloom filter index must specify at least one column";
+            return false;
+        }
+        ui32 prefixLen = static_cast<ui32>(index.index_columns_size());
+        double fpp = NTable::DefaultBloomFilterFpp;
+        if (index.local_bloom_filter_index().has_false_positive_probability()) {
+            fpp = index.local_bloom_filter_index().false_positive_probability();
+            if (fpp <= 0.0 || fpp >= 1.0) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "false_positive_probability must be in range (0, 1)";
+                return false;
+            }
+        }
+        bloomPrefixes[prefixLen] = fpp;
+    }
+
+    for (const auto& [prefix, fpp] : bloomPrefixes) {
+        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(prefix);
+        entry->SetFalsePositiveProbability(fpp);
+    }
+
+    return true;
+}
+
+bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
@@ -1130,10 +1222,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 upsert->SetClassName("BLOOM_FILTER");
                 auto* bloom = upsert->MutableBloomFilter();
-                if (index.local_bloom_filter_index().has_false_positive_probability()) {
-                    bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
-                }
-
+                const auto& bloomSettings = index.local_bloom_filter_index();
+                const double bloomFpp = bloomSettings.has_false_positive_probability()
+                    ? bloomSettings.false_positive_probability()
+                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
+                bloom->SetFalsePositiveProbability(bloomFpp);
                 bloom->AddColumnNames(index.index_columns(0));
                 break;
             }
@@ -1146,11 +1239,16 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = upsert->MutableBloomNGrammFilter();
-                ngram->SetNGrammSize(index.local_bloom_ngram_filter_index().ngram_size());
-                ngram->SetHashesCount(index.local_bloom_ngram_filter_index().hashes_count());
-                ngram->SetFilterSizeBytes(index.local_bloom_ngram_filter_index().filter_size_bytes());
-                ngram->SetRecordsCount(index.local_bloom_ngram_filter_index().records_count());
-                ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().case_sensitive());
+                const auto& ngramSettings = index.local_bloom_ngram_filter_index();
+                const double fpp = ngramSettings.has_false_positive_probability()
+                    ? ngramSettings.false_positive_probability()
+                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
+                ngram->SetNGrammSize(ngramSettings.ngram_size() ? ngramSettings.ngram_size() : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize);
+                ngram->SetCaseSensitive(ngramSettings.has_case_sensitive() ? ngramSettings.case_sensitive() : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
+                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                ngram->SetFalsePositiveProbability(fpp);
                 ngram->SetColumnName(index.index_columns(0));
                 break;
             }
@@ -1159,6 +1257,19 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = "Only local bloom indexes are supported for column tables";
                 return false;
         }
+    } else if (OpType == EAlterOperationKind::RenameIndex) {
+        const auto& rename = req->rename_indexes(0);
+        if (!ValidateRenameIndexRequest(rename, status, error)) {
+            return false;
+        }
+
+        auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+        auto* renameIndex = alterColumnTable->MutableAlterSchema()->AddMoveIndex();
+        renameIndex->SetSourceName(rename.source_name());
+        renameIndex->SetDestinationName(rename.destination_name());
+        renameIndex->SetReplaceDestination(rename.replace_destination());
     } else if (OpType == EAlterOperationKind::DropIndex) {
         if (req->drop_indexes_size() != 1) {
             status = Ydb::StatusIds::UNSUPPORTED;
@@ -1422,6 +1533,32 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             index->set_size_bytes(tableIndex.GetDataSize());
         }
     }
+
+    // Synthesize LocalBloomFilter index entries for DataShard tables.
+    // ByKeyFilterPrefixes stores prefix lengths + FPP. Names are generated
+    // as "idx_bloom_<prefixLen>".
+    if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
+        const auto& pkCols = in.GetKeyColumnNames();
+        for (const auto& bloomPrefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
+            ui32 prefix = bloomPrefix.GetPrefixLength();
+            if (prefix == 0 || static_cast<int>(prefix) > pkCols.size()) {
+                continue;
+            }
+            auto index = out.add_indexes();
+            index->set_name(TStringBuilder() << "idx_bloom_" << prefix);
+            for (ui32 i = 0; i < prefix; ++i) {
+                index->add_index_columns(pkCols[i]);
+            }
+            auto* bloomFilter = index->mutable_local_bloom_filter_index();
+            if (bloomPrefix.HasFalsePositiveProbability() &&
+                bloomPrefix.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
+                bloomFilter->set_false_positive_probability(bloomPrefix.GetFalsePositiveProbability());
+            }
+            if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
+                index->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+            }
+        }
+    }
 }
 
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
@@ -1445,6 +1582,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
     for (const auto& index : in.indexes()) {
         auto indexDesc = out.MutableIndexDescription()->Add();
+
+        if (index.name().empty()) {
+            return returnError(Ydb::StatusIds::BAD_REQUEST, "Index must have a name");
+        }
 
         if (!index.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Data column feature is not supported yet");
@@ -1532,6 +1673,7 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
     out.set_schema_changes(in.GetSchemaChanges());
     out.set_user_sids(in.GetUserSIDs());
+    out.set_trace_ids(in.GetTraceIds());
     out.set_aws_region(in.GetAwsRegion());
 
     if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
@@ -1600,6 +1742,7 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     out.SetSchemaChanges(in.schema_changes());
     out.SetAwsRegion(in.aws_region());
     out.SetUserSIDs(in.user_sids());
+    out.SetTraceIds(in.trace_ids());
 
     if (in.has_resolved_timestamps_interval()) {
         out.SetResolvedTimestampsIntervalMs(TDuration::Seconds(in.resolved_timestamps_interval().seconds()).MilliSeconds());

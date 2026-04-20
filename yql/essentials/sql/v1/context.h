@@ -89,11 +89,7 @@ enum class EColumnRefState {
     MatchRecognizeDefineAggregate,
 };
 
-enum class EYqlSelectMode {
-    Disable,
-    Auto,
-    Force,
-};
+using NSQLTranslation::EYqlSelect;
 
 enum class EFlattenAndAggrExprsPersistence {
     Disable,
@@ -276,13 +272,13 @@ public:
 
     TScopedStatePtr CreateScopedState() const;
 
-    EYqlSelectMode GetYqlSelectMode() const {
+    EYqlSelect GetYqlSelectMode() const {
         return YqlSelectMode_;
     }
 
-    void SetYqlSelectMode(EYqlSelectMode mode) {
+    void SetYqlSelectMode(EYqlSelect mode) {
         YqlSelectMode_ = mode;
-        if (YqlSelectMode_ != EYqlSelectMode::Disable) {
+        if (YqlSelectMode_ != EYqlSelect::Disable) {
             DeriveColumnOrder = true;
         }
     }
@@ -290,6 +286,11 @@ public:
     bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
 
     bool EnsureBackwardCompatibleFeatureAvailable(
+        TPosition position,
+        TStringBuf feature,
+        NYql::TLangVersion version);
+
+    bool EnsureFeatureNotExpired(
         TPosition position,
         TStringBuf feature,
         NYql::TLangVersion version);
@@ -329,7 +330,7 @@ private:
     TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations_;
     TString NoColumnErrorContext_ = "in current scope";
     TVector<TBlocks*> CurrentBlocks_;
-    EYqlSelectMode YqlSelectMode_ = EYqlSelectMode::Disable;
+    EYqlSelect YqlSelectMode_ = EYqlSelect::Disable;
 
 public:
     THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
@@ -528,14 +529,8 @@ public:
         AltNotImplemented(ruleName, node.Alt_case(), node, TNode::descriptor());
     }
 
-    template <typename TNode>
-    TString AltDescription(const TNode& node) const {
-        return AltDescription(node, node.Alt_case(), TNode::descriptor());
-    }
-
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
-    TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
 
 protected:
     TContext& Ctx_;

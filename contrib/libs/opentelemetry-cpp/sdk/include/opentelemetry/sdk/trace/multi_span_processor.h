@@ -40,6 +40,11 @@ public:
     }
   }
 
+  MultiSpanProcessor(const MultiSpanProcessor &)            = delete;
+  MultiSpanProcessor(MultiSpanProcessor &&)                 = delete;
+  MultiSpanProcessor &operator=(const MultiSpanProcessor &) = delete;
+  MultiSpanProcessor &operator=(MultiSpanProcessor &&)      = delete;
+
   void AddProcessor(std::unique_ptr<SpanProcessor> &&processor)
   {
     // Add preocessor to end of the list.

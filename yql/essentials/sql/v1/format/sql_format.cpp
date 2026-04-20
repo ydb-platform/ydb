@@ -1,5 +1,6 @@
 #include "sql_format.h"
 
+#include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 
 #include <yql/essentials/parser/lexer_common/lexer.h>
@@ -857,7 +858,7 @@ private:
                 break;
             }
             case TRule_value_constructor::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -2898,7 +2899,7 @@ private:
                 VisitKeyword(msg.GetAlt_ttl_tier_action2().GetToken1());
                 break;
             case TRule_ttl_tier_action::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -3386,7 +3387,8 @@ public:
             }
 
             TVector<NSQLTranslation::TParsedToken> comments;
-            TParsedTokenList parsedTokens, stmtTokens;
+            TParsedTokenList parsedTokens;
+            TParsedTokenList stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
@@ -3401,8 +3403,8 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
-            if (!message) {
+            google::protobuf::Message* message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            if (!message || IsEmptyQuery(message)) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
                     finalFormattedQuery << "\n";
@@ -3469,6 +3471,10 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
         throw yexception() << issues.ToString();
+    }
+
+    if (parsedSettings.PgParser) {
+        return query;
     }
 
     auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);

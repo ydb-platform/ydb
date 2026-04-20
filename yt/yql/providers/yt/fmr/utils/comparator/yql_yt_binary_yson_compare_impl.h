@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <util/generic/strbuf.h>
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/yson/zigzag.h>
@@ -24,22 +25,10 @@ struct TExtractedKey {
 
 int CompareExtractedKeys(const TExtractedKey& lhs, const TExtractedKey& rhs);
 
-struct TColumnOffsetRange {
-    ui64 StartOffset = 0;
-    ui64 EndOffset = 0;
-
-    bool IsValid() const {
-        return EndOffset > StartOffset;
-    }
-};
-
 enum class ESortOrder {
     Ascending = 0,
     Descending = 1
 };
-
-// Row markup: key columns ranges + last range is full row boundary [rowStart,rowEnd).
-using TRowIndexMarkup = std::vector<TColumnOffsetRange>;
 
 struct TYsonReader {
     TStringBuf Data;

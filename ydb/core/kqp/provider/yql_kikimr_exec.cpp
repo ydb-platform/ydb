@@ -20,6 +20,8 @@
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -445,7 +447,12 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
         TSecretSettings settings;
         settings.Name = TString(createSecret.Secret());
-        settings.Value = TString(createSecret.Value());
+        if (auto value = TString(createSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(createSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
+        }
         settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
         return settings;
     }
@@ -453,7 +460,12 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiAlterSecret alterSecret) {
         TSecretSettings settings;
         settings.Name = TString(alterSecret.Secret());
-        settings.Value = TString(alterSecret.Value());
+        if (auto value = TString(alterSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(alterSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
+        }
         return settings;
     }
 
@@ -2360,8 +2372,7 @@ public:
                                     return SyncError();
                                 }
 
-                                auto* ngramIndex = add_index->mutable_local_bloom_ngram_filter_index();
-                                ngramIndex->set_case_sensitive(true);
+                                add_index->mutable_local_bloom_ngram_filter_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2457,17 +2468,21 @@ public:
                                 }
                             }
 
-                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex && localBloomFilterDesc.FalsePositiveProbability) {
-                                add_index->mutable_local_bloom_filter_index()->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+                                auto* proto = add_index->mutable_local_bloom_filter_index();
+                                const double fpp = localBloomFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                                proto->set_false_positive_probability(fpp);
                             }
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
                                 auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
-                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
-                                proto->set_hashes_count(localBloomNgramFilterDesc.HashesCount);
-                                proto->set_filter_size_bytes(localBloomNgramFilterDesc.FilterSizeBytes);
-                                proto->set_records_count(localBloomNgramFilterDesc.RecordsCount);
-                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
+                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
+                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
+                                const double fpp = localBloomNgramFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                                proto->set_hashes_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                                proto->set_filter_size_bytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                                proto->set_records_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                                proto->set_false_positive_probability(fpp);
                             }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
@@ -2516,24 +2531,35 @@ public:
                             break;
                         }
                         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
-                            if (table.Metadata->StoreType != EStoreType::Column) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom indexes are supported only for column tables"));
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    "Local bloom index does not support data columns"));
                                 return SyncError();
                             }
-
+                            if (table.Metadata->StoreType == EStoreType::Column) {
+                                if (add_index->index_columns().size() != 1) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                        "Local bloom index on column tables requires exactly one index column"));
+                                    return SyncError();
+                                }
+                            } else {
+                                // Row-store: columns must be a left-prefix of the primary key.
+                                const auto& pk = table.Metadata->KeyColumnNames;
+                                const auto& idxCols = add_index->index_columns();
+                                bool validPrefix = static_cast<size_t>(idxCols.size()) <= pk.size();
+                                for (int i = 0; validPrefix && i < idxCols.size(); ++i) {
+                                    validPrefix = (idxCols[i] == pk[i]);
+                                }
+                                if (!validPrefix) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                        "Bloom filter index columns must be a prefix of the primary key"));
+                                    return SyncError();
+                                }
+                            }
                             break;
                         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
                             if (table.Metadata->StoreType != EStoreType::Column) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local bloom ngram indexes are supported only for column tables"));
-                                return SyncError();
-                            }
-
-                            if (!add_index->local_bloom_ngram_filter_index().ngram_size() ||
-                                !add_index->local_bloom_ngram_filter_index().hashes_count() ||
-                                !add_index->local_bloom_ngram_filter_index().filter_size_bytes() ||
-                                !add_index->local_bloom_ngram_filter_index().records_count()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
-                                    "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
                                 return SyncError();
                             }
 
@@ -2671,6 +2697,12 @@ public:
                                     );
 
                                     add_changefeed->set_user_sids(FromString<bool>(to_lower(value)));
+                                } else if (name == "trace_ids") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_trace_ids(FromString<bool>(to_lower(value)));
                                 } else if (name == "virtual_timestamps") {
                                     auto value = TString(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()

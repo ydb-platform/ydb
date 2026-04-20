@@ -17,7 +17,7 @@ class TestYtReading:
         result = kqp_run.yql_exec(verbose=True)
 
         plan = json.loads(result.plan)
-        assert plan['Plan']['Plans'][0]['Plans'][0]['Plans'][0]['Plans'][0]['Stats']['Tasks'] == 2
+        assert plan['Plan']['Plans'][0]['Plans'][0]['Plans'][0]['Plans'][0]['Stats']['Tasks'] == 1
 
     def test_block_reading(self, kqp_run: KqpRun):
         add_sample_table(kqp_run, infer_schema=False)

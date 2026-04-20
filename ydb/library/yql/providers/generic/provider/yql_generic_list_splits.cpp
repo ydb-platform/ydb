@@ -321,7 +321,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
 
         Y_ENSURE(!result->Splits.empty());
 
-        if (auto issue = State_->AttachSplitsToTable(tableAddress, selectKey, result->Splits); issue) {
+        if (auto issue = State_->AttachSplitsToTable(tableAddress, selectKey, std::move(result->Splits)); issue) {
             ctx.AddError(*issue);
             return TStatus::Error;
         }

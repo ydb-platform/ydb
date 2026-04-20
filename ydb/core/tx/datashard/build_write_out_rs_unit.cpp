@@ -5,8 +5,6 @@
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -74,7 +72,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
 
     try {
         const auto& kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{};
-        KqpFillOutReadSets(op->OutReadSets(), kqpLocks, true, nullptr, DataShard.SysLocksTable(), tabletId);
+        KqpFillOutReadSets(op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), tabletId);
     } catch (const TNotReadyTabletException&) {
         LOG_C("Unexpected TNotReadyTabletException exception at build out rs");
         return OnTabletNotReady(*writeOp, txc, ctx);

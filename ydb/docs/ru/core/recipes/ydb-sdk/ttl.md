@@ -40,6 +40,14 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
   ```java
@@ -87,6 +95,14 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
   ```java
@@ -131,17 +147,25 @@
 
 {% endif %}
 
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Go
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -194,6 +218,14 @@
   )
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
   ```java
@@ -243,6 +275,14 @@
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
   ```java
@@ -288,6 +328,14 @@
   ttl = desc.ttl_settings
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
   ```java
@@ -296,3 +344,4 @@
 
 {% endlist %}
 
+{% endlist %}

@@ -1,0 +1,10 @@
+/* custom error: user message */
+define subquery $sub() as 
+   select 1 || 2;
+end define;
+
+$sub = ($world)->{
+   return WithIssue($sub($world), "foo_file", 10, 20, "user message")
+};
+
+process $sub();

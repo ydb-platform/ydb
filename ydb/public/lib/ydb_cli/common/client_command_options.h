@@ -367,7 +367,7 @@ public:
         : Opt(std::move(opt))
         , ValueSource(valueSource)
     {
-        OptValues.emplace_back(std::move(value));
+        OptValues.emplace_back(value);
     }
 
     EOptionValueSource GetValueSource() const {

@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -76,8 +77,8 @@ message ImportFromS3Settings {
     string endpoint = 1 [(required) = true];
     Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
+    string access_key = 4 [(required) = true, (Ydb.sensitive) = true];
+    string secret_key = 5 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 6; // Empty collection means import of all export objects
     string description = 7 [(length).le = 128];
     uint32 number_of_retries = 8;
@@ -238,8 +239,8 @@ message ListObjectsInS3ExportSettings {
     string endpoint = 1 [(required) = true];
     ImportFromS3Settings.Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
+    string access_key = 4 [(required) = true, (Ydb.sensitive) = true];
+    string secret_key = 5 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 6;
     uint32 number_of_retries = 7;
 

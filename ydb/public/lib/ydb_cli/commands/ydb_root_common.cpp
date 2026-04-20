@@ -203,6 +203,7 @@ int TClientCommandRootCommon::Process(TConfig& config) {
         try {
             TClientCommand::Prepare(config);
             ExtractParams(config);
+            config.BuildInfoCommandTag = "completion-scheme";
             TDriver driver(config.CreateDriverConfig());
             RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
             driver.Stop(true);
@@ -285,6 +286,8 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     for (const auto& profile : Settings.AiPredefinedProfiles) {
         config.AiPredefinedProfiles.push_back({profile.Name, profile.ApiType, profile.ApiEndpoint, profile.ModelName});
     }
+
+    config.BuildInfoProvider = Settings.BuildInfoProvider;
 
     SetCredentialsGetter(config);
 }

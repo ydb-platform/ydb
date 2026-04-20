@@ -1,30 +1,30 @@
-# Import and export for column tables
+# Import and export of data to column tables
 
-{{ ydb-short-name }} column tables currently do not have a built-in backup and restore mechanism (it is in development). For data migration or recovery after failures, use export and import operations.
+Column tables in {{ ydb-short-name }} currently do not have a built-in backup and restore mechanism (it is in development). For data migration or recovery after failures, use export and import operations.
 
 Two main approaches are available:
 
 1. [Export and import via federated queries](#objstorage) to object storage (for example, {{ objstorage-name }} or any other S3-compatible storage).
-**Advantages:** Uses built-in YDB functionality; no third-party services or tools required.
-**Limitations:** This method only supports exporting data to object storage.
+**Advantages**: Uses built-in YDB functionality; no third-party services or tools required.
+**Limitations**: This method only allows exporting data to object storage.
 
-2. [Export and import via Apache Spark™](#spark) — a flexible option for large volumes of data.
-**Advantages:** Supports a wide range of target storage systems.
-**Limitations:** Requires installing and configuring additional software (Apache Spark™).
+2. [Export and import via Apache Spark™](#spark) — a flexible approach for working with large volumes of data.
+**Advantages**: Support for a wide range of target storage systems.
+**Limitations**: Requires installation and configuration of additional software (Apache Spark™).
 
 ## Export and import via federated queries to {{ objstorage-name }} {#objstorage}
 
-[Federated queries](../concepts/federated_query/index.md) let {{ ydb-short-name }} read and write data in Parquet or CSV files directly. This approach is convenient for export and import using SQL only, without external tools.
+[Federated queries](../concepts/query_execution/federated_query/index.md) let {{ ydb-short-name }} read and write data directly in Parquet or CSV files. This method is convenient for running export and import operations using SQL only, without external tools.
 
 ### Prerequisites
 
-- Object storage ({{ objstorage-name }}) and a static access key; for example, [{{ objstorage-full-name }}](https://yandex.cloud/docs/en/storage/) with a pre-created bucket (e.g. `your-bucket`).
-- Network access from the {{ ydb-short-name }} cluster nodes to the object storage. The examples use endpoint `storage.yandexcloud.net` — ensure access on port 443.
-- The examples use TPC-H benchmark data. Instructions for loading the sample data are in the [relevant section](../reference/ydb-cli/workload-tpch.md) of the guide.
+- Object storage ({{ objstorage-name }}) and a static access key, for example [{{ objstorage-full-name }}](https://yandex.cloud/en/docs/storage/) with a pre-created bucket (for example, `your-bucket`).
+- Network access from {{ ydb-short-name }} cluster nodes to the object storage. The example uses endpoint `storage.yandexcloud.net` — ensure access to it on port 443.
+- The examples use TPC-H benchmark data. Instructions for loading test data are in the corresponding [section](../reference/ydb-cli/workload-tpch.md) of the guide.
 
 ### Create a secret for access to {{ objstorage-name }}
 
-To connect to a private bucket, use static access key authentication. In {{ ydb-short-name }}, these keys are stored as [secrets](../concepts/datamodel/secrets.md).
+To connect to a private bucket, use authentication with static access keys. In {{ ydb-short-name }}, these keys are stored as [secrets](../concepts/datamodel/secrets.md).
 
 ```sql
 CREATE SECRET aws_access_id WITH (value='<access_key_id>');
@@ -40,7 +40,7 @@ Where:
 
 ### Configuring the connection
 
-Next, configure the connection to the bucket by creating an external data source and an external table with a schema that matches `lineitem`.
+Next, configure the connection to the bucket by creating an external data source and an external table with a schema identical to `lineitem`.
 
 ```sql
 -- Create a data source pointing to the bucket and using the secret
@@ -59,7 +59,7 @@ Where:
 - `external/backup_datasource` — name of the external data source being created.
 - `LOCATION` — bucket URL, including the bucket name `<bucket_name>`.
 - `AUTH_METHOD="AWS"` — authentication method compatible with the S3 API.
-- `AWS_ACCESS_KEY_ID_SECRET_PATH`, `AWS_SECRET_ACCESS_KEY_SECRET_PATH` — secrets used for authentication with {{ objstorage-name }}.
+- `AWS_ACCESS_KEY_ID_SECRET_PATH`, `AWS_SECRET_ACCESS_KEY_SECRET_PATH` — secrets used for authentication to {{ objstorage-name }}.
 
 ```sql
 -- Create an external table with the lineitem schema
@@ -90,7 +90,7 @@ CREATE EXTERNAL TABLE `external/backup/lineitem_sql` (
 Where:
 
 - `LOCATION` — path to the directory with data inside the bucket.
-- `DATA_SOURCE` — name of the `EXTERNAL DATA SOURCE` object that holds the connection parameters.
+- `DATA_SOURCE` — name of the `EXTERNAL DATA SOURCE` object that contains the connection parameters.
 - `external/backup/lineitem_sql` — full name of the external table being created.
 
 ### Exporting data from {{ ydb-short-name }}
@@ -108,7 +108,7 @@ After this query runs, Parquet files with the data will appear in bucket `your-b
 
 {% note info %}
 
-The INSERT command may fail if the table you are restoring into already has rows. In that case, clear the target table and run the INSERT again.
+The INSERT command may fail if the table you are restoring data into already contains rows. In that case, clear the target table and run the INSERT command again.
 
 {% endnote %}
 
@@ -119,7 +119,7 @@ INSERT INTO `tpch/s10/lineitem`
 SELECT * FROM `external/backup/lineitem_sql`;
 ```
 
-Here `tpch/s10/lineitem` is the target table in {{ ydb-short-name }} into which data will be loaded.
+Here `tpch/s10/lineitem` is the name of the target table in {{ ydb-short-name }} into which the data will be loaded.
 
 ## Export and import with Apache Spark™ {#spark}
 
@@ -129,23 +129,23 @@ Using the [connector](../integrations/ingestion/spark.md) for {{ ydb-short-name 
 
 - PySpark version 4.0.1 installed; see the [installation guide](https://spark.apache.org/docs/latest/api/python/getting_started/install.html).
 - A [gRPC endpoint](../concepts/connect.md#endpoint) for connecting to the {{ ydb-short-name }} database.
-- [Connection credentials](../reference/ydb-cli/connect.md#command-line-pars) for {{ ydb-short-name }} with read/write permissions.
-- Network access from the {{ ydb-short-name }} cluster nodes to the object storage. The examples use endpoint `storage.yandexcloud.net` — ensure access on port 443.
-- The examples use TPC-H benchmark data. Instructions for loading the sample data are in the [relevant section](../reference/ydb-cli/workload-tpch.md) of the guide.
+- [Access credentials](../reference/ydb-cli/connect.md#command-line-pars) for {{ ydb-short-name }} with read/write permissions.
+- Network access from {{ ydb-short-name }} cluster nodes to the object storage. The example uses endpoint `storage.yandexcloud.net` — ensure access to it on port 443.
+- The examples use TPC-H benchmark data. Instructions for loading test data are in the corresponding [section](../reference/ydb-cli/workload-tpch.md) of the guide.
 
 ### Exporting data from {{ ydb-short-name }} to Parquet
 
 Parameters used:
 
-- `spark.jars.packages` — Maven configuration that loads the {{ ydb-short-name }} Spark connector and other required components.
+- `spark.jars.packages` — Maven configuration parameter that loads the {{ ydb-short-name }} connector for Spark and other required components.
 - `S3_ENDPOINT` — endpoint of the S3-compatible storage (for {{ objstorage-full-name }} use `https://storage.yandexcloud.net`).
-- `S3_ACCESS_KEY` — static access key ID for S3.
-- `S3_SECRET_KEY` — secret part of the S3 access key.
-- `YDB_HOSTNAME` — gRPC endpoint host (e.g. `ydb.serverless.yandexcloud.net`).
-- `YDB_PORT` — gRPC endpoint port (e.g. `2135`).
-- `YDB_DATABASE_NAME` — path to your database (e.g. `/ru-central1/b1g.../etn...`).
-- `YDB_AUTH_TYPE` — authentication parameters for {{ ydb-short-name }}, as supported by the [Apache Spark driver](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
-- `YDB_SOURCE_TABLE` — path to the source table (e.g. `tpch/s1/lineitem`).
+- `S3_ACCESS_KEY` — static key ID for S3 access.
+- `S3_SECRET_KEY` — secret part of the key for S3 access.
+- `YDB_HOSTNAME` — gRPC endpoint host (for example, `ydb.serverless.yandexcloud.net`).
+- `YDB_PORT` — gRPC endpoint port (for example, `2135`).
+- `YDB_DATABASE_NAME` — path to your database (for example, `/ru-central1/b1g.../etn...`).
+- `YDB_AUTH_TYPE` — parameters for authentication to {{ ydb-short-name }}, supported by the [Apache Spark driver](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
+- `YDB_SOURCE_TABLE` — path to the source table in the source database (for example, `tpch/s1/lineitem`).
 
 ```python
 from pyspark.sql import SparkSession
@@ -198,15 +198,15 @@ spark.stop()
 
 ### Importing data from Parquet into {{ ydb-short-name }}
 
-- `spark.jars.packages` — Maven configuration that loads the {{ ydb-short-name }} Spark connector and other required components.
+- `spark.jars.packages` — Maven configuration parameter that loads the {{ ydb-short-name }} connector for Spark and other required components.
 - `S3_ENDPOINT` — endpoint of the S3-compatible storage (for {{ objstorage-full-name }} use `https://storage.yandexcloud.net`).
-- `S3_ACCESS_KEY` — static access key ID for S3.
-- `S3_SECRET_KEY` — secret part of the S3 access key.
-- `YDB_HOSTNAME` — gRPC endpoint host (e.g. `ydb.serverless.yandexcloud.net`).
-- `YDB_PORT` — gRPC endpoint port (e.g. `2135`).
-- `YDB_DATABASE_NAME` — path to your database (e.g. `/ru-central1/b1g.../etn...`).
-- `YDB_AUTH_TYPE` — authentication parameters for {{ ydb-short-name }}, as supported by the [Apache Spark driver](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
-- `YDB_TARGET_TABLE` — path to the target table (e.g. `tpch/s1/lineitem`).
+- `S3_ACCESS_KEY` — static key ID for S3 access.
+- `S3_SECRET_KEY` — secret part of the key for S3 access.
+- `YDB_HOSTNAME` — gRPC endpoint host (for example, `ydb.serverless.yandexcloud.net`).
+- `YDB_PORT` — gRPC endpoint port (for example, `2135`).
+- `YDB_DATABASE_NAME` — path to your database (for example, `/ru-central1/b1g.../etn...`).
+- `YDB_AUTH_TYPE` — parameters for authentication to {{ ydb-short-name }}, supported by the [Apache Spark driver](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
+- `YDB_TARGET_TABLE` — path to the table in the destination database (for example, `tpch/s1/lineitem`).
 
 ```python
 from pyspark.sql import SparkSession
@@ -244,7 +244,7 @@ spark = (SparkSession.builder
     .config("spark.hadoop.fs.s3a.retry.throttle.interval", "100")          # 100ms
     .getOrCreate())
 
-# Read data from Parquet files in S3 created during export
+# Read data from Parquet files in S3 created during the export step
 df = spark.read.parquet(f"s3a://{S3_BUCKET_NAME}/{S3_FOLDER_PATH}")
 
 # Write data to the target table

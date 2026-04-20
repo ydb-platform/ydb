@@ -1,5 +1,6 @@
 #include "py_test_engine.h"
 
+#include <yql/essentials/utils/yql_panic.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/strip.h>
 
@@ -93,7 +94,7 @@ Y_UNIT_TEST(BadFromPythonFloat) {
             "    return '3 <dot> 1415926'",
             [](const NUdf::TUnboxedValuePod& value) {
                 Y_UNUSED(value);
-                Y_UNREACHABLE();
+                Y_ENSURE(false, "Unreachable");
             }),
         yexception, "Cast error object '3 <dot> 1415926' to Float");
 }
@@ -112,7 +113,7 @@ Y_UNIT_TEST(BadFromPythonLong) {
             "    return " RETVAL,
             [](const NUdf::TUnboxedValuePod& value) {
                 Y_UNUSED(value);
-                Y_UNREACHABLE();
+                Y_ENSURE(false, "Unreachable");
             }),
         yexception, "Cast error object " RETVAL " to Long");
 }
@@ -144,7 +145,7 @@ Y_UNIT_TEST(BadToPythonJson) {
             "def Test(arg):\n"
             "   pass",
             [](const NUdf::TUnboxedValuePod&) {
-                Y_UNREACHABLE();
+                Y_ENSURE(false, "Unreachable");
             }),
         yexception, "Failed to export Json given as args[0]");
 }

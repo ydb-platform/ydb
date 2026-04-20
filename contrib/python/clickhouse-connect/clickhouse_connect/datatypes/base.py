@@ -7,12 +7,13 @@ from typing import NamedTuple, Dict, Type, Any, Sequence, MutableSequence, Union
 
 from clickhouse_connect.driver.common import array_type, int_size, write_array, write_uint64, low_card_version
 from clickhouse_connect.driver.context import BaseQueryContext
-from clickhouse_connect.driver.ctypes import numpy_conv, data_conv
+from clickhouse_connect.driver import ctypes as driver_ctypes
+from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.exceptions import NotSupportedError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
-from clickhouse_connect.driver.options import np, pd
+from clickhouse_connect.driver import options
 
 logger = logging.getLogger(__name__)
 ch_read_formats = {}
@@ -321,7 +322,7 @@ class ArrayType(ClickHouseType, ABC, registered=False):
 
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if ctx.use_numpy:
-            return numpy_conv.read_numpy_array(source, self.np_type, num_rows)
+            return driver_ctypes.numpy_conv.read_numpy_array(source, self.np_type, num_rows)
         return source.read_array(self._array_type, num_rows)
 
     def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any) -> Sequence:
@@ -329,16 +330,16 @@ class ArrayType(ClickHouseType, ABC, registered=False):
 
     def _build_lc_column(self, index: Sequence, keys: array.array, ctx: QueryContext):
         if ctx.use_numpy:
-            return np.fromiter((index[key] for key in keys), dtype=index.dtype, count=len(index))
+            return options.np.fromiter((index[key] for key in keys), dtype=index.dtype, count=len(index))
         return super()._build_lc_column(index, keys, ctx)
 
     def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
         if self.read_format(ctx) == 'string':
             return [str(x) for x in column]
         if ctx.use_extended_dtypes and self.nullable:
-            return pd.array(column, dtype=self.base_type)
+            return options.pd.array(column, dtype=self.base_type)
         if ctx.use_numpy and self.nullable and (not ctx.use_none):
-            return np.array(column, dtype=self.np_type)
+            return options.np.array(column, dtype=self.np_type)
         return column
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
@@ -348,7 +349,7 @@ class ArrayType(ClickHouseType, ABC, registered=False):
 
     def _active_null(self, ctx: QueryContext):
         if ctx.as_pandas and ctx.use_extended_dtypes:
-            return pd.NA
+            return options.pd.NA
         if ctx.use_none:
             return None
         return 0

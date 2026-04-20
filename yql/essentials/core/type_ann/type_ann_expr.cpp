@@ -8,8 +8,11 @@
 #include <yql/essentials/core/yql_func_stack.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/poly_args/yql_poly_args.h>
 #include <yql/essentials/utils/exception_utils.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/datetime/cputimer.h>
 #include <util/generic/scope.h>
@@ -923,7 +926,12 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
+        if (input->IsCallable({"Udf", "ScriptUdf"}) && !GetTypes().UdfResolver) {
+            input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (input->IsCallable({"EvaluateAtom",
             "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter",
             "SubqueryOrderBy", "SubqueryAssumeOrderBy", "SubqueryExtendFor", "SubqueryUnionAllFor",
             "SubqueryMergeFor", "SubqueryUnionMergeFor",
@@ -1021,22 +1029,169 @@ public:
     }
 };
 
+class TPartialUdfResolver : public IUdfResolver {
+public:
+    explicit TPartialUdfResolver(const IUdfMeta* udfMeta,
+        std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser,
+        std::function<TString (const TTypeAnnotationNode*)> typeWriter)
+        : UdfMeta_(udfMeta)
+        , TypeParser_(std::move(typeParser))
+        , TypeWriter_(std::move(typeWriter))
+    {}
+
+    TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const final {
+        Y_UNUSED(moduleName);
+        ythrow yexception() << "Not supported";
+    }
+
+    bool LoadMetadata(const TVector<TImport*>& imports,
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
+        Y_UNUSED(imports);
+        Y_UNUSED(logLevel);
+        Y_UNUSED(storage);
+        Y_UNUSED(ctx);
+        for (auto f : functions) {
+            auto lowered = to_lower(f->Name);
+            TStringBuf moduleName;
+            TStringBuf funcName;
+            if (!SplitUdfName(lowered, moduleName, funcName)) {
+                ctx.AddError(TIssue(f->Pos, TStringBuilder() << "Invalid function name: " << f->Name));
+                return false;
+            }
+
+            if (moduleName == "yson2" || moduleName == "datetime2") {
+                moduleName = moduleName.substr(0, moduleName.size() - 1);
+            }
+
+            auto meta = UdfMeta_->GetMetadata(moduleName, funcName);
+            if (!meta) {
+                continue;
+            }
+
+            f->NormalizedName = f->Name;
+            if (!meta->IsTypeAwareness) {
+                if (meta->CallableType && meta->CallableType != "__truncated__") {
+                    f->CallableType = TypeParser_(meta->CallableType, ctx);
+                    if (!f->CallableType) {
+                        return false;
+                    }
+                }
+
+                if (meta->RunConfigType) {
+                    f->RunConfigType = TypeParser_(meta->RunConfigType, ctx);
+                    if (!f->RunConfigType) {
+                        return false;
+                    }
+                }
+
+                f->IsStrict = meta->IsStrict;
+                f->SupportsBlocks = meta->SupportsBlocks;
+                f->MinLangVer = meta->MinLangVer;
+                f->MaxLangVer = meta->MaxLangVer;
+                continue;
+            }
+
+            if (!meta->PolyArgs) {
+                continue;
+            }
+
+            auto polyArgs = ParsePolyArgs(NYT::NodeFromYsonString(meta->PolyArgs));
+            IPolyArgs::TArgs args;
+            if (f->UserType && f->UserType->GetKind() == ETypeAnnotationKind::Tuple) {
+                auto topTupleType = f->UserType->Cast<TTupleExprType>();
+                if (topTupleType->GetSize() >= 1 && topTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Tuple) {
+                    auto argsTupleType = topTupleType->GetItems()[0]->Cast<TTupleExprType>();
+                    for (ui32 i = 0; i < argsTupleType->GetSize(); ++i) {
+                        args["T" + ToString(i)] = NYT::NodeFromYsonString(TypeWriter_(argsTupleType->GetItems()[i]));
+                    }
+                }
+            }
+
+            auto result = polyArgs->Match(args, f->LangVer);
+            NYT::TNode callableTypeNode;
+            if (result.CallableType) {
+                callableTypeNode = *result.CallableType;
+            } else {
+                auto resolvedCallableTypesNode = NYT::NodeFromYsonString(meta->ResolvedCallableTypes);
+                YQL_ENSURE(resolvedCallableTypesNode.IsList());
+                YQL_ENSURE(result.Index < resolvedCallableTypesNode.AsList().size());
+                callableTypeNode = resolvedCallableTypesNode.AsList()[result.Index];
+            }
+
+            f->CallableType = TypeParser_(NYT::NodeToYsonString(callableTypeNode), ctx);
+            if (!f->CallableType) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
+        Y_UNUSED(imports);
+        Y_UNUSED(logLevel);
+        Y_UNUSED(storage);
+        ythrow yexception() << "Not supported";
+    }
+
+    bool ContainsModule(const TStringBuf& moduleName) const final {
+        Y_UNUSED(moduleName);
+        ythrow yexception() << "Not supported";
+    }
+
+    bool IsPartial() const final {
+        return true;
+    }
+
+private:
+    const IUdfMeta* UdfMeta_;
+    const std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> TypeParser_;
+    const std::function<TString (const TTypeAnnotationNode*)> TypeWriter_;
+};
+
 }
 
-bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues,
-    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory) {
+bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
+    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory,
+    std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser,
+    std::function<TString (const TTypeAnnotationNode*)> typeWriter) {
     YQL_ENSURE(astRoot, "AST root is null");
 
     TExprContext ctx;
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,
-                        /* hasAnnotations= */ false, /* typeAnnotationIndex= */ Max<ui32>(), /* syntaxVersion= */ 1)) {
+    TLibraryCohesion cohesion;
+    bool res;
+    if (isLibrary) {
+        res = CompileExpr(*astRoot, cohesion, ctx, /*syntaxVersion=*/ 1);
+    }  else {
+        res = CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,
+                        /* hasAnnotations= */ false, /* typeAnnotationIndex= */ Max<ui32>(), /* syntaxVersion= */ 1);
+    }
+
+    if (!res) {
         issues.AddIssues(ctx.IssueManager.GetCompletedIssues());
         return false;
     }
 
+    if (isLibrary) {
+        TExprNode::TListType exports;
+        for (const auto& [name, node] : cohesion.Exports.Symbols()) {
+            exports.push_back(node);
+        }
+
+        if (exports.empty()) {
+            return true;
+        }
+
+        exprRoot = ctx.NewCallable(TPosition(), "LibraryExports", std::move(exports));
+    }
+
     TTypeAnnotationContext typeCtx;
     typeCtx.LangVer = langver;
+    if (udfMeta) {
+        typeCtx.UdfResolver = new TPartialUdfResolver(udfMeta, typeParser, typeWriter);
+    }
+
     typeCtx.ArrowResolver = new TFakeArrowResolver;
     typeCtx.LayersRegistry = new TFakeLayersRegistry;
     typeCtx.UserDataStorage = new TUserDataStorage(nullptr, {}, nullptr, new TUdfIndex);

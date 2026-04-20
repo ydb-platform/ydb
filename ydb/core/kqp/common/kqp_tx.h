@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 
 #include <ydb/core/util/ulid.h>
 
@@ -179,6 +180,7 @@ public:
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
 
         HasOlapTable = false;

@@ -42,6 +42,34 @@ Y_UNIT_TEST_SUITE(BlobTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(BatchMemory) {
+    Y_UNIT_TEST(UnpackFreesPackedData) {
+        TBatch batch(0, 0);
+        auto ts = TInstant::Seconds(100);
+        for (ui32 i = 0; i < 10; ++i) {
+            TString data(1_KB, 'a' + i);
+            batch.AddBlob(TClientBlob(
+                TString("src"), i + 1, std::move(data), TMaybe<TPartData>(),
+                ts, ts, 0, "", ""
+            ));
+        }
+
+        UNIT_ASSERT(!batch.Packed);
+        UNIT_ASSERT(batch.GetUnpackedSize() > 0);
+
+        batch.Pack();
+        UNIT_ASSERT(batch.Packed);
+        UNIT_ASSERT(batch.PackedData.Size() > 0);
+        UNIT_ASSERT(batch.PackedData.Capacity() > 0);
+
+        batch.Unpack();
+        UNIT_ASSERT(!batch.Packed);
+        UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.Size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.Capacity(), 0);
+        UNIT_ASSERT(!batch.Blobs.empty());
+    }
+}
+
 bool operator ==(const TClientBlob &lhs, const TClientBlob &rhs) {
     TPartData defaultPartData{0, 0, 0};
 

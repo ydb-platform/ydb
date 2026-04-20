@@ -2168,7 +2168,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const auto& settings = params.GetSettings();
     TString pathPattern = "*";
     ES3PatternVariant pathPatternVariant = ES3PatternVariant::FilePattern;
-    auto hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
+    const bool hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
                               return a.IsDirectory;
                           }) != paths.end();
     if (hasDirectories) {
@@ -2291,17 +2291,26 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             }
         }
 
-        readSpec->Format = params.GetFormat();
+        const TString format = params.GetFormat();
+        // csv format (no file header) is handled by csv_with_names parser with a virtual header from SCHEMA.
+        readSpec->Format = (format == "csv") ? "csv_with_names" : format;
 
         if (readSpec->Format == "csv_with_names") {
             readSpec->Settings.csv.empty_as_default = true;
         }
 
-        if (const auto it = settings.find("compression"); settings.cend() != it)
+        if (const auto it = settings.find("compression"); settings.cend() != it) {
             readSpec->Compression = it->second;
+        }
 
-        if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty())
+        if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty()) {
             readSpec->Settings.csv.delimiter = it->second[0];
+        }
+
+        if (format == "csv") {
+            const auto& columnNames = params.GetUserSchemaColumns();
+            readSpec->Settings.csv.file_column_names.assign(columnNames.begin(), columnNames.end());
+        }
 
         if (const auto it = settings.find("data.datetime.formatname"); settings.cend() != it) {
             readSpec->Settings.date_time_format_name = ToDateTimeFormat(it->second);
@@ -2347,6 +2356,14 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
+
+        // format=csv (no header row): SCHEMA supplies names via file_column_names. If with_names_use_header
+        // stays true, CSVRowInputFormat reads the first data line as header; values like "aa" are then
+        // treated as column names and NOT NULL columns from SCHEMA are reported missing.
+        if (format == "csv" && !readSpec->Settings.csv.file_column_names.empty()) {
+            readSpec->Settings.with_names_use_header = false;
+        }
+
         ui64 sizeLimit = std::numeric_limits<ui64>::max();
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {
             sizeLimit = FromString<ui64>(it->second);
@@ -2359,16 +2376,17 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
 
         return {actor, actor};
-    } else {
-        ui64 sizeLimit = std::numeric_limits<ui64>::max();
-        if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
-            sizeLimit = FromString<ui64>(it->second);
-
-        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
-                                            std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
-                                            cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
-                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);
     }
+
+    ui64 sizeLimit = std::numeric_limits<ui64>::max();
+    if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {
+        sizeLimit = FromString<ui64>(it->second);
+    }
+
+    return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
+                                        std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
+                                        cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
+                                        params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);
 }
 
 } // namespace NYql::NDq

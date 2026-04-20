@@ -1585,6 +1585,137 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithBloomFilter(true);
     }
 
+    Y_UNIT_TEST(DataShardBloomFilterIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto getPartitionConfig = [&]() {
+            return kikimr.GetTestClient().Ls("/Root/T")->Record
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        auto execScheme = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        // CREATE TABLE with two bloom filters at different prefix lengths
+        execScheme(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/T` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
+            );
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        }
+
+        // KEY_BLOOM_FILTER = DISABLED disables all bloom filters on the table
+        AlterTableSetttings(session, "/Root/T", {{"KEY_BLOOM_FILTER", "DISABLED"}}, false);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+
+        // ALTER TABLE ADD INDEX accumulates bloom filter prefixes one by one
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1);
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        }
+
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2);
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        }
+
+        // ALTER TABLE ADD INDEX with custom false_positive_probability
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bloom3 LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05);
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            // prefix 1 already existed, FPP should be updated to 0.05
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.05, 1e-9);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        }
+
+        // KEY_BLOOM_FILTER = DISABLED clears all bloom filters including ByKeyFilterPrefixes
+        AlterTableSetttings(session, "/Root/T", {{"KEY_BLOOM_FILTER", "DISABLED"}}, false);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+
+        // Non-prefix columns must be rejected
+        auto expectError = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        };
+        // Key2 alone is not a prefix of (Key1, Key2)
+        expectError(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key2);
+        )");
+        // (Key2, Key1) is not a prefix of (Key1, Key2)
+        expectError(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key2, Key1);
+        )");
+        // data_columns are not supported for local bloom filter index
+        expectError(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) COVER (Value);
+        )");
+        // false_positive_probability must be in (0, 1)
+        auto expectBadRequest = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        };
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0);
+        )");
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=1);
+        )");
+    }
+
     void CreateTableWithReadReplicas(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -13629,6 +13760,226 @@ END DO)",
             )sql";
             const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SetSecretValueWithParamOk) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+
+        { // Utf8 parameter type
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").Utf8(TString("value") + operationType).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Utf8;
+                            %s SECRET `sec-utf8` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        { // String parameter type
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").String(TString("value") + operationType).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS String;
+                            %s SECRET `sec-string` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        { // empty value in parameter
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").Utf8("").Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Utf8;
+                            %s SECRET `sec-empty` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        { // non-null optional<Utf8> parameter type
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").OptionalUtf8(TString("opt-value-") + operationType).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Optional<Utf8>;
+                            %s SECRET `sec-optional` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        { // non-null optional<String> parameter type
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").OptionalString(TString("opt-value-") + operationType).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Optional<String>;
+                            %s SECRET `sec-optional-str` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        { // Without DECLARE — parameter type inferred from the passed value
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").Utf8(TString("no-declare-") + operationType).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            %s SECRET `sec-no-declare` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SetSecretValueWithParamFail) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        { // Create secret so we can try to alter it later
+            static const auto query = R"sql(
+                CREATE SECRET `old-sec` WITH (value = "val");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // No parameter passed
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Utf8;
+                            %s SECRET `%s` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Parameter $secValue is required for " + TString(operationType) + " SECRET", result.GetIssues().ToString());
+            }
+        }
+
+        { // Wrong parameter type – integer is passed instead of string
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                auto params = TParamsBuilder()
+                    .AddParam("$secValue").Uint64(42).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS String;
+                            %s SECRET `%s` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Parameter $secValue must be String or Utf8", result.GetIssues().ToString());
+            }
+        }
+
+        { // Wrong parameter type – integer is declared instead of string
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                auto params = TParamsBuilder()
+                    .AddParam("$secValue").Uint64(42).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Uint64;
+                            %s SECRET `%s` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Parameter $secValue must be String or Utf8", result.GetIssues().ToString());
+            }
+        }
+
+        { // Too complex expression
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                auto params = TParamsBuilder()
+                    .AddParam("$secValue1").Utf8("").Build()
+                    .AddParam("$secValue2").Utf8("").Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue1 AS String;
+                            DECLARE $secValue2 AS String;
+                            %s SECRET `%s` WITH (VALUE = $secValue1 || $secValue2);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Only string or single string parameter is supported as secret value", result.GetIssues().ToString());
+            }
+        }
+
+        { // NULL Optional<Utf8> parameter
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                auto params = TParamsBuilder()
+                    .AddParam("$secValue").EmptyOptional(EPrimitiveType::Utf8).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Optional<Utf8>;
+                            %s SECRET `%s` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Parameter $secValue must not be NULL", result.GetIssues().ToString());
+            }
         }
     }
 

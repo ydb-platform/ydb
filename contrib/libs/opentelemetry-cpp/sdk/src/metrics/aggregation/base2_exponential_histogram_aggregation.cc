@@ -218,9 +218,9 @@ void Base2ExponentialHistogramAggregation::Downscale(uint32_t by) noexcept
 
 // Merge A and B into a new circular buffer C.
 // Caller must ensure that A and B are used as buckets at the same scale.
-AdaptingCircularBufferCounter MergeBuckets(size_t max_buckets,
-                                           const AdaptingCircularBufferCounter &A,
-                                           const AdaptingCircularBufferCounter &B)
+static AdaptingCircularBufferCounter MergeBuckets(size_t max_buckets,
+                                                  const AdaptingCircularBufferCounter &A,
+                                                  const AdaptingCircularBufferCounter &B)
 {
   AdaptingCircularBufferCounter C = AdaptingCircularBufferCounter(max_buckets);
   C.Clear();

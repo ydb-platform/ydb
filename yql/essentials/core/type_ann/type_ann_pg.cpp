@@ -8,6 +8,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_csee.h>
+#include <yql/essentials/core/yql_expr_type_annotation_pg.h>
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
@@ -22,16 +23,6 @@ const NPg::TTypeDesc& GetTypeDescOfNode(const TExprNodePtr& node)
     const auto typeId = node->GetTypeAnn()->Cast<TPgExprType>()->GetId();
 
     return NPg::LookupType(typeId);
-}
-
-bool IsCastRequired(ui32 fromTypeId, ui32 toTypeId) {
-    if (toTypeId == fromTypeId) {
-        return false;
-    }
-    if (toTypeId == NPg::AnyOid || toTypeId == NPg::AnyArrayOid || toTypeId == NPg::AnyNonArrayOid) {
-        return false;
-    }
-    return true;
 }
 
 bool AdjustPgUnknownType(TVector<const TItemExprType*>& outputItems, TExprContext& ctx) {
@@ -63,28 +54,6 @@ TVector<TExprNode::TPtr> InferPgGroupRefTypes(const TExprNode& groupExprs, TExpr
     return types;
 }
 
-TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx) {
-    return ctx.Builder(node->Pos())
-        .Callable("PgCast")
-            .Add(0, std::move(node))
-            .Callable(1, "PgType")
-                .Atom(0, NPg::LookupType(targetTypeId).Name)
-                .Seal()
-        .Seal()
-        .Build();
-};
-
-TExprNodePtr WrapWithPgCast(TExprNodePtr& node, ui32 targetTypeId, TExprContext& ctx) {
-    return ctx.Builder(node->Pos())
-        .Callable("PgCast")
-            .Add(0, node)
-            .Callable(1, "PgType")
-                .Atom(0, NPg::LookupType(targetTypeId).Name)
-                .Seal()
-        .Seal()
-        .Build();
-};
-
 TExprNodePtr FindLeftCombinatorOfNthSetItem(const TExprNode* setItems, const TExprNode* setOps, ui32 n) {
     TVector<ui32> setItemsStack(setItems->ChildrenSize());
     i32 sp = -1;
@@ -101,7 +70,7 @@ TExprNodePtr FindLeftCombinatorOfNthSetItem(const TExprNode* setItems, const TEx
             Y_ENSURE(0 <= sp);
         }
     }
-    Y_UNREACHABLE();
+    YQL_ENSURE(false, "Unreachable");
 }
 
 IGraphTransformer::TStatus InferPgCommonType(
@@ -391,40 +360,27 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         }
     } else {
         try {
-            const auto procOrType = NPg::LookupProcWithCasts(TString(name), argTypes);
+            constexpr size_t argStart = 3;
             auto children = input->ChildrenList();
-            if (const auto* procPtr = std::get_if<const NPg::TProcDesc*>(&procOrType)) {
-                const auto& proc = *(*procPtr);
-                auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
-                children.insert(children.begin() + 1, idNode);
+            YQL_ENSURE(children.size() >= 2);
+            TVector<TExprNode::TPtr> inputArgNodes(children.begin() + (argStart - 1), children.end());
+            const auto resolution = NYql::ResolvePgCall(TString(name), inputArgNodes, input->Pos(), ctx.Expr);
+            if (!resolution.Defined()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Failed to resolve PG call " << name << ": cannot extract argument types"));
+                return IGraphTransformer::TStatus::Error;
+            }
 
+            const auto& resolutionVal = resolution.GetRef();
+            if (const auto* procRes = resolutionVal.AsProc()) {
+                const auto& proc = *procRes->Proc;
                 const auto& fargTypes = proc.ArgTypes;
-                for (size_t i = 0; i < argTypes.size(); ++i) {
-                    auto targetType = (i >= fargTypes.size()) ? proc.VariadicType : fargTypes[i];
-                    if (IsCastRequired(argTypes[i], targetType)) {
-                        children[i+3] = WrapWithPgCast(std::move(children[i+3]), targetType, ctx.Expr);
-                    }
-                }
-
-                if (argTypes.size() < fargTypes.size()) {
-                    YQL_ENSURE(fargTypes.size() - argTypes.size() <= proc.DefaultArgs.size());
-                    for (size_t i = argTypes.size(); i < fargTypes.size(); ++i) {
-                        const auto& value = proc.DefaultArgs[i + proc.DefaultArgs.size() - fargTypes.size()];
-                        TExprNode::TPtr defNode;
-                        if (!value) {
-                            defNode = ctx.Expr.NewCallable(input->Pos(), "Null", {});
-                        } else {
-                            defNode = ctx.Expr.Builder(input->Pos())
-                                .Callable("PgConst")
-                                    .Atom(0, *value)
-                                    .Callable(1, "PgType")
-                                        .Atom(0, NPg::LookupType(fargTypes[i]).Name)
-                                    .Seal()
-                                .Seal()
-                                .Build();
-                        }
-                        children.insert(children.end(), defNode);
-                    }
+                auto children = input->ChildrenList();
+                auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
+                children.resize(argStart - 1);
+                children.insert(children.begin() + 1, idNode);
+                for (auto& node : procRes->BuildArgs(inputArgNodes, ctx.Expr)) {
+                    children.push_back(std::move(node));
                 }
 
                 if (proc.Lang == NPg::LangSQL) {
@@ -434,13 +390,13 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
 
                     // substibute by lambda
                     YQL_ENSURE(proc.ExprNode->IsLambda());
-                    YQL_ENSURE(proc.ExprNode->Head().ChildrenSize() == fargTypes.size());
+                    YQL_ENSURE(proc.ExprNode->Head().ChildrenSize() == static_cast<ui32>(fargTypes.size()));
                     TNodeOnNodeOwnedMap deepClones;
                     YQL_ENSURE(NPg::GetSqlLanguageParser());
                     auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, true, false);
                     TNodeOnNodeOwnedMap replaces;
                     for (ui32 i = 0; i < fargTypes.size(); ++i) {
-                        replaces[lambda->Head().Child(i)] = children[i + 3];
+                        replaces[lambda->Head().Child(i)] = children[i + argStart];
                     }
 
                     output = ctx.Expr.ReplaceNodes(lambda->TailPtr(), replaces);
@@ -448,10 +404,10 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                 }
 
                 output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
-            } else if (const auto* typePtr = std::get_if<const NPg::TTypeDesc*>(&procOrType)) {
-                output = WrapWithPgCast(std::move(children[2]), (*typePtr)->TypeId, ctx.Expr);
+            } else if (const auto* typeDesc = resolutionVal.AsType()) {
+                output = NYql::WrapWithPgCast(input->ChildPtr(2), typeDesc->TypeId, ctx.Expr);
             } else {
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
             }
             return IGraphTransformer::TStatus::Repeat;
         } catch (const yexception& e) {
@@ -681,17 +637,17 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
 
             switch(oper.Kind) {
                 case NPg::EOperKind::LeftUnary:
-                    if (IsCastRequired(argTypes[0], oper.RightType)) {
-                        children[1] = WrapWithPgCast(std::move(children[1]), oper.RightType, ctx.Expr);
+                    if (NYql::IsCastRequired(argTypes[0], oper.RightType)) {
+                        children[1] = NYql::WrapWithPgCast(std::move(children[1]), oper.RightType, ctx.Expr);
                     }
                     break;
 
                 case NYql::NPg::EOperKind::Binary:
-                    if (IsCastRequired(argTypes[0], oper.LeftType)) {
-                        children[1] = WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx.Expr);
+                    if (NYql::IsCastRequired(argTypes[0], oper.LeftType)) {
+                        children[1] = NYql::WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx.Expr);
                     }
-                    if (IsCastRequired(argTypes[1], oper.RightType)) {
-                        children[2] = WrapWithPgCast(std::move(children[2]), oper.RightType, ctx.Expr);
+                    if (NYql::IsCastRequired(argTypes[1], oper.RightType)) {
+                        children[2] = NYql::WrapWithPgCast(std::move(children[2]), oper.RightType, ctx.Expr);
                     }
                     break;
 
@@ -809,12 +765,12 @@ IGraphTransformer::TStatus PgArrayOpWrapper(const TExprNode::TPtr& input, TExprN
             }
 
             auto children = input->ChildrenList();
-            if (IsCastRequired(argTypes[0], oper.LeftType)) {
-                children[1] = WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx.Expr);
+            if (NYql::IsCastRequired(argTypes[0], oper.LeftType)) {
+                children[1] = NYql::WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx.Expr);
             }
-            if (IsCastRequired(argTypes[1], oper.RightType)) {
+            if (NYql::IsCastRequired(argTypes[1], oper.RightType)) {
                 auto arrayType = NPg::LookupType(oper.RightType).ArrayTypeId;
-                children[2] = WrapWithPgCast(std::move(children[2]), arrayType, ctx.Expr);
+                children[2] = NYql::WrapWithPgCast(std::move(children[2]), arrayType, ctx.Expr);
             }
 
             auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(oper.OperId));
@@ -1127,9 +1083,9 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
 
     ui32 argIdx = overWindow ? 3 : 2;
     for (ui32 i = 0; i < argTypes.size(); ++i, ++argIdx) {
-        if (IsCastRequired(argTypes[i], aggDesc.ArgTypes[i])) {
+        if (NYql::IsCastRequired(argTypes[i], aggDesc.ArgTypes[i])) {
             auto& argNode = input->ChildRef(argIdx);
-            argNode = WrapWithPgCast(std::move(argNode), aggDesc.ArgTypes[i], ctx.Expr);
+            argNode = NYql::WrapWithPgCast(std::move(argNode), aggDesc.ArgTypes[i], ctx.Expr);
             needRetype = true;
         }
     }
@@ -1198,8 +1154,8 @@ IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNo
         ctx.Expr.AddError(*issue);
         return IGraphTransformer::TStatus::Error;
     }
-    if (IsCastRequired(commonType->TypeId, types[0])) {
-        input->ChildRef(0) = WrapWithPgCast(std::move(input->ChildRef(0)), commonType->TypeId, ctx.Expr);
+    if (NYql::IsCastRequired(commonType->TypeId, types[0])) {
+        input->ChildRef(0) = NYql::WrapWithPgCast(std::move(input->ChildRef(0)), commonType->TypeId, ctx.Expr);
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -1848,7 +1804,7 @@ IGraphTransformer::TStatus PgArrayWrapper(const TExprNode::TPtr& input, TExprNod
         if (argTypes[i] == elemType) {
             castArrayElems.push_back(child);
         } else {
-            castArrayElems.push_back(WrapWithPgCast(std::move(child), elemType, ctx.Expr));
+            castArrayElems.push_back(NYql::WrapWithPgCast(std::move(child), elemType, ctx.Expr));
         }
     }
     output = ctx.Expr.NewCallable(input->Pos(), "PgArray", std::move(castArrayElems));
@@ -1898,7 +1854,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     if (pgType->GetName() == "interval" || pgType->GetName() == "_interval") {
-        if (mods.size() < 1) {
+        if (mods.empty()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "At least one modifier is expected for pginterval"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -1981,7 +1937,7 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
         if (argTypes[i] != textTypeId) {
             if (NPg::IsCoercible(argTypes[i], textTypeId, NPg::ECoercionCode::Implicit)) {
                 auto& argNode = input->ChildRef(i);
-                argNode = WrapWithPgCast(std::move(argNode), textTypeId, ctx.Expr);
+                argNode = NYql::WrapWithPgCast(std::move(argNode), textTypeId, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;
             }
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -2093,12 +2049,12 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
 
                 elemsOfType.Items.push_back((lhsTypeId == elemsOfType.TargetType)
                     ? input->HeadPtr()
-                    : WrapWithPgCast(input->HeadPtr(), elemsOfType.TargetType, ctx.Expr));
+                    : NYql::WrapWithPgCast(input->HeadPtr(), elemsOfType.TargetType, ctx.Expr));
             }
             const auto rhsItemTypeId = input->Child(i)->GetTypeAnn()->Cast<TPgExprType>()->GetId();
             elemsOfType.Items.push_back((rhsItemTypeId == elemsOfType.TargetType)
                 ? input->Child(i)
-                : WrapWithPgCast(input->Child(i), elemsOfType.TargetType, ctx.Expr));
+                : NYql::WrapWithPgCast(input->ChildPtr(i), elemsOfType.TargetType, ctx.Expr));
         }
         TExprNodeList orClausesOfIn;
         orClausesOfIn.reserve(elemsByType.size());
@@ -2120,7 +2076,7 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
                 const auto itemTypeId = input->Child(i)->GetTypeAnn()->Cast<TPgExprType>()->GetId();
                 items.push_back((itemTypeId == commonType->TypeId)
                     ? input->Child(i)
-                    : WrapWithPgCast(input->Child(i), commonType->TypeId, ctx.Expr));
+                    : NYql::WrapWithPgCast(input->ChildPtr(i), commonType->TypeId, ctx.Expr));
             }
         }
         output = BuildUniTypePgIn(std::move((castRequired) ? items : input->ChildrenList()), ctx);

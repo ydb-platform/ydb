@@ -720,4 +720,17 @@ TColumnFilter TColumnFilter::Cut(const ui32 totalRecordsCount, const ui32 limit,
     return result;
 }
 
+TColumnFilter TColumnFilter::CreateReversed() const {
+    if (IsTotalDenyFilter() || IsTotalAllowFilter()) {
+        return *this;
+    }
+    TColumnFilter result = *this;
+    std::reverse(result.Filter.begin(), result.Filter.end());
+    if (result.FilterPlain) {
+        std::reverse(result.FilterPlain->begin(), result.FilterPlain->end());
+    }
+    result.LastValue = result.Filter.size() % 2 != 0 ? result.LastValue : !result.LastValue;
+    return result;
+}
+
 }   // namespace NKikimr::NArrow

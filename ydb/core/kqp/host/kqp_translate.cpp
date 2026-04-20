@@ -275,6 +275,9 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
 
     settings.ApplicationName = ApplicationName;
     settings.GUCSettings = GUCSettings;
+    if (YqlSelect) {
+        settings.YqlSelect = *YqlSelect;
+    }
 
     return settings;
 }

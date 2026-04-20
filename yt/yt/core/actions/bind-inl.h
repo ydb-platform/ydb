@@ -641,22 +641,14 @@ struct TBindHelper<TR(TAs...)>
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    class TTag,
-    int Counter,
+    auto LocationLite,
 #endif
     class TFunctor,
     class... TBs>
 auto Bind(
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    const TSourceLocation& location,
-#endif
     TFunctor&& functor,
     TBs&&... bound)
 {
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    Y_UNUSED(location);
-#endif
-
     using TTraits = NDetail::TFunctorTraits<typename std::decay_t<TFunctor>>;
     using TRunSignature = typename NDetail::TSplit<sizeof...(TBs), typename TTraits::TSignature>::TResult;
 
@@ -673,7 +665,7 @@ auto Bind(
 
     return TExtendedCallback<TRunSignature>{
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-        NewWithLocation<TState, TTag, Counter>(location, location, std::forward<TFunctor>(functor), std::forward<TBs>(bound)...),
+        NewWithLocation<TState, LocationLite>(TSourceLocation::FromLite<LocationLite>(), std::forward<TFunctor>(functor), std::forward<TBs>(bound)...),
 #else
         New<TState>(std::forward<TFunctor>(functor), std::forward<TBs>(bound)...),
 #endif
@@ -685,20 +677,13 @@ auto Bind(
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    class TTag,
-    int Counter,
+    auto LocationLite,
 #endif
     class T
 >
 auto Bind(
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    const TSourceLocation& location,
-#endif
     const TCallback<T>& callback)
 {
-#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-    Y_UNUSED(location);
-#endif
     return TExtendedCallback<T>(callback);
 }
 

@@ -91,6 +91,7 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
+        case EScriptType::SystemPython3_14:
             return TPythonTypeChecker().Walk(funcType, nodeStack);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, nodeStack);
@@ -240,7 +241,7 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
 }
 
 static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+    MKQL_ENSURE(!wideComponents.empty(), "Expected at least one column");
     std::vector<TType*> items;
     items.reserve(wideComponents.size());
     // XXX: Declare these variables outside the loop body to use for the last
@@ -304,6 +305,7 @@ bool IsSystemPython(EScriptType type) {
            type == EScriptType::SystemPython3_11 ||
            type == EScriptType::SystemPython3_12 ||
            type == EScriptType::SystemPython3_13 ||
+           type == EScriptType::SystemPython3_14 ||
            type == EScriptType::Python ||
            type == EScriptType::Python2;
 }
@@ -360,7 +362,8 @@ const IFunctionRegistry& TProgramBuilder::GetFunctionRegistry() const {
 }
 
 TType* TProgramBuilder::ChooseCommonType(TType* type1, TType* type2) {
-    bool isOptional1, isOptional2;
+    bool isOptional1;
+    bool isOptional2;
     const auto data1 = UnpackOptionalData(type1, isOptional1);
     const auto data2 = UnpackOptionalData(type2, isOptional2);
     if (data1->IsSameType(*data2)) {
@@ -377,7 +380,8 @@ TType* TProgramBuilder::ChooseCommonType(TType* type1, TType* type2) {
 }
 
 TType* TProgramBuilder::BuildArithmeticCommonType(TType* type1, TType* type2) {
-    bool isOptional1, isOptional2;
+    bool isOptional1;
+    bool isOptional2;
     const auto data1 = UnpackOptionalData(type1, isOptional1);
     const auto data2 = UnpackOptionalData(type2, isOptional2);
     const auto features1 = NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features;
@@ -751,7 +755,10 @@ TRuntimeNode TProgramBuilder::Squeeze(TRuntimeNode stream, TRuntimeNode state,
     const auto newState = handler(itemArg, stateNodeArg);
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*state.GetStaticType()), "State type is changed by the handler");
 
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
 
     if (save && load) {
         outSave = save(saveArg = Arg(state.GetStaticType()));
@@ -791,7 +798,10 @@ TRuntimeNode TProgramBuilder::Squeeze1(TRuntimeNode stream, const TUnaryLambda& 
     const auto newState = handler(itemArg, stateNodeArg);
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*initState.GetStaticType()), "State type is changed by the handler");
 
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
 
     if (save && load) {
         outSave = save(saveArg = Arg(initState.GetStaticType()));
@@ -2173,7 +2183,10 @@ TRuntimeNode TProgramBuilder::GraceJoinCommon(const TStringBuf& funcName, TRunti
         MKQL_ENSURE(!rightKeyColumns.empty(), "At least one key column must be specified");
     }
 
-    TRuntimeNode::TList leftKeyColumnsNodes, rightKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    TRuntimeNode::TList rightKeyColumnsNodes;
+    TRuntimeNode::TList leftRenamesNodes;
+    TRuntimeNode::TList rightRenamesNodes;
 
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
     std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes),
@@ -2288,7 +2301,7 @@ TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
 }
 
 TRuntimeNode TProgramBuilder::BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {
-    MKQL_ENSURE(lists.size() > 0, "Expected at least 1 list or flow");
+    MKQL_ENSURE(!lists.empty(), "Expected at least 1 list or flow");
     if (lists.size() == 1) {
         return lists.front();
     }
@@ -2962,7 +2975,8 @@ TRuntimeNode TProgramBuilder::Div(TRuntimeNode data1, TRuntimeNode data2) {
 }
 
 TRuntimeNode TProgramBuilder::DecimalDiv(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
     const auto rightType = UnpackOptionalData(data2, isOptionalRight);
 
@@ -2981,7 +2995,8 @@ TRuntimeNode TProgramBuilder::DecimalDiv(TRuntimeNode data1, TRuntimeNode data2)
 }
 
 TRuntimeNode TProgramBuilder::DecimalMod(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
     const auto rightType = UnpackOptionalData(data2, isOptionalRight);
 
@@ -3000,7 +3015,8 @@ TRuntimeNode TProgramBuilder::DecimalMod(TRuntimeNode data1, TRuntimeNode data2)
 }
 
 TRuntimeNode TProgramBuilder::DecimalMul(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
     const auto rightType = UnpackOptionalData(data2, isOptionalRight);
 
@@ -3115,7 +3131,8 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
     auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
 
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     MKQL_ENSURE(UnpackOptionalData(firstType->GetItemType(), isOpt1)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
     MKQL_ENSURE(UnpackOptionalData(secondType->GetItemType(), isOpt2)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
 
@@ -3132,7 +3149,8 @@ TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& ca
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
     auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
 
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     auto* leftDataType = UnpackOptionalData(firstType->GetItemType(), isOpt1);
     UnpackOptionalData(secondType->GetItemType(), isOpt2);
 
@@ -3206,7 +3224,8 @@ TRuntimeNode TProgramBuilder::AggrCompare(const std::string_view& callableName, 
 }
 
 TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, TRuntimeNode left, TRuntimeNode right) {
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
     const auto leftType = UnpackOptionalData(left, isOptionalLeft);
     const auto rightType = UnpackOptionalData(right, isOptionalRight);
 
@@ -3288,7 +3307,9 @@ TRuntimeNode TProgramBuilder::AggrGreaterOrEqual(TRuntimeNode data1, TRuntimeNod
 }
 
 TRuntimeNode TProgramBuilder::If(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
-    bool condOpt, thenOpt, elseOpt;
+    bool condOpt;
+    bool thenOpt;
+    bool elseOpt;
     const auto conditionType = UnpackOptionalData(condition, condOpt);
     MKQL_ENSURE(conditionType->GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected bool");
 
@@ -3366,7 +3387,8 @@ TRuntimeNode TProgramBuilder::IfPresent(TRuntimeNode optional, const TUnaryLambd
 
     const auto itemArg = Arg(unpackedType);
     const auto then = thenBranch(itemArg);
-    bool thenOpt, elseOpt;
+    bool thenOpt;
+    bool elseOpt;
     const auto thenUnpacked = UnpackOptional(then, thenOpt);
     const auto elseUnpacked = UnpackOptional(elseBranch, elseOpt);
 
@@ -3409,7 +3431,8 @@ TRuntimeNode TProgramBuilder::Not(TRuntimeNode data) {
 }
 
 TRuntimeNode TProgramBuilder::BuildBinaryLogical(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     MKQL_ENSURE(UnpackOptionalData(data1, isOpt1)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
     MKQL_ENSURE(UnpackOptionalData(data2, isOpt2)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
     const auto resultType = NewDataType(NUdf::TDataType<bool>::Id, isOpt1 || isOpt2);
@@ -3430,7 +3453,8 @@ TRuntimeNode TProgramBuilder::BuildLogical(const std::string_view& callableName,
     }
 
     const auto half = (args.size() + 1U) >> 1U;
-    const TArrayRef<const TRuntimeNode> one(args.data(), half), two(args.data() + half, args.size() - half);
+    const TArrayRef<const TRuntimeNode> one(args.data(), half);
+    const TArrayRef<const TRuntimeNode> two(args.data() + half, args.size() - half);
     return BuildBinaryLogical(callableName, BuildLogical(callableName, one), BuildLogical(callableName, two));
 }
 
@@ -4241,7 +4265,7 @@ TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flowOrStream, const TWideLamb
         TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(NewMultiType(tupleItems)));
         return fillCallableBuilder(callableBuilder, flowOrStream);
     } else {
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -4584,7 +4608,7 @@ TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRu
 }
 
 TRuntimeNode TProgramBuilder::Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1U && args.size() <= 3U, "Expected from one to three arguments.");
+    MKQL_ENSURE(!args.empty() && args.size() <= 3U, "Expected from one to three arguments.");
     std::array<TArgType, 4U> argTypes;
     argTypes.front().first = UnpackOptionalData(resultType, argTypes.front().second)->GetSchemeType();
     auto i = 0U;
@@ -4787,7 +4811,8 @@ TRuntimeNode TProgramBuilder::NewNull() {
 }
 
 TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     const auto type1 = UnpackOptionalData(data1, isOpt1)->GetSchemeType();
     const auto type2 = UnpackOptionalData(data2, isOpt2)->GetSchemeType();
     const auto resultType = NewDataType(type1 == type2 ? type1 : NUdf::TDataType<char*>::Id);
@@ -4795,7 +4820,7 @@ TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
 }
 
 TRuntimeNode TProgramBuilder::ConcatMany(const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1, "Expected at least one argument");
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
     if (args.size() == 1) {
         return args[0];
     }
@@ -4842,7 +4867,8 @@ TRuntimeNode TProgramBuilder::EndsWith(TRuntimeNode string, TRuntimeNode suffix)
 }
 
 TRuntimeNode TProgramBuilder::StringContains(TRuntimeNode string, TRuntimeNode pattern) {
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     TDataType* type1 = UnpackOptionalData(string, isOpt1);
     TDataType* type2 = UnpackOptionalData(pattern, isOpt2);
     MKQL_ENSURE(type1->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id ||
@@ -5143,7 +5169,9 @@ TRuntimeNode TProgramBuilder::MapJoinCore(TRuntimeNode flow, TRuntimeNode dict, 
     MKQL_ENSURE(leftRenames.size() % 2U == 0U, "Expected even count");
     MKQL_ENSURE(rightRenames.size() % 2U == 0U, "Expected even count");
 
-    TRuntimeNode::TList leftKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    TRuntimeNode::TList leftRenamesNodes;
+    TRuntimeNode::TList rightRenamesNodes;
 
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
     std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes),
@@ -5176,8 +5204,12 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKi
     MKQL_ENSURE(leftColumns.size() % 2U == 0U, "Expected even count");
     MKQL_ENSURE(rightColumns.size() % 2U == 0U, "Expected even count");
 
-    TRuntimeNode::TList leftInputColumnsNodes, rightInputColumnsNodes, requiredColumnsNodes,
-        leftOutputColumnsNodes, rightOutputColumnsNodes, keyColumnsNodes;
+    TRuntimeNode::TList leftInputColumnsNodes;
+    TRuntimeNode::TList rightInputColumnsNodes;
+    TRuntimeNode::TList requiredColumnsNodes;
+    TRuntimeNode::TList leftOutputColumnsNodes;
+    TRuntimeNode::TList rightOutputColumnsNodes;
+    TRuntimeNode::TList keyColumnsNodes;
 
     bool s = false;
     for (const auto idx : leftColumns) {
@@ -5550,7 +5582,8 @@ TRuntimeNode TProgramBuilder::WideChopper(TRuntimeNode flow, const TWideLambda& 
                                           const std::function<TRuntimeNode(TRuntimeNode::TList, TRuntimeNode)>& groupHandler) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
-    TRuntimeNode::TList itemArgs, keyArgs;
+    TRuntimeNode::TList itemArgs;
+    TRuntimeNode::TList keyArgs;
     itemArgs.reserve(wideComponents.size());
 
     auto i = 0U;
@@ -5605,7 +5638,10 @@ TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list,
     auto outStateUpdate = update(itemArg, stateArg);
 
     auto hasSaveLoad = (bool)save;
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
     if (hasSaveLoad) {
         saveArg = Arg(stateType);
         outSave = save(saveArg);
@@ -5684,7 +5720,10 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     auto outStateUpdate = update(itemArg, stateArg);
 
     auto hasSaveLoad = (bool)save;
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
     if (hasSaveLoad) {
         saveArg = Arg(stateType);
         outSave = save(saveArg);

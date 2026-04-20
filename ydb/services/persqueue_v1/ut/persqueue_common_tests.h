@@ -331,9 +331,8 @@ public:
                 UNIT_ASSERT(res);
             }
 
-            auto duration = Now() - start;
-            Cerr << "DURATION " << duration << "\n";
-            UNIT_ASSERT_GT_C(duration, minTime, "Duration: " << duration);
+            Cerr << "DURATION " << (TInstant::Now() - start) << "\n";
+            UNIT_ASSERT(TInstant::Now() - start > minTime);
         }
     }
 

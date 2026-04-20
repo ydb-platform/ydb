@@ -6,6 +6,7 @@
 
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
@@ -761,6 +762,17 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         return nullptr;
     }
 
+    if (op.GetUniqueIndexKeySize()) {
+        if (op.GetUniqueIndexKeySize() >= keyColIds.size()) {
+            errStr = TStringBuilder()
+                << "Too many unique key prefix columns"
+                << ": " << op.GetUniqueIndexKeySize()
+                << ", max: " << (keyColIds.size()-1);
+            return nullptr;
+        }
+        alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
+    }
+
     if (source) {
         // key columns reorder or deletion is not supported
         const TVector<ui32>& oldColIds = source->KeyColumnIds;
@@ -1062,21 +1074,40 @@ bool TPartitionConfigMerger::ApplyChanges(
         result.MutablePipelineConfig()->CopyFrom(changes.GetPipelineConfig());
     }
 
+    if (changes.HasEnableFilterByKey() && !changes.GetEnableFilterByKey() &&
+        changes.ByKeyFilterPrefixesSize() > 0) {
+        errDescr = "Cannot disable KEY_BLOOM_FILTER and add bloom filter prefixes in the same operation";
+        return false;
+    }
+
     if (changes.HasEnableFilterByKey()) {
         result.SetEnableFilterByKey(changes.GetEnableFilterByKey());
+        if (!changes.GetEnableFilterByKey()) {
+            // Disabling KEY_BLOOM_FILTER clears all bloom filter state including prefixed filters
+            result.ClearByKeyFilterPrefixes();
+        }
     }
 
     if (changes.ByKeyFilterPrefixesSize() > 0) {
-        TVector<ui32> prefixes;
-        for (auto p : changes.GetByKeyFilterPrefixes()) {
-            if (p > 0) {
-                prefixes.push_back(p);
+        // Merge existing + new prefixes, keyed by PrefixLength (new FPP wins on conflict)
+        TMap<ui32, double> prefixMap;
+        for (const auto& p : result.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
-        SortUnique(prefixes);
+        for (const auto& p : changes.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                prefixMap[p.GetPrefixLength()] = fpp;
+            }
+        }
         result.ClearByKeyFilterPrefixes();
-        for (auto p : prefixes) {
-            result.AddByKeyFilterPrefixes(p);
+        for (const auto& [len, fpp] : prefixMap) {
+            auto* entry = result.AddByKeyFilterPrefixes();
+            entry->SetPrefixLength(len);
+            entry->SetFalsePositiveProbability(fpp);
         }
     }
 

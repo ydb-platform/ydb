@@ -285,9 +285,10 @@ TSortedPartitioner::TReadSliceResult TSortedPartitioner::ReadSlice(TFmrTablesChu
             slice.Weight += chunk.DataWeight;
             chunkPool.UpdateFilterBoundary(chunk.TableId, TSortedPartitionerFilterBoundary{.FilterBoundary = sepKey, .IsInclusive = true});
         } else {
+            YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: undefined behaviour in ReadSlice, intersection doesn't reach separator key";
             return TReadSliceResult{.Error = TFmrError{
                 .Component = EFmrComponent::Coordinator,
-                .Reason = EFmrErrorReason::RestartQuery,
+                .Reason = EFmrErrorReason::FallbackOperation,
                 .ErrorMessage = "Undefined behaviour in ReadSlice: intersection doesn't reach separator key"
             }};
         }

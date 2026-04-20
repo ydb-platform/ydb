@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     events.cpp
     lock_handle.cpp
+    snapshot_handle.cpp
+    snapshot_registry.cpp
     types.cpp
 )
 

@@ -93,9 +93,6 @@ jobs:
         else
           python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_with_issue_and_area.sql --table_path test_results/analytics/muted_tests_with_issue_and_area --store_type column --partition_keys date_window branch build_type area --primary_keys date_window full_name branch build_type --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
         fi
-    - name: Upload muted tests statistic data mart
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_statistic.sql --table_path test_results/analytics/muted_tests_statistic --store_type column --partition_keys month_point_date branch build_type owner --primary_keys ym branch build_type owner
     - name: Upload muted tests daily by team (pre-aggregation for BI)
       continue-on-error: true
       run: |

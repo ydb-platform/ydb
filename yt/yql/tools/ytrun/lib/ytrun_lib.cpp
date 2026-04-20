@@ -7,7 +7,9 @@
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <yt/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/access_provider/full/yt_access_provider.h>
 #include <yt/yql/providers/yt/lib/secret_masker/dummy/dummy_secret_masker.h>
+#include <yt/yql/providers/yt/lib/tvm_client/full/tvm_client.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
 #include <yt/yql/providers/yt/fmr/fmr_tool_lib/yql_yt_fmr_initializer.h>
@@ -188,6 +190,8 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
     services.SecretMasker = CreateSecretMasker();
+    services.TvmClient = CreateTvmClient(GetRunOptions().GatewaysConfig->GetYt());
+    services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, GetRunOptions().GatewaysConfig->GetYt());
     auto ytGateway = CreateYtNativeGateway(services);
     if (!GetRunOptions().GatewayTypes.contains(NFmr::FastMapReduceGatewayName)) {
         return ytGateway;

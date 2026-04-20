@@ -1,6 +1,5 @@
 #include "actor.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 
 namespace NKikimr::NPQ {

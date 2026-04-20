@@ -4,6 +4,7 @@
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/yson/node/node_io.h>
+#include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/client/proto_helpers/yql_yt_table_data_service_proto_helpers.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/interface/yql_yt_service_discovery.h>
@@ -34,27 +35,22 @@ public:
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
-        auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
-        TStringStream outputStream;
         YQL_CLOG(TRACE, FastMapReduce) << "Sending put request with url: " << putRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
         auto putTableDataServiceFunc = [&]() {
-            try {
-                auto statusCode = httpClient.DoPost(putRequestUrl, value, &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
-                TString serializedResponse = outputStream.ReadAll();
-                HandleHttpError(statusCode, serializedResponse);
-                NProto::TTableDataServicePutResponse protoPutResponse;
-                YQL_ENSURE(protoPutResponse.ParseFromString(serializedResponse));
-                bool putSuccess = TableDataServicePutResponseFromProto(protoPutResponse);
-                if (!putSuccess) {
-                    throw yexception() << "Failed to put chunkId " << chunkId << " to table data service - memory limit exceeded";
-                    // Throw basic retryable exception in case other keys in table service are cleared soon.
-                }
-                return NThreading::MakeFuture<bool>(true);
-            } catch (...) {
-                return NThreading::MakeErrorFuture<bool>(std::current_exception());
+            auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+            TStringStream outputStream;
+            auto statusCode = httpClient.DoPost(putRequestUrl, value, &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            HandleHttpError(statusCode, serializedResponse);
+            NProto::TTableDataServicePutResponse protoPutResponse;
+            YQL_ENSURE(protoPutResponse.ParseFromString(serializedResponse));
+            bool putSuccess = TableDataServicePutResponseFromProto(protoPutResponse);
+            if (!putSuccess) {
+                throw yexception() << "Failed to put chunkId " << chunkId << " to table data service - memory limit exceeded";
             }
+            return NThreading::MakeFuture<bool>(true);
         };
         return *DoWithRetry<NThreading::TFuture<bool>, yexception>(putTableDataServiceFunc, RetryPolicy_, true, OnFail_);
     }
@@ -64,26 +60,22 @@ public:
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
-        auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
-        TStringStream outputStream;
         YQL_CLOG(TRACE, FastMapReduce) << "Sending get request with url: " << getRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
         auto getTableDataServiceFunc = [&]() {
-            try {
-                auto statusCode = httpClient.DoGet(getRequestUrl,&outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
-                TString serializedResponse = outputStream.ReadAll();
-                HandleHttpError(statusCode, serializedResponse);
-                NProto::TTableDataServiceGetResponse protoGetResponse;
-                YQL_ENSURE(protoGetResponse.ParseFromString(serializedResponse));
-                TMaybe<TString> getResponse = TableDataServiceGetResponseFromProto(protoGetResponse);
-                if (!getResponse.Defined()) {
-                    throw TFmrNonRetryableJobException() << "Failed to get group " << group << " and chunkId " << chunkId << " from table data service";
-                }
-                return NThreading::MakeFuture(getResponse);
-            } catch (...) {
-                return NThreading::MakeErrorFuture<TMaybe<TString>>(std::current_exception());
+            auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+            TStringStream outputStream;
+            auto statusCode = httpClient.DoGet(getRequestUrl, &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            HandleHttpError(statusCode, serializedResponse);
+            NProto::TTableDataServiceGetResponse protoGetResponse;
+            YQL_ENSURE(protoGetResponse.ParseFromString(serializedResponse));
+            TMaybe<TString> getResponse = TableDataServiceGetResponseFromProto(protoGetResponse);
+            if (!getResponse.Defined()) {
+                throw TFmrNonRetryableJobException() << "Failed to get group " << group << " and chunkId " << chunkId << " from table data service";
             }
+            return NThreading::MakeFuture(getResponse);
         };
         return *DoWithRetry<NThreading::TFuture<TMaybe<TString>>, yexception>(getTableDataServiceFunc, RetryPolicy_, true, OnFail_);
     }
@@ -94,19 +86,15 @@ public:
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
-        auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
-        TStringStream outputStream;
         YQL_CLOG(TRACE, FastMapReduce) << "Sending delete request with url: " << deleteRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
         auto deleteTableDataServiceFunc = [&]() {
-            try {
-                auto statusCode = httpClient.DoRequest("DELETE", deleteRequestUrl, "", &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
-                HandleHttpError(statusCode, outputStream.ReadAll());
-                return NThreading::MakeFuture();
-            } catch (...) {
-                return NThreading::MakeErrorFuture<void>(std::current_exception());
-            }
+            auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+            TStringStream outputStream;
+            auto statusCode = httpClient.DoRequest("DELETE", deleteRequestUrl, "", &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
+            HandleHttpError(statusCode, outputStream.ReadAll());
+            return NThreading::MakeFuture();
         };
         return *DoWithRetry<NThreading::TFuture<void>, yexception>(deleteTableDataServiceFunc, RetryPolicy_, true, OnFail_);
     }
@@ -120,19 +108,14 @@ public:
         std::vector<NThreading::TFuture<void>> allNodesDeletions;
         for (ui64 workerNum = 0; workerNum < totalWorkersNum; ++workerNum) {
             auto workerConnection = TableDataServiceDiscovery_->GetHosts()[workerNum];
-            auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
-            TStringStream outputStream;
             YQL_CLOG(TRACE, FastMapReduce) << "Sending delete groups request with url: " << deleteGroupsRequestUrl <<
                 " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
             auto deletionRequestFunc = [&]() {
-                try {
-                    auto protobufHeaders = TKeepAliveHttpClient::THeaders{{"Content-Type", "application/x-protobuf"}};
-                    auto statusCode = httpClient.DoPost(deleteGroupsRequestUrl, serializedProtoDeletionRequest, &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
-                    HandleHttpError(statusCode, outputStream.ReadAll());
-                    return NThreading::MakeFuture();
-                } catch (...) {
-                    return NThreading::MakeErrorFuture<void>(std::current_exception());
-                }
+                auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+                TStringStream outputStream;
+                auto statusCode = httpClient.DoPost(deleteGroupsRequestUrl, serializedProtoDeletionRequest, &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
+                HandleHttpError(statusCode, outputStream.ReadAll());
+                return NThreading::MakeFuture();
             };
             allNodesDeletions.emplace_back(*DoWithRetry<NThreading::TFuture<void>, yexception>(deletionRequestFunc, RetryPolicy_, true, OnFail_));
         }
@@ -166,7 +149,10 @@ private:
     ui32 DestinationTvmId_ = 0;
 
     std::shared_ptr<IRetryPolicy<const yexception&>> RetryPolicy_ = IRetryPolicy<const yexception&>::GetExponentialBackoffPolicy(
-        /*retryClassFunction*/ [] (const yexception&) {
+        /*retryClassFunction*/ [] (const yexception& e) {
+            if (dynamic_cast<const TFmrNonRetryableJobException*>(&e)) {
+                return ERetryErrorClass::NoRetry;
+            }
             return ERetryErrorClass::LongRetry;
         },
         /*minDelay*/ TDuration::MilliSeconds(10),

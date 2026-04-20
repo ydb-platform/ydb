@@ -29,6 +29,7 @@ public:
    * Initialize a new logger.
    * @param name The name of this logger instance
    * @param context The logger provider that owns this logger.
+   * @param instrumentation_scope The instrumentation scope for this logger.
    */
   explicit Logger(
       opentelemetry::nostd::string_view name,

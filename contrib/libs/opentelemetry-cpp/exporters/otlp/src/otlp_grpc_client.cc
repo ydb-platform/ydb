@@ -162,13 +162,13 @@ template <class StubType, class RequestType, class ResponseType>
 static sdk::common::ExportResult InternalDelegateAsyncExport(
     const std::shared_ptr<OtlpGrpcClientAsyncData> &async_data,
     StubType *stub,
-    std::unique_ptr<grpc::ClientContext> &&context,
-    std::unique_ptr<google::protobuf::Arena> &&arena,
-    RequestType &&request,
+    std::unique_ptr<grpc::ClientContext> context,
+    std::unique_ptr<google::protobuf::Arena> arena,
+    RequestType request,
     std::function<bool(opentelemetry::sdk::common::ExportResult,
                        std::unique_ptr<google::protobuf::Arena> &&,
                        const RequestType &,
-                       ResponseType *)> &&result_callback,
+                       ResponseType *)> result_callback,
     int32_t export_data_count,
     const char *export_data_name) noexcept
 {
@@ -188,11 +188,14 @@ static sdk::common::ExportResult InternalDelegateAsyncExport(
 
   std::shared_ptr<OtlpGrpcAsyncCallData<RequestType, ResponseType>> call_data =
       std::make_shared<OtlpGrpcAsyncCallData<RequestType, ResponseType>>();
-  call_data->arena.swap(arena);
-  call_data->result_callback.swap(result_callback);
+  call_data->arena           = std::move(arena);
+  call_data->result_callback = std::move(result_callback);
 
-  call_data->request = google::protobuf::Arena::Create<RequestType>(
-      call_data->arena.get(), std::forward<RequestType>(request));
+  call_data->request = google::protobuf::Arena::Create<RequestType>(call_data->arena.get());
+  if (call_data->request != nullptr)
+  {
+    call_data->request->Swap(&request);
+  }
   call_data->response = google::protobuf::Arena::Create<ResponseType>(call_data->arena.get());
 
   if (call_data->request == nullptr || call_data->response == nullptr)
@@ -210,7 +213,7 @@ static sdk::common::ExportResult InternalDelegateAsyncExport(
 
     return opentelemetry::sdk::common::ExportResult::kFailure;
   }
-  call_data->grpc_context.swap(context);
+  call_data->grpc_context = std::move(context);
 
   call_data->grpc_async_callback = [](OtlpGrpcAsyncCallDataBase *base_call_data) {
     OtlpGrpcAsyncCallData<RequestType, ResponseType> *real_call_data =

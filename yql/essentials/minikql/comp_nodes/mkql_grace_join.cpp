@@ -668,7 +668,7 @@ public:
                 }
             }
         }
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 
 private:

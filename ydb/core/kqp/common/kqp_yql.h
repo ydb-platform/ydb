@@ -136,6 +136,8 @@ public:
     static constexpr TStringBuf DefaultOperatorSettingName = "DefaultOperator";
     static constexpr TStringBuf MinimumShouldMatchSettingName = "MinimumShouldMatch";
     static constexpr TStringBuf ModeSettingName = "Mode";
+    static constexpr TStringBuf TokensSettingName = "Tokens";
+
     TExprNode::TPtr ItemsLimit;
     TExprNode::TPtr SkipLimit;
     TExprNode::TPtr BFactor;
@@ -143,6 +145,7 @@ public:
     TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
     TExprNode::TPtr Mode;
+    TExprNode::TPtr Tokens;
 
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
     void SetSkipLimit(const TExprNode::TPtr& expr) { SkipLimit = expr; }
@@ -151,6 +154,7 @@ public:
     void SetDefaultOperator(const TExprNode::TPtr& expr) { DefaultOperator = expr; }
     void SetMinimumShouldMatch(const TExprNode::TPtr& expr) { MinimumShouldMatch = expr; }
     void SetMode(const TExprNode::TPtr& expr) { Mode = expr; }
+    void SetTokens(const TExprNode::TPtr& expr) { Tokens = expr; }
 
     static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;

@@ -1,6 +1,7 @@
 # Развёртывание {{ ydb-short-name }} кластера вручную
 
 <!-- markdownlint-disable blanks-around-fences -->
+
 {% note warning %}
 
 Данная инструкция предназначена только для развёртывания кластеров с [конфигурацией V1](../../configuration-management/configuration-v1/index.md). Развёртывание кластеров с [конфигурацией V2](../../configuration-management/configuration-v2/index.md) в настоящий момент находится в разработке.

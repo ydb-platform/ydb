@@ -1,7 +1,7 @@
 #include "http.h"
 #include "http_proxy.h"
 
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -1597,11 +1597,11 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
 
     struct TMtlsTestSetup {
         TAutoPtr<TLogBackend> LogBackend;
-        NKikimr::TCertAndKey CaCertAndKey;
-        NKikimr::TCertAndKey ServerCertAndKey;
-        NKikimr::TCertAndKey ClientCertAndKey;
-        NKikimr::TCertAndKey UntrustedCaCertAndKey;
-        NKikimr::TCertAndKey UntrustedClientCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey CaCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey ServerCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey ClientCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey UntrustedCaCertAndKey;
+        NKikimr::NCertTestUtils::TCertAndKey UntrustedClientCertAndKey;
         TTempFileHandle CaCertFile;
         TTempFileHandle ServerCertFile;
         TTempFileHandle ServerKeyFile;
@@ -1627,17 +1627,17 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
                 LogBackend = std::move(customLogBackend);
             }
             // Generate certificates
-            CaCertAndKey = NKikimr::GenerateCA(NKikimr::TProps::AsCA());
-            ServerCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsServer());
-            ClientCertAndKey = NKikimr::GenerateSignedCert(CaCertAndKey, NKikimr::TProps::AsClient());
+            CaCertAndKey = NKikimr::NCertTestUtils::GenerateCA(NKikimr::NCertTestUtils::TProps::AsCA());
+            ServerCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(CaCertAndKey, NKikimr::NCertTestUtils::TProps::AsServer());
+            ClientCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(CaCertAndKey, NKikimr::NCertTestUtils::TProps::AsClient());
 
-            NKikimr::TProps untrustedCaProps = NKikimr::TProps::AsCA();
+            NKikimr::NCertTestUtils::TProps untrustedCaProps = NKikimr::NCertTestUtils::TProps::AsCA();
             untrustedCaProps.CommonName = "Untrusted " + untrustedCaProps.CommonName;
-            UntrustedCaCertAndKey = NKikimr::GenerateCA(untrustedCaProps);
+            UntrustedCaCertAndKey = NKikimr::NCertTestUtils::GenerateCA(untrustedCaProps);
 
-            NKikimr::TProps untrustedClientProps = NKikimr::TProps::AsClient();
+            NKikimr::NCertTestUtils::TProps untrustedClientProps = NKikimr::NCertTestUtils::TProps::AsClient();
             untrustedClientProps.CommonName = "Untrusted " + untrustedClientProps.CommonName;
-            UntrustedClientCertAndKey = NKikimr::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
+            UntrustedClientCertAndKey = NKikimr::NCertTestUtils::GenerateSignedCert(UntrustedCaCertAndKey, untrustedClientProps);
 
             // Write certificates to files
             CaCertFile.Write(CaCertAndKey.Certificate.c_str(), CaCertAndKey.Certificate.size());

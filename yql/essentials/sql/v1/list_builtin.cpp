@@ -14,7 +14,7 @@ TNodePtr TListBuiltin::GetIdentityLambda() {
 }
 
 bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
-    if (Args_.size() < 1 || Args_.size() > 2) {
+    if (Args_.empty() || Args_.size() > 2) {
         ctx.Error(Pos_) << OpName_ << " requires one or two parameters.";
         return false;
     }

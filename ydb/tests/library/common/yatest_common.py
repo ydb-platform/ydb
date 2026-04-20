@@ -3,14 +3,14 @@
 import os
 
 import yatest.common as ya_common
-import yatest.common.network as ya_common_network
+import library.python.port_manager
 import ydb.tests.oss.canonical as oss_canonical
 """
 For yatest.common package see file
 library/python/testing/yatest_common/yatest/common/__init__.py
 """
 
-PortManager = ya_common_network.PortManager
+PortManager = library.python.port_manager.PortManager
 
 
 def wrap(func, alternative):

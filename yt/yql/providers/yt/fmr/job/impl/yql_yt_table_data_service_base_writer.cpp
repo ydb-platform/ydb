@@ -57,10 +57,10 @@ void TFmrTableDataServiceBaseWriter::DoFlush() {
 
 NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(const TString& currentYsonContent) {
     std::unordered_map<TString, TString> splittedYsonByColumnGroups;
-    auto columnGroupSplitYsonResult = SplitYsonByColumnGroups(currentYsonContent, ColumnGroupSpec_);
+    auto columnGroupSplitYsonResult = SplitYsonByColumnGroupsRaw(currentYsonContent, ColumnGroupSpec_);
     ui64 recordsCount = columnGroupSplitYsonResult.RecordsCount;
     CurrentChunkRows_ += recordsCount;
-    splittedYsonByColumnGroups = columnGroupSplitYsonResult.SplittedYsonByColumnGroups;
+    splittedYsonByColumnGroups = std::move(columnGroupSplitYsonResult.SplittedYsonByColumnGroups);
 
     with_lock(State_->Mutex) {
         State_->CondVar.Wait(State_->Mutex, [&] {
@@ -77,7 +77,7 @@ NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(
     for (auto& [groupName, columnGroupYsonContent]: splittedYsonByColumnGroups) {
         auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
         auto tableDataServiceChunkId = GetTableDataServiceChunkId(ChunkCount_, groupName);
-        auto future = TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId,columnGroupYsonContent).Subscribe(
+        auto future = TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId, columnGroupYsonContent).Subscribe(
             [weakState = std::weak_ptr(State_)] (const auto& putFuture) mutable {
                 std::shared_ptr<TFmrWriterState> state = weakState.lock();
                 if (state) {

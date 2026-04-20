@@ -236,17 +236,18 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
         auto traceId = item.HasTraceId()
             ? NWilson::TTraceId(item.GetTraceId())
             : NWilson::TTraceId();
-        auto ev = std::make_unique<TEvBlobStorage::TEvPut>(
-            LogoBlobIDFromLogoBlobID(item.GetBlobId()),
-            TRope(msg.GetPayload(index)),
-            item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
-            msg.Record.GetHandleClass(),
-            static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
-            item.GetIssueKeepFlag(),
-            item.GetIgnoreBlock(),
-            item.GetAlreadyEncrypted(),
-            false
-        );
+        auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+            .BlobId = LogoBlobIDFromLogoBlobID(item.GetBlobId()),
+            .Buffer = TRope(msg.GetPayload(index)),
+            .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
+            .HandleClass = msg.Record.GetHandleClass(),
+            .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .IssueKeepFlag = item.GetIssueKeepFlag(),
+            .IgnoreBlock = item.GetIgnoreBlock(),
+            .AlreadyEncrypted = item.GetAlreadyEncrypted(),
+            .ReduceInterpileTraffic = false,
+            .IsZeroEntry = item.GetIsZeroEntry(),
+        });
         ev->ForceGroupGeneration = groupGeneration;
         SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
         ++common->RepliesRemaining;

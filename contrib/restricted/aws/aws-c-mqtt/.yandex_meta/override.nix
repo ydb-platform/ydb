@@ -1,10 +1,10 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "0.15.0";
+  version = "0.15.2";
 
   src = fetchFromGitHub {
     owner = "awslabs";
     repo = "aws-c-mqtt";
     rev = "v${version}";
-    hash = "sha256-50b8TLQvaSaawKsGbm4fSCRoTfolAlF7ZwMdNmZ8wQo=";
+    hash = "sha256-24OqObewfaGO2sly9/R4FBePOezCvqpDlzfmHDhqBsE=";
   };
 }

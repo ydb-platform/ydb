@@ -14,9 +14,12 @@ public:
         return TRangeLock(lockableRanges, lsn);
     }
 
-    static TRangeLock Make(ILockableRanges* lockableRanges, TBlockRange64 range)
+    static TRangeLock Make(
+        ILockableRanges* lockableRanges,
+        TBlockRange64 range,
+        TLocationMask mask)
     {
-        return TRangeLock(lockableRanges, range);
+        return TRangeLock(lockableRanges, range, mask);
     }
 };
 
@@ -38,9 +41,12 @@ public:
         }
     }
 
-    TLockRangeHandle LockDDiskRange(TBlockRange64 range) override
+    TLockRangeHandle LockDDiskRange(
+        TBlockRange64 range,
+        TLocationMask mask) override
     {
         Y_UNUSED(range);
+        Y_UNUSED(mask);
 
         TLockRangeHandle handle = ++NextHandle;
         ++RangeLocks[handle];
@@ -69,11 +75,14 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestNotArmed)
     {
         TMockLockableRanges mock;
+        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 123);
-            TRangeLock lock2 =
-                TRangeLockAccess::Make(&mock, TBlockRange64::MakeOneBlock(100));
+            TRangeLock lock2 = TRangeLockAccess::Make(
+                &mock,
+                TBlockRange64::MakeOneBlock(100),
+                mask);
             UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
             UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
         }
@@ -100,10 +109,13 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestRangeLockConstructor)
     {
         TMockLockableRanges mock;
+        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         {
-            TRangeLock lock =
-                TRangeLockAccess::Make(&mock, TBlockRange64::MakeOneBlock(100));
+            TRangeLock lock = TRangeLockAccess::Make(
+                &mock,
+                TBlockRange64::MakeOneBlock(100),
+                mask);
 
             lock.Arm();
             UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
@@ -117,11 +129,14 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestMoveConstructor)
     {
         TMockLockableRanges mock;
+        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
-            TRangeLock lock2 =
-                TRangeLockAccess::Make(&mock, TBlockRange64::MakeOneBlock(100));
+            TRangeLock lock2 = TRangeLockAccess::Make(
+                &mock,
+                TBlockRange64::MakeOneBlock(100),
+                mask);
             lock1.Arm();
             lock2.Arm();
 
@@ -141,11 +156,14 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestMoveAssignment)
     {
         TMockLockableRanges mock;
+        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
-            TRangeLock lock2 =
-                TRangeLockAccess::Make(&mock, TBlockRange64::MakeOneBlock(100));
+            TRangeLock lock2 = TRangeLockAccess::Make(
+                &mock,
+                TBlockRange64::MakeOneBlock(100),
+                mask);
             lock1.Arm();
             lock2.Arm();
 
@@ -167,9 +185,13 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestDoubleArm)
     {
         TMockLockableRanges mock;
+        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
+
         TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
-        TRangeLock lock2 =
-            TRangeLockAccess::Make(&mock, TBlockRange64::MakeOneBlock(100));
+        TRangeLock lock2 = TRangeLockAccess::Make(
+            &mock,
+            TBlockRange64::MakeOneBlock(100),
+            mask);
         lock1.Arm();
         lock2.Arm();
 

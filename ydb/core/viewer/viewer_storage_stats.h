@@ -73,6 +73,7 @@ class TJsonStorageStats : public TViewerPipeClient {
     std::unordered_map<TActorId, size_t> VDiskRequestIndex;
     std::unordered_map<TTabletId, TTabletStorageInfo> TabletStorageInfo;
     std::unordered_map<TString, TPathStorageInfo> PathStorageInfo;
+    std::vector<TString> Problems;
 
 public:
     TJsonStorageStats(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -116,6 +117,15 @@ public:
                 }
             }
         }
+    }
+
+    void AddProblem(const TString& problem) {
+        for (const auto& p : Problems) {
+            if (p == problem) {
+                return;
+            }
+        }
+        Problems.push_back(problem);
     }
 
     void Bootstrap() override {
@@ -417,7 +427,7 @@ public:
                 for (const auto& vdiskActorId : vdiskActorIds) {
                     size_t requestIndex = VDiskRequests.size();
                     if (VDiskRequestIndex.emplace(vdiskActorId, requestIndex).second) {
-                        VDiskRequests.emplace_back(MakeRequest<TEvGetLogoBlobIndexStatResponse>(vdiskActorId, new TEvGetLogoBlobIndexStatRequest(), 0, requestIndex), groupId);
+                        VDiskRequests.emplace_back(MakeRequest<TEvGetLogoBlobIndexStatResponse>(vdiskActorId, new TEvGetLogoBlobIndexStatRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, requestIndex), groupId);
                     }
                 }
             }
@@ -546,12 +556,31 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         static const TString error = "Undelivered";
-        TNodeId nodeId = ev.Get()->Cookie;
-        HandleNodeError(nodeId, error);
+        AddProblem("data-incomplete");
+        switch (ev->Get()->SourceType) {
+            case TEvBlobStorage::EvGetLogoBlobIndexStatRequest: {
+                size_t requestIndex = ev->Cookie;
+                if (requestIndex < VDiskRequests.size()) {
+                    if (VDiskRequests[requestIndex].VDiskRequest.Error(error)) {
+                        RequestDone();
+                    }
+                } else {
+                    AddEvent("Unknown TEvUndelivered VDisk request");
+                }
+                break;
+            }
+            case TEvWhiteboard::EvTabletStateRequest:
+            default: {
+                TNodeId nodeId = ev->Cookie;
+                HandleNodeError(nodeId, error);
+                break;
+            }
+        }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         static const TString error = "NodeDisconnected";
+        AddProblem("data-incomplete");
         TNodeId nodeId = ev->Get()->NodeId;
         HandleNodeError(nodeId, error);
     }
@@ -562,6 +591,13 @@ public:
         bool returnTablets = FromStringWithDefault<bool>(Params.Get("tablets"), returnEverything);
         bool returnMedia = FromStringWithDefault<bool>(Params.Get("media"), returnEverything);
         NJson::TJsonValue json;
+        if (!Problems.empty()) {
+            NJson::TJsonValue& jsonProblems(json["Problems"]);
+            jsonProblems.SetType(NJson::JSON_ARRAY);
+            for (const auto& problem : Problems) {
+                jsonProblems.AppendValue(problem);
+            }
+        }
         if (GroupBy == EGroupBy::TabletType) {
             NJson::TJsonValue& jsonTablets(json["Tablets"]);
             if (returnTablets) {
@@ -768,7 +804,6 @@ public:
             .Description = "return media kind info",
             .Type = "boolean",
         });
-        yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TEvDescribeSchemeInfo>());
         return yaml;
     }
 };

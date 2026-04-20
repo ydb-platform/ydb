@@ -2,8 +2,10 @@
 #include "quoter_service_impl.h"
 #include "debug_info.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kesus/tablet/quoter_constants.h>
 
@@ -57,6 +59,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         bool SessionIsActive = false;
         bool ProxySessionWasSent = false;
         TInstant LastAllocated = TInstant::Zero();
+        double LastAllocAmount = 0.0; // Last allocation from Kesus, used for sustained rate
         std::pair<TDuration, double> AverageAllocationParams = {TDuration::Zero(), 0.0};
 
         NKikimrKesus::TStreamingQuoterResource Props;
@@ -161,22 +164,58 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             , Counters(resource, quoterCounters)
         {}
 
-        void AddUpdate(TEvQuota::TEvProxyUpdate& ev) const {
+        void AddUpdate(TEvQuota::TEvProxyUpdate& ev, ui32 version) const {
+            TVector<TEvQuota::TUpdateTick> update;
+            double sustainedRate = 0.0;
+
+            switch (version) {
+            case 1:
+                AddUpdateV1(update, sustainedRate);
+                break;
+            default:
+                AddUpdateV0(update, sustainedRate);
+                break;
+            }
+
+            ev.Resources.emplace_back(ResId, sustainedRate, std::move(update), TEvQuota::EUpdateState::Normal);
+        }
+
+    private:
+        void AddUpdateV0(TVector<TEvQuota::TUpdateTick>& update, double& sustainedRate) const {
             constexpr double rateBurst = 2.0;
             constexpr ui32 ticks = 2;
             constexpr double ticksD = static_cast<double>(ticks);
 
-            TVector<TEvQuota::TUpdateTick> update;
-            double sustainedRate = 0.0;
             if (Available > 0.0) {
                 update.emplace_back(0, ticks, Available * (rateBurst / ticksD), TEvQuota::ETickPolicy::Front);
                 sustainedRate = Available * rateBurst;
             } else {
-                // Ticks > 0 keeps the channel alive (Ticks=0 would erase it)
                 update.emplace_back(0, ticks, 0.0, TEvQuota::ETickPolicy::Front);
             }
-            ev.Resources.emplace_back(ResId, sustainedRate, std::move(update), TEvQuota::EUpdateState::Normal);
         }
+
+        void AddUpdateV1(TVector<TEvQuota::TUpdateTick>& update, double& sustainedRate) const {
+            // Dual-channel: sustained (channel 0) prevents starvation between
+            // Kesus allocations; burst (channel 1) provides immediate availability.
+            const double speed = Props.GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond();
+            const double steadyRatePerTick = LastAllocAmount;
+            const double exhaustionThreshold = speed / 2.0;
+
+            if (steadyRatePerTick > 0 && Available > -exhaustionThreshold && speed > 0) {
+                update.emplace_back(0, Max<ui32>(), steadyRatePerTick, TEvQuota::ETickPolicy::Sustained);
+                sustainedRate = steadyRatePerTick * 10.0;
+            } else {
+                update.emplace_back(0, 2, 0.0, TEvQuota::ETickPolicy::Sustained);
+            }
+
+            if (Available > 0.0) {
+                update.emplace_back(1, 2, Available, TEvQuota::ETickPolicy::Front);
+            } else {
+                update.emplace_back(1, 1, 0.0, TEvQuota::ETickPolicy::Front);
+            }
+        }
+
+    public:
 
         void AddConsumed(double consumed) {
             if (ReplicationEnabled) {
@@ -244,6 +283,9 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             if (!InitedProps) {
                 InitedProps = true;
                 SetAvailable(ResourceBucketMaxSize);
+                // Conservative init: 1% of expected per-tick allocation.
+                // Enough to keep TickRate > 0, adapts on first TEvResourcesAllocated.
+                LastAllocAmount = speed / 1000.0;
             }
             AllocStats.SetProps(Props);
         }
@@ -297,6 +339,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     TInstant DisconnectTime;
     ui64 OfflineAllocationCookie = 0;
     ui64 KesusReconnectCount = 0;
+    TControlWrapper QuoterProxyProtocolVersion{1, 0, 10};
 
     TMap<TString, THolder<TResourceState>> Resources; // Map because iterators are needed to remain valid during insertions.
     THashMap<ui64, decltype(Resources)::iterator> ResIndex;
@@ -513,7 +556,7 @@ private:
             // Already. Resend result.
             resState->ProxySessionWasSent = false;
             SendProxySessionIfNotSent(resState);
-            resState->AddUpdate(GetProxyUpdateEv());
+            AddResourceUpdate(*resState);
         }
     }
 
@@ -556,6 +599,10 @@ private:
             ProxyUpdateEv = CreateUpdateEvent();
         }
         return *ProxyUpdateEv;
+    }
+
+    void AddResourceUpdate(TResourceState& res) {
+        res.AddUpdate(GetProxyUpdateEv(), static_cast<ui32>(static_cast<i64>(QuoterProxyProtocolVersion)));
     }
 
     void InitUpdateEv() {
@@ -757,7 +804,7 @@ private:
                 }
                 KESUS_PROXY_LOG_TRACE("Set info for resource \"" << res.Resource << "\": { Available: " << res.Available << ", QueueWeight: " << res.QueueWeight << " }");
                 CheckState(res);
-                res.AddUpdate(GetProxyUpdateEv());
+                AddResourceUpdate(res);
             }
         }
     }
@@ -862,7 +909,7 @@ private:
                             resourceIt->second->SetAvailable(resResult.GetInitialAvailable());
                         }
                         resState->AllocStats.OnConnected();
-                        resourceIt->second->AddUpdate(GetProxyUpdateEv());
+                        AddResourceUpdate(*resourceIt->second);
                         SendProxySessionIfNotSent(resState);
                     } else {
                         // TODO: make cache with error results.
@@ -890,11 +937,12 @@ private:
                 }
                 res->SetAvailable(res->Available + amount);
                 res->LastAllocated = now;
+                res->LastAllocAmount = amount;
                 res->AllocStats.OnResourceAllocated(now, amount);
                 res->TotalAllocated += amount;
                 res->Counters.ReceivedFromKesus += amount;
                 CheckState(*res);
-                res->AddUpdate(GetProxyUpdateEv());
+                AddResourceUpdate(*res);
             } else {
                 KESUS_PROXY_LOG_WARN("Resource [" << res->Resource << "] is broken: " << KesusErrorToString(allocatedInfo.GetStateNotification()));
                 BreakResource(*res, GetProxyUpdateEv());
@@ -919,7 +967,7 @@ private:
             res->SetAvailable(res->Available + allocatedInfo.Amount);
             res->LastAllocated = now;
             CheckState(*res);
-            res->AddUpdate(GetProxyUpdateEv());
+            AddResourceUpdate(*res);
             if (wasActive) {
                 MarkResourceForOfflineAllocation(*res, now);
             }
@@ -950,7 +998,7 @@ private:
             res->SetAvailable(available - consumedLagCompensation + allocatedLagCompensation);
             res->LastAllocated = now;
             CheckState(*res);
-            res->AddUpdate(GetProxyUpdateEv());
+            AddResourceUpdate(*res);
         }
     }
 
@@ -1095,6 +1143,10 @@ public:
     void Bootstrap() {
         KESUS_PROXY_LOG_INFO("Created kesus quoter proxy. Tablet id: " << GetKesusTabletId());
         Counters.Init(CanonizePath(Path));
+        if (AppData()->Icb) {
+            TControlBoard::RegisterSharedControl(QuoterProxyProtocolVersion,
+                AppData()->Icb->QuoterControls.ProxyProtocolVersion);
+        }
         Become(&TThis::StateFunc);
         ConnectToKesus(false);
     }

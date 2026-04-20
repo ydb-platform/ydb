@@ -1,7 +1,6 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-#include <yql/essentials/core/yql_statistics.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -74,10 +73,19 @@ struct TColumnLineage {
     THashMap<TString, int, TInfoUnit::THashFunction> MaxDuplicateId;
 };
 
+enum ELogicalCardinality: ui32 {
+    ZeroOrMore,
+    Zero,
+    ZeroOrOne,
+    One,
+    OneOrMore
+};
+
 class TRBOMetadata {
 public:
     EStatisticsType Type = EStatisticsType::BaseTable;
     EStorageType StorageType = EStorageType::NA;
+    ELogicalCardinality LogicalCard = ELogicalCardinality::ZeroOrMore;
 
     TColumnLineage ColumnLineage;
     TVector<TInfoUnit> KeyColumns;
@@ -94,8 +102,8 @@ public:
 
 class TRBOStatistics {
 public:
-    double RecordsCount = 0;
-    double DataSize = 0;
+    double ERows = 0;
+    double EBytes = 0;
     double Selectivity = 1.0;
 
     TString ToString(ui32 printOptions);

@@ -80,6 +80,7 @@ public:
 
     virtual TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
     virtual bool ContainsModule(const TStringBuf& moduleName) const = 0;
+    virtual bool IsPartial() const;
 };
 
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);

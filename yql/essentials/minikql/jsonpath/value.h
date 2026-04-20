@@ -78,7 +78,7 @@ public:
     // Scalar value methods
     double GetNumber() const;
     bool GetBool() const;
-    const TStringBuf GetString() const;
+    TStringBuf GetString() const;
 
     ui32 GetSize() const;
 

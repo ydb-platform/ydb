@@ -64,6 +64,27 @@ class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
 };
 
 /**
+ * Inline join filters
+ */
+class TInlineJoinFiltersRule : public ISimplifiedRule {
+  public:
+    TInlineJoinFiltersRule() : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+
+/***
+ * Fuse two consequtive filters
+ */
+class TFuseFiltersRule : public ISimplifiedRule {
+  public:
+    TFuseFiltersRule() : ISimplifiedRule("Fuse filters", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Push down a non-projecting map operator
  * Currently only pushes below joins that are immediately below
  */
@@ -111,6 +132,16 @@ class TPushFilterIntoJoinRule : public ISimplifiedRule {
 class TPeepholePredicate : public ISimplifiedRule {
   public:
       TPeepholePredicate() : ISimplifiedRule("Peephole predicate", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Push ranges to read.
+ */
+class TPushRangesRule : public ISimplifiedRule {
+  public:
+      TPushRangesRule() : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
 
       virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
@@ -210,6 +241,16 @@ class TPruneColumnsStage : public IRBOStage {
   public:
     TPruneColumnsStage();
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+};
+
+/**
+ * Propagate topsort operator.
+ */
+class TPropagateTopSortThroughStageRule : public ISimplifiedRule {
+  public:
+    TPropagateTopSortThroughStageRule() : ISimplifiedRule("Propagate topsort operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 /**

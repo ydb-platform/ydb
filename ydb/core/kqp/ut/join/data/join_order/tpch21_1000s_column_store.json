@@ -3,11 +3,11 @@
   "args":
     [
       {
-        "op_name":"LeftOnlyJoin (Grace)",
+        "op_name":"LeftOnlyJoin (BlockHash)",
         "args":
           [
             {
-              "op_name":"LeftSemiJoin (Grace)",
+              "op_name":"LeftSemiJoin (BlockHash)",
               "args":
                 [
                   {
@@ -15,7 +15,7 @@
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (Grace)",
+                          "op_name":"InnerJoin (BlockHash)",
                           "args":
                             [
                               {
@@ -27,7 +27,7 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (Grace)",
+                                      "op_name":"InnerJoin (BlockHash)",
                                       "args":
                                         [
                                           {
@@ -63,7 +63,7 @@
                       ]
                   },
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
@@ -81,7 +81,7 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"InnerJoin (BlockHash)",
                                 "args":
                                   [
                                     {
@@ -121,7 +121,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
@@ -139,7 +139,7 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"InnerJoin (BlockHash)",
                                 "args":
                                   [
                                     {

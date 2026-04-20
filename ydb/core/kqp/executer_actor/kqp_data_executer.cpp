@@ -68,12 +68,14 @@ public:
         TMaybe<NBatchOperations::TSettings> batchOperationSettings,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         ui64 generation,
-        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+        TVector<NKikimr::TTableId> tableIdsForSnapshot)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService)
         , ShardIdToTableInfo(shardIdToTableInfo)
+        , TableIdsForSnapshot(std::move(tableIdsForSnapshot))
         , ReadOnlyTx(IsReadOnlyTx())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
@@ -88,10 +90,6 @@ public:
             YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
                 || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
-    }
-
-    TString GetUserSID() const {
-        return (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
     }
 
     bool CheckExecutionComplete() {
@@ -267,6 +265,7 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
                 IgnoreFunc(TEvDqCompute::TEvState);
+                IgnoreFunc(TEvDqCompute::TEvNodeState);
                 IgnoreFunc(TEvDqCompute::TEvChannelData);
                 IgnoreFunc(TEvDqCompute::TEvResumeExecution);
                 IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
@@ -404,6 +403,7 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
+                hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
@@ -799,7 +799,7 @@ private:
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot));
 
             KQP_STLOG_T(KQPDATA, "Create temporary mvcc snapshot, become WaitSnapshotState",
                 (trace_id, TraceId()));
@@ -829,22 +829,22 @@ private:
     }
 
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
-        auto& record = ev->Get()->Record;
+        auto* msg = ev->Get();
 
         KQP_STLOG_T(KQPDATA, "Read snapshot result",
-            (status, record.GetStatus()),
-            (step, record.GetSnapshotStep()),
-            (tx_id, record.GetSnapshotTxId()),
+            (status, msg->Status),
+            (step, msg->Snapshot.Step),
+            (tx_id, msg->Snapshot.TxId),
             (trace_id, TraceId()));
 
-        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds::StatusCode_Name(record.GetStatus()));
-            ReplyErrorAndDie(record.GetStatus(), record.MutableIssues());
+        if (msg->Status != Ydb::StatusIds::SUCCESS) {
+            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds::StatusCode_Name(msg->Status));
+            ReplyErrorAndDie(msg->Status, msg->Issues);
             return;
         }
         ExecuterStateSpan.EndOk();
 
-        SetSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
+        SetSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
         ImmediateTx = true;
 
         ContinueExecute();
@@ -958,6 +958,7 @@ private:
     STATEFN(WaitShutdownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
+            hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
@@ -971,6 +972,12 @@ private:
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
         HandleComputeStats(ev);
 
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            PassAway();
+        }
+    }
+
+    void HandleShutdown(TEvDqCompute::TEvNodeState::TPtr&) {
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
             PassAway();
         }
@@ -1211,6 +1218,7 @@ private:
 
 private:
     TShardIdToTableInfoPtr ShardIdToTableInfo;
+    TVector<NKikimr::TTableId> TableIdsForSnapshot;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -1246,12 +1254,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+    TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-        channelService);
+        channelService, std::move(tableIdsForSnapshot));
 }
 
 } // namespace NKqp

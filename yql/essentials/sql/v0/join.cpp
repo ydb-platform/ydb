@@ -331,7 +331,7 @@ protected:
         }
 
         JoinDescrs_.back().Keys.push_back({ { leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
-            { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } });
+                    { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } });
         KeysInitializing_ = false;
         return true;
     }

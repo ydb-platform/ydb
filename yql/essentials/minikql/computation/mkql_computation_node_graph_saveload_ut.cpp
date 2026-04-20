@@ -274,7 +274,9 @@ Y_UNIT_TEST(TestHoppingSaveLoad) {
         TCallableBuilder inStream(pgmBuilder.GetTypeEnvironment(), "OneYieldStream", inStreamType);
         auto streamNode = inStream.Build();
 
-        ui64 hop = 10, interval = 30, delay = 20;
+        ui64 hop = 10;
+        ui64 interval = 30;
+        ui64 delay = 20;
 
         auto pgmReturn = pgmBuilder.HoppingCore(
             TRuntimeNode(streamNode, false),

@@ -3,7 +3,6 @@
 #include <yql/essentials/public/udf/arrow/defs.h>
 
 #include <arrow/buffer.h>
-#include <arrow/buffer.h>
 
 namespace NYql::NCommon {
 

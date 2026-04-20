@@ -12,7 +12,7 @@ int Main(int argc, const char** argv)
     Y_UNUSED(argv);
     NJsonWriter::TBuf json;
     json.BeginList();
-    NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind, NYql::TLangVersion minLangVer) {
+    NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer) {
         json.BeginObject();
         json.WriteKey("name");
         json.WriteString(name);
@@ -21,6 +21,10 @@ int Main(int argc, const char** argv)
         if (minLangVer != NYql::UnknownLangVersion) {
             json.WriteKey("minLangVer");
             json.WriteString(NYql::FormatLangVersion(minLangVer).GetRef());
+        }
+        if (maxLangVer != NYql::UnknownLangVersion) {
+            json.WriteKey("maxLangVer");
+            json.WriteString(NYql::FormatLangVersion(maxLangVer).GetRef());
         }
         json.EndObject();
     });

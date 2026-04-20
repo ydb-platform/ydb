@@ -1005,7 +1005,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) final;
     TNodePtr DoClone() const final;
     TAstNode* Translate(TContext& ctx) const override;
-    const TNodePtr GetExternalTypes() const;
+    TNodePtr GetExternalTypes() const;
     const TString& GetFunction() const;
     const TString& GetModule() const;
     TNodePtr GetRunConfig() const;
@@ -1778,7 +1778,7 @@ TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) 
     return {};
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer)>& callback);
+void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback);
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);

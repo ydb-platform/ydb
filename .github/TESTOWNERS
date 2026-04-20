@@ -68,6 +68,7 @@
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/postgresql @ydb-platform/qp
 /ydb/tests/functional/kqp @ydb-platform/qp
+/ydb/tests/functional/query_cache @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
@@ -100,6 +101,7 @@
 /ydb/tests/stress/testshard_workload @ydb-platform/blobstorage
 /ydb/tools/stress_tool @ydb-platform/blobstorage
 /ydb/core/load_test @ydb-platform/blobstorage
+/ydb/tests/stress/reconfig_state_storage_workload @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
@@ -129,6 +131,10 @@
 /ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
 /ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
 /ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
+/ydb/tests/stress/topic/ @ydb-platform/Topics
+/ydb/tests/stress/topic_kafka/ @ydb-platform/Topics
+/ydb/tests/stress/topic_sqs/ @ydb-platform/Topics
+/ydb/tests/stress/transfer/ @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

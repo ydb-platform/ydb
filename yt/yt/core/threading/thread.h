@@ -77,6 +77,9 @@ private:
     TThreadId ThreadId_ = InvalidThreadId;
     ::TThread UnderlyingThread_;
 
+    //! Only valid on x86-64 linux.
+    [[maybe_unused]] void* FSBase_ = nullptr;
+
 #if defined(_unix_)
     std::unique_ptr<NThreading::TExecutionStack> SignalHandlerStack_;
 #endif

@@ -25,32 +25,30 @@ public:
 
     void Bootstrap() {
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken = Request->GetInternalToken();
-        if (userToken) {
-            ReplyResult(*userToken);
-        } else {
-            ReplyError("No token provided");
-        }
+        ReplyResult(userToken.Get());
         PassAway();
     }
 
 private:
-    void ReplyResult(const NACLib::TUserToken& userToken) {
+    void ReplyResult(const NACLib::TUserToken* userToken) {
         auto* response = TEvWhoAmIRequest::AllocateResult<Ydb::Discovery::WhoAmIResult>(Request);
-        response->set_user(userToken.GetUserSID());
-        if (TEvWhoAmIRequest::GetProtoRequest(Request)->include_groups()) {
-            for (const auto& group : userToken.GetGroupSIDs()) {
-                response->add_groups(group);
+        if (userToken) {
+            response->set_user(userToken->GetUserSID());
+            if (TEvWhoAmIRequest::GetProtoRequest(Request)->include_groups()) {
+                for (const auto& group : userToken->GetGroupSIDs()) {
+                    response->add_groups(group);
+                }
             }
         }
 
         // Add permission information (always returned)
         const auto* appData = AppData();
-        bool isAdministrationAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
-        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
-        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
-        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
-        bool isRegisterNodeAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetRegisterDynamicNodeAllowedSIDs());
-        bool isBootstrapAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetBootstrapAllowedSIDs());
+        bool isAdministrationAllowed = IsAdministrator(appData, userToken);
+        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(userToken, appData->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
+        bool isRegisterNodeAllowed = IsTokenAllowed(userToken, appData->RegisterDynamicNodeAllowedSIDs);
+        bool isBootstrapAllowed = IsTokenAllowed(userToken, appData->BootstrapAllowedSIDs);
         response->set_is_administration_allowed(isAdministrationAllowed);
         response->set_is_monitoring_allowed(isMonitoringAllowed);
         response->set_is_viewer_allowed(isViewerAllowed);

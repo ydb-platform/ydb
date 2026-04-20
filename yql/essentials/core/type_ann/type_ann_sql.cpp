@@ -88,7 +88,6 @@ TString EscapeDotsInAlias(TStringBuf alias) {
     }
     return sb;
 }
-
 ////////////////////////////////////////////////////////////////////////////////
 
 ui64 CalculateExprHash(const TExprNode& root, TNodeMap<ui64>& visited) {
@@ -99,42 +98,44 @@ ui64 CalculateExprHash(const TExprNode& root, TNodeMap<ui64>& visited) {
 
     ui64 hash = 0;
     switch (root.Type()) {
-    case TExprNode::EType::Callable:
-        hash = CseeHash(root.Content().size(), hash);
-        hash = CseeHash(root.Content().data(), root.Content().size(), hash);
-        [[fallthrough]];
-    case TExprNode::EType::List:
-        hash = CseeHash(root.ChildrenSize(), hash);
-        for (ui32 i = 0; i < root.ChildrenSize(); ++i) {
-            hash = CombineHashes(CalculateExprHash(*root.Child(i), visited), hash);
-        }
+        case TExprNode::EType::Callable:
+            hash = CseeHash(root.Content().size(), hash);
+            hash = CseeHash(root.Content().data(), root.Content().size(), hash);
+            [[fallthrough]];
+        case TExprNode::EType::List:
+            hash = CseeHash(root.ChildrenSize(), hash);
+            for (ui32 i = 0; i < root.ChildrenSize(); ++i) {
+                hash = CombineHashes(CalculateExprHash(*root.Child(i), visited), hash);
+            }
 
-        break;
-    case TExprNode::EType::Atom:
-        hash = CseeHash(root.Content().size(), hash);
-        hash = CseeHash(root.Content().data(), root.Content().size(), hash);
-        hash = CseeHash(root.GetFlagsToCompare(), hash);
-        break;
-    case TExprNode::EType::World:
-        break;
-    case TExprNode::EType::Lambda:
-        hash = CseeHash(root.ChildrenSize(), hash);
-        hash = CseeHash(root.Head().ChildrenSize(), hash);
-        for (ui32 argIndex = 0; argIndex < root.Head().ChildrenSize(); ++argIndex) {
-            visited.emplace(root.Head().Child(argIndex), argIndex);
-        }
+            break;
+        case TExprNode::EType::Atom:
+            hash = CseeHash(root.Content().size(), hash);
+            hash = CseeHash(root.Content().data(), root.Content().size(), hash);
+            hash = CseeHash(root.GetFlagsToCompare(), hash);
+            break;
+        case TExprNode::EType::World:
+            break;
+        case TExprNode::EType::Lambda:
+            hash = CseeHash(root.ChildrenSize(), hash);
+            hash = CseeHash(root.Head().ChildrenSize(), hash);
+            for (ui32 argIndex = 0; argIndex < root.Head().ChildrenSize(); ++argIndex) {
+                visited.emplace(root.Head().Child(argIndex), argIndex);
+            }
 
-        for (ui32 bodyIndex = 1; bodyIndex < root.ChildrenSize(); ++bodyIndex) {
-            hash = CombineHashes(CalculateExprHash(*root.Child(bodyIndex), visited), hash);
-        }
-        break;
-    default:
-        YQL_ENSURE(false, "Unexpected node type");
+            for (ui32 bodyIndex = 1; bodyIndex < root.ChildrenSize(); ++bodyIndex) {
+                hash = CombineHashes(CalculateExprHash(*root.Child(bodyIndex), visited), hash);
+            }
+            break;
+        default:
+            YQL_ENSURE(false, "Unexpected node type");
     }
 
     visited.emplace(&root, hash);
     return hash;
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& visited) {
     if (!visited.emplace(&left).second) {
@@ -146,49 +147,54 @@ bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& vi
     }
 
     switch (left.Type()) {
-    case TExprNode::EType::Callable:
-        if (left.Content() != right.Content()) {
-            return false;
-        }
-
-        [[fallthrough]];
-    case TExprNode::EType::List:
-        if (left.ChildrenSize() != right.ChildrenSize()) {
-            return false;
-        }
-
-        for (ui32 i = 0; i < left.ChildrenSize(); ++i) {
-            if (!ExprNodesEquals(*left.Child(i), *right.Child(i), visited)) {
+        case TExprNode::EType::Callable:
+            if (left.Content() != right.Content()) {
                 return false;
             }
-        }
 
-        return true;
-    case TExprNode::EType::Atom:
-        return left.Content() == right.Content() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
-    case TExprNode::EType::Argument:
-        return left.GetArgIndex() == right.GetArgIndex();
-    case TExprNode::EType::World:
-        return true;
-    case TExprNode::EType::Lambda:
-        if (left.ChildrenSize() != right.ChildrenSize()) {
-            return false;
-        }
-
-        if (left.Head().ChildrenSize() != right.Head().ChildrenSize()) {
-            return false;
-        }
-
-        for (ui32 i = 1; i < left.ChildrenSize(); ++i) {
-            if (!ExprNodesEquals(*left.Child(i), *right.Child(i), visited)) {
+            [[fallthrough]];
+        case TExprNode::EType::List:
+            if (left.ChildrenSize() != right.ChildrenSize()) {
                 return false;
             }
-        }
 
-        return true;
-    default:
-        YQL_ENSURE(false, "Unexpected node type");
+            for (ui32 i = 0; i < left.ChildrenSize(); ++i) {
+                if (!ExprNodesEquals(*left.Child(i), *right.Child(i), visited)) {
+                    return false;
+                }
+            }
+
+            return true;
+        case TExprNode::EType::Atom:
+            return left.Content() == right.Content() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
+        case TExprNode::EType::Argument:
+            return left.GetArgIndex() == right.GetArgIndex();
+        case TExprNode::EType::World:
+            return true;
+        case TExprNode::EType::Lambda:
+            if (left.ChildrenSize() != right.ChildrenSize()) {
+                return false;
+            }
+
+            if (left.Head().ChildrenSize() != right.Head().ChildrenSize()) {
+                return false;
+            }
+
+            for (ui32 i = 1; i < left.ChildrenSize(); ++i) {
+                if (!ExprNodesEquals(*left.Child(i), *right.Child(i), visited)) {
+                    return false;
+                }
+            }
+
+            return true;
+        default:
+            YQL_ENSURE(false, "Unexpected node type");
     }
+}
+
+bool ExprNodesEquals(const TExprNode& left, const TExprNode& right) {
+    TNodeSet visited;
+    return ExprNodesEquals(left, right, visited);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -592,9 +598,7 @@ TMaybe<bool> ScanExprForMatchedGroup(
             if (exprs[i].Hash != hash) {
                 continue;
             }
-
-            TNodeSet equalsVisited;
-            if (!ExprNodesEquals(*exprs[i].OriginalRoot, root, equalsVisited)) {
+            if (!ExprNodesEquals(*exprs[i].OriginalRoot, root)) {
                 continue;
             }
 
@@ -1550,8 +1554,7 @@ bool ValidateSort(
             bool changedSort = false;
             for (auto projectionIndex : projectionHashes[hash]) {
                 const auto& projectionLambda = projection->Tail().Child(projectionIndex)->Tail();
-                TNodeSet equalsVisited;
-                if (ExprNodesEquals(newLambda->Tail(), projectionLambda.Tail(), equalsVisited)) {
+                if (ExprNodesEquals(newLambda->Tail(), projectionLambda.Tail())) {
                     auto columnName = projectionOrders->at(projectionIndex)->first.front().PhysicalName;
                     newLambda = ctx.Expr.Builder(newLambda->Pos())
                         .Lambda()
@@ -1676,8 +1679,7 @@ ui32 RegisterGroupExpression(
     auto it = hashes.find(hash);
     if (it != hashes.end()) {
         for (auto i : it->second) {
-            TNodeSet visitedNodes;
-            if (ExprNodesEquals(*root, groupExprsItems[i]->Tail().Tail(), visitedNodes)) {
+            if (ExprNodesEquals(*root, groupExprsItems[i]->Tail().Tail())) {
                 return i;
             }
         }
@@ -1701,7 +1703,8 @@ ui32 RegisterGroupExpression(
 }
 
 bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprNode::TPtr& groupExprs, TExprContext& ctx) {
-    TExprNode::TListType groupSetsItems, groupExprsItems;
+    TExprNode::TListType groupSetsItems;
+    TExprNode::TListType groupExprsItems;
     THashMap<ui64, TVector<ui32>> hashes;
     for (const auto& child : data.Children()) {
         const auto& lambda = child->Tail();
@@ -3535,7 +3538,8 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     }
 
                     if (!scanColumnsOnly) {
-                        TExprNode::TPtr groupSets, groupExprs;
+                        TExprNode::TPtr groupSets;
+                        TExprNode::TPtr groupExprs;
                         if (!BuildGroupingSets(data, groupSets, groupExprs, ctx.Expr)) {
                             return IGraphTransformer::TStatus::Error;
                         }

@@ -728,6 +728,9 @@ TSortedUploadTaskParams SortedUploadTaskParamsFromProto(const NProto::TSortedUpl
     SortedUploadTaskParams.Output = YtTableRefFromProto(protoSortedUploadTaskParams.GetOutput());
     SortedUploadTaskParams.CookieYson = protoSortedUploadTaskParams.GetCookieYson();
     SortedUploadTaskParams.Order = protoSortedUploadTaskParams.GetOrder();
+    if (protoSortedUploadTaskParams.HasSortingColumns()) {
+        SortedUploadTaskParams.SortingColumns = SortingColumnsFromProto(protoSortedUploadTaskParams.GetSortingColumns());
+    }
     return SortedUploadTaskParams;
 }
 
@@ -739,6 +742,8 @@ NProto::TSortedUploadTaskParams SortedUploadTaskParamsToProto(const TSortedUploa
     protoSortedUploadTaskParams.MutableOutput()->Swap(&output);
     protoSortedUploadTaskParams.SetCookieYson(SortedUploadTaskParams.CookieYson);
     protoSortedUploadTaskParams.SetOrder(SortedUploadTaskParams.Order);
+    auto protoSortingColumns = SortingColumnsToProto(SortedUploadTaskParams.SortingColumns);
+    protoSortedUploadTaskParams.MutableSortingColumns()->Swap(&protoSortingColumns);
 
     return protoSortedUploadTaskParams;
 }

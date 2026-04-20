@@ -42,7 +42,7 @@ message TOAuthToken {
 
 message TIamCredentials {
     optional string ServiceAccountId = 1;
-    optional TOAuthToken InitialToken = 2; // Initial token used to check rights & to resolve ResourceId
+    optional TOAuthToken InitialToken = 2 [(Ydb.sensitive) = true]; // Initial token used to check rights & to resolve ResourceId
     optional string ResourceId = 3; // In terms of IAM Service Control, actually CloudId
 }
 
@@ -50,7 +50,7 @@ message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
     optional bool EnableSsl = 5;
-    optional string CaCert = 6;
+    optional string CaCert = 6; // No Ydb.sensitive annotation since this is public trust-anchor material, not a secret
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;

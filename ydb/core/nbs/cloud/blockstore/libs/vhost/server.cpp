@@ -437,6 +437,7 @@ public:
             .BlockSize = options.BlockSize,
             .BlockCount = options.BlocksCount,
             .BlocksPerStripeCount = options.StripeSize / options.BlockSize,
+            .VChunkSize = options.VChunkSize,
             .MaxZeroBlocksSubRequestSize = options.MaxZeroBlocksSubRequestSize,
             .UnalignedRequestsDisabled = options.UnalignedRequestsDisabled,
             .StorageMediaKind = options.StorageMediaKind};

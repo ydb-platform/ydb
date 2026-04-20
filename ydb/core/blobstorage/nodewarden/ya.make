@@ -62,6 +62,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk
     ydb/core/control/lib
     ydb/library/pdisk_io
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
 )
 

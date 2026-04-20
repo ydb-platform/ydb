@@ -67,7 +67,7 @@ nostd::shared_ptr<HttpCurlGlobalInitializer> HttpCurlGlobalInitializer::GetInsta
 #ifdef ENABLE_OTLP_COMPRESSION_PREVIEW
 // Original source:
 // https://stackoverflow.com/questions/12398377/is-it-possible-to-have-zlib-read-from-and-write-to-the-same-memory-buffer/12412863#12412863
-int deflateInPlace(z_stream *strm, unsigned char *buf, uint32_t len, uint32_t *max_len)
+static int deflateInPlace(z_stream *strm, unsigned char *buf, uint32_t len, uint32_t *max_len)
 {
   // must be large enough to hold zlib or gzip header (if any) and one more byte -- 11 works for the
   // worst case here, but if gzip encoding is used and a deflateSetHeader() call is inserted in this

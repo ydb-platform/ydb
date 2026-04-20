@@ -6,24 +6,7 @@
 
 #include <library/cpp/getopt/small/completer.h>
 
-#include <util/system/env.h>
-
 namespace NYdb::NConsoleClient {
-
-namespace {
-    TString DetectShellFromEnv() {
-        auto shellVar = TryGetEnv("SHELL");
-        if (!shellVar) {
-            return {};
-        }
-        TStringBuf shell = shellVar.GetRef();
-        shell = shell.RAfter('/');
-        if (shell == "bash" || shell == "zsh") {
-            return TString(shell);
-        }
-        return {};
-    }
-} // anonymous namespace
 
 TCommandConfig::TCommandConfig(TClientCommandTree* rootTree)
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")

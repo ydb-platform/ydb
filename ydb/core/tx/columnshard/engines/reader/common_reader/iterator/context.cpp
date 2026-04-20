@@ -5,6 +5,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 

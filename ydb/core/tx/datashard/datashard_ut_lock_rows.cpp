@@ -265,6 +265,26 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         TTestActorRuntime::TEventObserverHolder RemoveObserver;
     };
 
+    static TString GetWaitGraphStr(TTestActorRuntime& runtime, ui32 nodeIdx) {
+        ui32 nodeId = runtime.GetNodeId(nodeIdx);
+        auto sender = runtime.AllocateEdgeActor(nodeIdx);
+        runtime.Send(
+            MakeLongTxServiceID(nodeId), sender,
+            new TEvLongTxService::TEvGetLockWaitGraph, nodeIdx, true);
+        auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvGetLockWaitGraphResult>(sender);
+
+        TVector<std::pair<ui64, ui64>> edges;
+        for (const auto& edge : result->Get()->WaitEdges) {
+            edges.emplace_back(edge.Awaiter.LockId, edge.Blocker.LockId);
+        }
+        std::sort(edges.begin(), edges.end());
+        TStringBuilder wgStr;
+        for (auto& [a, b] : edges) {
+            wgStr << a << " -> " << b << "\n";
+        }
+        return wgStr;
+    }
+
     Y_UNIT_TEST(Basics) {
         TPortManager pm;
 
@@ -1328,24 +1348,8 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         runtime.SimulateSleep(TDuration::Seconds(1));
         for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
             // Check that the wait edges are instantiated in the LongTxService on all nodes.
-            ui32 nodeId = runtime.GetNodeId(nodeIdx);
-            auto sender = runtime.AllocateEdgeActor(nodeIdx);
-            runtime.Send(
-                MakeLongTxServiceID(nodeId), sender,
-                new TEvLongTxService::TEvGetLockWaitGraph, nodeIdx, true);
-            auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvGetLockWaitGraphResult>(sender);
-
-            TVector<std::pair<ui64, ui64>> edges;
-            for (const auto& edge : result->Get()->WaitEdges) {
-                edges.emplace_back(edge.Awaiter.LockId, edge.Blocker.LockId);
-            }
-            std::sort(edges.begin(), edges.end());
-            TStringBuilder wgStr;
-            for (auto& [a, b] : edges) {
-                wgStr << a << " -> " << b << "\n";
-            }
             UNIT_ASSERT_VALUES_EQUAL_C(
-                wgStr,
+                GetWaitGraphStr(runtime, nodeIdx),
                 "123 -> 234\n",
                 "with nodeIdx: " << nodeIdx);
         }
@@ -2069,7 +2073,10 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         for (const auto& [status, count] : responseStatusStats) {
             Cerr << status << ": " << count << Endl;
         }
-        UNIT_ASSERT_GT(successfulTxs, REQUIRED_SUCCESSFUL_TXS);
+
+        UNIT_ASSERT_GT_C(
+            successfulTxs, REQUIRED_SUCCESSFUL_TXS,
+            "Wait graph:\n" << GetWaitGraphStr(runtime, 0));
         UNIT_ASSERT(responseStatusStats[NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK] > 0);
     }
 

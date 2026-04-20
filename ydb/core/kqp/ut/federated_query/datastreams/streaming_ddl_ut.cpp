@@ -2981,6 +2981,116 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
         });
     }
+
+    Y_UNIT_TEST_F(UnionAllTwoTopics, TStreamingTestFixture) {
+        constexpr char inputTopicName1[] = "unionAllTwoTopicsInputTopic1";
+        constexpr char inputTopicName2[] = "unionAllTwoTopicsInputTopic2";
+        constexpr char outputTopicName[] = "unionAllTwoTopicsOutputTopic";
+        CreateTopic(inputTopicName1);
+        CreateTopic(inputTopicName2);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT key || value AS result FROM `{pq_source}`.`{input_topic1}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        )
+                    )
+                    UNION ALL
+                    SELECT key || value AS result FROM `{pq_source}`.`{input_topic2}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        )
+                    )
+                END DO;
+            )sql",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic1"_a = inputTopicName1,
+            "input_topic2"_a = inputTopicName2,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName1, R"({"key": "topic1_", "value": "key1"})");
+        WriteTopicMessage(inputTopicName2, R"({"key": "topic2_", "value": "key2"})");
+
+        ReadTopicMessages(outputTopicName, {"topic1_key1", "topic2_key2"}, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
+
+        ExecQuery(fmt::format(
+            R"sql(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
+            )sql",
+            "query_name"_a = queryName
+        ));
+    }
+
+    Y_UNIT_TEST_F(UnionAllTopicWithItself, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "unionAllTopicWithItselfInputTopic";
+        constexpr char outputTopicName[] = "unionAllTopicWithItselfOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT key || value AS result FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        )
+                    )
+                    UNION ALL
+                    SELECT key || value || "_dup" AS result FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        )
+                    )
+                END DO;
+            )sql",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"key": "k", "value": "v"})");
+
+        ReadTopicMessages(outputTopicName, {"kv", "kv_dup"}, TInstant::Now() - TDuration::Seconds(100), /* sort */ true);
+
+        ExecQuery(fmt::format(
+            R"sql(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
+            )sql",
+            "query_name"_a = queryName
+        ));
+    }
 }
 
 } // namespace NKikimr::NKqp

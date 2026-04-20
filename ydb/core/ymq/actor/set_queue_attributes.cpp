@@ -5,6 +5,7 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
@@ -16,8 +17,6 @@
 #include <util/generic/maybe.h>
 #include <util/generic/utility.h>
 #include <util/string/cast.h>
-
-using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {
 
@@ -117,6 +116,7 @@ private:
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvQueueId,  HandleQueueId);
+            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
         }
     }
 
@@ -143,8 +143,11 @@ private:
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             // OK
-            RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
-            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+            if (IsTopicCreated()) {
+                return UpdateTopic();
+            } else {
+                NotifyQueueLeader();
+            }
         } else {
             RLOG_SQS_WARN("Request failed: " << record);
             MakeError(result, NErrors::INTERNAL_FAILURE);
@@ -155,6 +158,61 @@ private:
 
     const TSetQueueAttributesRequest& Request() const {
         return SourceSqsRequest_.GetSetQueueAttributes();
+    }
+
+    void UpdateTopic() {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(GetTopicName());
+        if (ValidatedAttributes_.MessageRetentionPeriod) {
+            request.mutable_set_retention_period()->set_seconds(*ValidatedAttributes_.MessageRetentionPeriod);
+        }
+
+        auto* consumer = request.add_alter_consumers();
+        consumer->set_name(ConsumerName);
+
+        auto* type = consumer->mutable_alter_shared_consumer_type();
+        if (ValidatedAttributes_.VisibilityTimeout) {
+            type->mutable_set_default_processing_timeout()->set_seconds(*ValidatedAttributes_.VisibilityTimeout);
+        }
+        if (ValidatedAttributes_.DelaySeconds) {
+            type->mutable_set_receive_message_delay()->set_seconds(*ValidatedAttributes_.DelaySeconds);
+        }
+        if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
+            type->mutable_set_receive_message_wait_time()->set_seconds(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds);
+        }
+
+        auto* policy = type->mutable_alter_dead_letter_policy();
+        if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
+            policy->set_set_enabled(true);
+            policy->mutable_alter_condition()->set_set_max_processing_attempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
+        }
+        if (ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
+            policy->set_set_enabled(true);
+            policy->mutable_set_move_action()->set_dead_letter_queue(TStringBuilder() << "sqs://" << UserName_ << "/" << FolderId_ << "/" << *ValidatedAttributes_.RedrivePolicy.TargetQueueName);
+        }
+
+        RLOG_SQS_DEBUG("Alter topic request: " << request.ShortDebugString());
+        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
+            .Database = GetDatabaseName(),
+            .Request = std::move(request),
+        }));
+    }
+
+    void NotifyQueueLeader() {
+        RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
+        Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+    }
+
+    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+        const auto& response = *ev->Get();
+        if (response.Status == Ydb::StatusIds::SUCCESS) {
+            NotifyQueueLeader();
+        } else {
+            RLOG_SQS_WARN("Failed to alter topic: " << response.ErrorMessage);
+            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE);
+        }
+
+        SendReplyAndDie();
     }
 
 private:

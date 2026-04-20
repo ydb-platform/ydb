@@ -1957,9 +1957,10 @@ void TTcpConnection::UpdateTcpStatistics()
         int ret = ::getsockopt(Socket_, IPPROTO_TCP, TCP_INFO, &info, &len);
         if (ret == 0) {
             // Handle counter overflow.
-            i64 delta = info.tcpi_total_retrans < LastRetransmitCount_
-                ? info.tcpi_total_retrans + (Max<ui32>() - LastRetransmitCount_)
-                : info.tcpi_total_retrans - LastRetransmitCount_;
+            // tcpi_total_retrans is a uint32 that wraps around. Using unsigned subtraction
+            // handles the overflow case correctly without a branch: e.g. if the counter
+            // wrapped from Max<ui32>() past zero, (ui32)(new - old) still gives the right delta.
+            i64 delta = static_cast<ui32>(info.tcpi_total_retrans - LastRetransmitCount_);
             UpdateBusCounter(&TBusNetworkBandCounters::Retransmits, delta);
             LastRetransmitCount_ = info.tcpi_total_retrans;
         }

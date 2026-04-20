@@ -772,7 +772,7 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
         idToName[col.GetId()] = col.GetName();
     }
 
-    for (auto&& olapIndex : schema.GetIndexes()) {
+    for (const auto& olapIndex : schema.GetIndexes()) {
         Y_ENSURE(olapIndex.HasName(), "Column table index must have a name");
 
         switch (olapIndex.GetImplementationCase()) {

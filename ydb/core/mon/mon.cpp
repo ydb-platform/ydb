@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/tablet_devui_mon_access.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -504,6 +505,13 @@ public:
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
+        if (NKikimr::IsTabletDevUiSecurePathInfo(Container.GetPathInfo())) {
+            const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
+            if (!NKikimr::IsAdministrator(AppData(), userToken)) {
+                return ReplyForbiddenAndPassAway(TStringBuilder()
+                    << "Administrator access is required for " << Container.GetPath());
+            }
+        }
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
             TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
@@ -545,8 +553,8 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (ActorMonPage->AuthMode == TMon::EAuthMode::ExtractOnly) {
-            // Extract token but don't enforce authorization - let the handler decide
+        if (ActorMonPage->AuthMode == TMon::EAuthMode::RelaxedMonitoring) {
+            // No AllowedSIDs or auth-RPC failure gate here; SendRequest still requires admin for secure tablet DevUI.
             SendRequest(&result);
             return;
         }
@@ -1179,8 +1187,8 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (Fields.AuthMode == TMon::EAuthMode::ExtractOnly) {
-            // Extract token but don't enforce authorization - let the handler decide
+        if (Fields.AuthMode == TMon::EAuthMode::RelaxedMonitoring) {
+            // No AllowedSIDs or auth-RPC failure gate here; Fields.Handler enforces access if needed.
             SendRequest(&result);
             return;
         }
@@ -1375,8 +1383,8 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (AuthMode == TMon::EAuthMode::ExtractOnly) {
-            // Extract token but don't enforce authorization - let the handler decide
+        if (AuthMode == TMon::EAuthMode::RelaxedMonitoring) {
+            // No AllowedSIDs or auth-RPC failure gate here; static page only (no tablet actor hop).
             ProcessRequest();
             return;
         }

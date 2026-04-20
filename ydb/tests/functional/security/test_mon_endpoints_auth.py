@@ -279,6 +279,18 @@ def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
     _test_endpoints(ydb_cluster_without_enforce_user_token, EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN)
 
 
+def test_tablets_app_secure_prefix_forbids_non_admins(ydb_cluster_with_enforce_user_token):
+    q = 'TabletID=1'
+    expected = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, {f'/tablets/app/secure?{q}': expected})
+
+
 def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
     EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH = {
         '/counters': {

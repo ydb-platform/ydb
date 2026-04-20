@@ -74,6 +74,8 @@ SRCS(
     table_index.cpp
     tablet.cpp
     tablet.h
+    tablet_devui_mon_access.cpp
+    tablet_devui_mon_access.h
     tablet_killer.cpp
     tablet_pipe.h
     tablet_pipecache.h

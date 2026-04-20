@@ -728,8 +728,10 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     // Special handling for successful lock subscriptions
     if (lockStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
         lock.State = EProxyLockState::Subscribed;
+        bool gotTimestamp = false;
         if (lockTimestamp && !lock.Timestamp) {
             lock.Timestamp = lockTimestamp;
+            gotTimestamp = true;
         }
         for (auto& pr : lock.NewSubscribers) {
             Send(pr.first,
@@ -746,6 +748,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
             TLockStateHandle{lock}, record.GetWaitEdges(),
             [&](const TWaitEdgeId& id) { return id.OwnerId.NodeId() != SelfId().NodeId(); });
 
+        if (gotTimestamp && lock.WaitNode.Island) {
+            ScheduleDeadlockDetection(*lock.WaitNode.Island, TDuration::Zero());
+        }
         return;
     }
 
@@ -1201,7 +1206,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
     // 1. Update the local graph.
 
     TVector<TWaitEdgeInfo> actuallyAdded;
-    THashSet<TLockIsland*> islandsWithPossibleDeadlock;
+    bool deadlockPossible = false;
     for (const auto& addedEdge : added) {
         auto existingIt = WaitEdges.find(addedEdge.Id);
         if (existingIt != WaitEdges.end()) {
@@ -1240,13 +1245,13 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
 
         if (!awaiter.WaitNode().Island && !blocker.WaitNode().Island) {
             // Create an island of two
-            auto* island = new TLockIsland;
-            LockIslands.PushBack(island);
-            island->Locks.PushBack(&awaiter.WaitNode());
-            island->Locks.PushBack(&blocker.WaitNode());
-            island->LocksCount = 2;
-            awaiter.WaitNode().Island = island;
-            blocker.WaitNode().Island = island;
+            const ui64 id = NextLockIslandId++;
+            auto& island = LockIslands.try_emplace(id, id).first->second;
+            island.Locks.PushBack(&awaiter.WaitNode());
+            island.Locks.PushBack(&blocker.WaitNode());
+            island.LocksCount = 2;
+            awaiter.WaitNode().Island = &island;
+            blocker.WaitNode().Island = &island;
         } else if (!awaiter.WaitNode().Island && blocker.WaitNode().Island) {
             blocker.WaitNode().Island->Locks.PushBack(&awaiter.WaitNode());
             ++blocker.WaitNode().Island->LocksCount;
@@ -1266,10 +1271,10 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             }
             bigger->Locks.Append(smaller->Locks);
             bigger->LocksCount += smaller->LocksCount;
-            delete smaller;
+            LockIslands.erase(smaller->Id);
         } else {
             // Awaiter and blocker belong to the same island, deadlock is possible.
-            islandsWithPossibleDeadlock.insert(awaiter.WaitNode().Island);
+            deadlockPossible = true;
         }
 
         if (Settings.Counters) {
@@ -1380,8 +1385,8 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
     }
 
     // 3. Run deadlock detection
-    for (auto* island: islandsWithPossibleDeadlock) {
-        RunDeadlockDetection(*island);
+    if (deadlockPossible && awaiter.WaitNode().Island) {
+        ScheduleDeadlockDetection(*awaiter.WaitNode().Island, TDuration::MilliSeconds(10));
     }
 }
 
@@ -1431,7 +1436,7 @@ void TLongTxServiceActor::UnlinkWaitEdge(TWaitEdge& edge) {
             wn.Unlink();
             --wn.Island->LocksCount;
             if (!wn.Island->LocksCount) {
-                delete wn.Island;
+                LockIslands.erase(wn.Island->Id);
             }
             wn.Island = nullptr;
         }
@@ -1459,8 +1464,9 @@ void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
     if (waitNode.Island) {
         --waitNode.Island->LocksCount;
         if (!waitNode.Island->LocksCount) {
-            delete waitNode.Island;
+            LockIslands.erase(waitNode.Island->Id);
         }
+        waitNode.Island = nullptr;
     }
 }
 
@@ -1548,9 +1554,24 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
+void TLongTxServiceActor::ScheduleDeadlockDetection(TLockIsland& island, TDuration delay) {
+    if (island.DeadlockDetectionScheduled) {
+        return;
+    }
+    if (delay) {
+        Schedule(delay, new TEvPrivate::TEvRunDeadlockDetection(island.Id));
+    } else {
+        Send(SelfId(), new TEvPrivate::TEvRunDeadlockDetection(island.Id));
+    }
+    island.DeadlockDetectionScheduled = true;
+}
 
-void TLongTxServiceActor::RunDeadlockDetection(TLockIsland& island) {
-    auto hashFunc = [](const TLockStateHandle& lh) { return lh.Hash(); };
+void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) {
+    auto islandIt = LockIslands.find(ev->Get()->IslandId);
+    if (islandIt == LockIslands.end()) {
+        return;
+    }
+    auto& island = islandIt->second;
 
     // The higher priority, the more likely we are to break the wait by this lock.
     // We want to abort wait edges of younger locks, so that older transactions can finish their work.
@@ -1561,83 +1582,104 @@ void TLongTxServiceActor::RunDeadlockDetection(TLockIsland& island) {
         return left.LockId() > right.LockId();
     };
 
-    THashSet<TWaitNode*> awaitersWithLocalEdges;
-    for (auto& lock : island.Locks) {
-        for (const auto& edge : lock.Blockers) {
-            if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
-                awaitersWithLocalEdges.insert(&lock);
-                break;
-            }
+    TVector<TWaitEdge*> localEdges;
+    for (auto& [id, edge] : WaitEdges) {
+        if (!edge.Broken && id.OwnerId.NodeId() == SelfId().NodeId()
+            && edge.Awaiter.WaitNode().Island == &island) {
+            localEdges.push_back(&edge);
         }
     }
+    std::sort(
+        localEdges.begin(), localEdges.end(),
+        [&](TWaitEdge* left, TWaitEdge* right) {
+            return lockPriorityCmp(left->Awaiter, right->Awaiter);
+        });
 
     TVector<TWaitNode*> current;
     TVector<TWaitNode*> next;
-    THashMap<TLockStateHandle, TWaitEdge*, decltype(hashFunc)> prev;
-    THashSet<TWaitEdge*> toBreak;
-    for (const auto& start : awaitersWithLocalEdges) {
+    THashMap<TWaitNode*, TWaitEdge*> prev;
+    TWaitEdge* toBreak = nullptr;
+    for (auto* startEdge : localEdges) {
+        const TWaitNode* startAwaiter = &startEdge->Awaiter.WaitNode();
+        TWaitNode* startBlocker = &startEdge->Blocker.WaitNode();
         current.clear();
-        current.push_back(start);
+        current.push_back(startBlocker);
         next.clear();
         prev.clear();
 
         while (!current.empty()) {
-            bool found = false;
             for (const auto& node : current) {
+                if (node->Blockers.Empty() || !node->Blockers.Front()->Awaiter.Timestamp()) {
+                    continue;
+                }
                 for (auto& edge : node->Blockers) {
-                    if (&edge.Blocker.WaitNode() == start) {
-                        // Found a cycle, now find the best edge to break.
-                        found = true;
-                        TWaitEdge* bestEdge = nullptr;
+                    if (edge.Broken) {
+                        continue;
+                    }
+                    if (&edge.Blocker.WaitNode() == startAwaiter) {
+                        // Found a cycle with startEdge now determine if it is the best edge to break.
+                        bool foundBetter = false;
                         TWaitEdge* curEdge = &edge;
                         while (true) {
-                            if (!bestEdge
-                                || lockPriorityCmp(curEdge->Awaiter, bestEdge->Awaiter)) {
-                                bestEdge = curEdge;
+                            if (lockPriorityCmp(curEdge->Awaiter, startEdge->Awaiter)) {
+                                foundBetter = true;
+                                break;
                             }
 
-                            if (&curEdge->Awaiter.WaitNode() == start) {
+                            if (&curEdge->Awaiter.WaitNode() == startBlocker) {
                                 break;
                             } else {
-                                curEdge = prev.at(curEdge->Awaiter);
+                                curEdge = prev.at(&curEdge->Awaiter.WaitNode());
                             }
                         }
 
-                        if (bestEdge && !bestEdge->Broken
-                            && bestEdge->Id.OwnerId.NodeId() == SelfId().NodeId()) {
-                            toBreak.insert(bestEdge);
+                        if (!foundBetter) {
+                            toBreak = startEdge;
+                            break;
                         }
                     } else {
-                        if (prev.emplace(edge.Blocker, &edge).second) {
+                        if (prev.emplace(&edge.Blocker.WaitNode(), &edge).second) {
                             next.push_back(&edge.Blocker.WaitNode());
                         }
                     }
                 }
+
+                if (toBreak) {
+                    break;
+                }
             }
 
-            if (found) {
+            if (toBreak) {
                 break;
             }
 
             std::swap(current, next);
             next.clear();
         }
-    }
 
-    for (auto edge : toBreak) {
-        TXLOG_DEBUG("Breaking the wait edge id: " << edge->Id
-            << ", awaiter: " << edge->Awaiter.LockInfo(SelfId())
-            << ", blocker: " << edge->Blocker.LockInfo(SelfId()));
-        edge->Broken = true;
-        Send(
-            edge->Id.OwnerId,
-            new TEvLongTxService::TEvWaitingLockDeadlock(edge->Id.RequestId));
-        if (Settings.Counters) {
-            Settings.Counters->WaitGraphEdgesBroken->Inc();
+        if (toBreak) {
+            break;
         }
     }
 
-    if (!toBreak.empty()) {
+    if (toBreak) {
+        TXLOG_DEBUG("Breaking the wait edge id: " << toBreak->Id
+            << ", awaiter: " << toBreak->Awaiter.LockInfo(SelfId())
+            << ", blocker: " << toBreak->Blocker.LockInfo(SelfId()));
+        toBreak->Broken = true;
+        Send(
+            toBreak->Id.OwnerId,
+            new TEvLongTxService::TEvWaitingLockDeadlock(toBreak->Id.RequestId));
+        if (Settings.Counters) {
+            Settings.Counters->WaitGraphEdgesBroken->Inc();
+        }
+
+        Send(SelfId(), new TEvPrivate::TEvRunDeadlockDetection(island.Id));
+    } else {
+        island.DeadlockDetectionScheduled = false;
+    }
+
+    if (toBreak) {
         TVector<std::tuple<ui64, ui32, ui64, ui32, ui32>> edges;
         for (const auto& [id, edge] : WaitEdges) {
             edges.emplace_back(
@@ -1653,7 +1695,7 @@ void TLongTxServiceActor::RunDeadlockDetection(TLockIsland& island) {
         }
         TXLOG_DEBUG("FFF WG\n" << sb);
 
-        for (const auto& island : LockIslands) {
+        for (const auto& [id, island] : LockIslands) {
             TStringBuilder sb;
             sb << " lc:" << island.LocksCount << " ll:" << island.Locks.Size();
             for (const auto& lock : island.Locks) {
@@ -1665,7 +1707,7 @@ void TLongTxServiceActor::RunDeadlockDetection(TLockIsland& island) {
                 }
                 Y_ABORT_UNLESS(handle);
             }
-            TXLOG_DEBUG("FFF ISLAND " << sb);
+            TXLOG_DEBUG("FFF ISLAND Id: " << id << sb);
         }
     }
 }

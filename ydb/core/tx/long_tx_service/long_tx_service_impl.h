@@ -263,9 +263,13 @@ namespace NLongTxService {
         };
 
         struct TLockIsland : public TIntrusiveListItem<TLockIsland> {
+            ui64 Id;
             TIntrusiveList<TWaitNode, TTagIsland> Locks;
             // Current number of locks in this island (we merge smaller island into the bigger island)
             size_t LocksCount = 0;
+            bool DeadlockDetectionScheduled = false;
+
+            explicit TLockIsland(ui64 id) : Id(id) {}
         };
 
         struct TWaitEdge
@@ -299,6 +303,7 @@ namespace NLongTxService {
                 EvAcquireSnapshotFinished,
                 EvReconnect,
                 EvSnapshotMaintenance,
+                EvRunDeadlockDetection,
             };
 
             struct TEvCommitFinished : public TEventLocal<TEvCommitFinished, EvCommitFinished> {
@@ -352,6 +357,15 @@ namespace NLongTxService {
 
             struct TEvSnapshotMaintenance : public TEventLocal<TEvSnapshotMaintenance, EvSnapshotMaintenance> {
             };
+
+            struct TEvRunDeadlockDetection : public TEventLocal<
+                    TEvRunDeadlockDetection, EvRunDeadlockDetection> {
+                const ui64 IslandId;
+
+                explicit TEvRunDeadlockDetection(ui64 islandId)
+                    : IslandId(islandId)
+                {}
+            };
         };
 
     private:
@@ -402,10 +416,6 @@ namespace NLongTxService {
                 SessionSubscribeActor->Self = nullptr;
                 SessionSubscribeActor = nullptr;
             }
-
-            while (!LockIslands.Empty()) {
-                delete LockIslands.PopBack();
-            }
         }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -442,6 +452,7 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvWaitingLockRemove, Handle);
                 hFunc(TEvLongTxService::TEvUpdateLockWaitEdges, Handle);
                 hFunc(TEvLongTxService::TEvGetLockWaitGraph, Handle);
+                hFunc(TEvPrivate::TEvRunDeadlockDetection, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvPrivate::TEvReconnect, Handle);
@@ -472,6 +483,7 @@ namespace NLongTxService {
         void Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr& ev);
         void Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev);
         void Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev);
+        void Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
@@ -525,7 +537,7 @@ namespace NLongTxService {
         void UnlinkWaitEdge(TWaitEdge&);
         void UnlinkWaitNode(TWaitNode&);
 
-        void RunDeadlockDetection(TLockIsland&);
+        void ScheduleDeadlockDetection(TLockIsland&, TDuration delay);
 
     private:
         const TLongTxServiceSettings Settings;
@@ -544,7 +556,8 @@ namespace NLongTxService {
         TLocalSnapshotsStoragePtr LocalSnapshotsStorage = MakeIntrusive<TLocalSnapshotsStorage>();
         TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
 
-        TIntrusiveList<TLockIsland> LockIslands;
+        ui64 NextLockIslandId = 1;
+        THashMap<ui64, TLockIsland> LockIslands;
         THashMap<TWaitEdgeId, TWaitEdge> WaitEdges;
     };
 

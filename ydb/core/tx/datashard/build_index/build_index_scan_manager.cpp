@@ -31,12 +31,12 @@ namespace NKikimr::NDataShard {
 
     void TBuildIndexScanManager::PersistAdd(NIceDb::TNiceDb& db, ui64 buildId,
                                             ui64 seqNoGeneration, ui64 seqNoRound,
-                                            TStringBuf responseType)
+                                            ui32 responseType)
     {
         db.Table<TDataShard::Schema::IndexBuildScans>()
             .Key(buildId, seqNoGeneration, seqNoRound)
             .Update(
-                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(TString(responseType)),
+                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(responseType),
                 NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::FinalProgressRecord>(TString()));
 
         TScanInfo& info = Scans[buildId];
@@ -51,17 +51,18 @@ namespace NKikimr::NDataShard {
                                                         ui64 seqNoGeneration, ui64 seqNoRound,
                                                         const TString& serializedRecord)
     {
+        const ui32 responseType = static_cast<ui32>(EBuildIndexEventType::SecondaryIndexResponseFinal);
         db.Table<TDataShard::Schema::IndexBuildScans>()
             .Key(buildId, seqNoGeneration, seqNoRound)
             .Update(
-                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(TString(IndexBuildScanResponseTypeFinal)),
+                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(responseType),
                 NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::FinalProgressRecord>(serializedRecord));
 
         TScanInfo& info = Scans[buildId];
         info.BuildId = buildId;
         info.SeqNoGeneration = seqNoGeneration;
         info.SeqNoRound = seqNoRound;
-        info.ResponseType = TString(IndexBuildScanResponseTypeFinal);
+        info.ResponseType = responseType;
         info.FinalProgressRecordSerialized = serializedRecord;
     }
 

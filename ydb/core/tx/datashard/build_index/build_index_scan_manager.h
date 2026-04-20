@@ -6,9 +6,15 @@
 #include <util/generic/strbuf.h>
 
 namespace NKikimr::NDataShard {
+    enum class EBuildIndexEventType : ui32 {
+        Unused = 0, 
+        SecondaryIndexResponseFinal = 1,
+        SecondaryIndexProgressResponse = 2
+    };
 
     inline constexpr TStringBuf IndexBuildScanResponseTypeFinal =
         TStringBuf("TEvBuildIndexProgressResponseFinal");
+    inline constexpr TStringBuf IndexProgressResponse = TStringBuf("TEvBuildIndexProgressResponse");
 
     class TBuildIndexScanManager {
     public:
@@ -16,7 +22,7 @@ namespace NKikimr::NDataShard {
             ui64 BuildId = 0;
             ui64 SeqNoGeneration = 0;
             ui64 SeqNoRound = 0;
-            TString ResponseType;
+            ui32 ResponseType = 0;
             TString FinalProgressRecordSerialized;
         };
 
@@ -24,7 +30,7 @@ namespace NKikimr::NDataShard {
         bool Load(NIceDb::TNiceDb& db);
 
         void PersistAdd(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound,
-                        TStringBuf responseType);
+                        ui32 responseType);
 
         void PersistRemove(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound);
 

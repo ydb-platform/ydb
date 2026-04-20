@@ -534,7 +534,7 @@ public:
         }
 
         Self->BuildIndexScanManager.PersistAdd(db, buildId, seqNoGeneration, seqNoRound,
-            "TEvBuildIndexProgressResponse");
+            static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse));
 
         Self->HandleSafe(Ev, ctx);
 

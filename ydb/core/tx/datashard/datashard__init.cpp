@@ -201,7 +201,7 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
         for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
             auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
 
-            if (scanInfo.ResponseType == IndexBuildScanResponseTypeFinal) {
+            if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexResponseFinal)) {
                 response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);
                 LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxInitRestored: resending persisted final build index progress to SchemeShard"
@@ -209,7 +209,7 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
                     << ", tabletId# " << Self->TabletID()
                     << ", schemeShardId# " << Self->CurrentSchemeShardId
                     << ", responseType# " << scanInfo.ResponseType);
-            } else if (scanInfo.ResponseType == TStringBuf("TEvBuildIndexProgressResponse")) {
+            } else if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse)) {
                 TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
                 FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
                 response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);

@@ -1,12 +1,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <util/stream/null.h>
 #include <util/datetime/cputimer.h>
 #include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
+#include "ut_common.h"
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -16,53 +16,6 @@
 
 using namespace NKikimr;
 using namespace NHive;
-
-namespace {
-
-class TTestHive : public THive {
-public:
-    TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
-
-    template<typename F>
-    void UpdateConfig(F func) {
-        func(ClusterConfig);
-        BuildCurrentConfig();
-    }
-
-    TBootQueue& GetBootQueue() {
-        return BootQueue;
-    }
-
-    void MakeNodes(size_t numNodes) {
-        for (TNodeId nodeId = 1; nodeId <= numNodes; ++nodeId) {
-            TNodeInfo& node = Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *this)).first->second;
-            node.ServicedDomains.push_back({1, 2});
-            node.Local = TActorId(nodeId, "LOCAL");
-            node.ChangeVolatileState(TNodeInfo::EVolatileState::Connected);
-            node.LocationAcquired = true;
-            NKikimrLocal::TTabletAvailability dummyTabletAvailability;
-            dummyTabletAvailability.SetType(TTabletTypes::Dummy);
-            dummyTabletAvailability.SetPriority(nodeId % 3);
-            node.TabletAvailability.emplace(std::piecewise_construct,
-                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy),
-                                            std::tuple<NKikimrLocal::TTabletAvailability>(dummyTabletAvailability));
-        }
-    }
-
-    void MakeTablets(size_t numTablets) {
-        for (TTabletId i = 1; i <= numTablets; i++) {
-            TLeaderTabletInfo& tablet = Tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, *this)).first->second;
-            tablet.SetType(TTabletTypes::Dummy);
-            tablet.AssignDomains({1, 1}, {});
-            tablet.Weight = RandomNumber<double>();
-            tablet.ChangeVolatileState(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_BOOTING);
-            BootQueue.AddToBootQueue(tablet, 0);
-        }
-    }
-
-};
-
-} // namespace
 
 using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
@@ -374,38 +327,6 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
         }
-    }
-
-    Y_UNIT_TEST(ManyNodesManyTablets) {
-        static constexpr size_t NUM_NODES = 20'000;
-        static constexpr size_t NUM_TABLETS = 20'000;
-
-        TMailbox mailbox;
-        auto setup = MakeHolder<TActorSystemSetup>();
-        TString name = "no name";
-        TActorSystem as(setup, nullptr, new NLog::TSettings(TActorId(), 0, NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, [&](auto&&) { return std::ref(name); }, NLog::EPriority::PRI_EMERG));
-        TExecutorThread executor{0, &as, nullptr, "dummy"};
-        TActorContext dummyContext(mailbox, executor, 0, TActorId());
-        TlsActivationContext = &dummyContext; // all that so calls to logging do not segfault
-
-        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
-        hiveStorage->TabletType = TTabletTypes::Hive;
-        TTestHive hive(hiveStorage.Get(), TActorId());
-        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
-            config.SetMaxBootBatchSize(20'000);
-        });
-
-        hive.MakeNodes(NUM_NODES);
-        hive.MakeTablets(NUM_TABLETS);
-
-        NIceDb::TToughDb tough;
-        NIceDb::TNiceDb db{tough}; // ignored anyway
-        TSideEffects sideEffects;
-
-        TProfileTimer timer;
-        Cerr << "Start" << Endl;
-        hive.ExecuteProcessBootQueue(db, sideEffects);
-        Cerr << "Passed " << timer.Get().SecondsFloat() << Endl;
     }
 }
 

@@ -1266,6 +1266,11 @@ struct TIndexDescription {
         GlobalFulltextRelevance,
         LocalBloomFilter,
         LocalBloomNgramFilter,
+<<<<<<< HEAD
+=======
+        GlobalJson,
+        LocalMinMax
+>>>>>>> 03551b9560f (add ddl for min_max index is YDB Column Shards)
     };
 
     struct TIndexSetting {

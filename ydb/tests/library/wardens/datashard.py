@@ -17,10 +17,12 @@ class TxCompleteLagLivenessWarden(LivenessWarden):
         for monitor in nodes_monitors + slots_monitors:
             sensors = monitor.get_by_name('SUM(DataShard/TxCompleteLag)')
             total_tx_complete_lag += sum(map(lambda x: x[1], sensors))
+            pq_sensors = monitor.get_by_name('SUM(PQ/TxCompleteLag)')
+            total_tx_complete_lag += sum(map(lambda x: x[1], pq_sensors))
 
         if total_tx_complete_lag != 0:
             return [
-                "Liveness violation for sensor SUM(DataShard/TxCompleteLag): "
+                "Liveness violation for sensor SUM(DataShard/TxCompleteLag) + SUM(PQ/TxCompleteLag): "
                 "actual value is %d, but expected be %d" % (
                     total_tx_complete_lag,
                     0

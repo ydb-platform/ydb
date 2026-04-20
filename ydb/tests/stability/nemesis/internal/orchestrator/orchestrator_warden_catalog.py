@@ -68,7 +68,7 @@ ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS: Tuple[OrchestratorAggregatedSafetyCheck, 
     OrchestratorAggregatedSafetyCheck(
         name="UnifiedAgentVerifyFailedAggregated",
         description="Aggregate and deduplicate VERIFY failed errors from all agents",
-        agent_source_class_name=UnifiedAgentVerifyFailedSafetyWarden.__name__,
+        agent_source_class_name='unified_agent_verify_failed',
         impl=UnifiedAgentVerifyFailedAggregated,
     ),
 )

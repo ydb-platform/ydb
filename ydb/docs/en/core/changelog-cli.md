@@ -6,7 +6,6 @@ Released on April 20, 2026. To update to version **2.31.0**, select the [Downloa
 
 ### Features
 
-* Added the `--no-producer-id-track` option to the `{{ ydb-cli }} workload topic run write|full` [commands](./reference/ydb-cli/workload-topic.md), which allows disabling ProducerId tracking in transactions when using `--use-tx`.
 * Added the `--stats` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), enabling extended execution statistics collection (e.g., `--stats profile`).
 
 ## Version 2.30.0 {#2-30-0}

@@ -6,7 +6,6 @@
 
 ### Функциональность
 
-* Добавлена опция `--no-producer-id-track` в [команды](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic run write|full`, позволяющая отключить отслеживание ProducerId в транзакциях при использовании `--use-tx`.
 * Добавлена опция `--stats` в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`, позволяющая включить сбор расширенной статистики выполнения (например, `--stats profile`).
 
 ## Версия 2.30.0 {#2-30-0}

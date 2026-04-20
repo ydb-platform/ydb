@@ -55,11 +55,66 @@ void TBaseFixture::Init()
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost0, hostIndex);
-        UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
-        RangeData = GenerateRandomString(CopyRangeSize);
+        // TODO сделать полноценную проверку range'ей
+        // range может быть подзапросом (подмножеством) ExpectedRange
+        UNIT_ASSERT_C(
+            ExpectedRange.Contains(range),
+            TStringBuilder() << "range " << range.Print()
+                             << " is not contained in ExpectedRange "
+                             << ExpectedRange.Print());
+
+        // Генерируем данные для всего ExpectedRange один раз (при смене range —
+        // заново)
+        if (!LastGeneratedRange || *LastGeneratedRange != ExpectedRange) {
+            RangeData = GenerateRandomString(CopyRangeSize);
+            LastGeneratedRange = ExpectedRange;
+        }
+
+        // Копируем только часть данных, соответствующую range
+        const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
+        const ui64 offsetBytes = offsetBlocks * BlockSize;
+        const ui64 sizeBytes = range.Size() * BlockSize;
         SgListCopy(
-            TBlockDataRef{RangeData.data(), RangeData.size()},
+            TBlockDataRef{RangeData.data() + offsetBytes, sizeBytes},
+            guardedSglist.Acquire().Get());
+
+        return ReadPromise.GetFuture();
+    };
+
+    DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
+        (ui32 vChunkIndex,
+         ui8 hostIndex,
+         ui64 lsn,
+         TBlockRange64 range,
+         const TGuardedSgList& guardedSglist,
+         const NWilson::TTraceId& traceId)
+    {
+        Y_UNUSED(vChunkIndex);
+        Y_UNUSED(hostIndex);
+        Y_UNUSED(lsn);
+        Y_UNUSED(traceId);
+
+        // range может быть подзапросом (подмножеством) ExpectedRange
+        UNIT_ASSERT_C(
+            ExpectedRange.Contains(range),
+            TStringBuilder() << "PBuffer range " << range.Print()
+                             << " is not contained in ExpectedRange "
+                             << ExpectedRange.Print());
+
+        // Генерируем данные для всего ExpectedRange один раз (при смене range —
+        // заново)
+        if (!LastGeneratedRange || *LastGeneratedRange != ExpectedRange) {
+            RangeData = GenerateRandomString(CopyRangeSize);
+            LastGeneratedRange = ExpectedRange;
+        }
+
+        // Копируем только часть данных, соответствующую range
+        const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
+        const ui64 offsetBytes = offsetBlocks * BlockSize;
+        const ui64 sizeBytes = range.Size() * BlockSize;
+        SgListCopy(
+            TBlockDataRef{RangeData.data() + offsetBytes, sizeBytes},
             guardedSglist.Acquire().Get());
 
         return ReadPromise.GetFuture();

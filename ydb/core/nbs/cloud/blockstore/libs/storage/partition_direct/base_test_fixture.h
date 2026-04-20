@@ -41,6 +41,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TBlocksDirtyMap DirtyMap{BlockSize, DefaultVChunkSize / BlockSize};
 
     TBlockRange64 ExpectedRange;
+    std::optional<TBlockRange64> LastGeneratedRange;
     TString RangeData;
     NThreading::TPromise<TDBGReadBlocksResponse> ReadPromise =
         NThreading::NewPromise<TDBGReadBlocksResponse>();

@@ -262,6 +262,7 @@ void TBlocksDirtyMap::RestorePBuffer(
     }
 }
 
+/*
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
@@ -336,6 +337,167 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             makeHint(item->Value.ReadMask(), item->Key, item->Range));
     }
 
+    return result;
+}*/
+
+TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
+{
+    TReadHint result;
+
+    auto makeDefaultHint = [this](TBlockRange64 range, ui64 offsetBlocks)
+    {
+        // Filter out disabled locations.
+        auto locationMask = FilterLocations(DesiredDDisks, range);
+        Y_ABORT_UNLESS(!locationMask.Empty());
+
+        return TReadRangeHint(
+            locationMask,
+            0,
+            TBlockRange64::WithLength(
+                offsetBlocks,
+                range.Size()),   // RequestRelativeRange
+            range,               // VChunkRange
+            TRangeLock(this, range, locationMask));
+    };
+
+    auto makeHint = [this](
+                        TLocationMask locationMask,
+                        ui64 lsn,
+                        TBlockRange64 range,
+                        ui64 offsetBlocks)
+    {
+        Y_ABORT_UNLESS(!locationMask.Empty());
+
+        // Filter out disabled locations.
+        if (locationMask.HasDDisk()) {
+            locationMask = locationMask.LogicalAnd(DesiredDDisks);
+        }
+        locationMask = locationMask.Exclude(DisabledLocations);
+        Y_ABORT_UNLESS(!locationMask.Empty());
+
+        return TReadRangeHint(
+            locationMask,
+            lsn,
+            TBlockRange64::WithLength(offsetBlocks, range.Size()),
+            range,
+            locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
+                                     : TRangeLock(this, lsn));
+    };
+
+    if (!Inflight.HasOverlaps(range)) {
+        result.RangeHints.push_back(makeDefaultHint(range, 0));
+        return result;
+    }
+
+    // Собрать все перекрывающиеся inflight записи
+    // Используем легковесную структуру с указателем на Value вместо ссылки
+    struct TOverlappingItem
+    {
+        ui64 Key;
+        TBlockRange64 Range;
+        TInflightInfo* Value;
+    };
+
+    TVector<TOverlappingItem> overlappingItems;
+    Inflight.EnumerateOverlapping(
+        range,
+        [&](TInflightMap::TFindItem& item)
+        {
+            overlappingItems.push_back({item.Key, item.Range, &item.Value});
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    // Сортировать по началу диапазона, затем по LSN (убывание для более свежих)
+    Sort(
+        overlappingItems.begin(),
+        overlappingItems.end(),
+        [](const auto& a, const auto& b)
+        {
+            if (a.Range.Start != b.Range.Start) {
+                return a.Range.Start < b.Range.Start;
+            }
+            // При одинаковом начале диапазона, больший LSN первым
+            return a.Key > b.Key;
+        });
+
+    // Отфильтровать дубликаты - для одинаковых диапазонов оставить только
+    // первый (с максимальным LSN)
+    TVector<TOverlappingItem> filteredItems;
+    for (size_t i = 0; i < overlappingItems.size(); ++i) {
+        // Пропустить, если следующий элемент имеет тот же диапазон
+        if (i + 1 < overlappingItems.size() &&
+            overlappingItems[i].Range == overlappingItems[i + 1].Range)
+        {
+            // Текущий элемент имеет больший LSN (из-за сортировки), оставляем
+            // его
+            filteredItems.push_back(overlappingItems[i]);
+            // Пропускаем все последующие с тем же диапазоном
+            while (i + 1 < overlappingItems.size() &&
+                   overlappingItems[i].Range == overlappingItems[i + 1].Range)
+            {
+                ++i;
+            }
+        } else {
+            filteredItems.push_back(overlappingItems[i]);
+        }
+    }
+
+    // Разбить на сегменты
+    ui64 currentPos = range.Start;
+    ui64 offsetBlocks = 0;
+
+    for (const auto& item: filteredItems) {
+        if (item.Range.End < currentPos) {
+            continue;
+        }
+
+        // Добавить gap до текущего item (если есть)
+        if (currentPos < item.Range.Start) {
+            auto gapRange = TBlockRange64::MakeClosedInterval(
+                currentPos,
+                Min(item.Range.Start - 1, range.End));
+
+            result.RangeHints.push_back(
+                makeDefaultHint(gapRange, offsetBlocks));
+
+            offsetBlocks += gapRange.Size();
+            currentPos = item.Range.Start;
+        }
+
+        // не нужно?
+        if (currentPos > range.End) {
+            break;
+        }
+
+        // Добавить пересечение с item
+        auto intersection = range.Intersect(item.Range);
+        // Y_ABORT_UNLESS(offsetBlocks == intersection.Start);
+
+        if (item.Value->ReadMask().Empty()) {
+            // Нужно ждать quorum
+            result.WaitReady = item.Value->GetQuorumReadyFuture();
+            result.RangeHints.clear();
+            return result;
+        }
+
+        result.RangeHints.push_back(makeHint(
+            item.Value->ReadMask(),
+            item.Value->ReadMask().OnlyDDisk() ? 0
+                                               : item.Key,   // LSN=0 для DDisk
+            intersection,
+            offsetBlocks));   // intersection.Start?
+
+        offsetBlocks += intersection.Size();
+        currentPos = intersection.End + 1;
+    }
+
+    // Добавить оставшийся gap (если есть)
+    if (currentPos <= range.End) {
+        auto gapRange =
+            TBlockRange64::MakeClosedInterval(currentPos, range.End);
+
+        result.RangeHints.push_back(makeDefaultHint(gapRange, offsetBlocks));
+    }
     return result;
 }
 

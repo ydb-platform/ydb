@@ -11,6 +11,7 @@ SRCS(
     fast_path_service.cpp
     flush_request.cpp
     load_actor_adapter.cpp
+    multi_source_read_coordinator.cpp
     part_initschema.cpp
     part_loadstate.cpp
     part_storevolumeconfig.cpp

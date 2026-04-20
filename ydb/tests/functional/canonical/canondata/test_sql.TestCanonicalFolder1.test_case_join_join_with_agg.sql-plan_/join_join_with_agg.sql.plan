@@ -10,6 +10,8 @@
                 {
                     "columns": [
                         "Fk21",
+                        "Fk22",
+                        "Key",
                         "Value"
                     ],
                     "scan_by": [

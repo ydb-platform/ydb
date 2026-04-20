@@ -24,7 +24,10 @@
             "reads": [
                 {
                     "columns": [
-                        "Key1"
+                        "Fk3",
+                        "Key1",
+                        "Key2",
+                        "Value"
                     ],
                     "scan_by": [
                         "Key1 (-\u221e, +\u221e)",

@@ -111,11 +111,17 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         }
 
         ui64 newCursor = Self->NextSchemeChangeSequenceId;
+        const TInstant now = TInstant::Now();
 
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(newCursor),
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(TInstant::Now().MicroSeconds())
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
         );
+
+        if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
+            it->second.LastAckedSequenceId = newCursor;
+            it->second.LastActivityAt = now;
+        }
 
         Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
         Result->Record.SetNewCursor(newCursor);

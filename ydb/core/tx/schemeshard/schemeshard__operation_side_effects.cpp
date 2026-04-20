@@ -940,7 +940,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         return;
     }
 
-    if (!ss->HasSchemeChangeSubscribers) {
+    if (ss->Subscribers.empty()) {
         return;
     }
 

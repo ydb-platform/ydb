@@ -1370,7 +1370,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         {
             auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
             if (!subRowset.IsReady()) return false;
-            Self->HasSchemeChangeSubscribers = !subRowset.EndOfSet();
+            Self->Subscribers.clear();
+            while (!subRowset.EndOfSet()) {
+                TString id = subRowset.GetValue<Schema::SchemeChangeSubscribers::SubscriberId>();
+                TSchemeShard::TSubscriberInfo info;
+                info.LastAckedSequenceId = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedSequenceId>();
+                info.LastActivityAt = TInstant::MicroSeconds(
+                    subRowset.GetValue<Schema::SchemeChangeSubscribers::LastActivityAt>());
+                Self->Subscribers.emplace(std::move(id), info);
+                if (!subRowset.Next()) return false;
+            }
         }
 
         {

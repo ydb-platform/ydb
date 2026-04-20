@@ -279,7 +279,23 @@ public:
     ui64 NextSchemeChangeSequenceId = 0;
     ui64 SchemeChangeRecordCount = 0;
     ui64 MaxSchemeChangeRecords = 100000;
-    bool HasSchemeChangeSubscribers = false;
+
+    struct TSubscriberInfo {
+        ui64 LastAckedSequenceId = 0;
+        TInstant LastActivityAt;
+    };
+    THashMap<TString, TSubscriberInfo> Subscribers;
+
+    ui64 GetMinSubscriberCursor() const {
+        if (Subscribers.empty()) {
+            return NextSchemeChangeSequenceId;
+        }
+        ui64 m = Max<ui64>();
+        for (const auto& [_, info] : Subscribers) {
+            m = Min(m, info.LastAckedSequenceId);
+        }
+        return m;
+    }
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;

@@ -28,11 +28,15 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
             Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
             Result->Record.SetCurrentSequenceId(currentCursor);
         } else {
+            const TInstant now = TInstant::Now();
             db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
                 NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(0),
-                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(TInstant::Now().MicroSeconds())
+                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
             );
-            Self->HasSchemeChangeSubscribers = true;
+            TSchemeShard::TSubscriberInfo info;
+            info.LastAckedSequenceId = 0;
+            info.LastActivityAt = now;
+            Self->Subscribers.emplace(subscriberId, info);
             Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
             Result->Record.SetCurrentSequenceId(0);
         }
@@ -141,9 +145,13 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             }
         }
 
+        const TInstant now = TInstant::Now();
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(TInstant::Now().MicroSeconds())
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
         );
+        if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
+            it->second.LastActivityAt = now;
+        }
 
         Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
         Result->Record.SetLastSequenceId(lastSeqId);
@@ -207,10 +215,16 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             newCursor = Self->NextSchemeChangeSequenceId;
         }
 
+        const TInstant now = TInstant::Now();
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedSequenceId>(newCursor),
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(TInstant::Now().MicroSeconds())
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
         );
+
+        if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
+            it->second.LastAckedSequenceId = newCursor;
+            it->second.LastActivityAt = now;
+        }
 
         Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
         Result->Record.SetNewCursor(newCursor);
@@ -253,26 +267,7 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         }
 
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Delete();
-
-        // Check if any subscribers remain
-        auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
-        if (!subRowset.IsReady()) {
-            return false;
-        }
-
-        bool hasRemaining = false;
-        while (!subRowset.EndOfSet()) {
-            TString id = subRowset.GetValue<Schema::SchemeChangeSubscribers::SubscriberId>();
-            if (id != subscriberId) {
-                hasRemaining = true;
-                break;
-            }
-            if (!subRowset.Next()) {
-                return false;
-            }
-        }
-
-        Self->HasSchemeChangeSubscribers = hasRemaining;
+        Self->Subscribers.erase(subscriberId);
 
         Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
 

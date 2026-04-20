@@ -176,6 +176,25 @@ def fetch_candidate_closed_issues(ydb_wrapper, issues_table_path):
     return ydb_wrapper.execute_scan_query(query, query_name="mute_quarantine_closed_issues")
 
 
+def fetch_currently_muted_tests(ydb_wrapper, tests_monitor_table, branch, build_type):
+    escaped_branch = _escape_yql_string(branch)
+    escaped_build_type = _escape_yql_string(build_type)
+    query = f"""
+    SELECT DISTINCT
+        full_name
+    FROM `{tests_monitor_table}`
+    WHERE branch = '{escaped_branch}'
+        AND build_type = '{escaped_build_type}'
+        AND is_muted = 1
+        AND date_window >= CurrentUtcDate() - 1 * Interval("P1D")
+    """
+    rows = ydb_wrapper.execute_scan_query(
+        query,
+        query_name="mute_quarantine_currently_muted_tests",
+    )
+    return {row.get("full_name") for row in rows if row.get("full_name")}
+
+
 def fetch_project_issue_refs(issue_numbers=None):
     refs = {}
     required_numbers = set(issue_numbers or [])
@@ -346,6 +365,7 @@ def process_enter_quarantine(
     ydb_wrapper,
     table_path,
     issues_table_path,
+    tests_monitor_table,
     quarantine_window_days,
     status_field_id,
     status_options,
@@ -372,6 +392,7 @@ def process_enter_quarantine(
     run_url = workflow_run_url()
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     quarantine_until = now + datetime.timedelta(days=quarantine_window_days)
+    currently_muted_cache = {}
 
     new_rows = []
     for issue in closed_issues:
@@ -400,6 +421,16 @@ def process_enter_quarantine(
         issue_rows = []
         for full_name in tests:
             for branch in branches:
+                muted_cache_key = (branch, build_type)
+                if muted_cache_key not in currently_muted_cache:
+                    currently_muted_cache[muted_cache_key] = fetch_currently_muted_tests(
+                        ydb_wrapper,
+                        tests_monitor_table,
+                        branch,
+                        build_type,
+                    )
+                if full_name not in currently_muted_cache[muted_cache_key]:
+                    continue
                 row_key = (full_name, branch, build_type)
                 if row_key in existing_keys:
                     continue
@@ -514,6 +545,8 @@ def process_failed_quarantine(
     status_options,
 ):
     rows = fetch_quarantine_rows(ydb_wrapper, table_path)
+    if not rows:
+        return
     run_url = workflow_run_url()
     issue_numbers = {
         int(row["github_issue_number"])
@@ -521,53 +554,64 @@ def process_failed_quarantine(
         if row.get("github_issue_number") is not None
     }
     issue_refs = fetch_project_issue_refs(issue_numbers)
-    updated_issue_numbers = set()
     failures_by_key = fetch_monitor_failures_bulk(
         ydb_wrapper,
         tests_monitor_table,
         rows,
         quarantine_window_days,
     )
-
+    rows_by_issue = {}
+    failed_rows_by_issue = {}
     for row in rows:
         full_name = row.get("full_name")
         branch = row.get("branch")
         build_type = row.get("build_type")
-        issue_id = row.get("github_issue_id")
         issue_number_raw = row.get("github_issue_number")
         if not full_name or not branch or not build_type or issue_number_raw is None:
             continue
         issue_number = int(issue_number_raw)
+        rows_by_issue.setdefault(issue_number, []).append(row)
+        fail_count = failures_by_key.get((full_name, branch, build_type), 0)
+        if fail_count > 0:
+            failed_rows_by_issue.setdefault(issue_number, []).append((row, fail_count))
+
+    for issue_number, failed_rows in failed_rows_by_issue.items():
         issue_ref = issue_refs.get(issue_number) or {}
-        issue_id = issue_ref.get("issue_id") or issue_id
-        project_item_id = issue_ref.get("project_item_id")
-        issue_url = issue_ref.get("issue_url") or f"https://github.com/{ORG_NAME}/{REPO_NAME}/issues/{issue_number}"
+        fallback_issue_id = failed_rows[0][0].get("github_issue_id")
+        issue_id = issue_ref.get("issue_id") or fallback_issue_id
         if not issue_id:
             continue
+        project_item_id = issue_ref.get("project_item_id")
+        issue_url = issue_ref.get("issue_url") or f"https://github.com/{ORG_NAME}/{REPO_NAME}/issues/{issue_number}"
 
-        quarantine_since = _timestamp_to_datetime(row.get("quarantine_since"))
-        fail_count = failures_by_key.get((full_name, branch, build_type), 0)
-        if fail_count <= 0:
-            continue
-
-        delete_quarantine_row(ydb_wrapper, table_path, full_name, branch, build_type)
-        if issue_number not in updated_issue_numbers and project_item_id:
+        for issue_row in rows_by_issue.get(issue_number, []):
+            delete_quarantine_row(
+                ydb_wrapper,
+                table_path,
+                issue_row.get("full_name"),
+                issue_row.get("branch"),
+                issue_row.get("build_type"),
+            )
+        if project_item_id:
             update_issue_status(
                 project_item_id,
                 status_field_id,
                 status_options[STATUS_MUTED],
                 issue_url,
             )
-            updated_issue_numbers.add(issue_number)
-        comment = COMMENT_QUARANTINE_FAILED.format(
-            failed_test_name=full_name,
-            fail_count=fail_count,
-            quarantine_since=quarantine_since.strftime("%Y-%m-%d %H:%M:%S UTC")
-            if quarantine_since
-            else "unknown",
-            workflow_run_url=run_url,
-        )
-        add_issue_comment(issue_id, comment)
+
+        for failed_row, fail_count in failed_rows:
+            full_name = failed_row.get("full_name")
+            quarantine_since = _timestamp_to_datetime(failed_row.get("quarantine_since"))
+            comment = COMMENT_QUARANTINE_FAILED.format(
+                failed_test_name=full_name,
+                fail_count=fail_count,
+                quarantine_since=quarantine_since.strftime("%Y-%m-%d %H:%M:%S UTC")
+                if quarantine_since
+                else "unknown",
+                workflow_run_url=run_url,
+            )
+            add_issue_comment(issue_id, comment)
 
 
 def process_expired_quarantine(ydb_wrapper, table_path, quarantine_window_days):
@@ -625,6 +669,7 @@ def main():
             ydb_wrapper,
             quarantine_table,
             issues_table,
+            tests_monitor_table,
             quarantine_window_days,
             status_field_id,
             status_options,

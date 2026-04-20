@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             "expected column table after backup");
         const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
         THashSet<TString> found;
-        for (auto&& ix : schema.GetIndexes()) {
+        for (const auto& ix : schema.GetIndexes()) {
             found.insert(ix.GetName());
         }
 

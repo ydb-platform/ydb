@@ -981,7 +981,6 @@ private:
                 TEvTicketParser::TError error;
                 error.Message = "Unacceptable peername format";
                 error.Retryable = false;
-                BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) << ": " << error);
                 Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, ev->Cookie);
                 return;
             } else {

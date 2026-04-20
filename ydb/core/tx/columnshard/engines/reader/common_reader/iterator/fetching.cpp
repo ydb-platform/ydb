@@ -77,6 +77,9 @@ TStepAction::TStepAction(
 }
 
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
+    if (!source->GetExecutionContext().HasProgramIterator()) {
+        return;
+    }
     auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
     if (!iterator->IsValid()) {
         return;

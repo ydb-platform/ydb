@@ -12,14 +12,14 @@ from ydb_wrapper import YDBWrapper
 # Get repository path
 dir = os.path.dirname(__file__)
 repo_path = os.path.abspath(f"{dir}/../../../")
-MUTE_OBSERVATION_CONFIG_PATH = os.path.join(
-    repo_path, ".github", "config", "mute_observation_config.json"
+MUTE_CONFIG_PATH = os.path.join(
+    repo_path, ".github", "config", "mute_config.json"
 )
 
 
 def load_query_variables():
     variables = {}
-    with open(MUTE_OBSERVATION_CONFIG_PATH, "r", encoding="utf-8") as config_file:
+    with open(MUTE_CONFIG_PATH, "r", encoding="utf-8") as config_file:
         config = json.load(config_file)
     observation_window_days = int(config["observation_window_days"])
     if observation_window_days <= 0:

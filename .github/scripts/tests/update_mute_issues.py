@@ -14,8 +14,8 @@ REPO_NAME = 'ydb'
 PROJECT_ID = '45'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
-MUTE_OBSERVATION_CONFIG_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_observation_config.json')
+MUTE_CONFIG_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_config.json')
 )
 
 # Github api (personal access token (classic)) token shoud have permitions to
@@ -30,7 +30,7 @@ GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
 
 
 def load_observation_window_days():
-    with open(MUTE_OBSERVATION_CONFIG_PATH, 'r', encoding='utf-8') as config_file:
+    with open(MUTE_CONFIG_PATH, 'r', encoding='utf-8') as config_file:
         config = json.load(config_file)
     observation_window_days = int(config["observation_window_days"])
     if observation_window_days <= 0:

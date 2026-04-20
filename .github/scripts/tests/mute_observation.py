@@ -26,7 +26,7 @@ from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
 
 
 CONFIG_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_observation_config.json')
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_config.json')
 )
 
 STATUS_MUTED = "Muted"

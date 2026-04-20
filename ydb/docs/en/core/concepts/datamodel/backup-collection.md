@@ -1,6 +1,6 @@
 # Backup Collection
 
-A backup collection organizes full and incremental backups of selected [row-oriented tables](table.md#row-oriented-tables) into managed chains. It allows **recovery to the state at the time of one of the saved backups in the chain** (full or incremental), providing protection against accidental data loss such as erroneous deletions or modifications.
+A backup collection organizes full and incremental backups of selected [row-oriented tables](table.md#row-oriented-tables) into managed chains. It allows **recovery to the state of the latest backup in the chain**, providing protection against accidental data loss such as erroneous deletions or modifications.
 
 {% note info %}
 

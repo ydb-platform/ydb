@@ -14,10 +14,12 @@ namespace {
     struct TRecordWithNewline {
         ELogPriority Priority;
         TTempBuf Buf;
+        TMaybe<NKikimr::NStructLog::TStructuredMessage> StructMessage;
 
         TRecordWithNewline(const TLogRecord& rec)
             : Priority(rec.Priority)
             , Buf(rec.Len + 1)
+            , StructMessage(rec.StructMessage)
         {
             Buf.Append(rec.Data, rec.Len);
             if (rec.Len > 0 && rec.Data[rec.Len - 1] != '\n') {
@@ -26,17 +28,19 @@ namespace {
         }
 
         operator TLogRecord() const {
-            return TLogRecord(Priority, Buf.Data(), Buf.Filled());
+            return TLogRecord(Priority, Buf.Data(), Buf.Filled(), StructMessage);
         }
     };
 
     struct TRecordWithColorsAndNewline {
         ELogPriority Priority;
         TTempBuf Buf;
+        TMaybe<NKikimr::NStructLog::TStructuredMessage> StructMessage;
 
         TRecordWithColorsAndNewline(const TLogRecord& rec)
             : Priority(rec.Priority)
             , Buf(rec.Len + 16)
+            , StructMessage(rec.StructMessage)
         {
             switch (rec.Priority) {
                 case ELogPriority::TLOG_EMERG:
@@ -76,7 +80,7 @@ namespace {
         }
 
         operator TLogRecord() const {
-            return TLogRecord(Priority, Buf.Data(), Buf.Filled());
+            return TLogRecord(Priority, Buf.Data(), Buf.Filled(), StructMessage);
         }
     };
 

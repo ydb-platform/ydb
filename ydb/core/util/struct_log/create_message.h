@@ -6,6 +6,7 @@
 #include <util/generic/maybe.h>
 
 #include <initializer_list>
+#include <utility>
 
 namespace NKikimr::NStructLog {
 
@@ -17,30 +18,30 @@ public:
     // Native types support
     template <typename T, typename K = TKeyName, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >
     TCreateMessageArg(K&& name, const T& value) {
-        GetBuildMessage().AppendValue({std::move(name)}, value);
+        GetBuildMessage().AppendValue({std::forward<TKeyName>(name)}, value);
     }
 
     template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >
     TCreateMessageArg(TKeyName&& name, const TMaybe<T>& value) {
         if (value.Defined()) {
-            GetBuildMessage().AppendValue({std::move(name)}, value.GetRef());
+            GetBuildMessage().AppendValue({std::forward<TKeyName>(name)}, value.GetRef());
         }
     }
 
     template<unsigned N>
     TCreateMessageArg(TKeyName&& name, const char(&value)[N])
     {
-        GetBuildMessage().AppendFixedValue({std::move(name)}, value);
+        GetBuildMessage().AppendFixedValue({std::forward<TKeyName>(name)}, value);
     }
 
     // Structured messages support
     TCreateMessageArg(TKeyName&& name, const TStructuredMessage& subMessage) {
-        GetBuildMessage().AppendSubMessage({std::move(name)}, subMessage);
+        GetBuildMessage().AppendSubMessage({std::forward<TKeyName>(name)}, subMessage);
     }
 
     TCreateMessageArg(TKeyName&& name, const TMaybe<TStructuredMessage>& subMessage) {
         if (subMessage.Defined()) {
-            GetBuildMessage().AppendSubMessage({std::move(name)}, subMessage.GetRef());
+            GetBuildMessage().AppendSubMessage({std::forward<TKeyName>(name)}, subMessage.GetRef());
         }
     }
 

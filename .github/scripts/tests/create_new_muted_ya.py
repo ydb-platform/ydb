@@ -51,6 +51,31 @@ def load_manual_unmute_config():
     return get_manual_unmute_window_days(), get_manual_unmute_min_runs()
 
 
+def tests_monitor_query_days_window():
+    """How many calendar days of ``tests_monitor`` history we must load for mute/unmute/delete/fast-unmute."""
+    return max(
+        get_mute_window_days(),
+        get_unmute_window_days(),
+        get_delete_window_days(),
+        get_manual_unmute_window_days(),
+    )
+
+
+def grace_started_at_to_utc_date(value):
+    """Normalize ``grace_started_at`` from scan_query (datetime, date, or int microseconds)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.astimezone(datetime.timezone.utc).date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, int):
+        return datetime.datetime.fromtimestamp(
+            value / 1_000_000, tz=datetime.timezone.utc
+        ).date()
+    return None
+
+
 def merge_mute_aggregate_with_fast_unmute_grace(
     all_data,
     aggregated_for_mute_default,
@@ -65,26 +90,37 @@ def merge_mute_aggregate_with_fast_unmute_grace(
     if not grace_map:
         return aggregated_for_mute_default
 
-    agg_by_period = {}
-    for d in range(manual_window_days, mute_window_days + 1):
-        agg_by_period[d] = aggregate_test_data(all_data, d)
-
     today = datetime.datetime.now(datetime.timezone.utc).date()
+    # Which ladder window lengths (eff) actually occur for grace rows. We aggregate only
+    # those periods — not every integer from manual_window_days..mute_window_days — so we
+    # skip redundant aggregate_test_data calls when few distinct eff values appear.
+    needed_effs = set()
+    for meta in grace_map.values():
+        gs_date = grace_started_at_to_utc_date(meta.get('grace_started_at'))
+        if gs_date is None:
+            continue
+        days_since = max(0, (today - gs_date).days)
+        needed_effs.add(min(mute_window_days, manual_window_days + days_since))
+
+    # Per eff: full_name -> aggregated row. Lets the loop below do dict lookups instead of
+    # rebuilding {full_name: row} from the agg list for every test (same result, less work).
+    maps_by_eff = {}
+    for d in sorted(needed_effs):
+        agg_list = aggregate_test_data(all_data, d)
+        maps_by_eff[d] = {t['full_name']: t for t in agg_list}
+
     by_name = {t['full_name']: t for t in aggregated_for_mute_default}
     merged = []
     for fn, test in by_name.items():
         meta = grace_map.get(fn)
         if meta:
-            gs = meta.get('grace_started_at')
-            if gs is not None:
-                if isinstance(gs, datetime.datetime):
-                    gs_date = gs.astimezone(datetime.timezone.utc).date()
-                else:
-                    gs_date = gs
+            gs_date = grace_started_at_to_utc_date(meta.get('grace_started_at'))
+            if gs_date is not None:
                 days_since = max(0, (today - gs_date).days)
                 eff = min(mute_window_days, manual_window_days + days_since)
-                alt = {t['full_name']: t for t in agg_by_period.get(eff, [])}
-                test = alt.get(fn, test)
+                alt_map = maps_by_eff.get(eff)
+                if alt_map is not None:
+                    test = alt_map.get(fn, test)
         merged.append(test)
     return merged
 
@@ -237,7 +273,9 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
     return result
 
 
-def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, ydb_wrapper=None):
+def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=None, ydb_wrapper=None):
+    if days_window is None:
+        days_window = tests_monitor_query_days_window()
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
     
     def _run(w):
@@ -1192,9 +1230,7 @@ def mute_worker(args):
         unmute_window_days = get_unmute_window_days()
         delete_window_days = get_delete_window_days()
 
-        all_data = execute_query(
-            args.branch, build_type=build_type, days_window=7, ydb_wrapper=ydb_wrapper
-        )
+        all_data = execute_query(args.branch, build_type=build_type, ydb_wrapper=ydb_wrapper)
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.

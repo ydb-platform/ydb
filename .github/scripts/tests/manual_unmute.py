@@ -801,6 +801,13 @@ def sync(ydb_wrapper):
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
+    if not os.environ.get('GITHUB_TOKEN'):
+        logging.error(
+            'GITHUB_TOKEN is required for GitHub GraphQL (issue close, labels, timeline). '
+            'Set it in workflow env or export it when running locally.'
+        )
+        return 1
+
     parser = argparse.ArgumentParser(description='Manual fast-unmute state machine')
     subparsers = parser.add_subparsers(dest='mode', required=True)
     subparsers.add_parser('sync', help='Enter new rows and clean up stale/failed/unmuted rows')

@@ -10443,6 +10443,34 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_weak_field-weak_member_string_copy_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-fuse_filter_basic]": [
+        {
+            "checksum": "77e4b010182e0f0e0ab95217d5833318",
+            "size": 4854,
+            "uri": "https://{canondata_backend}/1942671/e3f965972b73df683709fd54542499aefa271e57/resource.tar.gz#test_sql2yql.test_window-fuse_filter_basic_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-fuse_filter_field_subset]": [
+        {
+            "checksum": "10b2bd053e8edb5b4ba91f1111fd396c",
+            "size": 4901,
+            "uri": "https://{canondata_backend}/1775059/491dadb3a0e447b5a64c677d47f6eb43791c2ae5/resource.tar.gz#test_sql2yql.test_window-fuse_filter_field_subset_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-fuse_filter_intermediate_extract_members]": [
+        {
+            "checksum": "9432a6801c9c10ec85fc46515d0af2df",
+            "size": 5690,
+            "uri": "https://{canondata_backend}/1031349/fda05029ecf7ee9d40060aa7cecd5de2b4ae104e/resource.tar.gz#test_sql2yql.test_window-fuse_filter_intermediate_extract_members_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-fuse_filter_reorder]": [
+        {
+            "checksum": "30da9280812ebe2a300c9a9240ad606c",
+            "size": 5883,
+            "uri": "https://{canondata_backend}/1942671/e3f965972b73df683709fd54542499aefa271e57/resource.tar.gz#test_sql2yql.test_window-fuse_filter_reorder_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-fuse_with_rename]": [
         {
             "checksum": "64c7cb0d72c7f356a51db9f38bc43419",
@@ -10490,6 +10518,20 @@
             "checksum": "de800cd887d22dc8be679a4fb8b9da85",
             "size": 2032,
             "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_window-presort_window_partition_by_mem_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-pushdown_filter_full]": [
+        {
+            "checksum": "7b692a47c3140274264b649423aa8675",
+            "size": 4141,
+            "uri": "https://{canondata_backend}/1942671/e3f965972b73df683709fd54542499aefa271e57/resource.tar.gz#test_sql2yql.test_window-pushdown_filter_full_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-pushdown_filter_partial]": [
+        {
+            "checksum": "5e1e9f82883695c20e6f4121a6547ac5",
+            "size": 4190,
+            "uri": "https://{canondata_backend}/1942671/e3f965972b73df683709fd54542499aefa271e57/resource.tar.gz#test_sql2yql.test_window-pushdown_filter_partial_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-random_sample_window]": [
@@ -17497,6 +17539,26 @@
             "uri": "file://test_sql_format.test_weak_field-weak_member_string_copy_/formatted.sql"
         }
     ],
+    "test_sql_format.test[window-fuse_filter_basic]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_filter_basic_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-fuse_filter_field_subset]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_filter_field_subset_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-fuse_filter_intermediate_extract_members]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_filter_intermediate_extract_members_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-fuse_filter_reorder]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_filter_reorder_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[window-fuse_with_rename]": [
         {
             "uri": "file://test_sql_format.test_window-fuse_with_rename_/formatted.sql"
@@ -17530,6 +17592,16 @@
     "test_sql_format.test[window-presort_window_partition_by_mem]": [
         {
             "uri": "file://test_sql_format.test_window-presort_window_partition_by_mem_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-pushdown_filter_full]": [
+        {
+            "uri": "file://test_sql_format.test_window-pushdown_filter_full_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-pushdown_filter_partial]": [
+        {
+            "uri": "file://test_sql_format.test_window-pushdown_filter_partial_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-random_sample_window]": [

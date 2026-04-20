@@ -16092,6 +16092,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["WinOnRows"] = &WinOnWrapper;
         ExtFunctions["WinOnGroups"] = &WinOnWrapper;
         ExtFunctions["WinOnRange"] = &WinOnWrapper;
+        ExtFunctions["WinFilter"] = &WinOnWrapper;
         ExtFunctions["WindowTraits"] = &WindowTraitsWrapper;
         Functions["ToWindowTraits"] = &ToWindowTraitsWrapper;
         Functions["CalcOverWindow"] = &CalcOverWindowWrapper;

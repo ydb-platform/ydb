@@ -438,17 +438,17 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages();
 
-#define YDBLOG_THIS_FILE_COMPONTENT 1000
+#define YDBLOG_THIS_FILE_COMPONENT 1000
         YDBLOG_CTX_EMERG(env, "Test message");
-#undef YDBLOG_THIS_FILE_COMPONTENT
+#undef YDBLOG_THIS_FILE_COMPONENT
 
-#define YDBLOG_THIS_FILE_COMPONTENT 1001
+#define YDBLOG_THIS_FILE_COMPONENT 1001
         YDBLOG_CTX_EMERG(env, "Test message");
-#undef YDBLOG_THIS_FILE_COMPONTENT
+#undef YDBLOG_THIS_FILE_COMPONENT
 
-#define YDBLOG_THIS_FILE_COMPONTENT 1002
+#define YDBLOG_THIS_FILE_COMPONENT 1002
         YDBLOG_CTX_EMERG(env, "Test message");
-#undef YDBLOG_THIS_FILE_COMPONTENT
+#undef YDBLOG_THIS_FILE_COMPONENT
 
         env.FetchMessage("1970-01-01T23:59:50.000000Z :A EMERG: log_ut.cpp:442: Test message");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :B EMERG: log_ut.cpp:446: Test message");

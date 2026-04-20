@@ -419,7 +419,12 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":1,"subValue2":2})");
 
         // subMessage name conflict
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1})}), R"({"value":1,"_value":{"value":1}})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1})}),
+            R"({"value":1,"_value":{"value":1}})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1}, {"value2", 2})}),
+            R"({"value":1,"_value":{"value":1,"value2":2}})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1})}, {"xvalue", YDBLOG_CREATE_MESSAGE({"value", 10})}),
+            R"({"value":1,"_value":{"value":1},"xvalue":{"value":10}})");
     }
 }
 }

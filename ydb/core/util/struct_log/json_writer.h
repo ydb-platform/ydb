@@ -20,27 +20,38 @@ public:
     using TNameSet = std::unordered_set<TString>;
 
     TJsonKeyValueWriter(NJsonWriter::TBuf& jsonWriter, const TJsonKeyValueWriter::TNameSet& busyKeyNames, bool jsonStarted) :
-        JsonWriter(jsonWriter), BusyKeyNames(busyKeyNames), JsonStarted(jsonStarted) {
+        JsonWriter(jsonWriter),
+        BusyKeyNames(busyKeyNames),
+        JsonStartedState(jsonStarted?TJsonStartedState::ParentStarted:TJsonStartedState::NotStarted) {
     }
 
     void Done() {
-        if (!JsonStarted) {
-            JsonWriter.BeginObject();
-            JsonWriter.EndObject();
-        }
-        else
-        {
-            for(std::size_t i = 0; i < LastAppendedKey.size(); i++) {
+        switch (JsonStartedState) {
+            case TJsonStartedState::NotStarted:
+                JsonWriter.BeginObject();
                 JsonWriter.EndObject();
-            }
+                break;
+            case TJsonStartedState::ParentStarted:
+                for(std::size_t i = 1; i < LastAppendedKey.size(); i++) {
+                    JsonWriter.EndObject();
+                }
+                break;
+            case TJsonStartedState::Started:
+                for(std::size_t i = 1; i < LastAppendedKey.size(); i++) {
+                    JsonWriter.EndObject();
+                }
+                // Close whole json
+                JsonWriter.EndObject();
+                break;
+            default: ;
         }
     }
 
     template <typename T>
     void AppendKeyValue(const std::vector<TKeyName>& key, const T& value) {
-        if (!JsonStarted) {
+        if (JsonStartedState == TJsonStartedState::NotStarted) {
             JsonWriter.BeginObject();
-            JsonStarted = true;
+            JsonStartedState = TJsonStartedState::Started;
         }
 
         // Prepare contexts
@@ -96,7 +107,12 @@ protected:
 
     NJsonWriter::TBuf& JsonWriter;
     const TJsonKeyValueWriter::TNameSet& BusyKeyNames;
-    bool JsonStarted{false};
+
+    enum class TJsonStartedState {
+        NotStarted,
+        ParentStarted,
+        Started
+    } JsonStartedState;
 
     std::vector<TKeyName> LastAppendedKey;
 
@@ -147,9 +163,7 @@ public:
 
         KeyValueWriter = nullptr;
 
-        if (!jsonStarted) {
-            keyValueWriter.Done();
-        }
+        keyValueWriter.Done();
         return true;
     }
 

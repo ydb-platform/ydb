@@ -116,7 +116,7 @@ struct TFloatingTypeSupport : public TNativePlainTypeSupport<T>
     }
 
     static void AppendToString(const T& value, TStringBuilder& stringBuffer) {
-        stringBuffer.append(ToString<T>(value));
+        stringBuffer.append(ToString(value));
     }
 };
 

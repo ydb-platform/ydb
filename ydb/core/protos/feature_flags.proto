@@ -291,4 +291,5 @@ message TFeatureFlags {
     optional bool EnableInterpileTrafficOptimization = 253 [default = false];
     optional bool EnableSnapshotsLocking = 254 [default = true];
     optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
+    optional bool UseRealUserIpForBlackbox = 256 [default = false];
 }

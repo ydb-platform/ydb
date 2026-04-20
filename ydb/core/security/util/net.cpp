@@ -5,8 +5,6 @@
 #include <util/generic/strbuf.h>
 #include <util/string/cast.h>
 
-#include <regex>
-
 namespace NKikimr::NSecurity {
 
 namespace {

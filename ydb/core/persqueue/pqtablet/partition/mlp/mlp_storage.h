@@ -58,8 +58,6 @@ public:
         Delayed = 4,
     };
 
-    struct TIntrusiveListGroupIdTag {};
-
     struct TMessageData {
         ui32 Status: 3 = static_cast<ui32>(EMessageStatus::Unprocessed);
         ui32 Reserve: 3 = 0;

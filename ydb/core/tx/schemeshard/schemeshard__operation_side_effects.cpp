@@ -946,8 +946,9 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
 
     struct TCandidate {
         TTxId TxId;
+        ui32 PartIdx;
         TStepId PlanStep;
-        TOperationId FirstPartOpId;
+        TOperationId OpId;
     };
     TVector<TCandidate> candidates;
 
@@ -977,13 +978,12 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
                 continue;
             }
 
-            candidates.push_back(TCandidate{txId, txState.PlanStep, partOpId});
-            break;
+            candidates.push_back(TCandidate{txId, partIdx, txState.PlanStep, partOpId});
         }
     }
 
     std::sort(candidates.begin(), candidates.end(), [](const TCandidate& a, const TCandidate& b) {
-        return std::tie(a.PlanStep, a.TxId) < std::tie(b.PlanStep, b.TxId);
+        return std::tie(a.PlanStep, a.TxId, a.PartIdx) < std::tie(b.PlanStep, b.TxId, b.PartIdx);
     });
 
     NIceDb::TNiceDb db(txc.DB);
@@ -991,16 +991,21 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
     for (const auto& candidate : candidates) {
         TTxId txId = candidate.TxId;
 
-        auto txStateIt = ss->TxInFlight.find(candidate.FirstPartOpId);
+        auto txStateIt = ss->TxInFlight.find(candidate.OpId);
         if (txStateIt == ss->TxInFlight.end()) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "DoPersistSchemeChangeRecords: no scheme change record logged for txId=" << txId
+                    << " partIdx=" << candidate.PartIdx
                     << ", TxInFlight entry disappeared between passes");
             continue;
         }
 
         const TTxState& txState = txStateIt->second;
         TPathId pathId = txState.TargetPathId;
+
+        if (!ss->PathsById.contains(pathId)) {
+            continue;
+        }
 
         TPathElement::TPtr path = ss->PathsById.at(pathId);
 
@@ -1014,12 +1019,9 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         TString body;
         {
             auto opIt = ss->Operations.find(txId);
-            if (opIt != ss->Operations.end()) {
-                const auto& operation = opIt->second;
-                if (!operation->Parts.empty()) {
-                    bool ok = operation->Parts[0]->GetTransaction().SerializeToString(&body);
-                    Y_DEBUG_ABORT_UNLESS(ok);
-                }
+            if (opIt != ss->Operations.end() && candidate.PartIdx < opIt->second->Parts.size()) {
+                bool ok = opIt->second->Parts[candidate.PartIdx]->GetTransaction().SerializeToString(&body);
+                Y_DEBUG_ABORT_UNLESS(ok);
             }
         }
 
@@ -1042,6 +1044,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             "DoPersistSchemeChangeRecords: logged entry"
                 << " seqId=" << seqId
                 << " txId=" << txId
+                << " partIdx=" << candidate.PartIdx
                 << " path=" << pathName
                 << " type=" << ui32(txState.TxType));
     }

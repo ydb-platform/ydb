@@ -1,4 +1,6 @@
-#include "ddisk_actor_pdisk_ut.inl"
+#include "ddisk_actor_pdisk_common_ut.h"
+
+namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     Y_UNIT_TEST(WriteAndRead_4KiB_Uring) {

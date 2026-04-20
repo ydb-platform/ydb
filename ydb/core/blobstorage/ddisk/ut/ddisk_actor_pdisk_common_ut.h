@@ -1019,3 +1019,4 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 }
 
 } // anonymous namespace
+} // NKikimr

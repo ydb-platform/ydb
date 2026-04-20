@@ -11,31 +11,48 @@
 namespace NKikimr::NPQ::NMLP {
 
     bool TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState() const {
-        if (LastSendFullStateReasons == ESendReasons::ParentDone && SendFullStateReasons == ESendReasons::ParentDone) {
+        if (LastSendReasons.Defined() && LastSendReasons->Reasons == ESendReasons::Done && SendReasons.Reasons == ESendReasons::Done) {
             return false;
         }
-        return SendFullStateReasons != ESendReasons::None;
+        return SendReasons.Reasons != ESendReasons::None;
     }
 
     void TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::MarkAsSent() {
-        LastSendFullStateReasons = std::exchange(SendFullStateReasons, ESendReasons::None);
+        LastSendReasons = std::exchange(SendReasons, TFullState{ESendReasons::None, SendReasons.GroupsCount});
     }
 
     bool TChildPartitionsOrderManager::Empty() const {
         return ChildrenPartitionWithKeepOrder.empty();
     }
 
-    bool TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::AddSendFullStateReason(ESendReasons reason) {
-        ESendReasons n = static_cast<ESendReasons>(static_cast<ui32>(SendFullStateReasons) | static_cast<ui32>(reason));
-        std::swap(SendFullStateReasons, n);
-        return SendFullStateReasons != n;
+    bool TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::AddSendFullStateReason(ESendReasons reason, ui64 groupsCount) {
+        if (reason == ESendReasons::Commit) {
+            if (!EnableSendFullBlacklist) {
+                return false;
+            }
+            if (LastSendReasons.Defined() && LastSendReasons->Reasons == ESendReasons::Commit) {
+                if (groupsCount * 2 > LastSendReasons->GroupsCount) { // Send an update to the child section only if the number of groups has been reduced by at least half.
+                    return false;
+                }
+            }
+        }
+
+        ESendReasons n = static_cast<ESendReasons>(static_cast<ui32>(SendReasons.Reasons) | static_cast<ui32>(reason));
+        TFullState newState{n, groupsCount};
+        std::swap(SendReasons, newState);
+        return SendReasons.Reasons != newState.Reasons;
     }
 
-    bool TChildPartitionsOrderManager::SetSendFullStateToAll(ESendReasons reason) {
+    bool TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::AddSendFullStateReason(ESendReasons reason) {
+        Y_ASSERT(reason != ESendReasons::Commit);
+        return AddSendFullStateReason(reason, SendReasons.GroupsCount);
+    }
+
+    bool TChildPartitionsOrderManager::SetSendFullStateToAll(ESendReasons reason, ui64 groupsCount) {
         Y_ASSERT(reason != ESendReasons::None);
         bool update = false;
         for (auto& [_, state] : ChildrenPartitionWithKeepOrder) {
-            if (state.AddSendFullStateReason(reason)) {
+            if (state.AddSendFullStateReason(reason, groupsCount)) {
                 update = true;
             }
         }
@@ -54,7 +71,7 @@ namespace NKikimr::NPQ::NMLP {
     }
 
     TString TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::SendFullStateReasonsAsString() const {
-        return SendReasonsToString(SendFullStateReasons);
+        return SendReasonsToString(SendReasons.Reasons);
     }
 
     TString TChildPartitionsOrderManager::SendReasonsToString(const ESendReasons reasons) {

@@ -165,6 +165,8 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("localBloomFilter");
         case TIndexDescription::EType::LocalBloomNgramFilter:
             return node.Q("localBloomNgramFilter");
+        case TIndexDescription::EType::LocalMinMax:
+            return node.Q("localMinMax");
     }
 }
 

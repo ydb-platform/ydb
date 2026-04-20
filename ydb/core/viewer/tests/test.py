@@ -755,6 +755,30 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_content_and_tabletcounters_missing_params(cls):
+        """Stable 400 for missing path / tablet selector (avoid browse / scheme timeouts)."""
+        result = {}
+        result['content_no_path'] = cls.get_viewer("/viewer/content", {
+            'database': cls.dedicated_db,
+        })
+        result['content_whitespace_path'] = cls.get_viewer("/viewer/content", {
+            'database': cls.dedicated_db,
+            'path': '   ',
+        })
+        result['tabletcounters_no_path_no_tablet'] = cls.get_viewer("/viewer/tabletcounters", {
+            'database': cls.dedicated_db,
+        })
+        assert result['content_no_path'].get('status_code') == 400, result['content_no_path']
+        assert "Parameter 'path' is required" in result['content_no_path'].get('text', ''), result['content_no_path']
+        assert result['content_whitespace_path'].get('status_code') == 400, result['content_whitespace_path']
+        assert "Parameter 'path' is required" in result['content_whitespace_path'].get('text', ''), result['content_whitespace_path']
+        assert result['tabletcounters_no_path_no_tablet'].get('status_code') == 400, result['tabletcounters_no_path_no_tablet']
+        assert (
+            "Parameter 'path' or 'tablet_id' is required" in result['tabletcounters_no_path_no_tablet'].get('text', '')
+        ), result['tabletcounters_no_path_no_tablet']
+        return result
+
+    @classmethod
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result

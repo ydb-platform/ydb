@@ -3863,6 +3863,20 @@
         "Tenants": "3",
         "Versions": "not-empty-array"
     },
+    "test.TestViewer.test_viewer_content_and_tabletcounters_missing_params": {
+        "content_no_path": {
+            "status_code": 400,
+            "text": "Parameter 'path' is required"
+        },
+        "content_whitespace_path": {
+            "status_code": 400,
+            "text": "Parameter 'path' is required"
+        },
+        "tabletcounters_no_path_no_tablet": {
+            "status_code": 400,
+            "text": "Parameter 'path' or 'tablet_id' is required"
+        }
+    },
     "test.TestViewer.test_viewer_describe": {
         "/Root": {
             "LastExistedPrefixDescription": {},

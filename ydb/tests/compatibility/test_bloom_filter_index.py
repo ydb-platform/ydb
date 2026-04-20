@@ -19,6 +19,9 @@ class TestBloomFilterIndex(RestartToAnotherVersionFixture):
             return pool.execute_with_retries(query)
 
     def test_bloom_filter_survives_version_change(self):
+        if min(self.versions) < (26, 2):
+            pytest.skip("Bloom filter index syntax requires 26.2+")
+
         # Create table with bloom filter index
         self._execute(f"""
             CREATE TABLE `{self.table_name}` (
@@ -37,6 +40,10 @@ class TestBloomFilterIndex(RestartToAnotherVersionFixture):
 
         # Change cluster version
         self.change_cluster_version()
+
+        # The bloom filter index definition should survive version change
+        schema_after = self._execute(f"SHOW CREATE TABLE `{self.table_name}`;")
+        assert "idx_bloom" in str(schema_after)
 
         # Data should survive version change, point lookup should work
         result_after = self._execute(f"SELECT * FROM `{self.table_name}` WHERE key1 = 1;")

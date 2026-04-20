@@ -54,14 +54,18 @@ class WorkloadBloomFilterIndex(WorkloadBase):
         sql = f"UPSERT INTO `{table_path}` ({col_names}) VALUES {', '.join(rows)};"
         self.client.query(sql, False)
 
-    def _select_existing(self, table_path):
+    def _select_existing(self, table_path, num_key_columns):
         key = random.randint(0, self.row_count - 1)
-        sql = f"SELECT * FROM `{table_path}` WHERE k0 = {key};"
+        prefix_len = random.randint(1, num_key_columns)
+        where_clauses = [f"k{i} = {key + i * 1000}" for i in range(prefix_len)]
+        sql = f"SELECT * FROM `{table_path}` WHERE {' AND '.join(where_clauses)};"
         return self.client.query(sql, False)
 
-    def _select_nonexistent(self, table_path):
+    def _select_nonexistent(self, table_path, num_key_columns):
         key = self.row_count + random.randint(1000, 9999)
-        sql = f"SELECT * FROM `{table_path}` WHERE k0 = {key};"
+        prefix_len = random.randint(1, num_key_columns)
+        where_clauses = [f"k{i} = {key + i * 1000}" for i in range(prefix_len)]
+        sql = f"SELECT * FROM `{table_path}` WHERE {' AND '.join(where_clauses)};"
         return self.client.query(sql, False)
 
     def _check_loop(self, table_path, num_key_columns):
@@ -79,10 +83,12 @@ class WorkloadBloomFilterIndex(WorkloadBase):
         # Insert data
         self._upsert_rows(table_path, num_key_columns, 0, self.row_count)
 
-        # Point lookups (existing and non-existing keys exercise bloom filter)
+        # Lookups by various prefixes; existing and non-existing prefixes exercise bloom filter behavior.
         for _ in range(10):
-            self._select_existing(table_path)
-            self._select_nonexistent(table_path)
+            res_ext = self._select_existing(table_path, num_key_columns)
+            assert len(res_ext[0].rows) == 1, f"Expected 1 row, got {len(res_ext[0].rows)}"
+            res_non = self._select_nonexistent(table_path, num_key_columns)
+            assert len(res_non[0].rows) == 0, f"Expected 0 rows, got {len(res_non[0].rows)}"
 
         # Disable all bloom filters
         self._disable_bloom(table_path)

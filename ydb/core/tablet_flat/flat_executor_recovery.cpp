@@ -587,11 +587,13 @@ public:
         }
 
         auto cgi = ev->Get()->Cgi();
-        if (const auto& path = cgi.Get("restoreBackup")) {
-            if (RestoreState == ERestoreState::NotStarted) {
-                bool skipChecksum = cgi.Has("skipChecksumValidation");
-                bool dryRun = cgi.Has("dryRun");
-                StartRestore(path, {}, skipChecksum, dryRun);
+        if (ev->Get()->GetMethod() == HTTP_METHOD_POST) {
+            if (const auto& path = cgi.Get("restoreBackup")) {
+                if (RestoreState == ERestoreState::NotStarted) {
+                    bool skipChecksum = cgi.Has("skipChecksumValidation");
+                    bool dryRun = cgi.Has("dryRun");
+                    StartRestore(path, {}, skipChecksum, dryRun);
+                }
             }
         }
 
@@ -675,9 +677,8 @@ public:
                             }
 
                             $.ajax({
-                                type: "GET",
-                                url: window.location.href,
-                                data: form.serialize(),
+                                type: "POST",
+                                url: window.location.href + '&' + form.serialize(),
                                 success: function(response) {
                                     $('body').html(response);
                                 },

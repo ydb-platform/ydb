@@ -5310,6 +5310,15 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
+        {
+            const TString q = Q1_(R"(
+                SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) LIMIT 1;
+            )");
+            auto explainResult = session.ExplainDataQuery(q).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            Cerr << "IndexFilterPushDown AST (query 1): " << explainResult.GetAst() << Endl;
+        }
+
         result = session.ExecuteDataQuery(Q1_(R"(
             SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) LIMIT 1;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
@@ -6278,6 +6287,962 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 INSERT INTO `/Root/TestInsertIndexNotNullDefault` (Key) VALUES (1);
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CoveringIndexFilterBeforeLookup) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            const TString createTableSql(R"(
+                CREATE TABLE `/Root/t_main` (
+                    pk_col Text NOT NULL,
+                    ts_col Timestamp,
+                    state_a Text,
+                    state_b Text,
+                    ref_col_1 Text,
+                    ref_col_2 Text,
+                    data_col Text,
+                    PRIMARY KEY (pk_col),
+                    INDEX ix_ts GLOBAL SYNC ON (ts_col)
+                    COVER (state_a, state_b, ref_col_1, ref_col_2)
+                );
+            )");
+            auto result = queryClient.ExecuteQuery(
+                createTableSql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString upsertSql(Q_(R"(
+                UPSERT INTO `/Root/t_main` (pk_col, ts_col, state_a, state_b, ref_col_1, ref_col_2, data_col) VALUES
+                    ('r1'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A1'u, 'B1'u, 'x1'u, 'y1'u, 'D1'u),
+                    ('r2'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A1'u, 'B1'u, 'x2'u, 'y2'u, 'D2'u),
+                    ('r3'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A1'u, 'B2'u, 'x3'u, 'y3'u, 'D3'u),
+                    ('r4'u, Timestamp('2025-01-02T00:00:00.000000Z'), 'A1'u, 'B1'u, 'x4'u, 'y4'u, 'D4'u),
+                    ('r5'u, Timestamp('2025-01-01T00:00:00.000000Z'), 'A2'u, 'B1'u, 'x5'u, 'y5'u, 'D5'u);
+            )"));
+
+            auto result = queryClient.ExecuteQuery(
+                upsertSql,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString query(Q_(R"(
+            SELECT ts_col, state_a, state_b, data_col
+            FROM `/Root/t_main` VIEW ix_ts
+            WHERE ts_col = Timestamp('2025-01-01T00:00:00.000000Z')
+                AND state_a = 'A1'
+                AND state_b = 'B1';
+        )"));
+
+        {
+            auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST: " << *ast << Endl;
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan: " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+
+            auto filterCount = CountPlanNodesByKv(planJson, "Node Type", "Filter");
+            UNIT_ASSERT_C(filterCount > 0, "Expected Filter node in the plan (filter on covered columns should be pushed before lookup)");
+
+            auto indexAccess = CountPlanNodesByKv(planJson, "Table", "t_main/ix_ts/indexImplTable");
+            UNIT_ASSERT_C(indexAccess > 0, "Expected access to index table ix_ts");
+        }
+
+        {
+            auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+            auto result = queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                execSettings)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto yson = NYdb::FormatResultSetYson(result.GetResultSet(0));
+            Cerr << "Result: " << yson << Endl;
+
+            CompareYson(R"([
+                [[1735689600000000u];["A1"];["B1"];["D1"]];
+                [[1735689600000000u];["A1"];["B1"];["D2"]]
+            ])", yson);
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            ui64 mainTableReads = 0;
+            ui64 indexTableReads = 0;
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    if (access.name() == "/Root/t_main" && access.reads().rows() > 0) {
+                        mainTableReads += access.reads().rows();
+                    }
+                    if (access.name() == "/Root/t_main/ix_ts/indexImplTable" && access.reads().rows() > 0) {
+                        indexTableReads += access.reads().rows();
+                    }
+                }
+            }
+            UNIT_ASSERT_C(indexTableReads > mainTableReads,
+                "Index table should read more rows than main table (filter narrows results before lookup). "
+                "Index reads: " << indexTableReads << ", main table reads: " << mainTableReads);
+            UNIT_ASSERT_VALUES_EQUAL_C(mainTableReads, 2,
+                "Filter on covered columns must be applied before lookup to main table. "
+                "Expected 2 main table reads (only matching rows), got " << mainTableReads);
+        }
+    }
+
+    Y_UNIT_TEST(CoveringIndexFilterBeforeLookupWithLeftJoin) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            const TString createMainTableSql(R"(
+                CREATE TABLE `/Root/MainTable` (
+                    id Utf8 NOT NULL,
+                    ts Timestamp,
+                    code Utf8,
+                    val1 Decimal(22, 9),
+                    val2 Decimal(22, 9),
+                    val3 Decimal(22, 9),
+                    fk_id Utf8,
+                    PRIMARY KEY (id),
+                    INDEX idx_ts GLOBAL SYNC ON (ts)
+                    COVER (code, val1)
+                );
+            )");
+            auto result = queryClient.ExecuteQuery(
+                createMainTableSql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString createLookupTableSql(R"(
+                CREATE TABLE `/Root/LookupTable` (
+                    id Utf8 NOT NULL,
+                    payload Utf8,
+                    PRIMARY KEY (id)
+                );
+            )");
+            auto result = queryClient.ExecuteQuery(
+                createLookupTableSql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString upsertMainSql(Q_(R"(
+                UPSERT INTO `/Root/MainTable` (id, ts, code, val1, val2, val3, fk_id) VALUES
+                    ('d1'u, Timestamp('2026-01-26T10:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('100', 22, 9), Decimal('200', 22, 9), 'f1'u),
+                    ('d2'u, Timestamp('2026-01-26T11:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('150', 22, 9), Decimal('250', 22, 9), 'f2'u),
+                    ('d3'u, Timestamp('2026-01-26T12:00:00.000000Z'), 'AAA'u, Decimal('2', 22, 9), Decimal('300', 22, 9), Decimal('400', 22, 9), 'f1'u),
+                    ('d4'u, Timestamp('2026-01-27T08:00:00.000000Z'), 'BBB'u, Decimal('1', 22, 9), Decimal('500', 22, 9), Decimal('600', 22, 9), 'f1'u),
+                    ('d5'u, Timestamp('2025-12-01T00:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('700', 22, 9), Decimal('800', 22, 9), 'f1'u),
+                    ('d6'u, Timestamp('2026-01-26T15:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('900', 22, 9), Decimal('950', 22, 9), NULL);
+            )"));
+            auto result = queryClient.ExecuteQuery(
+                upsertMainSql,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString upsertLookupSql(Q_(R"(
+                UPSERT INTO `/Root/LookupTable` (id, payload) VALUES
+                    ('f1'u, 'One'u),
+                    ('f2'u, 'Two'u);
+            )"));
+            auto result = queryClient.ExecuteQuery(
+                upsertLookupSql,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString query(Q_(R"(
+            SELECT t.id, t.code, t.val1, t.val2, t.val3
+            FROM `/Root/MainTable` VIEW idx_ts AS t
+            LEFT JOIN `/Root/LookupTable` AS l ON l.id = t.fk_id
+            WHERE t.ts >= Timestamp('2026-01-26T00:00:00.000000Z')
+              AND t.code = 'AAA'
+              AND t.val1 = Decimal('1', 22, 9)
+            LIMIT 10
+        )"));
+
+        {
+            auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST: " << *ast << Endl;
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan: " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+
+            auto indexAccess = CountPlanNodesByKv(planJson, "Table", "MainTable/idx_ts/indexImplTable");
+            UNIT_ASSERT_C(indexAccess > 0, "Expected access to index table idx_ts");
+        }
+
+        {
+            auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+            auto result = queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                execSettings)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto yson = NYdb::FormatResultSetYson(result.GetResultSet(0));
+            Cerr << "Result: " << yson << Endl;
+
+            {
+                TResultSetParser parser(result.GetResultSet(0));
+                TSet<TString> ids;
+                while (parser.TryNextRow()) {
+                    ids.insert(TString(parser.ColumnParser(0).GetUtf8()));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ids.size(), 3u);
+                UNIT_ASSERT_C(ids.contains("d1"), "Expected id 'd1' in results");
+                UNIT_ASSERT_C(ids.contains("d2"), "Expected id 'd2' in results");
+                UNIT_ASSERT_C(ids.contains("d6"), "Expected id 'd6' in results");
+            }
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            ui64 mainTableReads = 0;
+            ui64 indexTableReads = 0;
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    Cerr << "Table: " << access.name()
+                         << " reads: " << access.reads().rows()
+                         << " updates: " << access.updates().rows() << Endl;
+                    if (access.name() == "/Root/MainTable" && access.reads().rows() > 0) {
+                        mainTableReads += access.reads().rows();
+                    }
+                    if (access.name() == "/Root/MainTable/idx_ts/indexImplTable" && access.reads().rows() > 0) {
+                        indexTableReads += access.reads().rows();
+                    }
+                }
+            }
+            UNIT_ASSERT_C(indexTableReads > 0, "Expected reads from the index table");
+            UNIT_ASSERT_C(indexTableReads > mainTableReads,
+                "Index table should read at least as many rows as main table (filter narrows results before lookup). "
+                "Index reads: " << indexTableReads << ", main table reads: " << mainTableReads);
+        }
+    }
+
+    Y_UNIT_TEST(TopSortOnNonCoveredColumnPreservesIndexFilter) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/MainTable` (
+                    id Utf8 NOT NULL,
+                    ts Timestamp,
+                    code Utf8,
+                    val1 Decimal(22, 9),
+                    val2 Decimal(22, 9),
+                    val3 Decimal(22, 9),
+                    fk_id Utf8,
+                    PRIMARY KEY (id),
+                    INDEX idx_ts GLOBAL SYNC ON (ts)
+                    COVER (code, val1)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/LookupTable` (
+                    id Utf8 NOT NULL,
+                    payload Utf8,
+                    PRIMARY KEY (id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/MainTable` (id, ts, code, val1, val2, val3, fk_id) VALUES
+                    ('d1'u, Timestamp('2026-01-26T10:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('100', 22, 9), Decimal('200', 22, 9), 'f1'u),
+                    ('d2'u, Timestamp('2026-01-26T11:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('150', 22, 9), Decimal('250', 22, 9), 'f2'u),
+                    ('d3'u, Timestamp('2026-01-26T12:00:00.000000Z'), 'AAA'u, Decimal('2', 22, 9), Decimal('300', 22, 9), Decimal('400', 22, 9), 'f1'u),
+                    ('d4'u, Timestamp('2026-01-27T08:00:00.000000Z'), 'BBB'u, Decimal('1', 22, 9), Decimal('500', 22, 9), Decimal('600', 22, 9), 'f1'u),
+                    ('d5'u, Timestamp('2025-12-01T00:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('700', 22, 9), Decimal('800', 22, 9), 'f1'u),
+                    ('d6'u, Timestamp('2026-01-26T15:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('900', 22, 9), Decimal('950', 22, 9), NULL);
+            )"),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/LookupTable` (id, payload) VALUES
+                    ('f1'u, 'One'u),
+                    ('f2'u, 'Two'u);
+            )"),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString query(Q_(R"(
+            SELECT t.id, t.code, t.val1, t.val2, t.val3
+            FROM `/Root/MainTable` VIEW idx_ts AS t
+            LEFT JOIN `/Root/LookupTable` AS l ON l.id = t.fk_id
+            WHERE t.ts >= Timestamp('2026-01-26T00:00:00.000000Z')
+              AND t.code = 'AAA'
+              AND t.val1 = Decimal('1', 22, 9)
+            ORDER BY t.val2
+            LIMIT 10
+        )"));
+
+        {
+            auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST: " << *ast << Endl;
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan: " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+
+            auto indexAccess = CountPlanNodesByKv(planJson, "Table", "MainTable/idx_ts/indexImplTable");
+            UNIT_ASSERT_C(indexAccess > 0, "Expected access to index table idx_ts");
+        }
+
+        {
+            auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+            auto result = queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                execSettings)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto yson = NYdb::FormatResultSetYson(result.GetResultSet(0));
+            Cerr << "Result: " << yson << Endl;
+
+            {
+                TResultSetParser parser(result.GetResultSet(0));
+                TVector<TString> ids;
+                while (parser.TryNextRow()) {
+                    ids.push_back(TString(parser.ColumnParser(0).GetUtf8()));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ids.size(), 3u);
+                UNIT_ASSERT_VALUES_EQUAL(ids[0], "d1");
+                UNIT_ASSERT_VALUES_EQUAL(ids[1], "d2");
+                UNIT_ASSERT_VALUES_EQUAL(ids[2], "d6");
+            }
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            ui64 mainTableReads = 0;
+            ui64 indexTableReads = 0;
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    Cerr << "Table: " << access.name()
+                         << " reads: " << access.reads().rows()
+                         << " updates: " << access.updates().rows() << Endl;
+                    if (access.name() == "/Root/MainTable" && access.reads().rows() > 0) {
+                        mainTableReads += access.reads().rows();
+                    }
+                    if (access.name() == "/Root/MainTable/idx_ts/indexImplTable" && access.reads().rows() > 0) {
+                        indexTableReads += access.reads().rows();
+                    }
+                }
+            }
+            UNIT_ASSERT_C(indexTableReads > 0, "Expected reads from the index table");
+            UNIT_ASSERT_C(indexTableReads > mainTableReads,
+                "Filter on covered columns (code, val1) should be pushed to index before lookup, "
+                "even when ORDER BY is on a non-covered column (val2). "
+                "Index reads: " << indexTableReads << ", main table reads: " << mainTableReads);
+        }
+    }
+
+    Y_UNIT_TEST(TakePushedBeforeLookupOnCoveringIndex) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/MainTable` (
+                    id Utf8 NOT NULL,
+                    ts Timestamp,
+                    code Utf8,
+                    val1 Decimal(22, 9),
+                    val2 Decimal(22, 9),
+                    val3 Decimal(22, 9),
+                    fk_id Utf8,
+                    PRIMARY KEY (id),
+                    INDEX idx_ts GLOBAL SYNC ON (ts)
+                    COVER (code, val1)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/MainTable` (id, ts, code, val1, val2, val3, fk_id) VALUES
+                    ('d1'u, Timestamp('2026-01-26T10:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('100', 22, 9), Decimal('200', 22, 9), 'f1'u),
+                    ('d2'u, Timestamp('2026-01-26T11:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('150', 22, 9), Decimal('250', 22, 9), 'f2'u),
+                    ('d3'u, Timestamp('2026-01-26T12:00:00.000000Z'), 'AAA'u, Decimal('2', 22, 9), Decimal('300', 22, 9), Decimal('400', 22, 9), 'f1'u),
+                    ('d4'u, Timestamp('2026-01-27T08:00:00.000000Z'), 'BBB'u, Decimal('1', 22, 9), Decimal('500', 22, 9), Decimal('600', 22, 9), 'f1'u),
+                    ('d5'u, Timestamp('2025-12-01T00:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('700', 22, 9), Decimal('800', 22, 9), 'f1'u),
+                    ('d6'u, Timestamp('2026-01-26T15:00:00.000000Z'), 'AAA'u, Decimal('1', 22, 9), Decimal('900', 22, 9), Decimal('950', 22, 9), NULL);
+            )"),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString query(Q_(R"(
+            SELECT id, code, val1, val2 AS other_val, val3
+            FROM `/Root/MainTable` VIEW idx_ts
+            WHERE ts >= Timestamp('2026-01-26T00:00:00.000000Z')
+              AND code = 'AAA'
+              AND val1 = Decimal('1', 22, 9)
+            LIMIT 2
+        )"));
+
+        {
+            auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST: " << *ast << Endl;
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan: " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+
+            auto indexAccess = CountPlanNodesByKv(planJson, "Table", "MainTable/idx_ts/indexImplTable");
+            UNIT_ASSERT_C(indexAccess > 0, "Expected access to index table idx_ts");
+        }
+
+        {
+            auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
+                .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+            auto result = queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                execSettings)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto yson = NYdb::FormatResultSetYson(result.GetResultSet(0));
+            Cerr << "Result: " << yson << Endl;
+
+            auto resultSets = result.GetResultSets();
+            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(resultSets[0].RowsCount(), 2u);
+
+            {
+                TResultSetParser parser(result.GetResultSet(0));
+                TSet<TString> ids;
+                while (parser.TryNextRow()) {
+                    ids.insert(TString(parser.ColumnParser(0).GetUtf8()));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ids.size(), 2u);
+                UNIT_ASSERT_C(ids.contains("d1"), "Expected id 'd1' in results");
+                UNIT_ASSERT_C(ids.contains("d2"), "Expected id 'd2' in results");
+            }
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            ui64 mainTableReads = 0;
+            ui64 indexTableReads = 0;
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    Cerr << "Table: " << access.name()
+                         << " reads: " << access.reads().rows()
+                         << " updates: " << access.updates().rows() << Endl;
+                    if (access.name() == "/Root/MainTable" && access.reads().rows() > 0) {
+                        mainTableReads += access.reads().rows();
+                    }
+                    if (access.name() == "/Root/MainTable/idx_ts/indexImplTable" && access.reads().rows() > 0) {
+                        indexTableReads += access.reads().rows();
+                    }
+                }
+            }
+            UNIT_ASSERT_C(indexTableReads > 0, "Expected reads from the index table");
+            UNIT_ASSERT_C(mainTableReads <= 2,
+                "Take (LIMIT) should be pushed before lookup so at most 2 main table reads. "
+                "Got main table reads: " << mainTableReads << ", index reads: " << indexTableReads);
+            UNIT_ASSERT_C(indexTableReads <= 2,
+                "Take (LIMIT) should be pushed to index side, limiting index reads to at most LIMIT rows. "
+                "Column rename of a non-covered column should not prevent Take pushdown. "
+                "Got index reads: " << indexTableReads << ", main table reads: " << mainTableReads);
+        }
+    }
+
+    Y_UNIT_TEST(SimpleViewAutoSelectIndex) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/orders` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsertResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/orders` (id, name) VALUES
+                (1u, "Alice"),
+                (2u, "Bob"),
+                (3u, "Alice"),
+                (4u, "Charlie");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE VIEW `/Root/simple_view` WITH (security_invoker = TRUE) AS
+                SELECT * FROM `/Root/orders`;
+        )").GetValueSync());
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                SELECT * FROM `/Root/simple_view` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << "Plan: " << explainResult.GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+            auto indexAccess = CountPlanNodesByKv(plan, "Table", "orders/idx_name/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL_C(indexAccess, 1,
+                "Expected auto-select index through simple view, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT id, name FROM `/Root/simple_view` WHERE name = 'Alice' ORDER BY id;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["Alice"]];[[3u];["Alice"]]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UnionAllViewAutoSelectIndex) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/orders1` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/orders2` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsertResult1 = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/orders1` (id, name) VALUES
+                (1u, "Alice"),
+                (2u, "Bob");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult1.IsSuccess(), upsertResult1.GetIssues().ToString());
+
+        auto upsertResult2 = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/orders2` (id, name) VALUES
+                (3u, "Alice"),
+                (4u, "Charlie");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult2.IsSuccess(), upsertResult2.GetIssues().ToString());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE VIEW `/Root/all_orders` WITH (security_invoker = TRUE) AS
+                SELECT * FROM `/Root/orders1`
+                UNION ALL
+                SELECT * FROM `/Root/orders2`;
+        )").GetValueSync());
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                SELECT * FROM `/Root/all_orders` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << "Plan: " << explainResult.GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+
+            auto indexAccess1 = CountPlanNodesByKv(plan, "Table", "orders1/idx_name/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL_C(indexAccess1, 1,
+                "Expected auto-select index for orders1 through union view, plan: " << explainResult.GetPlan());
+
+            auto indexAccess2 = CountPlanNodesByKv(plan, "Table", "orders2/idx_name/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL_C(indexAccess2, 1,
+                "Expected auto-select index for orders2 through union view, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT id, name FROM `/Root/all_orders` WHERE name = 'Alice' ORDER BY id;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["Alice"]];[[3u];["Alice"]]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UnionAllViewPartialAutoSelectIndex) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/orders_indexed` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/orders_no_index` (
+                id Uint32,
+                name Utf8,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsertResult1 = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/orders_indexed` (id, name) VALUES
+                (1u, "Alice"),
+                (2u, "Bob");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult1.IsSuccess(), upsertResult1.GetIssues().ToString());
+
+        auto upsertResult2 = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/orders_no_index` (id, name) VALUES
+                (3u, "Alice"),
+                (4u, "Charlie");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult2.IsSuccess(), upsertResult2.GetIssues().ToString());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE VIEW `/Root/mixed_orders` WITH (security_invoker = TRUE) AS
+                SELECT * FROM `/Root/orders_indexed`
+                UNION ALL
+                SELECT * FROM `/Root/orders_no_index`;
+        )").GetValueSync());
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                SELECT * FROM `/Root/mixed_orders` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << "Plan: " << explainResult.GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+
+            auto indexAccess = CountPlanNodesByKv(plan, "Table", "orders_indexed/idx_name/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL_C(indexAccess, 1,
+                "Expected auto-select index for orders_indexed, plan: " << explainResult.GetPlan());
+
+            auto fullScan = CountPlanNodesByKv(plan, "Table", "orders_no_index");
+            UNIT_ASSERT_VALUES_EQUAL_C(fullScan, 1,
+                "Expected full scan for orders_no_index (no index available), plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT id, name FROM `/Root/mixed_orders` WHERE name = 'Alice' ORDER BY id;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["Alice"]];[[3u];["Alice"]]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UnionAllViewMixedPushdown) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                id Uint32, name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+            CREATE TABLE `/Root/t2` (
+                id Uint32, name Utf8,
+                PRIMARY KEY (id)
+            );
+            CREATE TABLE `/Root/t3` (
+                id Uint32, name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+            CREATE TABLE `/Root/t4` (
+                id Uint32, name Utf8, status Utf8,
+                INDEX idx_status GLOBAL ON (status),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsert = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/t1` (id, name) VALUES (1u, "Alice"), (2u, "Bob");
+            UPSERT INTO `/Root/t2` (id, name) VALUES (3u, "Alice"), (4u, "Eve");
+            UPSERT INTO `/Root/t3` (id, name) VALUES (5u, "Alice"), (6u, "Charlie");
+            UPSERT INTO `/Root/t4` (id, name, status) VALUES (7u, "Alice", "active"), (8u, "Dan", "inactive");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE VIEW `/Root/v_all` WITH (security_invoker = TRUE) AS
+                SELECT id, name FROM `/Root/t1`
+                UNION ALL
+                SELECT id, name FROM `/Root/t2`
+                UNION ALL
+                SELECT id, name FROM `/Root/t3`
+                UNION ALL
+                SELECT id, name FROM `/Root/t4`;
+        )").GetValueSync());
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                SELECT * FROM `/Root/v_all` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << "Plan: " << explainResult.GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "t1/idx_name/indexImplTable"), 1,
+                "t1 has idx_name — should use index, plan: " << explainResult.GetPlan());
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "t3/idx_name/indexImplTable"), 1,
+                "t3 has idx_name — should use index, plan: " << explainResult.GetPlan());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "t2"), 1,
+                "t2 has no index on name — should full scan, plan: " << explainResult.GetPlan());
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "t4"), 1,
+                "t4 has index on status not name — should full scan, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT id, name FROM `/Root/v_all` WHERE name = 'Alice' ORDER BY id;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["Alice"]];[[3u];["Alice"]];[[5u];["Alice"]];[[7u];["Alice"]]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UnionAllMultiConsumerSkipsPushdown) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/o1` (
+                id Uint32, name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+            CREATE TABLE `/Root/o2` (
+                id Uint32, name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsert = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/o1` (id, name) VALUES (1u, "Alice"), (2u, "Bob");
+            UPSERT INTO `/Root/o2` (id, name) VALUES (3u, "Alice"), (4u, "Charlie");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        const TString query = R"(
+            $sub = SELECT id, name FROM `/Root/o1`
+                   UNION ALL
+                   SELECT id, name FROM `/Root/o2`;
+            SELECT id, name FROM (
+                SELECT id, name FROM $sub WHERE name = 'Alice'
+                UNION ALL
+                SELECT id, name FROM $sub WHERE name = 'Bob'
+            ) ORDER BY id;
+        )";
+
+        {
+            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << "Plan: " << explainResult.GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "o1/idx_name/indexImplTable"), 0,
+                "Multi-consumer Extend should skip index pushdown for o1, plan: " << explainResult.GetPlan());
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "o2/idx_name/indexImplTable"), 0,
+                "Multi-consumer Extend should skip index pushdown for o2, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["Alice"]];[[2u];["Bob"]];[[3u];["Alice"]]])",
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(TopSortOverExtendAutoSelectIndex) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                id Uint32, name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+            CREATE TABLE `/Root/t2` (
+                id Uint32, name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsert = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/t1` (id, name) VALUES
+                (1u, "Alice"), (2u, "Bob"), (3u, "Charlie"), (4u, "Dan");
+            UPSERT INTO `/Root/t2` (id, name) VALUES
+                (5u, "Alice"), (6u, "Eve"), (7u, "Bob"), (8u, "Frank");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE VIEW `/Root/v_union` WITH (security_invoker = TRUE) AS
+                SELECT id, name FROM `/Root/t1`
+                UNION ALL
+                SELECT id, name FROM `/Root/t2`;
+        )").GetValueSync());
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                SELECT id, name FROM `/Root/v_union`
+                ORDER BY name
+                LIMIT 3;
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            Cerr << "Plan: " << explainResult.GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "t1/idx_name/indexImplTable"), 1,
+                "Expected index auto-select for t1 with TopSort, plan: " << explainResult.GetPlan());
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Table", "t2/idx_name/indexImplTable"), 1,
+                "Expected index auto-select for t2 with TopSort, plan: " << explainResult.GetPlan());
+
+            auto limitNode = FindPlanNodeByKv(plan, "Node Type", "Limit");
+            UNIT_ASSERT_C(limitNode.IsDefined(),
+                "Expected Limit node in plan for LIMIT pushdown, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT id, name FROM `/Root/v_union`
+                ORDER BY name, id
+                LIMIT 3;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["Alice"]];[[5u];["Alice"]];[[2u];["Bob"]]])",
+                FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

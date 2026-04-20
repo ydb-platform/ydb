@@ -9,10 +9,35 @@ from hamcrest import assert_that, is_, not_
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common import types
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 logger = logging.getLogger(__name__)
+
+
+def wait_until_discovery_includes_all_slot_ports(
+    cluster,
+    resolver,
+    timeout_seconds=30,
+    step_seconds=0.5,
+    message=None,
+):
+    """Wait until ListEndpoints returns every tenant slot gRPC port (handles board publish lag)."""
+    required = {slot.grpc_port for slot in cluster.slots.values()}
+
+    def predicate():
+        resolved = resolver.resolve()
+        if resolved is None:
+            return False
+        return required <= {endpoint.port for endpoint in resolved.endpoints}
+
+    assert_that(
+        wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=step_seconds),
+        is_(True),
+        message
+        or "ListEndpoints should include every tenant slot port; expected ports %s" % sorted(required),
+    )
 
 
 class TestDiscoveryExtEndpoint(object):
@@ -51,6 +76,12 @@ class TestDiscoveryExtEndpoint(object):
         resolver = ydb.DiscoveryEndpointsResolver(driver_config)
         driver = ydb.Driver(driver_config)
         driver.wait(timeout=10)
+
+        wait_until_discovery_includes_all_slot_ports(
+            self.cluster,
+            resolver,
+            message="ListEndpoints via default gRPC should include every tenant slot port; missing after wait",
+        )
 
         endpoint_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
         # Discovery has been performed using default endpoint
@@ -149,6 +180,12 @@ class AbstractTestDiscoveryFaultInjection(object):
         driver = ydb.Driver(driver_config)
         driver.wait(timeout=10)
 
+        wait_until_discovery_includes_all_slot_ports(
+            self.cluster,
+            resolver,
+            message="ListEndpoints should include every tenant slot before fault injection",
+        )
+
         initial_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
         initial_ports = initial_ports[:1]
 
@@ -189,14 +226,24 @@ class AbstractTestDiscoveryFaultInjection(object):
                 self.extract_fault(slot)
                 self.logger.info("Extracted fault, slot with gRPC port: %s" % slot.grpc_port)
 
-        # monkey waiting until gRPC machinery will complete recovery
-        time.sleep(3)
+        def prepare_select_one_succeeds():
+            try:
+                session = driver.table_client.session().create()
+                session.prepare('select 1')
+                return True
+            except Exception:
+                return False
 
-        # ensure zero errors by internal error
-        for _ in range(10):
+        assert_that(
+            wait_for(prepare_select_one_succeeds, timeout_seconds=120, step_seconds=1.0),
+            is_(True),
+            "Database did not recover after fault extraction (prepare select 1)",
+        )
+
+        # ensure zero errors once healthy
+        for _ in range(9):
             session = driver.table_client.session().create()
-            session.prepare(
-                'select 1')
+            session.prepare('select 1')
 
 
 class TestDiscoveryFaultInjectionSlotStop(AbstractTestDiscoveryFaultInjection):

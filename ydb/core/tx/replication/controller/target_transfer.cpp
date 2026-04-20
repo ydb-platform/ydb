@@ -345,8 +345,9 @@ void TTargetTransfer::WorkerStatusChanged(ui64 workerId, ui64 status) {
 }
 
 bool TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
-    if (!TBase::UpdateStats(workerId, newStats))
+    if (!TBase::UpdateStats(workerId, newStats)) {
         return false;
+    }
 
     EnsureCounters();
     auto* statsPtr = dynamic_cast<TTransferStats*>(Stats.get());

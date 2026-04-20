@@ -727,7 +727,7 @@
     Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
     {% list tabs %}
-    
+
     - Native SDK
 
       ```python
@@ -961,7 +961,7 @@
 - Python
 
     {% list tabs %}
-    
+
     - Native SDK
 
         ```python
@@ -1064,7 +1064,7 @@
 
             print(f"Table index {index_name} created.")
         ```
-    
+
     {% endlist %}
 
 - C++

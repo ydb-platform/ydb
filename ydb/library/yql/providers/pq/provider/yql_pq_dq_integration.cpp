@@ -74,6 +74,23 @@ public:
         return 0;
     }
 
+    bool GetPartition(const TExprNode& node,  std::set<ui64>& partitions) {
+        std::set<ui64> partitions;
+        auto partitions1 = node.Ptr();
+
+        if (!partitions1->IsCallable("AsList")) {
+            return false;
+        }
+
+        for (ui32 j = 0; j < partitions1->ChildrenSize(); ++j) {
+            if (!partitions1->Child(j)->IsCallable("Uint64")) {
+                return false;
+            }
+            partitions.insert(FromString<ui64>(partitions1->Child(j)->Child(0)->Content()));
+        }
+        return partitions;
+    }
+
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
             return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true);
@@ -93,6 +110,12 @@ public:
                     streamingTopicRead = FromString<bool>(Value(setting));
                     break;
                 }
+                std::set<ui64> partitions;
+                bool success = GetPartition(topicSource.Partitions(), partitions);
+                if (success) {
+                    YQL_CLOG(DEBUG, ProviderPq) << "partitions999  " << JoinSeq(" ", partitions);
+                }
+
                 return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead);
             }
         }
@@ -150,6 +173,11 @@ public:
 
             const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
 
+            auto listType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
+            TExprNode::TPtr emptyList = ctx.NewCallable(pqReadTopic.Pos(), "List", {
+                ExpandType(pqReadTopic.Pos(), *listType, ctx)
+            });
+
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -161,6 +189,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(expandedRowType)
+                    .Partitions(emptyList)
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()

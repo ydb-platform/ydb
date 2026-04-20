@@ -975,19 +975,20 @@ private:
 
             if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
                 BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) <<
-                           ": invalid peer name format: " << ev->Get()->PeerName <<
-                           " for DB: " << ev->Get()->Database);
+                           ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
+                           " for DB: " << ev->Get()->Database.Quote());
 
                 TEvTicketParser::TError error;
-                error.Message = "Wrong peername format: " + ev->Get()->PeerName + " for DB: " + ev->Get()->Database;
+                error.Message = "Wrong peername format: " + ev->Get()->PeerName.Quote() +
+                                " for DB: " + ev->Get()->Database.Quote();
                 error.Retryable = false;
                 BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) << ": " << error);
                 Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, ev->Cookie);
                 return;
             } else {
                 BLOG_INFO("Ticket " << MaskTicket(ev->Get()->Ticket) <<
-                          ": invalid peer name format: " << ev->Get()->PeerName <<
-                          " for DB: " << ev->Get()->Database);
+                          ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
+                          " for DB: " << ev->Get()->Database.Quote());
             }
         }
 

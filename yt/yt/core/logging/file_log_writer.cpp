@@ -51,7 +51,7 @@ TString FormatFileName(const TString& fileNamePattern)
     formatter
         .SetProperty("process_id", ToString(GetCurrentProcessId()))
         .SetProperty("process_name", SanitizeFileName(GetCurrentProcessName()))
-        .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessName()));
+        .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessCommandLine()));
     return formatter.Format(fileNamePattern);
 }
 

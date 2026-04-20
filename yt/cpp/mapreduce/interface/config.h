@@ -239,6 +239,18 @@ struct TConfig
     bool UseAbortableResponse = false;
     bool EnableDebugMetrics = false;
 
+    /// @brief Simulate a response that halts (stops sending data) mid-stream.
+    ///
+    /// Testing options, should never be used in user programs.
+    /// When enabled, the HTTP response will be truncated after @ref HaltingResponseBytesLimit bytes.
+    bool UseHaltingResponse = false;
+
+    /// @brief Maximum number of bytes sent before the response is halted.
+    ///
+    /// Testing options, should never be used in user programs.
+    /// Only meaningful when @ref UseHaltingResponse is true.
+    i64 HaltingResponseBytesLimit = 64 * 1024;
+
     //
     // There is optimization used with local YT that enables to skip binary upload and use real binary path.
     // When EnableLocalModeOptimization is set to false this optimization is completely disabled.

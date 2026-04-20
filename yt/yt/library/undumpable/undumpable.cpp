@@ -105,7 +105,7 @@ public:
         while (mark) {
             int ret = ::madvise(mark->Ptr, mark->Size, MADV_DONTDUMP);
             if (ret == 0) {
-                ++result.MarkedSize += mark->Size;
+                result.MarkedSize += mark->Size;
             } else {
                 auto errorCode = LastSystemError();
                 for (auto& record : result.FailedToMarkMemory) {

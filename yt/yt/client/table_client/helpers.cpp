@@ -537,11 +537,11 @@ void FromUnversionedValue(const char** value, TUnversionedValue unversionedValue
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
     bool value,
-    const TRowBufferPtr& rowBuffer,
+    const TRowBufferPtr& /*rowBuffer*/,
     int id,
     EValueFlags flags)
 {
-    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedBooleanValue(value, id, flags));
+    *unversionedValue = MakeUnversionedBooleanValue(value, id, flags);
 }
 
 void FromUnversionedValue(bool* value, TUnversionedValue unversionedValue)

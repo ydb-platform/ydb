@@ -364,6 +364,16 @@ struct TLineageStats {
     ui64 Size = 0;
     ui64 Memory = 0;
     ui64 Duration = 0;
+    ui32 Version = 0;
+};
+
+struct TLineageSettings {
+    bool EnableLineage = false;
+    bool EnableStandaloneLineage = false;
+    ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
+    ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
+    ui32 LineageVersion = 1;
+    ui32 LineageStandaloneVersion = 1;
 };
 
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
@@ -492,11 +502,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 AndOverOrExpansionLimit = 100;
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
-    bool EnableLineage = false;
-    bool EnableStandaloneLineage = false;
     TLineageStats LineageStats;
-    ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
-    ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
+    TLineageSettings LineageSettings;
     bool FuzzUntypedLambda = false;
     bool FuzzUniversal = false;
 

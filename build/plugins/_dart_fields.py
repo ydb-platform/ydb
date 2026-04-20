@@ -715,10 +715,16 @@ class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
     _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
-    # HACK: Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
+    # HACK: YA-3039 Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
-    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = ('fintech/uservices', 'taxi', 'electro', 'maps/tariffs')
+    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = (
+        'electro',
+        'fintech/uservices',
+        'maps/tariffs',
+        'market/media_adv/madv-inspector',
+        'taxi',
+    )
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):

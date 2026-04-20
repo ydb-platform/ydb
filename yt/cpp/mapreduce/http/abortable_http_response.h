@@ -35,9 +35,9 @@ class IAbortableHttpResponse
     : public TIntrusiveListItem<IAbortableHttpResponse>
 {
 public:
-    virtual void Abort() = 0;
+    virtual void AbortResponse() = 0;
     virtual const TString& GetUrl() const = 0;
-    virtual bool IsAborted() const = 0;
+    virtual bool IsResponseAborted() const = 0;
     virtual void SetLengthLimit(size_t limit) = 0;
 
     virtual ~IAbortableHttpResponse() = default;
@@ -50,9 +50,9 @@ public:
     TAbortableHttpResponseBase(const TString& url);
     ~TAbortableHttpResponseBase();
 
-    void Abort() override;
+    void AbortResponse() override;
     const TString& GetUrl() const override;
-    bool IsAborted() const override;
+    bool IsResponseAborted() const override;
     void SetLengthLimit(size_t limit) override;
 
 protected:
@@ -65,20 +65,24 @@ protected:
 
 /// @brief Stream wrapper for @ref NYT::NHttpClient::TCoreHttpResponse with possibility to emulate errors.
 class TAbortableCoreHttpResponse
-    : public IInputStream
+    : public IAbortableInputStream
     , public TAbortableHttpResponseBase
 {
 public:
     TAbortableCoreHttpResponse(
-        std::unique_ptr<IInputStream> stream,
+        std::unique_ptr<IAbortableInputStream> stream,
         const TString& url);
+
+    // IAbortableInputStream
+    void Abort() override;
+    bool IsAborted() const override;
 
 private:
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
 
 private:
-    std::unique_ptr<IInputStream> Stream_;
+    std::unique_ptr<IAbortableInputStream> Stream_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -93,7 +97,7 @@ public:
     {
     public:
         TOutage(TString urlPattern, TAbortableHttpResponseRegistry& registry, const TOutageOptions& options);
-        TOutage(TOutage&&) = default;
+        TOutage(TOutage&&) noexcept = default;
         TOutage(const TOutage&) = delete;
         ~TOutage();
 

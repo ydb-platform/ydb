@@ -29,8 +29,8 @@ public:
     TTempTable(const TTempTable&) = delete;
     TTempTable& operator=(const TTempTable&) = delete;
 
-    TTempTable(TTempTable&&);
-    TTempTable& operator=(TTempTable&&);
+    TTempTable(TTempTable&&) noexcept;
+    TTempTable& operator=(TTempTable&&); // NOLINT Calls RemoveTable() that may throw.
 
     ~TTempTable();
 

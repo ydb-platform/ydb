@@ -32,6 +32,8 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> BuildCreateTopicTx(
     config->SetTopicPath(TString::Join(topicDir, '/', "streamImpl"));
 
     config->MutablePartitionConfig()->SetLifetimeSeconds(params.PartitionLifetimeSeconds);
+    config->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(1048576);
+    config->MutablePartitionConfig()->SetBurstSize(1048576);
 
     if (params.HasContentBasedDeduplication) {
         config->SetContentBasedDeduplication(params.ContentBasedDeduplication);

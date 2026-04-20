@@ -15,7 +15,6 @@ Usage:
 
 import argparse
 import datetime
-import json
 import logging
 import os
 import sys
@@ -36,23 +35,17 @@ from update_mute_issues import (
 )
 from ydb_wrapper import YDBWrapper
 
+from mute_constants import (
+    get_manual_unmute_currently_muted_lookback_days,
+    get_manual_unmute_issue_closed_lookback_days,
+    get_manual_unmute_min_runs,
+    get_manual_unmute_window_days,
+    get_mute_window_days,
+)
 
 LABEL_NAME = 'manual-fast-unmute'
 
 _LABEL_ID_CACHE = {}
-
-CONFIG_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_config.json')
-)
-
-# Lookback for CLOSED+COMPLETED issues when picking new fast-unmute candidates.
-# Issues closed earlier than this will not be reopened by this script even if
-# they still have muted tests — this keeps the scan cheap and bounds surprises.
-ISSUE_CLOSED_LOOKBACK_DAYS = 14
-
-# ``tests_monitor`` has one row per (full_name, date_window); take ``is_muted`` from the
-# latest ``date_window`` only (bounded scan), not DISTINCT over recent days (M1).
-CURRENTLY_MUTED_LOOKBACK_DAYS = 30
 
 # GitHub ``__typename`` is ``User`` for PAT-based bot accounts; skip known bot logins (M2).
 BOT_LOGINS = frozenset({'ydbot', 'github-actions'})
@@ -86,16 +79,10 @@ The following tests failed during the fast-unmute window and are back on the def
 
 
 def load_config():
-    with open(CONFIG_PATH, 'r', encoding='utf-8') as fp:
-        payload = json.load(fp)
-    for key in ('manual_unmute_window_days', 'manual_unmute_min_runs'):
-        if key not in payload:
-            raise RuntimeError(f"Missing key '{key}' in {CONFIG_PATH}")
-        if int(payload[key]) <= 0:
-            raise ValueError(f"'{key}' in {CONFIG_PATH} must be positive")
+    """Fast-track window/min-runs — same keys as ``mute_constants`` / ``mute_config.json``."""
     return {
-        'window_days': int(payload['manual_unmute_window_days']),
-        'min_runs': int(payload['manual_unmute_min_runs']),
+        'window_days': get_manual_unmute_window_days(),
+        'min_runs': get_manual_unmute_min_runs(),
     }
 
 
@@ -190,7 +177,7 @@ def fetch_candidate_issues(ydb_wrapper, issues_table_path, lookback_days):
 
 
 def fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type):
-    lb = int(CURRENTLY_MUTED_LOOKBACK_DAYS)
+    lb = int(get_manual_unmute_currently_muted_lookback_days())
     br = _escape(branch)
     bt = _escape(build_type)
     query = f"""
@@ -390,6 +377,105 @@ def remove_label_from_issue(issue_id):
         logging.warning('Failed to remove label from issue %s: %s', issue_id, exc)
 
 
+def create_fast_unmute_grace_table(ydb_wrapper, table_path):
+    create_sql = f"""
+    CREATE TABLE IF NOT EXISTS `{table_path}` (
+        `full_name`                   Utf8      NOT NULL,
+        `branch`                      Utf8      NOT NULL,
+        `build_type`                  Utf8      NOT NULL,
+        `github_issue_number`         Uint64    NOT NULL,
+        `fast_track_requested_at`     Timestamp NOT NULL,
+        `grace_started_at`            Timestamp NOT NULL,
+        PRIMARY KEY (full_name, branch, build_type)
+    )
+    WITH (STORE = COLUMN)
+    """
+    ydb_wrapper.create_table(table_path, create_sql)
+
+
+def upsert_fast_unmute_grace_row(
+    ydb_wrapper,
+    table_path,
+    full_name,
+    branch,
+    build_type,
+    github_issue_number,
+    fast_track_requested_at,
+    grace_started_at,
+):
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column('full_name', ydb.PrimitiveType.Utf8)
+        .add_column('branch', ydb.PrimitiveType.Utf8)
+        .add_column('build_type', ydb.PrimitiveType.Utf8)
+        .add_column('github_issue_number', ydb.PrimitiveType.Uint64)
+        .add_column('fast_track_requested_at', ydb.PrimitiveType.Timestamp)
+        .add_column('grace_started_at', ydb.PrimitiveType.Timestamp)
+    )
+    rows = [
+        {
+            'full_name': full_name,
+            'branch': branch,
+            'build_type': build_type,
+            'github_issue_number': int(github_issue_number),
+            'fast_track_requested_at': fast_track_requested_at,
+            'grace_started_at': grace_started_at,
+        }
+    ]
+    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
+
+
+def expire_fast_unmute_grace(ydb_wrapper, table_path, manual_window_days, mute_window_days):
+    """Remove grace rows once the ladder has reached the full mute window (``mute_window_days``)."""
+    query = f"""
+    SELECT full_name, branch, build_type, grace_started_at
+    FROM `{table_path}`
+    """
+    try:
+        rows = ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_grace_expire_scan')
+    except Exception as exc:
+        logging.warning('expire_fast_unmute_grace: scan failed: %s', exc)
+        return
+
+    today = datetime.datetime.now(tz=datetime.timezone.utc).date()
+    threshold = mute_window_days - manual_window_days
+    if threshold < 1:
+        threshold = 1
+
+    for row in rows:
+        gs = _coerce_dt(row.get('grace_started_at'))
+        if not gs:
+            continue
+        gs_date = gs.astimezone(datetime.timezone.utc).date()
+        if (today - gs_date).days >= threshold:
+            delete_grace_row(
+                ydb_wrapper,
+                table_path,
+                row.get('full_name'),
+                row.get('branch'),
+                row.get('build_type'),
+            )
+
+
+def delete_grace_row(ydb_wrapper, table_path, full_name, branch, build_type):
+    if not full_name or not branch or not build_type:
+        return
+    query = f"""
+    DECLARE $full_name AS Utf8;
+    DECLARE $branch AS Utf8;
+    DECLARE $build_type AS Utf8;
+    DELETE FROM `{table_path}`
+    WHERE full_name = $full_name
+        AND branch = $branch
+        AND build_type = $build_type;
+    """
+    ydb_wrapper.execute_dml(
+        query,
+        {'$full_name': full_name, '$branch': branch, '$build_type': build_type},
+        query_name='fast_unmute_grace_delete',
+    )
+
+
 def upsert_rows(ydb_wrapper, table_path, rows):
     if not rows:
         return
@@ -434,7 +520,9 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         if r.get('full_name') and r.get('branch') and r.get('build_type')
     }
 
-    raw_candidates = fetch_candidate_issues(ydb_wrapper, issues_table_path, ISSUE_CLOSED_LOOKBACK_DAYS)
+    raw_candidates = fetch_candidate_issues(
+        ydb_wrapper, issues_table_path, get_manual_unmute_issue_closed_lookback_days()
+    )
     # One issue can appear twice if linked from multiple projects (M4).
     candidates = list(
         {int(c['issue_number']): c for c in raw_candidates if c.get('issue_number') is not None}.values()
@@ -544,6 +632,13 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
     fails_by_issue = {}
     affected_issues = set()
     delete_count = 0
+    grace_table_path = None
+    try:
+        grace_table_path = ydb_wrapper.get_table_path('mute_fast_unmute_grace')
+        create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
+    except KeyError:
+        pass
+
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
         # Failure lookback must cover the longest row TTL (2 × window_days per row).
@@ -577,6 +672,21 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
             since_days = (effective_start - _MONITOR_EPOCH).days
 
             if full_name not in currently_muted:
+                if grace_table_path:
+                    try:
+                        ft_at = requested_at or now
+                        upsert_fast_unmute_grace_row(
+                            ydb_wrapper,
+                            grace_table_path,
+                            full_name,
+                            branch,
+                            build_type,
+                            int(issue_number or 0),
+                            ft_at,
+                            now,
+                        )
+                    except Exception as exc:
+                        logging.warning('Failed to record fast-unmute grace for %s: %s', full_name, exc)
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
                 if issue_number:
@@ -659,6 +769,12 @@ def sync(ydb_wrapper):
     tests_monitor_path = ydb_wrapper.get_table_path('tests_monitor')
 
     create_manual_unmute_table(ydb_wrapper, table_path)
+    try:
+        grace_table_path = ydb_wrapper.get_table_path('mute_fast_unmute_grace')
+        create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
+    except KeyError:
+        grace_table_path = None
+
     enter_manual_unmute(
         ydb_wrapper,
         table_path,
@@ -673,6 +789,13 @@ def sync(ydb_wrapper):
         tests_monitor_path,
         config['window_days'],
     )
+    if grace_table_path:
+        expire_fast_unmute_grace(
+            ydb_wrapper,
+            grace_table_path,
+            config['window_days'],
+            get_mute_window_days(),
+        )
 
 
 def main():

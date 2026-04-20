@@ -77,6 +77,10 @@ While a test is registered in that table, `create_new_muted_ya.py` evaluates it 
 
 - `manual_unmute_window_days` — how many days of history are aggregated (default: 2).
 - `manual_unmute_min_runs` — minimum clean runs (pass+fail+mute) needed to unmute (default: 2).
+- `mute_window_days` — days of monitor history for default `to_mute` thresholds and the upper bound of the post–fast-unmute mute ladder (default: 4).
+- `unmute_window_days` / `delete_window_days` — aggregation windows for normal unmute / delete lists (default: 7).
+- `manual_unmute_issue_closed_lookback_days` — how far back `manual_unmute.py` scans CLOSED+COMPLETED issues (default: 14).
+- `manual_unmute_currently_muted_lookback_days` — monitor lookback when resolving latest `is_muted` per test (default: 30).
 
 The usual "no failures in the window" rule still applies — if any of those tests fails during the window, the row is removed, a comment is posted on the issue, and the test returns to the default unmute criteria. When a test is successfully unmuted (by the regular pipeline using the short window), the row is cleaned up silently. Stale rows (older than 2 × window) are garbage-collected.
 

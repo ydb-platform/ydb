@@ -35,19 +35,6 @@ struct TEvPrivate {
 };
 
 class TDistributedRetroCollector : public NActors::TActorBootstrapped<TDistributedRetroCollector> {
-private:
-    // Compile-time constants (online configuration to be added separately)
-    static constexpr ui32 MaxBatchSize = 64;
-    static constexpr TDuration BatchFlushInterval = TDuration::MilliSeconds(500);
-    static constexpr TDuration DeduplicationTTL = TDuration::Seconds(10);
-
-    // Batch accumulation
-    std::vector<NWilson::TTraceId> PendingTraceIds;
-    bool FlushScheduled = false;
-
-    // Deduplication — recently observed trace IDs
-    std::unordered_map<TString, NActors::TMonotonic> RecentlyObserved;
-
 public:
     void Bootstrap() {
         Become(&TThis::StateFunc);
@@ -68,13 +55,10 @@ private:
         }
 
         const TString hex = traceId.GetHexTraceId();
-
-        // Check deduplication — skip if recently flushed
         if (RecentlyObserved.contains(hex)) {
             return;
         }
 
-        // Silently reject if batch is full — protects DistConf from overload
         if (PendingTraceIds.size() >= MaxBatchSize) {
             return;
         }
@@ -82,7 +66,6 @@ private:
         PendingTraceIds.push_back(NWilson::TTraceId(traceId));
         RecentlyObserved[hex] = NActors::TMonotonic::Now();
 
-        // Schedule flush timer if not already scheduled
         if (!std::exchange(FlushScheduled, true)) {
             Schedule(BatchFlushInterval, new TEvPrivate::TEvFlushBatch());
         }
@@ -99,16 +82,8 @@ private:
             return;
         }
 
-        // Send batched request to DistConf via NodeWarden (before moving PendingTraceIds)
         SendToDistConf();
-
-        // Single buffer scan for all pending trace IDs
-        ConvertAndSend(NRetroTracing::GetSpansOfTraces(std::move(PendingTraceIds)));
-
-        // Clear pending state (moved-from vector, but clear for safety)
-        PendingTraceIds.clear();
-
-        // Evict expired entries from RecentlyObserved
+        ConvertAndSend(NRetroTracing::GetSpansOfTraces(std::exchange(PendingTraceIds, {})));
         EvictExpiredEntries(NActors::TMonotonic::Now());
     }
 
@@ -139,6 +114,17 @@ private:
             wilson->End();
         }
     }
+
+private:
+    // TODO: on-line configuration
+    static constexpr ui32 MaxBatchSize = 64;
+    static constexpr TDuration BatchFlushInterval = TDuration::MilliSeconds(500);
+    static constexpr TDuration DeduplicationTTL = TDuration::Seconds(10);
+
+    std::vector<NWilson::TTraceId> PendingTraceIds;
+    bool FlushScheduled = false;
+
+    std::unordered_map<TString, NActors::TMonotonic> RecentlyObserved;
 };
 
 } // anonymous namespace

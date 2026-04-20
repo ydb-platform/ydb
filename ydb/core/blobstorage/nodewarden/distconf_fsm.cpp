@@ -584,7 +584,6 @@ namespace NKikimr::NStorage {
                 break;
 
             case TEvScatter::kDemandRetroTrace:
-                // No async preparation needed — spans are collected synchronously in PerformScatterTask
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -716,7 +715,6 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        // Issue a scatter task with all accumulated trace IDs
         TEvScatter task;
         auto* demandRetroTrace = task.MutableDemandRetroTrace();
         for (const NWilson::TTraceId& traceId : PendingRetroTraceIds) {
@@ -728,7 +726,6 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Perform(const TEvScatter::TDemandRetroTrace& request, TScatterTask& /*task*/) {
-        // Deserialize trace IDs from scatter request
         std::vector<NWilson::TTraceId> traceIds;
         for (const auto& proto : request.GetTraceId()) {
             NWilson::TTraceId traceId(proto);
@@ -736,9 +733,8 @@ namespace NKikimr::NStorage {
                 traceIds.push_back(std::move(traceId));
             }
         }
-        // Collect matching retro spans from thread-local buffers (single scan)
+
         std::vector<std::unique_ptr<NRetroTracing::TRetroSpan>> spans = NRetroTracing::GetSpansOfTraces(traceIds);
-        // Convert to Wilson spans and upload
         for (const std::unique_ptr<NRetroTracing::TRetroSpan>& span : spans) {
             std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
             wilson->Attribute("type", "RETRO");

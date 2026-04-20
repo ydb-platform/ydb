@@ -260,7 +260,6 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::DemandRetroTrace(const TQuery::TDemandRetroTrace& cmd) {
-        // Add trace IDs to the root's pending batch for scatter
         for (const auto& proto : cmd.GetTraceId()) {
             NWilson::TTraceId traceId(proto);
             if (traceId) {
@@ -268,7 +267,6 @@ namespace NKikimr::NStorage {
             }
         }
 
-        // Schedule root batch flush timer if not already scheduled
         if (!std::exchange(Self->RetroTraceBatchFlushScheduled, true)) {
             TActivationContext::Schedule(Self->RetroTraceBatchInterval,
                 new IEventHandle(TEvPrivate::EvFlushRetroTraceBatch, 0, Self->SelfId(), {}, nullptr, 0));

@@ -859,7 +859,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
     };
 
     ui32 nextIndexId = 1;
-    for (auto&& index : in.indexes()) {
+    for (const auto& index : in.indexes()) {
         if (index.name().empty()) {
             return fail("Index must have a name");
         }

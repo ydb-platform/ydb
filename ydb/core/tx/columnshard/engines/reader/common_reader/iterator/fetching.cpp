@@ -164,7 +164,19 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                         }
                     }
                 }
-                source->AddBytesRead(blobBytes);
+                bool hasSubColumns = false;
+                if (source->GetSourceSchemaOptional()) {
+                    for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
+                        if (source->GetSourceSchemaOptional()->GetColumnLoaderVerified(colId)->GetAccessorConstructor()->GetType() ==
+                            NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+                            hasSubColumns = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasSubColumns) {
+                    source->AddBytesRead(blobBytes);
+                }
                 LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             }
             break;

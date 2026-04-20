@@ -27,22 +27,29 @@ def wait_until_discovery_includes_all_slot_ports(
     required = {slot.grpc_port for slot in cluster.slots.values()}
     last_observed = {"ports": None, "debug_details": None}
 
-    def predicate():
+    def capture_debug_details():
         debug_details_getter = getattr(resolver, "debug_details", None)
-        if callable(debug_details_getter):
-            try:
-                last_observed["debug_details"] = debug_details_getter()
-            except Exception as e:
-                last_observed["debug_details"] = "debug_details() failed: %r" % (e,)
+        if not callable(debug_details_getter):
+            return
+        try:
+            last_observed["debug_details"] = debug_details_getter()
+        except Exception as e:
+            last_observed["debug_details"] = "debug_details() failed: %r" % (e,)
 
-        resolved = resolver.resolve()
-        if resolved is None:
-            last_observed["ports"] = None
-            return False
+    def predicate():
+        try:
+            resolved = resolver.resolve()
+            if resolved is None:
+                last_observed["ports"] = None
+                return False
 
-        ports = sorted(endpoint.port for endpoint in resolved.endpoints)
-        last_observed["ports"] = ports
-        return required <= set(ports)
+            ports = sorted(endpoint.port for endpoint in resolved.endpoints)
+            last_observed["ports"] = ports
+            return required <= set(ports)
+        finally:
+            # Capture debug_details after resolve() so the failure message
+            # reflects the most recent attempt (resolve() itself appends details).
+            capture_debug_details()
 
     assert_that(
         wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=step_seconds),

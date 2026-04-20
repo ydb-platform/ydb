@@ -376,8 +376,10 @@ public:
         auto released = tx.Released(resources);
         Y_ABORT_UNLESS(released);
 
-        if (reduceResourceBrokerTask) {
-            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(tx.TxResourceBrokerTaskId, {0, resources.Memory}, SelfId);
+        if (resources.Memory && reduceResourceBrokerTask) {
+            auto currentRbTaskId = tx.TxResourceBrokerTaskId.load();
+            Y_DEBUG_ABORT_UNLESS(currentRbTaskId);
+            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(currentRbTaskId, {0, resources.Memory}, SelfId);
             Y_DEBUG_ABORT_UNLESS(reduced);
         }
 

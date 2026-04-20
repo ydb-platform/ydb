@@ -768,7 +768,7 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSch
 void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     const auto& schema = in.GetSchema();
     THashMap<ui32, TString> idToName;
-    for (auto&& col : schema.GetColumns()) {
+    for (const auto& col : schema.GetColumns()) {
         idToName[col.GetId()] = col.GetName();
     }
 

@@ -65,6 +65,23 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 - Get confirmation from the test owner.
 - After merging, move the issue to Unmuted status, link the PR and issue.
 
+## ⚡ Manual fast-unmute (close-issue shortcut)
+
+Once you have fixed the tests tracked by a mute-issue, you can skip the default 7-day unmute wait by **manually closing the issue as Completed**. The `mute_manual_unmute.py sync` step on the next workflow run will:
+
+1. Detect CLOSED+COMPLETED issues closed by a human (not by the bot).
+2. For every test listed in the issue that is still muted, register a per-test row in the `mute_manual_unmute` YDB table.
+3. Reopen the issue and post a comment explaining what is happening.
+
+While a test is registered in that table, `create_new_muted_ya.py` evaluates it against a **shorter unmute window** defined in [mute_config.json](./mute_config.json):
+
+- `manual_unmute_window_days` — how many days of history are aggregated (default: 2).
+- `manual_unmute_min_runs` — minimum clean runs (pass+fail+mute) needed to unmute (default: 2).
+
+The usual "no failures in the window" rule still applies — if any of those tests fails during the window, the row is removed, a comment is posted on the issue, and the test returns to the default unmute criteria. When a test is successfully unmuted (by the regular pipeline using the short window), the row is cleaned up silently. Stale rows (older than 2 × window) are garbage-collected.
+
+This flow is **per-test**: different tests from the same issue can graduate or fall back independently.
+
 ## 📊 Dashboard for analyzing muted and flaky tests
 
 For analyzing test status, finding mute/unmute candidates, and tracking stability, use the interactive dashboard:

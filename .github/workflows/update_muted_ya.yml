@@ -129,6 +129,11 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
+      - name: Sync manual fast-unmute state
+        env:
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: python3 .github/scripts/tests/mute_manual_unmute.py sync
+
       - name: Generate new muted_ya.txt
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \

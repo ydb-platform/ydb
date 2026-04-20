@@ -43,6 +43,53 @@ _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest_config.json')
 )
 
+_MUTE_CONFIG_PATH = os.path.normpath(
+    os.path.join(dir, '..', '..', 'config', 'mute_config.json')
+)
+
+
+def load_manual_unmute_config():
+    """Read (window_days, min_runs) for the manual fast-unmute path.
+
+    Returns (None, None) when the config file is missing or malformed — in
+    that case the manual fast-unmute path is simply disabled, and the default
+    unmute logic applies.
+    """
+    try:
+        with open(_MUTE_CONFIG_PATH, 'r', encoding='utf-8') as fp:
+            payload = json.load(fp)
+        window = int(payload.get('manual_unmute_window_days', 0))
+        min_runs = int(payload.get('manual_unmute_min_runs', 0))
+        if window > 0 and min_runs > 0:
+            return window, min_runs
+    except (OSError, ValueError, TypeError) as exc:
+        logging.warning('Failed to read %s: %s — manual fast-unmute disabled', _MUTE_CONFIG_PATH, exc)
+    return None, None
+
+
+def load_manual_unmute_full_names(ydb_wrapper, branch, build_type):
+    """Return the set of full_name registered for manual fast-unmute on this (branch, build_type)."""
+    try:
+        table_path = ydb_wrapper.get_table_path('mute_manual_unmute')
+    except KeyError:
+        logging.info('mute_manual_unmute not registered in ydb_qa_config — manual fast-unmute disabled')
+        return set()
+
+    branch_escaped = str(branch).replace("'", "''")
+    build_type_escaped = str(build_type).replace("'", "''")
+    query = f"""
+    SELECT full_name
+    FROM `{table_path}`
+    WHERE branch = '{branch_escaped}'
+        AND build_type = '{build_type_escaped}'
+    """
+    try:
+        rows = ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_load_full_names')
+    except Exception as exc:
+        logging.warning('Failed to load mute_manual_unmute: %s — manual fast-unmute disabled', exc)
+        return set()
+    return {row['full_name'] for row in rows if row.get('full_name')}
+
 
 def is_chunk_test(test):
     # First, check the is_test_chunk field if it exists.
@@ -459,7 +506,17 @@ def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=F
         add_lines_to_file(debug_path, [line + '\n' for line in sorted_debug_list])
     logging.info(f"Created {os.path.basename(file_path)} with {len(sorted_test_set)} tests")
 
-def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete):
+def apply_and_add_mutes(
+    all_data,
+    output_path,
+    mute_check,
+    aggregated_for_mute,
+    aggregated_for_unmute,
+    aggregated_for_delete,
+    manual_unmute_full_names=None,
+    aggregated_for_manual_unmute=None,
+    manual_unmute_min_runs=None,
+):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
     
@@ -498,7 +555,32 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         # Merge per-test and wildcard results.
         to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_patterns)))
         to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debugs)))
-        
+
+        # 2a. Manual fast-unmute candidates.
+        # A test is considered under manual fast-unmute when its full_name is
+        # registered in the `mute_manual_unmute` YDB table (populated when a
+        # user manually closes the mute issue). Such tests are evaluated on a
+        # shorter window and smaller min_runs threshold, so they get unmuted
+        # sooner when stable.
+        manual_unmute_full_names = set(manual_unmute_full_names or [])
+        if manual_unmute_full_names and aggregated_for_manual_unmute and manual_unmute_min_runs:
+            def is_manual_unmute_candidate(test):
+                if is_chunk_test(test):
+                    return False
+                if test.get('full_name') not in manual_unmute_full_names:
+                    return False
+                total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
+                total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
+                return total_runs >= manual_unmute_min_runs and total_fails == 0
+
+            to_unmute_manual, to_unmute_manual_debug = create_file_set(
+                aggregated_for_manual_unmute, is_manual_unmute_candidate, mute_check, resolution='to_unmute'
+            )
+            if to_unmute_manual:
+                logging.info(f"Manual fast-unmute added {len(to_unmute_manual)} test(s) to to_unmute")
+            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual)))
+            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_debug)))
+
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
         # 3. Delete-from-mute candidates (to_delete).
@@ -1026,14 +1108,36 @@ def mute_worker(args):
         aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS for mute
         aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS for unmute
         aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS for delete
-    
+
+        manual_unmute_window_days, manual_unmute_min_runs = load_manual_unmute_config()
+        manual_unmute_full_names = set()
+        aggregated_for_manual_unmute = None
+        if manual_unmute_window_days and manual_unmute_min_runs:
+            manual_unmute_full_names = load_manual_unmute_full_names(ydb_wrapper, args.branch, build_type)
+            if manual_unmute_full_names:
+                aggregated_for_manual_unmute = aggregate_test_data(all_data, manual_unmute_window_days)
+                logging.info(
+                    f"Manual fast-unmute: window={manual_unmute_window_days}d, min_runs={manual_unmute_min_runs}, "
+                    f"tests={len(manual_unmute_full_names)}"
+                )
+
         logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
-    
+
         if args.mode == 'update_muted_ya':
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-            apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete)
+            apply_and_add_mutes(
+                all_data,
+                output_path,
+                mute_check,
+                aggregated_for_mute,
+                aggregated_for_unmute,
+                aggregated_for_delete,
+                manual_unmute_full_names=manual_unmute_full_names,
+                aggregated_for_manual_unmute=aggregated_for_manual_unmute,
+                manual_unmute_min_runs=manual_unmute_min_runs,
+            )
 
         elif args.mode == 'create_issues':
             file_path = args.file_path

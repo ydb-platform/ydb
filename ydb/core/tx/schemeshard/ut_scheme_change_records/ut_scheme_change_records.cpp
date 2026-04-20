@@ -243,6 +243,64 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         )", {NKikimrScheme::StatusResourceExhausted});
     }
 
+    Y_UNIT_TEST(AckFreesOverflowCapacityImmediately) {
+        // Verifies the post-Phase-2 invariant: overflow check uses
+        // (NextSchemeChangeSequenceId - MinSubscriberCursor), so an ack
+        // restores capacity immediately without waiting for background cleanup.
+        TSchemeShard* schemeshard;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        auto baseline = ReadSchemeChangeRecords(runtime);
+        schemeshard->MaxSchemeChangeRecords = baseline.size() + 2;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T2"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // At capacity: next op rejected
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T3a"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusResourceExhausted});
+
+        // Ack everything (without manually firing background cleanup)
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT(!entries.empty());
+        ui64 lastSeq = entries.back().SequenceId;
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "test:sub", lastSeq, ackHandle);
+
+        // Capacity must be free immediately after ack (overflow check is
+        // based on unacked range, not on row count in SchemeChangeRecords).
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T3b"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(RaisingLimitViaConfigUnblocksOperations) {
         TSchemeShard* schemeshard;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {

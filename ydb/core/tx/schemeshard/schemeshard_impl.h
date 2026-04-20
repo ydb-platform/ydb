@@ -277,7 +277,6 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
     ui64 NextSchemeChangeSequenceId = 0;
-    ui64 SchemeChangeRecordCount = 0;
     ui64 MaxSchemeChangeRecords = 100000;
 
     struct TSubscriberInfo {
@@ -872,7 +871,6 @@ public:
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextSchemeChangeSequenceId(NIceDb::TNiceDb& db) const;
-    void PersistUpdateSchemeChangeRecordCount(NIceDb::TNiceDb& db) const;
     ui64 AllocateSchemeChangeSequenceId(NIceDb::TNiceDb& db);
 
     struct TSchemeChangeRecordData {

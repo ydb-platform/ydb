@@ -30,8 +30,6 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
             NIceDb::TUpdate<Schema::SchemeChangeRecordDetails::Body>(entry.Body)
         );
     }
-    ++SchemeChangeRecordCount;
-    PersistUpdateSchemeChangeRecordCount(db);
 }
 
 } // namespace NKikimr::NSchemeShard

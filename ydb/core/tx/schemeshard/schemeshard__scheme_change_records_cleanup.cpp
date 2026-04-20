@@ -65,11 +65,6 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
             }
         }
 
-        if (deletedCount > 0 && Self->SchemeChangeRecordCount >= deletedCount) {
-            Self->SchemeChangeRecordCount -= deletedCount;
-            Self->PersistUpdateSchemeChangeRecordCount(db);
-        }
-
         return true;
     }
 

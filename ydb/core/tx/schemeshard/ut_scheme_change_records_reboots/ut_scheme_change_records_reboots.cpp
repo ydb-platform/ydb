@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SchemeChangeRecordCountReconciledOnReboot) {
+    Y_UNIT_TEST_WITH_REBOOTS(SchemeChangeRecordsSurviveReboot) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

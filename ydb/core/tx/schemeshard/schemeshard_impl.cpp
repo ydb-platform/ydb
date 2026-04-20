@@ -3696,16 +3696,15 @@ void TSchemeShard::PersistUpdateNextSchemeChangeSequenceId(NIceDb::TNiceDb& db) 
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeSequenceId)));
 }
 
-void TSchemeShard::PersistUpdateSchemeChangeRecordCount(NIceDb::TNiceDb& db) const {
-    db.Table<Schema::SysParams>().Key(Schema::SysParam_SchemeChangeRecordCount).Update(
-        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(SchemeChangeRecordCount)));
-}
-
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr) const {
-    if (SchemeChangeRecordCount >= MaxSchemeChangeRecords) {
+    if (Subscribers.empty()) {
+        return true;
+    }
+    const ui64 unacked = NextSchemeChangeSequenceId - GetMinSubscriberCursor();
+    if (unacked >= MaxSchemeChangeRecords) {
         errStr = TStringBuilder()
-            << "scheme change records is full: " << SchemeChangeRecordCount
-            << " entries (limit: " << MaxSchemeChangeRecords << ")."
+            << "scheme change records is full: " << unacked
+            << " unacked entries (limit: " << MaxSchemeChangeRecords << ")."
             << " Subscribers may not be draining.";
         return false;
     }

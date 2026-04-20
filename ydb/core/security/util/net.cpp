@@ -83,10 +83,10 @@ bool IsIPv6(TStringBuf address) {
 }
 
 bool IsGoodPeernameFormat(TStringBuf peername) {
-    return IsGoodIPv6Part4(peername) || IsGoodIPv4Part4(peername) ||
-           IsGoodIPv6Part3(peername) || IsGoodIPv4Part3(peername) ||
-           IsGoodIPv6Part2(peername) || IsGoodIPv4Part2(peername) ||
-           IsIPv6(peername)          || IsIPv4(peername);
+    return IsGoodIPv6Part4(peername) || IsGoodIPv4Part4(peername)
+        || IsGoodIPv6Part3(peername) || IsGoodIPv4Part3(peername)
+        || IsGoodIPv6Part2(peername) || IsGoodIPv4Part2(peername)
+        || IsIPv6(peername) || IsIPv4(peername);
 }
 
 } // namespace NKikimr::NSecurity

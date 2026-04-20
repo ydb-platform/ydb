@@ -2562,34 +2562,36 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    void TicketParserPeerNameValidation(
-        TTestActorRuntime* runtime, 
-        bool shouldFail,
-        const TString& peername) {
-        TActorId sender = runtime->AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
-
-        runtime->Send(new IEventHandle(
-            MakeTicketParserID(),
-            sender,
-            new TEvTicketParser::TEvAuthorizeTicket({
-                .Ticket = "user@builtin",
-                .Database = "",
-                .PeerName = peername,
-                .Entries = {},
-            })
-        ), 0);
-        TEvTicketParser::TEvAuthorizeTicketResult* result =
-            runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-
-        if (shouldFail) {
-            UNIT_ASSERT(result->HasError());
-            UNIT_ASSERT(!result->Error.Retryable);
-            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "Unacceptable peername format");
-        } else {
-            UNIT_ASSERT(!result->HasError());
-        }
-    }
+#define TICKET_PARSER_PEERNAME_VALIDATION(shouldFail, peername)       \
+    {                                                                          \
+        TActorId sender = runtime->AllocateEdgeActor();                        \
+        TAutoPtr<IEventHandle> handle;                                         \
+                                                                               \
+        runtime->Send(new IEventHandle(                                        \
+            MakeTicketParserID(),                                              \
+            sender,                                                            \
+            new TEvTicketParser::TEvAuthorizeTicket({                          \
+                .Ticket = "user@builtin",                                      \
+                .Database = "",                                                \
+                .PeerName = peername,                                          \
+                .Entries = {},                                                 \
+            })                                                                 \
+        ), 0);                                                                 \
+        TEvTicketParser::TEvAuthorizeTicketResult* result =                    \
+            runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>( \
+                handle);                                                       \
+                                                                               \
+        if (shouldFail) {                                                      \
+            UNIT_ASSERT(result->HasError());                                   \
+            UNIT_ASSERT(!result->Error.Retryable);                             \
+            UNIT_ASSERT_STRING_CONTAINS(                                       \
+                result->Error.Message,                                         \
+                "Unacceptable peername format");                               \
+        } else {                                                               \
+            UNIT_ASSERT(!result->HasError());                                  \
+        }                                                                      \
+    }                                                                          \
+// TICKET_PARSER_PEERNAME_VALIDATION
 
     Y_UNIT_TEST(TicketParserPeerNameValidationWithFeatureFlagEnabled) {
         using namespace Tests;
@@ -2616,43 +2618,43 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         // IPv4
-        TicketParserPeerNameValidation(runtime, false, "192.168.1.1");
-        TicketParserPeerNameValidation(runtime, false, "10.0.0.1:65535");
-        TicketParserPeerNameValidation(runtime, false, "ipv4:127.0.0.1");
-        TicketParserPeerNameValidation(runtime, false, "ipv4:172.10.0.1:1234");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "192.168.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "10.0.0.1:65535");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:127.0.0.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:172.10.0.1:1234");
 
         // IPv6
-        TicketParserPeerNameValidation(runtime, false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
-        TicketParserPeerNameValidation(runtime, false, "2001:db8::1");
-        TicketParserPeerNameValidation(runtime, false, "[fe80::1]:22");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:2001:db8::1");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:db8::1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[fe80::1]:22");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:2001:db8::1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
 
         // Invalid peername formats
-        TicketParserPeerNameValidation(runtime, true, "");
-        TicketParserPeerNameValidation(runtime, true, "invalid_format");
-        TicketParserPeerNameValidation(runtime, true, "[127.0.0.1]");
-        TicketParserPeerNameValidation(runtime, true, "127.0.0.1:65536");
-        TicketParserPeerNameValidation(runtime, true, "256.1.1.1");
-        TicketParserPeerNameValidation(runtime, true, "1.-1.1.1");
-        TicketParserPeerNameValidation(runtime, true, "ipv4:");
-        TicketParserPeerNameValidation(runtime, true, "ipv4:256.1.1.1");
-        TicketParserPeerNameValidation(runtime, true, "ipv4:[127.0.0.1]:1234");
-        TicketParserPeerNameValidation(runtime, true, "[::1]");
-        TicketParserPeerNameValidation(runtime, true, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
-        TicketParserPeerNameValidation(runtime, true, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
-        TicketParserPeerNameValidation(runtime, true, "[::1]:");
-        TicketParserPeerNameValidation(runtime, true, "[::1]:0");
-        TicketParserPeerNameValidation(runtime, true, "[::1]:65536");
-        TicketParserPeerNameValidation(runtime, true, "[::1]:port");
-        TicketParserPeerNameValidation(runtime, true, ":::1");
-        TicketParserPeerNameValidation(runtime, true, "ipv6:");
-        TicketParserPeerNameValidation(runtime, true, "ipv6:[::1]");
-        TicketParserPeerNameValidation(runtime, true, "ipv6:[::1]:");
-        TicketParserPeerNameValidation(runtime, true, "ipv6:[::1]:0");
-        TicketParserPeerNameValidation(runtime, true, "ipv6:[::1]:65536");
-        TicketParserPeerNameValidation(runtime, true, "ipv6:[::1]:port");
-        TicketParserPeerNameValidation(runtime, true, "ipv6:invalid");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "invalid_format");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "[127.0.0.1]");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "127.0.0.1:65536");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "256.1.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "1.-1.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv4:");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv4:256.1.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv4:[127.0.0.1]:1234");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:0");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:65536");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:port");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, ":::1");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:0");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:65536");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:port");
+        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:invalid");
     }
 
     Y_UNIT_TEST(TicketParserPeerNameValidationWithFeatureFlagDisabled) {
@@ -2680,44 +2682,46 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         // IPv4
-        TicketParserPeerNameValidation(runtime, false, "192.168.1.1");
-        TicketParserPeerNameValidation(runtime, false, "10.0.0.1:65535");
-        TicketParserPeerNameValidation(runtime, false, "ipv4:127.0.0.1");
-        TicketParserPeerNameValidation(runtime, false, "ipv4:172.10.0.1:1234");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "192.168.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "10.0.0.1:65535");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:127.0.0.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:172.10.0.1:1234");
 
         // IPv6
-        TicketParserPeerNameValidation(runtime, false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
-        TicketParserPeerNameValidation(runtime, false, "2001:db8::1");
-        TicketParserPeerNameValidation(runtime, false, "[fe80::1]:22");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:2001:db8::1");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:db8::1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[fe80::1]:22");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:2001:db8::1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
 
         // Invalid peername formats
-        TicketParserPeerNameValidation(runtime, false, "");
-        TicketParserPeerNameValidation(runtime, false, "invalid_format");
-        TicketParserPeerNameValidation(runtime, false, "[127.0.0.1]");
-        TicketParserPeerNameValidation(runtime, false, "127.0.0.1:65536");
-        TicketParserPeerNameValidation(runtime, false, "256.1.1.1");
-        TicketParserPeerNameValidation(runtime, false, "1.-1.1.1");
-        TicketParserPeerNameValidation(runtime, false, "ipv4:");
-        TicketParserPeerNameValidation(runtime, false, "ipv4:256.1.1.1");
-        TicketParserPeerNameValidation(runtime, false, "ipv4:[127.0.0.1]:1234");
-        TicketParserPeerNameValidation(runtime, false, "[::1]");
-        TicketParserPeerNameValidation(runtime, false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
-        TicketParserPeerNameValidation(runtime, false, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
-        TicketParserPeerNameValidation(runtime, false, "[::1]:");
-        TicketParserPeerNameValidation(runtime, false, "[::1]:0");
-        TicketParserPeerNameValidation(runtime, false, "[::1]:65536");
-        TicketParserPeerNameValidation(runtime, false, "[::1]:port");
-        TicketParserPeerNameValidation(runtime, false, ":::1");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:[::1]");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:[::1]:");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:[::1]:0");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:[::1]:65536");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:[::1]:port");
-        TicketParserPeerNameValidation(runtime, false, "ipv6:invalid");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "invalid_format");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[127.0.0.1]");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "127.0.0.1:65536");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "256.1.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "1.-1.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:256.1.1.1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:[127.0.0.1]:1234");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:0");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:65536");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:port");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, ":::1");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:0");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:65536");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:port");
+        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:invalid");
     }
+
+#undef TICKET_PARSER_PEER_NAME_VALIDATION
 } // Test suite TTicketParserTest
 
 Y_UNIT_TEST_SUITE(AuthorizeRequestToAccessService) {

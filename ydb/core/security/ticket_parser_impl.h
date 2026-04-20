@@ -972,21 +972,16 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
             CounterWrongPeernameFormat->Inc();
+            BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) <<
+                       ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
+                       " for DB: " << ev->Get()->Database.Quote());
 
             if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
-                BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) <<
-                           ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
-                           " for DB: " << ev->Get()->Database.Quote());
-
                 TEvTicketParser::TError error;
                 error.Message = "Unacceptable peername format";
                 error.Retryable = false;
                 Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, ev->Cookie);
                 return;
-            } else {
-                BLOG_INFO("Ticket " << MaskTicket(ev->Get()->Ticket) <<
-                          ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
-                          " for DB: " << ev->Get()->Database.Quote());
             }
         }
 

@@ -9565,7 +9565,7 @@
         "ColumnsAdded": [
             {
                 "ColumnId": 1,
-                "ColumnName": "SequenceId",
+                "ColumnName": "Order",
                 "ColumnType": "Uint64"
             },
             {
@@ -9590,7 +9590,7 @@
             },
             {
                 "ColumnId": 6,
-                "ColumnName": "PathName",
+                "ColumnName": "Path",
                 "ColumnType": "Utf8"
             },
             {
@@ -9615,7 +9615,7 @@
             },
             {
                 "ColumnId": 11,
-                "ColumnName": "CompletedAt",
+                "ColumnName": "CompletedAtUs",
                 "ColumnType": "Uint64"
             },
             {
@@ -9680,7 +9680,7 @@
             },
             {
                 "ColumnId": 2,
-                "ColumnName": "LastAckedSequenceId",
+                "ColumnName": "LastAckedOrder",
                 "ColumnType": "Uint64"
             },
             {
@@ -9725,7 +9725,7 @@
         "ColumnsAdded": [
             {
                 "ColumnId": 1,
-                "ColumnName": "SequenceId",
+                "ColumnName": "Order",
                 "ColumnType": "Uint64"
             },
             {

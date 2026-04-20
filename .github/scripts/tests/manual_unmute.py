@@ -18,6 +18,13 @@ the next ``sync`` can insert new rows and start another fast-unmute cycle.
 Usage:
     python3 manual_unmute.py sync
     python3 manual_unmute.py sync -v   # DEBUG: why each issue/test was skipped
+
+Testing only — unset before real runs.
+
+``MANUAL_UNMUTE_SIMULATE_UNMUTED``: comma-separated ``full_name`` values removed from the
+"currently muted" set so cleanup behaves as if ``is_muted`` were already 0 (grace path).
+
+``export MANUAL_UNMUTE_SIMULATE_UNMUTED='suite/path/Test.one' && python3 manual_unmute.py sync``
 """
 
 import argparse
@@ -52,6 +59,14 @@ from mute_constants import (
     get_mute_window_days,
 )
 
+
+def grace_ttl_calendar_days(mute_window_days, manual_unmute_window_days):
+    """Calendar days a ``fast_unmute_grace`` row is kept (same rule as ``expire_fast_unmute_grace``).
+
+    Stored on insert so dashboards and TTL stay interpretable even if ``mute_config.json`` changes later.
+    """
+    return max(1, int(mute_window_days) - int(manual_unmute_window_days))
+
 LABEL_NAME = 'manual-fast-unmute'
 
 # Org project board (same as ``update_mute_issues.PROJECT_ID``).
@@ -65,6 +80,16 @@ BOT_LOGINS = frozenset({'ydbot', 'github-actions'})
 
 # Verbose (`sync -v`) touches only this logger so ydb/grpc stay at INFO (no RPC spam).
 _LOG = logging.getLogger('manual_unmute')
+
+# Local testing: comma-separated ``tests_monitor.full_name`` — excluded from ``fetch_currently_muted``.
+_SIMULATE_UNMUTED_ENV = 'MANUAL_UNMUTE_SIMULATE_UNMUTED'
+
+
+def _simulate_unmuted_full_names():
+    raw = os.environ.get(_SIMULATE_UNMUTED_ENV, '').strip()
+    if not raw:
+        return frozenset()
+    return frozenset(x.strip() for x in raw.split(',') if x.strip())
 
 
 COMMENT_ENTER = """🚀 **Fast-unmute started**
@@ -219,7 +244,16 @@ def fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type):
         AND t.is_muted = 1
     """
     rows = ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_currently_muted')
-    return {row['full_name'] for row in rows if row.get('full_name')}
+    result = {row['full_name'] for row in rows if row.get('full_name')}
+    pretend_unmuted = _simulate_unmuted_full_names()
+    if pretend_unmuted:
+        logging.warning(
+            '%s active — excluding from currently-muted (simulate is_muted=0): %s',
+            _SIMULATE_UNMUTED_ENV,
+            ', '.join(sorted(pretend_unmuted)),
+        )
+        result -= pretend_unmuted
+    return result
 
 
 def fetch_monitor_outcomes_in_days(ydb_wrapper, tests_monitor_path, branch, build_type, lookback_days):
@@ -557,6 +591,7 @@ def create_fast_unmute_grace_table(ydb_wrapper, table_path):
         `github_issue_number`         Uint64    NOT NULL,
         `fast_track_requested_at`     Timestamp NOT NULL,
         `grace_started_at`            Timestamp NOT NULL,
+        `grace_ttl_days`              Uint32    NOT NULL,
         PRIMARY KEY (full_name, branch, build_type)
     )
     WITH (STORE = COLUMN)
@@ -573,6 +608,7 @@ def upsert_fast_unmute_grace_row(
     github_issue_number,
     fast_track_requested_at,
     grace_started_at,
+    grace_ttl_days,
 ):
     column_types = (
         ydb.BulkUpsertColumns()
@@ -582,6 +618,7 @@ def upsert_fast_unmute_grace_row(
         .add_column('github_issue_number', ydb.PrimitiveType.Uint64)
         .add_column('fast_track_requested_at', ydb.PrimitiveType.Timestamp)
         .add_column('grace_started_at', ydb.PrimitiveType.Timestamp)
+        .add_column('grace_ttl_days', ydb.PrimitiveType.Uint32)
     )
     rows = [
         {
@@ -591,15 +628,16 @@ def upsert_fast_unmute_grace_row(
             'github_issue_number': int(github_issue_number),
             'fast_track_requested_at': fast_track_requested_at,
             'grace_started_at': grace_started_at,
+            'grace_ttl_days': int(grace_ttl_days),
         }
     ]
     ydb_wrapper.bulk_upsert(table_path, rows, column_types)
 
 
-def expire_fast_unmute_grace(ydb_wrapper, table_path, manual_window_days, mute_window_days):
-    """Remove grace rows once the ladder has reached the full mute window (``mute_window_days``)."""
+def expire_fast_unmute_grace(ydb_wrapper, table_path):
+    """Remove grace rows after ``grace_ttl_days`` calendar days since ``grace_started_at``."""
     query = f"""
-    SELECT full_name, branch, build_type, grace_started_at
+    SELECT full_name, branch, build_type, grace_started_at, grace_ttl_days
     FROM `{table_path}`
     """
     try:
@@ -609,15 +647,13 @@ def expire_fast_unmute_grace(ydb_wrapper, table_path, manual_window_days, mute_w
         return
 
     today = datetime.datetime.now(tz=datetime.timezone.utc).date()
-    threshold = mute_window_days - manual_window_days
-    if threshold < 1:
-        threshold = 1
 
     for row in rows:
         gs = _coerce_dt(row.get('grace_started_at'))
         if not gs:
             continue
         gs_date = gs.astimezone(datetime.timezone.utc).date()
+        threshold = max(1, int(row['grace_ttl_days']))
         if (today - gs_date).days >= threshold:
             delete_grace_row(
                 ydb_wrapper,
@@ -820,12 +856,10 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                  len(new_rows), len(candidates))
 
 
-def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_window_days):
+def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
     """Drop rows that have served their purpose, failed, or expired.
 
-    TTL is computed from the ``window_days`` stored on each row (the value
-    captured at enter time). ``default_window_days`` is used only as a fallback
-    for rows without a stored value (e.g. legacy rows).
+    TTL uses ``window_days`` stored on each row (captured at enter time).
     """
     rows = fetch_all_rows(ydb_wrapper, table_path)
     if not rows:
@@ -851,13 +885,12 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
     except KeyError:
         pass
 
+    grace_ttl_snapshot = grace_ttl_calendar_days(get_mute_window_days(), get_manual_unmute_window_days())
+
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
         # Failure lookback must cover the longest row TTL (2 × window_days per row).
-        check_window = max(
-            (2 * int(r.get('window_days') or default_window_days) for r in group_rows),
-            default=2 * default_window_days,
-        )
+        check_window = max(2 * int(r['window_days']) for r in group_rows)
         monitor_rows = fetch_monitor_outcomes_in_days(
             ydb_wrapper, tests_monitor_path, branch, build_type, check_window
         )
@@ -867,7 +900,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
                 continue
             requested_at = _coerce_dt(row.get('requested_at'))
             issue_number = row.get('github_issue_number')
-            row_window = int(row.get('window_days') or default_window_days)
+            row_window = int(row['window_days'])
             ttl = datetime.timedelta(days=row_window * 2)
 
             # Rollback uses the same *rolling* calendar window width as manual unmute in
@@ -901,6 +934,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path, default_w
                             int(issue_number or 0),
                             ft_at,
                             now,
+                            grace_ttl_snapshot,
                         )
                     except Exception as exc:
                         logging.warning('Failed to record fast-unmute grace for %s: %s', full_name, exc)
@@ -1008,19 +1042,9 @@ def sync(ydb_wrapper):
         config['window_days'],
         config['min_runs'],
     )
-    cleanup_manual_unmute(
-        ydb_wrapper,
-        table_path,
-        tests_monitor_path,
-        config['window_days'],
-    )
+    cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path)
     if grace_table_path:
-        expire_fast_unmute_grace(
-            ydb_wrapper,
-            grace_table_path,
-            config['window_days'],
-            get_mute_window_days(),
-        )
+        expire_fast_unmute_grace(ydb_wrapper, grace_table_path)
 
 
 def main():

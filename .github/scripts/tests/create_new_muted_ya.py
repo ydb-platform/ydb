@@ -35,8 +35,10 @@ from mute_constants import (
     get_unmute_window_days,
 )
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging — root INFO so ydb/grpc don't spam DEBUG (channel options, etc.).
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+for _noisy in ('grpc', 'grpc._cython.cygrpc', 'ydb'):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 dir = os.path.dirname(__file__)
 repo_path = f"{dir}/../../../"
@@ -524,7 +526,15 @@ def is_mute_candidate(test):
     fail_count = test.get('fail_count', 0)
     result = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
 
-    logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{fail_count}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
+    logging.info(
+        'MUTE_CHECK: %s - runs:%s, fails:%s, state:%s, muted:%s, result:%s',
+        test.get('full_name'),
+        total_runs,
+        fail_count,
+        test.get('state'),
+        test.get('is_muted'),
+        result,
+    )
 
     return result
 
@@ -536,7 +546,16 @@ def is_unmute_candidate(test):
     result = total_runs >= 4 and total_fails == 0
 
     if test.get('is_muted', False):
-        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test.get('mute_count')}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
+        logging.info(
+            'UNMUTE_CHECK: %s - runs:%s, fails:%s, mute_count:%s, state:%s, muted:%s, result:%s',
+            test.get('full_name'),
+            total_runs,
+            total_fails,
+            test.get('mute_count'),
+            test.get('state'),
+            test.get('is_muted'),
+            result,
+        )
 
     return result
 
@@ -558,15 +577,30 @@ def is_delete_candidate(test):
     result = total_runs == 0 or only_skipped_while_muted
 
     if test.get('is_muted', False):
-        logging.debug(
-            f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, "
-            f"p:{pass_count}, f:{fail_count}, m:{mute_count}, s:{skip_count}, "
-            f"muted:{test.get('is_muted')}, only_skipped_while_muted:{only_skipped_while_muted}, result:{result}"
+        logging.info(
+            'DELETE_CHECK: %s - runs:%s, p:%s, f:%s, m:%s, s:%s, muted:%s, '
+            'only_skipped_while_muted:%s, result:%s',
+            test.get('full_name'),
+            total_runs,
+            pass_count,
+            fail_count,
+            mute_count,
+            skip_count,
+            test.get('is_muted'),
+            only_skipped_while_muted,
+            result,
         )
 
     return result
 
-def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
+def create_file_set(
+    aggregated_for_mute,
+    filter_func,
+    mute_check=None,
+    use_wildcards=False,
+    resolution=None,
+    debug_suffix='',
+):
     """Create a set of tests for output file based on a filter."""
     result_set = set()
     debug_list = []
@@ -596,8 +630,10 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
                 debug_string = create_debug_string(
                     test,
                     period_days=test.get('period_days'),
-                    date_window=test.get('date_window')
+                    date_window=test.get('date_window'),
                 )
+                if debug_suffix:
+                    debug_string += debug_suffix
                 debug_list.append(debug_string)
     
     # Force 100% output if it was not printed yet.
@@ -637,6 +673,7 @@ def apply_and_add_mutes(
     manual_unmute_full_names=None,
     aggregated_for_manual_unmute=None,
     manual_unmute_min_runs=None,
+    manual_unmute_window_days=None,
     ydb_wrapper=None,
     branch=None,
     build_type=None,
@@ -690,14 +727,29 @@ def apply_and_add_mutes(
             def is_manual_unmute_candidate(test):
                 if is_chunk_test(test):
                     return False
-                if test.get('full_name') not in manual_unmute_full_names:
+                fn = test.get('full_name')
+                if fn not in manual_unmute_full_names:
                     return False
                 total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
                 total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
-                return total_runs >= manual_unmute_min_runs and total_fails == 0
+                result = total_runs >= manual_unmute_min_runs and total_fails == 0
+                logging.info(
+                    'FAST_UNMUTE_CHECK: %s - runs:%s, fails:%s, min_runs:%s, window_days=%s, result:%s',
+                    fn,
+                    total_runs,
+                    total_fails,
+                    manual_unmute_min_runs,
+                    manual_unmute_window_days if manual_unmute_window_days is not None else '?',
+                    result,
+                )
+                return result
 
             to_unmute_manual, to_unmute_manual_debug = create_file_set(
-                aggregated_for_manual_unmute, is_manual_unmute_candidate, mute_check, resolution='to_unmute'
+                aggregated_for_manual_unmute,
+                is_manual_unmute_candidate,
+                mute_check,
+                resolution='to_unmute',
+                debug_suffix=' [fast-unmute]',
             )
             if to_unmute_manual:
                 logging.info(f"Manual fast-unmute added {len(to_unmute_manual)} test(s) to to_unmute")
@@ -1283,6 +1335,7 @@ def mute_worker(args):
                 manual_unmute_full_names=manual_unmute_full_names,
                 aggregated_for_manual_unmute=aggregated_for_manual_unmute,
                 manual_unmute_min_runs=manual_unmute_min_runs,
+                manual_unmute_window_days=manual_unmute_window_days,
                 ydb_wrapper=ydb_wrapper,
                 branch=args.branch,
                 build_type=build_type,

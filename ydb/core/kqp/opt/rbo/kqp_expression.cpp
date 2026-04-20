@@ -196,7 +196,15 @@ bool TExpression::IsColumnAccess() const {
     return (body->IsCallable("ToPg") || body->IsCallable("PgCast"));
  }
 
-bool TExpression::MaybeJoinCondition(bool includeExpressions) const {
+bool TExpression::MaybeEquiJoinCondition() const {
+    return MaybeEquiJoinConditionInternal(false);
+}
+
+bool TExpression::MaybeExprEquiJoinCondition() const {
+    return MaybeEquiJoinConditionInternal(true);
+}
+
+bool TExpression::MaybeEquiJoinConditionInternal(bool includeExpressions) const {
     auto body = Node->ChildPtr(1);
 
     if (body->IsCallable("FromPg")) {
@@ -303,7 +311,7 @@ TString TExpression::ToString() const {
     return PrintRBOExpression(Node, *Ctx);
 }
 
-TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
+TEquiJoinCondition::TEquiJoinCondition(const TExpression& expr) : Expr(expr)
 {
     auto body = Expr.Node->ChildPtr(1);
 
@@ -314,16 +322,12 @@ TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
     TExprNode::TPtr leftArg;
     TExprNode::TPtr rightArg;
     if (TestAndExtractEqualityPredicate(body, leftArg, rightArg)) {
-        EquiJoin = true;
-
         TVector<TInfoUnit> bodyIUs;
         GetAllMembers(body, bodyIUs, *Expr.PlanProps, false, true);
 
         GetAllMembers(leftArg, LeftIUs, *Expr.PlanProps, false, true);
         GetAllMembers(rightArg, RightIUs, *Expr.PlanProps, false, true);
     } else {
-        EquiJoin = false;
-
         Y_ENSURE(body->ChildrenSize()==2, "Non-binary callable in join condition");
 
         GetAllMembers(body->ChildPtr(0), LeftIUs, *Expr.PlanProps, false, true);
@@ -335,19 +339,19 @@ TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
     }
 }
 
-TInfoUnit TJoinCondition::GetLeftIU() const {
+TInfoUnit TEquiJoinCondition::GetLeftIU() const {
     Y_ENSURE(LeftIUs.size()==1);
 
     return LeftIUs[0];
 }
 
-TInfoUnit TJoinCondition::GetRightIU() const {
+TInfoUnit TEquiJoinCondition::GetRightIU() const {
     Y_ENSURE(RightIUs.size()==1);
 
     return RightIUs[0];
 }
 
-bool TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
+bool TEquiJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
     Y_ENSURE(Expr.PlanProps, "Plan properties null when extracting expressions from join condition");
 
     if (!IncludesExpressions) {

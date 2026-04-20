@@ -129,18 +129,33 @@ namespace {
         }
     }
 
-    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, ui64 recipientTopicTabletId,
+                          bool omitPeerTopicTablets, const THashSet<ui64>& topicTabletPeers) {
         transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
 
         if (!isImmediateCommit) {
             const auto prepareSettings = txManager->GetPrepareTransactionInfo();
 
+            const auto keepShardForPropose = [&](ui64 shardId) {
+                if (!omitPeerTopicTablets) {
+                    return true;
+                }
+                if (!topicTabletPeers.contains(shardId)) {
+                    return true;
+                }
+                return shardId == recipientTopicTabletId;
+            };
+
             if (!prepareSettings.ArbiterColumnShard) {
                 for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                    transaction.AddSendingShards(sendingShardId);
+                    if (keepShardForPropose(sendingShardId)) {
+                        transaction.AddSendingShards(sendingShardId);
+                    }
                 }
                 for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                    transaction.AddReceivingShards(receivingShardId);
+                    if (keepShardForPropose(receivingShardId)) {
+                        transaction.AddReceivingShards(receivingShardId);
+                    }
                 }
             } else {
                 transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
@@ -3882,10 +3897,25 @@ public:
         }
         bool kafkaTransaction = TxManager->GetTopicOperations().HasKafkaOperations();
 
+        THashSet<ui64> topicTabletPeers;
+        bool omitPeerTopicTablets = false;
+        if (!isImmediateCommit) {
+            const auto& topicOps = TxManager->GetTopicOperations();
+            omitPeerTopicTablets = topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange();
+            if (omitPeerTopicTablets) {
+                for (ui64 id : topicOps.GetReceivingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+                for (ui64 id : topicOps.GetSendingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+            }
+        }
+
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            FillTopicsCommit(isImmediateCommit, transaction, TxManager);
+            FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId, omitPeerTopicTablets, topicTabletPeers);
 
             if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();
@@ -4240,7 +4270,9 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            TStringBuilder()
+                << "Failed to deliver message to tablet " << ev->Get()->TabletId << ". "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 
@@ -4260,7 +4292,10 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            TStringBuilder()
+                << "Failed to deliver message to tablet " << ev->Get()->TabletId
+                << " during prepare phase. "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 
@@ -4272,7 +4307,9 @@ public:
                 ReplyError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message to coordinator.",
+                    TStringBuilder()
+                        << "Failed to deliver commit message to coordinator "
+                        << ev->Get()->TabletId << ".",
                     {});
                 return;
             }
@@ -4285,7 +4322,9 @@ public:
             ReplyError(
                     NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                    TStringBuilder() << "State of operation is unknown. Failed to deviler message to coordinator.",
+                    TStringBuilder()
+                        << "Transaction state unknown: lost connection to coordinator "
+                        << ev->Get()->TabletId << ".",
                     {});
             return;
         }
@@ -4303,7 +4342,10 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNDETERMINED,
             NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-            TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
+            TStringBuilder()
+                << "Transaction state unknown: failed to deliver message to tablet "
+                << ev->Get()->TabletId << ". "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 

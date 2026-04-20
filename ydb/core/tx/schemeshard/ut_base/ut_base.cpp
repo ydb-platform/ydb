@@ -6789,29 +6789,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             PartitionConfig {
-                ByKeyFilterPrefixes: 1
+                ByKeyFilterPrefixes { PrefixLength: 1 }
             }
         )");
         env.TestWaitNotification(runtime, txId);
         {
             auto cfg = getPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
         }
 
-        // Add another prefix — should accumulate [1, 2]
+        // Add another prefix with custom FPP — should accumulate [1, 2]
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             PartitionConfig {
-                ByKeyFilterPrefixes: 2
+                ByKeyFilterPrefixes { PrefixLength: 2 FalsePositiveProbability: 0.05 }
             }
         )");
         env.TestWaitNotification(runtime, txId);
         {
             auto cfg = getPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.05, 1e-9);
         }
 
         // Disable KEY_BLOOM_FILTER — should clear all prefixes
@@ -6840,7 +6841,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 .GetPathDescription().GetTable().GetPartitionConfig();
         };
 
-        // Create table with bloom filter prefix from the start
+        // Create table with bloom filter prefix and custom FPP from the start
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "Key1" Type: "Uint64"}
@@ -6848,29 +6849,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Columns { Name: "Value" Type: "Utf8"}
             KeyColumnNames: ["Key1", "Key2"]
             PartitionConfig {
-                ByKeyFilterPrefixes: 1
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.02 }
             }
         )");
         env.TestWaitNotification(runtime, txId);
         {
             auto cfg = getPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.02, 1e-9);
         }
 
         // Alter to add second prefix — should accumulate [1, 2]
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             PartitionConfig {
-                ByKeyFilterPrefixes: 2
+                ByKeyFilterPrefixes { PrefixLength: 2 }
             }
         )");
         env.TestWaitNotification(runtime, txId);
         {
             auto cfg = getPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
         }
 
         // Disable — should clear all

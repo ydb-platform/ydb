@@ -28,10 +28,33 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
     operatorList.AppendValue(MakeJson(op, explainFlags));
     result["Operators"] = operatorList;
 
+    auto getChildJson = [&](const auto& child) {
+        auto childJson = GetExplainJsonRec(child, nodeCounter, explainFlags);
+
+        // Insert shuffle connections if needed
+        // (currently always needed for GraceJoin)
+        NJson::TJsonValue connectionJson = childJson;
+        if (op->Kind == EOperator::Join) {
+            auto join = CastOperator<TOpJoin>(op);
+            if (join->Props.JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
+                connectionJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+                connectionJson["PlanNodeType"] = "Connection";
+                connectionJson["Node Type"] = "HashShuffle";
+                connectionJson["PlanNodeId"] = nodeCounter++;
+
+                NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
+                plans.AppendValue(childJson);
+                connectionJson["Plans"] = plans;
+            }
+        }
+
+        return connectionJson;
+    };
+
     if (op->Children.size()){
         NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        for (const auto & child : op->Children) {
-            plans.AppendValue(GetExplainJsonRec(child, nodeCounter, explainFlags));
+        for (const auto& child : op->Children) {
+            plans.AppendValue(getChildJson(child));
         }
         result["Plans"] = plans;
     }

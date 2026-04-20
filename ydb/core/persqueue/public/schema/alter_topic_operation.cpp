@@ -1,0 +1,175 @@
+#include "alter_topic_operation.h"
+#include "schema_operation.h"
+
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/ydb_convert/tx_proxy_status.h>
+
+namespace NKikimr::NPQ::NSchema {
+
+namespace {
+
+class TAlterTopicOperationActor: public TBaseActor<TAlterTopicOperationActor>
+                               , public TConstantLogPrefix {
+public:
+    TAlterTopicOperationActor(TActorId parentId, TAlterTopicOperationSettings&& settings)
+        : TBaseActor<TAlterTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
+        , ParentId(parentId)
+        , Settings(std::move(settings))
+    {
+    }
+
+    ~TAlterTopicOperationActor() = default;
+
+    void Bootstrap() {
+        DoDescribe();
+    }
+
+    TString BuildLogPrefix() const override {
+        return TStringBuilder() << "[" << Settings.Strategy->GetTopicName() << "] ";
+    }
+
+    void OnException(const std::exception& exc) override {
+        ReplyAndDie(Ydb::StatusIds::INTERNAL_ERROR, exc.what());
+    }
+
+private:
+    void DoDescribe() {
+        LOG_D("DoDescribe");
+        Become(&TAlterTopicOperationActor::DescribeState);
+
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
+            SelfId(),
+            Settings.Database,
+            { Settings.Strategy->GetTopicName() },
+            {
+                .UserToken = Settings.UserToken,
+                .AccessRights = NACLib::EAccessRights::AlterSchema,
+                .ForceSyncVersion = true
+            }));
+    }
+
+    void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+
+        auto& topics = ev->Get()->Topics;
+        AFL_ENSURE(topics.size() == 1)("s", topics.size());
+
+        TopicInfo = std::move(topics.begin()->second);
+        switch(TopicInfo.Status) {
+            case NDescriber::EStatus::SUCCESS: {
+                return DoAlter();
+            }
+            case NDescriber::EStatus::NOT_FOUND: {
+                if (Settings.IfExists) {
+                    return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+                }
+                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NOT_FOUND));
+            }
+            case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS: {
+                return ReplyAndDie(Ydb::StatusIds::UNAUTHORIZED, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
+            }
+            default: {
+                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
+            }
+        }
+    }
+
+    STFUNC(DescribeState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void DoAlter() {
+        LOG_D("DoAlter");
+
+        Become(&TAlterTopicOperationActor::AlterState);
+
+        auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+
+        proposal->Record.SetDatabaseName(Settings.Database);
+        proposal->Record.SetPeerName(Settings.PeerName);
+        if (Settings.UserToken) {
+            proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
+        }
+
+        NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
+
+        auto [workingDir, _] = GetWorkingDirAndName(TopicInfo.RealPath);
+        if (workingDir.empty()) {
+            return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
+        }
+
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+        modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetAllowAccessToPrivatePaths(true);
+
+        auto* config = modifyScheme.MutableAlterPersQueueGroup();
+        config->CopyFrom(TopicInfo.Info->Description);
+
+        // keep previous values or set in ModifyPersqueueConfig
+        config->ClearTotalGroupCount();
+        config->MutablePQTabletConfig()->ClearPartitionKeySchema();
+
+        {
+            auto applyIf = modifyScheme.AddApplyIf();
+            applyIf->SetPathId(TopicInfo.Self->Info.GetPathId());
+            applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
+        }
+
+        auto result = Settings.Strategy->ApplyChanges(modifyScheme, *config, TopicInfo.Info->Description, TopicInfo.CdcStream);
+        if (!result) {
+            return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
+        }
+
+        ModifyScheme = modifyScheme;
+
+        RegisterWithSameMailbox(CreateSchemaOperation(
+            SelfId(),
+            TopicInfo.RealPath,
+            std::move(proposal),
+            Settings.Cookie
+        ));
+    }
+
+    void Handle(TEvSchemaOperationResponse::TPtr& ev) {
+        LOG_D("Handle TEvSchemaOperationResponse");
+        auto& response = *ev->Get();
+        return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
+    }
+
+    STFUNC(AlterState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvSchemaOperationResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+        if (errorCode == Ydb::StatusIds::SUCCESS) {
+            ModifyScheme = {};
+        }
+        Send(ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+        PassAway();
+    }
+
+private:
+    const TActorId ParentId;
+    const TAlterTopicOperationSettings Settings;
+
+    NDescriber::TTopicInfo TopicInfo;
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+};
+
+}
+
+IActor* CreateAlterTopicOperationActor(TActorId parentId, TAlterTopicOperationSettings&& settings) {
+    return new TAlterTopicOperationActor(parentId, std::move(settings));
+}
+
+} // namespace NKikimr::NPQ::NSchema

@@ -492,8 +492,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         }
 
         TxInfo = MakeIntrusive<NRm::TTxState>(
-            TxId, TInstant::Now(), ResourceManager_->GetCounters(),
-            UserRequestContext->PoolId, memoryPoolPercent, Database, CaFactory_->GetVerboseMemoryLimitException());
+            ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
+            CaFactory_->GetVerboseMemoryLimitException());
     }
 
     if (ArrayBufferMinFillPercentage) {

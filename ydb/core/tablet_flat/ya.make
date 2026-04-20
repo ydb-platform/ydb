@@ -130,6 +130,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat/protos
     ydb/core/util
+    ydb/core/io_formats/json
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     ydb/library/mkql_proto/protos

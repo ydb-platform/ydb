@@ -1701,6 +1701,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 300,
             DefaultValue: 0 }];
+        optional uint64 HullCompFreeSpaceThresholdPerMille = 41 [(ControlOptions) = {
+            Description: "Garbage threshold for FreeSpace compaction strategy. This value is divided by 1000 and converted to double. Zero value entirely disables the FreeSpace compaction strategy.",
+            MinValue: 0,
+            MaxValue: 100000,
+            DefaultValue: 2000 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {

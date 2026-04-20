@@ -1,3 +1,5 @@
+* Added interface for export of metrics and spans, supported plugin for OpenTelemetry
+
 * Supported gRPC compression option on client side
 
 ## v3.17.0

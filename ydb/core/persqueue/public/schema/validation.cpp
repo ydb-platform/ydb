@@ -37,7 +37,7 @@ TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {
             << strategy.GetScaleDownPartitionWriteSpeedThresholdPercent()};
     }
     if (strategy.GetScaleThresholdSeconds() <= 0) {
-        return {Ydb::StatusIds::BAD_REQUEST, 
+        return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "Partition scale threshold time must be greater then 1 second, provided "
             << strategy.GetScaleThresholdSeconds() << " seconds"};
     }
@@ -180,5 +180,5 @@ TResult ValidateConsumersConfig(
 
     return TResult();
 }
-    
+
 } // namespace NKikimr::NPQ::NSchema

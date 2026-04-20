@@ -54,6 +54,7 @@ public:
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
+        , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -663,6 +664,7 @@ private:
         auto guard = BindAllocator();
 
         NUdf::TUnboxedValue row;
+        auto allocState = &guard.GetMutex()->Ref();
 
         YQL_ENSURE(!Input.IsInvalid());
         if (Input.IsFinish() || !Input.HasValue()) {
@@ -671,12 +673,14 @@ private:
         }
 
         size_t fetchCount = 0;
+        i64 bytesBefore = allocState->GetAllocated();
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
             ++fetchCount;
-            // avoid fetching too many rows at once
-            // todo: it might be better to check memory usage instead of rows count
-            if (fetchCount >= MaxRowsProcessing) {
+            // Avoid fetching too many rows at once: limit both the number of rows and
+            // the allocator growth since the start of this fetch loop. GetAllocated()
+            // is only a heuristic for memory pressure here, not a precise retained-memory metric.
+            if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
                 break;
             }
         }
@@ -926,6 +930,7 @@ private:
     ui64 MaxTotalBytesQuota = 0;
     size_t MaxRowsProcessing = 0;
     ui64 MaxInFlightReads = 50;
+    ui64 MaxBytesPerFetch = 256_MB;
     size_t MaxBytesDefaultQuota = 0;
     size_t MaxRowsDefaultQuota = 0;
 

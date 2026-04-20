@@ -1,4 +1,4 @@
-#include "schema_int.h"
+#include "alter_topic_operation.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -357,6 +357,7 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     }
 
     TResult ApplyChanges(
+        NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
         const bool isCdcStream
@@ -370,11 +371,10 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
 } // namespace
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings) {
-    return CreateTopicAlterer(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC, TTopicAltererSettings{
-        .ParentId = parentId,
+    return CreateAlterTopicOperationActor(parentId, {
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
-        .UserToken = std::move(settings.UserToken),
+        .UserToken = settings.UserToken,
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .Cookie = settings.Cookie,

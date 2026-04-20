@@ -1769,6 +1769,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 SELECT bar.id FROM `/Root/bar` as bar where bar.lastname IN (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.id2 >= bar.id2 AND foo.id==1);
             )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where bar.lastname NOT IN (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id > bar.id ) order by bar.id;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
@@ -1777,6 +1780,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[1]])",
             R"([[1]])",
             R"([[1]])",
+            R"([[0];[1];[2];[3]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

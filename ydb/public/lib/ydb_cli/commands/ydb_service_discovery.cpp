@@ -119,7 +119,11 @@ void TCommandWhoAmI::PrintResponse(NDiscovery::TWhoAmIResult& result) {
             result.IsMonitoringAllowed() || result.IsAdministrationAllowed() ||
             result.IsRegisterNodeAllowed() || result.IsBootstrapAllowed();
         if (hasAnyAccess) {
-            Cout << Endl << "Access levels:" << Endl;
+            if (!userName.empty()) {
+                Cout << Endl;
+            }
+
+            Cout << "Access levels:" << Endl;
             if (result.IsDatabaseAllowed()) Cout << "Database" << Endl;
             if (result.IsViewerAllowed()) Cout << "Viewer" << Endl;
             if (result.IsMonitoringAllowed()) Cout << "Monitoring" << Endl;

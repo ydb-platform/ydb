@@ -21,10 +21,7 @@
 
 ## Требования {#requirements}
 
-| Компонент | Версия |
-|-----------|--------|
-| DBeaver Community Edition | 24.x или новее |
-| Java                      | 21+    |
+Для работы плагина требуется DBeaver Community Edition версии 24.x или новее.
 
 ## Установка плагина {#installation}
 

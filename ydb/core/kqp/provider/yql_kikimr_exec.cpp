@@ -1942,7 +1942,7 @@ public:
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
             TVector<TSetColumnConstraintSettings> constraintSetObjects;
-            auto applyLocalBloomFilterIndex = [](Ydb::Table:TableIndex::LocalBloomNgramFilter* proto,
+            auto applyLocalBloomFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
                 if (desc.NgramSize) {
                     proto->set_ngram_size(*desc.NgramSize);
@@ -1955,7 +1955,7 @@ public:
                 if (desc.CaseSensitive) {
                     proto->set_case_sensitive(*desc.CaseSensitive);
                 }
-            }
+            };
 
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();

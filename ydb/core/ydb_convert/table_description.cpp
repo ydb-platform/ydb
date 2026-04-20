@@ -854,7 +854,9 @@ void FillLocalBloomNgramProto(TProto* ngram, const TSettings& ngramSettings) {
     ngram->SetFalsePositiveProbability(derived.FalsePositiveProbability);
     ngram->SetFilterSizeBytes(derived.FilterSizeBytes);
     ngram->SetHashesCount(derived.HashesCount);
-    ngram->SetRecordsCount(derived.RecordsCount);
+    // RecordsCount is intentionally not set here: this function is only called for
+    // FPP mode (false_positive_probability). Setting records_count would cause
+    // the index to be misidentified as using the deprecated sizing mode.
 }
 
 bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc, const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error) {
@@ -1397,22 +1399,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             }
             case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
                 namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
-                using TConstants = NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants;
 
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     status = Ydb::StatusIds::UNSUPPORTED;
                     error = "Local bloom ngram filter index support is disabled";
                     return false;
                 }
-
-                auto failBadRequest = [&](TStringBuf field) {
-                    status = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder()
-                        << field
-                        << " is out of allowed interval for local bloom ngram index on column: "
-                        << name;
-                    return false;
-                };
 
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
 

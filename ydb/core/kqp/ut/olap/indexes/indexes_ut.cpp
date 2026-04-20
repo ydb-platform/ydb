@@ -523,20 +523,23 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ui32 filterBytesBefore = 0;
         readBloomNGramm(fppBefore, filterBytesBefore);
 
-        ExecQuery(kikimr, UseQueryService, R"(
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapTableBloomNgramAddThenUpsert` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, "records_count" : 50000, "case_sensitive" : true, "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
-        )");
+        )", "cannot switch bloom ngram index from false_positive_probability mode to deprecated sizing");
 
         double fppAfter = 0;
         ui32 filterBytesAfter = 0;
         readBloomNGramm(fppAfter, filterBytesAfter);
 
-        UNIT_ASSERT_C(
-            fppBefore != fppAfter || filterBytesBefore != filterBytesAfter,
-            TStringBuilder() << "After ADD INDEX, ALTER OBJECT ... UPSERT_INDEX with filter_size_bytes/records_count should change schema; before fpp="
-                             << fppBefore << " filter_size_bytes=" << filterBytesBefore << " after fpp=" << fppAfter
-                             << " filter_size_bytes=" << filterBytesAfter);
+        UNIT_ASSERT_DOUBLES_EQUAL_C(
+            fppBefore, fppAfter, 1e-9,
+            TStringBuilder() << "Rejected UPSERT_INDEX must not change false_positive_probability; before fpp="
+                             << fppBefore << " after fpp=" << fppAfter);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            filterBytesBefore, filterBytesAfter,
+            TStringBuilder() << "Rejected UPSERT_INDEX must not change filter_size_bytes; before="
+                             << filterBytesBefore << " after=" << filterBytesAfter);
     }
 
     Y_UNIT_TEST(BloomNgramIndexCreatedViaAlterObjectWithFalsePositiveProbability, EUseQueryService) {
@@ -2571,7 +2574,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 WITH (ngram_size = 3, false_positive_probability = 0.02, case_sensitive = true);
         )");
 
-        auto readBloomNgramIndexIdAndFpp = [&]() -> decltype(auto) {
+        auto readBloomNgramIndexIdAndFpp = [&]() -> std::tuple<ui32, double> {
             auto desc = client.Ls("/Root/olapAlterIdxSameSchemeId");
             UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
             const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();

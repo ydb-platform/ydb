@@ -12,6 +12,7 @@ namespace NTable {
 
 Y_UNIT_TEST_SUITE(Bloom) {
     using namespace NTest;
+    using TBloomPrefix = TScheme::TTableInfo::TByKeyFilterPrefix;
 
     static const NTest::TMass Mass0(new NTest::TModelS3Hash, 24000, 42, 0.5);
 
@@ -191,7 +192,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         /*_ 20: Make next part Pw with enabled by key bloom filter */
 
-        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2}));
+        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2}}));
         me.To(21).Put(1, rw1, rw2, rw3).Commit().Snap(1).Compact(1, false);
         me.To(22).Select(1).Has(ru1, ru2, rw1, rw2, rw3).NoKey(no1, no2, no3);
 
@@ -279,7 +280,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         /*_ 10: Enable prefix bloom on first PK column only */
 
-        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {1}));
+        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{1}}));
         me.To(12).Put(1, rw1, rw2, rw3).Commit().Snap(1).Compact(1);
         me.To(13).Select(1).Has(rw1, rw2, rw3).NoKey(noSame, noDiff1, noDiff2);
 
@@ -357,7 +358,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         /* Enable prefix bloom on 1 column and full-key bloom (prefix=3) */
         me.To(11).Begin()
-            .Apply(*TAlter().SetByKeyFilterPrefixes(1, {1, 3}));
+            .Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{1}, TBloomPrefix{3}}));
         me.To(12).Put(1, rw1, rw2, rw3).Commit().Snap(1).Compact(1);
         me.To(13).Select(1).Has(rw1, rw2, rw3).NoKey(noSamePrefix, noDiffPrefix);
 
@@ -404,7 +405,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         /* Different 1st column — rejected by bloom-on-2 (longest) */
         const auto noDiff = *me.SchemedCookRow(1).Col("aab", 100_u64, "x1");
 
-        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2, 1})); /* deliberately reversed */
+        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2}, TBloomPrefix{1}})); /* deliberately reversed */
         me.To(12).Put(1, rw1, rw2, rw3).Commit().Snap(1).Compact(1);
         me.To(13).Select(1).Has(rw1, rw2, rw3).NoKey(noPassesFirst, noDiff);
 
@@ -494,7 +495,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         const auto no1 = *me.SchemedCookRow(1).Col("ba1_p9lw", 53543_u64);
 
         /* Enable bloom, write data, compact */
-        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2}));
+        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2}}));
         me.To(21).Put(1, rw1, rw2).Commit().Snap(1).Compact(1);
 
         /* Bloom filters before restart */
@@ -544,7 +545,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         const auto no1 = *me.SchemedCookRow(1).Col("ba1_p9lw", 53543_u64);
 
         /* Enable bloom, write data, compact */
-        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2}));
+        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2}}));
         me.To(21).Put(1, rw1, rw2).Commit().Snap(1).Compact(1);
 
         /* Bloom filters initially */
@@ -603,7 +604,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         me.To(10).Begin().Apply(*MakeAlter()).Commit();
 
         /* Enable full-key (2-column) bloom filter using new API */
-        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2})).Commit();
+        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2}})).Commit();
 
         /* GetSnapshot() must include both legacy ByKeyFilter and new ByKeyFilterPrefixes */
         {
@@ -637,17 +638,74 @@ Y_UNIT_TEST_SUITE(Bloom) {
         me.To(10).Begin().Apply(*MakeAlter()).Commit();
 
         // prefix=1 (first key column): valid
-        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {1})).Commit();
+        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{1}})).Commit();
 
         // prefix=2 (full key): valid
-        me.To(12).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2})).Commit();
+        me.To(12).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2}})).Commit();
 
         // prefix=3: exceeds key column count — must be rejected
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            me.Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {3})),
+            me.Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{3}})),
             yexception,
             "exceeds key column count"
         );
+    }
+
+    Y_UNIT_TEST(FalsePositiveProbability)
+    {
+        /* Verify that FPP setting affects bloom filter parameters.
+           For n items, optimal bloom filter uses:
+             bits = ceil(-1.44 * log2(fpp) * n), rounded up to 64
+             hashes = ceil(-log2(fpp))
+           With 100 rows:
+             fpp=0.5:   bits=ceil(1.44*100)=144→192,  hashes=1
+             fpp=0.001: bits=ceil(14.3*100)=1430→1472, hashes=10 */
+        TDbExec me;
+        me.To(10).Begin().Apply(*MakeAlter()).Commit();
+
+        // Enable bloom with high FPP (0.5)
+        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2, 0.5}})).Commit();
+
+        // Insert 100 rows
+        me.To(21).Begin();
+        for (ui32 i = 0; i < 100; ++i) {
+            me.Put(1, *me.SchemedCookRow(1).Col(Sprintf("key_%03u", i), ui64(i)));
+        }
+        me.Commit().Snap(1).Compact(1, true);
+
+        NPage::TBloom::TStats statsHighFpp;
+        {
+            auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            UNIT_ASSERT(subset->Flatten.size() == 1);
+            UNIT_ASSERT(subset->Flatten[0]->ByKeyPrefixes.size() == 1);
+            statsHighFpp = subset->Flatten[0]->ByKeyPrefixes[0].second->Stats();
+        }
+
+        // Switch to low FPP (0.001)
+        me.To(30).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {TBloomPrefix{2, 0.001}})).Commit();
+
+        // Insert same rows again for new compaction
+        me.To(31).Begin();
+        for (ui32 i = 0; i < 100; ++i) {
+            me.Put(1, *me.SchemedCookRow(1).Col(Sprintf("key_%03u", i), ui64(i)));
+        }
+        me.Commit().Snap(1).Compact(1, true);
+
+        NPage::TBloom::TStats statsLowFpp;
+        {
+            auto subset = me->Subset(1, TEpoch::Max(), { }, { });
+            UNIT_ASSERT(subset->Flatten.size() == 1);
+            UNIT_ASSERT(subset->Flatten[0]->ByKeyPrefixes.size() == 1);
+            statsLowFpp = subset->Flatten[0]->ByKeyPrefixes[0].second->Stats();
+        }
+
+        // hashes = ceil(-log2(fpp)): fpp=0.5 → 1, fpp=0.001 → 10
+        UNIT_ASSERT_VALUES_EQUAL(statsHighFpp.Hashes, 1);
+        UNIT_ASSERT_VALUES_EQUAL(statsLowFpp.Hashes, 10);
+
+        // bits: fpp=0.5 → 192, fpp=0.001 → 1472
+        UNIT_ASSERT_VALUES_EQUAL(statsHighFpp.Items, 192);
+        UNIT_ASSERT_VALUES_EQUAL(statsLowFpp.Items, 1472);
     }
 
     Y_UNIT_TEST(Stairs)
@@ -671,7 +729,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             alter.AddColumn(1, name, col, ETypes::String, false, false);
             alter.AddColumnToKey(1, col);
             if (col > 10) {
-                alter.SetByKeyFilterPrefixes(1, {col}); /* enable bloom on full key */
+                alter.SetByKeyFilterPrefixes(1, {TBloomPrefix{col}}); /* enable bloom on full key */
             } else {
                 alter.SetByKeyFilterPrefixes(1, {}); /* no bloom for first 8 parts */
             }

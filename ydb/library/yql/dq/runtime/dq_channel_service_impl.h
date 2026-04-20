@@ -274,6 +274,7 @@ public:
     void UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
     /* bool PushToWaitQueue(TDataChunk&& data); */
+    bool IsEmpty();
     bool IsFinished();
     bool IsEarlyFinished();
     void Terminate();

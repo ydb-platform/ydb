@@ -2562,36 +2562,24 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
     }
 
-#define TICKET_PARSER_PEERNAME_VALIDATION(shouldFail, peername)       \
-    {                                                                          \
-        TActorId sender = runtime->AllocateEdgeActor();                        \
-        TAutoPtr<IEventHandle> handle;                                         \
-                                                                               \
-        runtime->Send(new IEventHandle(                                        \
-            MakeTicketParserID(),                                              \
-            sender,                                                            \
-            new TEvTicketParser::TEvAuthorizeTicket({                          \
-                .Ticket = "user@builtin",                                      \
-                .Database = "",                                                \
-                .PeerName = peername,                                          \
-                .Entries = {},                                                 \
-            })                                                                 \
-        ), 0);                                                                 \
-        TEvTicketParser::TEvAuthorizeTicketResult* result =                    \
-            runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>( \
-                handle);                                                       \
-                                                                               \
-        if (shouldFail) {                                                      \
-            UNIT_ASSERT(result->HasError());                                   \
-            UNIT_ASSERT(!result->Error.Retryable);                             \
-            UNIT_ASSERT_STRING_CONTAINS(                                       \
-                result->Error.Message,                                         \
-                "Unacceptable peername format");                               \
-        } else {                                                               \
-            UNIT_ASSERT(!result->HasError());                                  \
-        }                                                                      \
-    }                                                                          \
-// TICKET_PARSER_PEERNAME_VALIDATION
+    TEvTicketParser::TEvAuthorizeTicketResult* RunPeernameQuery(
+        TTestActorRuntime* runtime,
+        const TString& peername) {
+        TActorId sender = runtime->AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        runtime->Send(new IEventHandle(
+            MakeTicketParserID(),
+            sender,
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user@builtin",
+                .Database = "",
+                .PeerName = peername,
+                .Entries = {},
+            })
+        ), 0);
+        return runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+    }
 
     Y_UNIT_TEST(TicketParserPeerNameValidationWithFeatureFlagEnabled) {
         using namespace Tests;
@@ -2618,43 +2606,166 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         // IPv4
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "192.168.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "10.0.0.1:65535");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:127.0.0.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:172.10.0.1:1234");
+        {
+            auto* res = RunPeernameQuery(runtime, "192.168.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "10.0.0.1:65535");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
 
         // IPv6
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:db8::1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[fe80::1]:22");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:2001:db8::1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[fe80::1]:22");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+            UNIT_ASSERT(!res->HasError());
+        }
 
         // Invalid peername formats
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "invalid_format");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "[127.0.0.1]");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "127.0.0.1:65536");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "256.1.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "1.-1.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv4:");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv4:256.1.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv4:[127.0.0.1]:1234");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:0");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:65536");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "[::1]:port");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, ":::1");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:0");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:65536");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:[::1]:port");
-        TICKET_PARSER_PEERNAME_VALIDATION(true, "ipv6:invalid");
+        {
+            auto* res = RunPeernameQuery(runtime, "");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "invalid_format");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[127.0.0.1]");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "127.0.0.1:65536");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "256.1.1.1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "1.-1.1.1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:0");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:65536");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:port");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, ":::1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime,  "ipv6:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:invalid");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
     }
 
     Y_UNIT_TEST(TicketParserPeerNameValidationWithFeatureFlagDisabled) {
@@ -2682,46 +2793,143 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         // IPv4
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "192.168.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "10.0.0.1:65535");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:127.0.0.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:172.10.0.1:1234");
+        {
+            auto* res = RunPeernameQuery(runtime, "192.168.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "10.0.0.1:65535");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
 
         // IPv6
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:db8::1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[fe80::1]:22");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:2001:db8::1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[fe80::1]:22");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+            UNIT_ASSERT(!res->HasError());
+        }
 
         // Invalid peername formats
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "invalid_format");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[127.0.0.1]");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "127.0.0.1:65536");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "256.1.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "1.-1.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:256.1.1.1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv4:[127.0.0.1]:1234");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:0");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:65536");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "[::1]:port");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, ":::1");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:0");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:65536");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:[::1]:port");
-        TICKET_PARSER_PEERNAME_VALIDATION(false, "ipv6:invalid");
+        {
+            auto* res = RunPeernameQuery(runtime, "");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "invalid_format");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[127.0.0.1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "127.0.0.1:65536");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "256.1.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "1.-1.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:0");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:65536");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:port");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, ":::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:invalid");
+            UNIT_ASSERT(!res->HasError());
+        }
     }
-
-#undef TICKET_PARSER_PEER_NAME_VALIDATION
 } // Test suite TTicketParserTest
 
 Y_UNIT_TEST_SUITE(AuthorizeRequestToAccessService) {

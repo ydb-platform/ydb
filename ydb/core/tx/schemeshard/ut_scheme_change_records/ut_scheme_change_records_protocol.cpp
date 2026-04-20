@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> handle;
         auto result = RegisterSubscriber(runtime, "test:sub:1", handle);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetCurrentSequenceId(), 0u);
     }
 
@@ -24,11 +24,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> h1;
         auto r1 = RegisterSubscriber(runtime, "test:sub:1", h1);
-        UNIT_ASSERT_VALUES_EQUAL(r1->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)r1->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
 
         TAutoPtr<IEventHandle> h2;
         auto r2 = RegisterSubscriber(runtime, "test:sub:1", h2);
-        UNIT_ASSERT_VALUES_EQUAL(r2->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)r2->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
     }
 
     Y_UNIT_TEST(FetchReturnsEntriesAfterCursor) {
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> fetchHandle;
         auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetchHandle);
-        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(fetch->Record.EntriesSize() >= 2);
     }
 
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> fetchHandle;
         auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 2, fetchHandle);
-        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(fetch->Record.EntriesSize(), 2);
         UNIT_ASSERT(fetch->Record.GetHasMore());
     }
@@ -112,12 +112,12 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         ui64 firstSeqId = fetch1->Record.GetEntries(0).GetSequenceId();
         TAutoPtr<IEventHandle> ackHandle;
         auto ack = AckSchemeChangeRecords(runtime, "test:sub:1", firstSeqId, ackHandle);
-        UNIT_ASSERT_VALUES_EQUAL(ack->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)ack->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(ack->Record.GetNewCursor(), firstSeqId);
 
         TAutoPtr<IEventHandle> fetch2Handle;
         auto fetch2 = FetchSchemeChangeRecords(runtime, "test:sub:1", firstSeqId, 100, fetch2Handle);
-        UNIT_ASSERT_VALUES_EQUAL(fetch2->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fetch2->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         UNIT_ASSERT(fetch2->Record.EntriesSize() < fetch1->Record.EntriesSize());
     }
 
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> fetchHandle;
         auto fetch = FetchSchemeChangeRecords(runtime, "nonexistent:sub", 0, 100, fetchHandle);
-        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
     }
 
     Y_UNIT_TEST(MultipleSubscribersIndependentCursors) {
@@ -181,12 +181,12 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> unregHandle;
         auto unregResult = UnregisterSubscriber(runtime, "test:sub:1", unregHandle);
-        UNIT_ASSERT_VALUES_EQUAL(unregResult->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)unregResult->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
 
         // Fetch should fail -- subscriber no longer exists
         TAutoPtr<IEventHandle> fetchHandle;
         auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetchHandle);
-        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fetch->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
     }
 
     Y_UNIT_TEST(UnregisterLastSubscriberStopsRecordCreation) {
@@ -243,6 +243,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> unregHandle;
         auto result = UnregisterSubscriber(runtime, "nonexistent:sub", unregHandle);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
     }
 }

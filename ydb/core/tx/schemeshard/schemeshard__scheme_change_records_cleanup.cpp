@@ -100,7 +100,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         }
 
         if (!rowset.IsValid()) {
-            Result->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
             Result->Record.SetReason("Subscriber not registered: " + subscriberId);
             return true;
         }
@@ -118,7 +118,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         Result->Record.SetNewCursor(newCursor);
 
         return true;

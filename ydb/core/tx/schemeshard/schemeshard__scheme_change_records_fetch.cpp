@@ -25,7 +25,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
 
         if (rowset.IsValid()) {
             ui64 currentCursor = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedSequenceId>();
-            Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
             Result->Record.SetCurrentSequenceId(currentCursor);
         } else {
             const TInstant now = TInstant::Now();
@@ -37,7 +37,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
             info.LastAckedSequenceId = 0;
             info.LastActivityAt = now;
             Self->Subscribers.emplace(subscriberId, info);
-            Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
             Result->Record.SetCurrentSequenceId(0);
         }
 
@@ -77,7 +77,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         }
 
         if (!subRowset.IsValid()) {
-            Result->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
             Result->Record.SetReason("Subscriber not registered: " + subscriberId);
             return true;
         }
@@ -140,7 +140,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             it->second.LastActivityAt = now;
         }
 
-        Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         Result->Record.SetLastSequenceId(lastSeqId);
         Result->Record.SetHasMore(hasMore);
         Result->Record.SetSkippedEntries(skippedEntries);
@@ -190,7 +190,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
         }
 
         if (!rowset.IsValid()) {
-            Result->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
             Result->Record.SetReason("Subscriber not registered: " + subscriberId);
             return true;
         }
@@ -248,7 +248,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             }
         }
 
-        Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         Result->Record.SetNewCursor(newCursor);
 
         return true;
@@ -289,7 +289,7 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         }
 
         if (!rowset.IsValid()) {
-            Result->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
             Result->Record.SetReason("Subscriber not registered: " + subscriberId);
             return true;
         }
@@ -330,7 +330,7 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
             }
         }
 
-        Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
 
         return true;
     }
@@ -364,7 +364,7 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
         // anonymous consumers must not pull them. Subscribers that lose their
         // registration between Fetch and FetchBodies must re-register first.
         if (!Self->Subscribers.contains(subscriberId)) {
-            Result->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
             Result->Record.SetReason("Subscriber not registered: " + subscriberId);
             return true;
         }
@@ -392,7 +392,7 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             // else: metadata present but no body row -> empty body entry.
         }
 
-        Result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
         return true;
     }
 

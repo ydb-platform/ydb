@@ -6,12 +6,22 @@ option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/scheme/protos/pathid.proto";
 
+message TSchemeChangeRecordsStatus {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_NOT_REGISTERED = 2;
+        STATUS_INVALID_REQUEST = 3;
+        STATUS_INTERNAL_ERROR = 4;
+    }
+}
+
 message TEvRegisterSubscriber {
     string SubscriberId = 1;
 }
 
 message TEvRegisterSubscriberResult {
-    optional uint32 Status = 1;
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     uint64 CurrentSequenceId = 3;
 }
@@ -38,7 +48,7 @@ message TEvFetchSchemeChangeRecords {
 }
 
 message TEvFetchSchemeChangeRecordsResult {
-    optional uint32 Status = 1;
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     repeated TSchemeChangeRecord Entries = 3;
     uint64 LastSequenceId = 4;
@@ -53,7 +63,7 @@ message TEvAckSchemeChangeRecords {
 }
 
 message TEvAckSchemeChangeRecordsResult {
-    optional uint32 Status = 1;
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     uint64 NewCursor = 3;
 }
@@ -63,7 +73,7 @@ message TEvForceAdvanceSubscriber {
 }
 
 message TEvForceAdvanceSubscriberResult {
-    optional uint32 Status = 1;
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     uint64 NewCursor = 3;
 }
@@ -73,7 +83,7 @@ message TEvUnregisterSubscriber {
 }
 
 message TEvUnregisterSubscriberResult {
-    optional uint32 Status = 1;
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
 }
 
@@ -87,7 +97,7 @@ message TEvFetchSchemeChangeRecordBodiesResult {
         uint64 SequenceId = 1;
         bytes Body = 2;
     }
-    optional uint32 Status = 1;
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     repeated TEntry Entries = 3;
 }

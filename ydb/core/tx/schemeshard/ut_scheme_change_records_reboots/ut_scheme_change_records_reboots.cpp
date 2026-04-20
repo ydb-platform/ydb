@@ -19,7 +19,7 @@ void RegisterSubscriber(TTestActorRuntime& runtime, const TString& subscriberId)
     TAutoPtr<IEventHandle> handle;
     auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvRegisterSubscriberResult>(handle);
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), (ui32)NKikimrScheme::StatusSuccess);
+    UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetStatus(), (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
 }
 
 } // anonymous namespace

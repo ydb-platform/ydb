@@ -304,8 +304,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TAutoPtr<IEventHandle> ackHandle;
         AckSchemeChangeRecords(runtime, "cleanup:sub", lastOrder, ackHandle);
 
-        // No manual TEvWakeupToRunSchemeChangeRecordsCleanup forwarded:
-        // records must be gone from the table as a side effect of the ack.
+        // Records must be gone as a side effect of the ack tx — no wakeup needed.
         auto entries = ReadSchemeChangeRecords(runtime);
         UNIT_ASSERT_C(entries.empty(),
             "Records should be deleted inline by ack, got " << entries.size());

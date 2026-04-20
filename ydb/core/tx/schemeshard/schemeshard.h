@@ -123,7 +123,6 @@ namespace TEvSchemeShard {
         EvUnregisterSubscriberResult,
         EvFetchSchemeChangeRecordBodies,
         EvFetchSchemeChangeRecordBodiesResult,
-        EvWakeupToRunSchemeChangeRecordsCleanup,
 
         EvEnd
     };
@@ -431,9 +430,6 @@ namespace TEvSchemeShard {
     };
 
     struct TEvWakeupToRunShredBSC : public TEventLocal<TEvWakeupToRunShredBSC, EvWakeupToRunShredBSC> {
-    };
-
-    struct TEvWakeupToRunSchemeChangeRecordsCleanup : public TEventLocal<TEvWakeupToRunSchemeChangeRecordsCleanup, EvWakeupToRunSchemeChangeRecordsCleanup> {
     };
 
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,

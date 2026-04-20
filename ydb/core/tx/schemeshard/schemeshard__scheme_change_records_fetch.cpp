@@ -211,11 +211,8 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        // Reactive cleanup: when this ack moves the global min subscriber
-        // cursor forward, delete newly-acked records in the same tx. No cap:
-        // total backlog is bounded by MaxSchemeChangeRecords (100k), which
-        // is ~3.2 MB of redo log — within single-tx budget. Background
-        // cleanup only runs at tablet boot as a safety net.
+        // Reactive cleanup: delete records that just became stale, in the
+        // same tx. Background cleanup only runs at tablet boot.
         if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
             return false;
         }
@@ -263,8 +260,6 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Delete();
         Self->Subscribers.erase(subscriberId);
 
-        // Reactive cleanup: removing a slow subscriber may jump the global
-        // min cursor forward. Delete newly-stale records inline.
         if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
             return false;
         }
@@ -295,9 +290,7 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
 
         NIceDb::TNiceDb db(txc.DB);
 
-        // Subscriber-gated: reject unknown subscribers. Bodies are sensitive;
-        // anonymous consumers must not pull them. Subscribers that lose their
-        // registration between Fetch and FetchBodies must re-register first.
+        // Subscriber-gated: bodies are pulled only by registered subscribers.
         if (!Self->Subscribers.contains(subscriberId)) {
             Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
             Result->Record.SetReason("Subscriber not registered: " + subscriberId);
@@ -305,7 +298,6 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
         }
 
         for (ui64 order : record.GetOrders()) {
-            // Skip records not present in metadata table (already cleaned up).
             auto metaRowset = db.Table<Schema::SchemeChangeRecords>().Key(order).Select();
             if (!metaRowset.IsReady()) {
                 return false;
@@ -324,7 +316,6 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             if (detailsRowset.IsValid()) {
                 entry->SetBody(detailsRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>());
             }
-            // else: metadata present but no body row -> empty body entry.
         }
 
         Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);

@@ -237,9 +237,6 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     StartStopShred();
 
-    // One-shot boot-time safety-net cleanup of any scheme change records
-    // left stranded by a crash mid-ack. No periodic schedule — in steady
-    // state ack/unregister delete records inline.
     Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
@@ -5587,7 +5584,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvUnregisterSubscriber, Handle);
         HFuncTraced(TEvSchemeShard::TEvForceAdvanceSubscriber, Handle);
         HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies, Handle);
-        HFuncTraced(TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup, Handle);
 
         HFuncTraced(TEvPersQueue::TEvOffloadStatus, Handle);
         HFuncTraced(TEvPrivate::TEvContinuousBackupCleanerResult, Handle);

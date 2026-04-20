@@ -2,11 +2,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-// Boot-time safety-net cleanup. Under normal operation ack/unregister
-// delete acked records inline (see TTxAckSchemeChangeRecords), so this tx
-// should find nothing to do on a healthy tablet. Runs exactly once at
-// init as insurance against any record left stranded by a bug in the
-// inline path; no self-rescheduling, no periodic wakeup.
 struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TTxSchemeChangeRecordsCleanup(TSchemeShard* self)
         : TTransactionBase(self)
@@ -14,57 +9,14 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-
-        auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
-        if (!subRowset.IsReady()) {
-            return false;
-        }
-
-        ui64 minOrder = Max<ui64>();
-        bool hasSubscribers = false;
-
-        while (!subRowset.EndOfSet()) {
-            ui64 order = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
-            hasSubscribers = true;
-            minOrder = Min(minOrder, order);
-
-            if (!subRowset.Next()) {
-                return false;
-            }
-        }
-
-        if (!hasSubscribers) {
-            minOrder = Self->NextSchemeChangeOrder;
-        }
-
-        if (minOrder == 0 || minOrder == Max<ui64>()) {
+        const ui64 minOrder = Self->GetMinSubscriberOrder();
+        if (minOrder == 0) {
             return true;
         }
-
-        auto logRowset = db.Table<Schema::SchemeChangeRecords>().Range().Select();
-        if (!logRowset.IsReady()) {
-            return false;
-        }
-
-        while (!logRowset.EndOfSet()) {
-            ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
-            if (order > minOrder) {
-                break;
-            }
-
-            db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
-            db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
-
-            if (!logRowset.Next()) {
-                return false;
-            }
-        }
-
-        return true;
+        return Self->DeleteAckedSchemeChangeRecords(db, 0, minOrder);
     }
 
-    void Complete(const TActorContext&) override {
-    }
+    void Complete(const TActorContext&) override {}
 };
 
 struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -109,8 +61,6 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        // Reactive cleanup: force-advance is the slowest-subscriber-rescue
-        // path, where records most need immediate deletion.
         if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
             return false;
         }
@@ -136,14 +86,6 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxForceAdvanceSubscriber(
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxForceAdvanceSubscriber(ev), ctx);
-}
-
-void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup::TPtr&, const TActorContext& ctx) {
-    HandleWakeupToRunSchemeChangeRecordsCleanup(ctx);
-}
-
-void TSchemeShard::HandleWakeupToRunSchemeChangeRecordsCleanup(const TActorContext& ctx) {
-    Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
 }
 
 } // namespace NKikimr::NSchemeShard

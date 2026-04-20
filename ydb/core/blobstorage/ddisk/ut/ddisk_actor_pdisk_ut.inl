@@ -1,6 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>

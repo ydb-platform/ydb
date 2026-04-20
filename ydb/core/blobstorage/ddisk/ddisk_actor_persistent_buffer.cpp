@@ -458,7 +458,9 @@ namespace NKikimr::NDDisk {
             partOp->SetCookie(opCookie);
             partOp->SetPartCookie(cookie);
             partOp->PrepareWrite(std::move(data), diskOffset, chunkIdx, offset);
+#if defined(__linux__)
             inflightRecord.Span.Event(UringRouter ? "DirectUringOp" : "Send to pdisk");
+#endif
             DirectUringOp(op);
         }
     }

@@ -4083,17 +4083,18 @@ TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& c
     TNodeOnNodeOwnedMap deepClones;
     auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
 
+    TNodeOnNodeOwnedMap replaces;
+    for (size_t i = 0; i < node->ChildrenSize(); i++) {
+        replaces.insert({lambda->Head().Child(i), node->ChildPtr(i)});
+    }
+    lambda = ctx.ReplaceNodes(lambda->TailPtr(), replaces);
+
+    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    auto status = ExpandApplyNoRepeat(lambda, lambda, ctx);
+    YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+
     YQL_CLOG(DEBUG, Core) << "Replace " << node->Content() << " with implementation";
-    return ctx.Builder(node->Pos())
-        .Apply(lambda)
-            .Do([&node](TExprNodeReplaceBuilder& builder) -> TExprNodeReplaceBuilder& {
-                for (size_t i = 0; i < node->ChildrenSize(); i++) {
-                    builder.With(i, node->ChildPtr(i));
-                }
-                return builder;
-            })
-        .Seal()
-        .Build();
+    return lambda;
 }
 
 TExprNode::TPtr MemberOverRenamingFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -5508,41 +5509,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["ListSample"] = map["ListSampleN"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-            YQL_CLOG(DEBUG, Core) << "Handle optional list in " << node->Content();
-            return ctx.Builder(node->Pos())
-                .Callable("Map")
-                    .Add(0, node->Child(0))
-                    .Lambda(1)
-                        .Param("list")
-                        .Callable(node->Content())
-                            .Arg(0, "list")
-                            .Add(1, node->Child(1))
-                            .Add(2, node->Child(2))
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-        }
-
-        if (node->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-            YQL_CLOG(DEBUG, Core) << "Handle optional prob arg in " << node->Content();
-            return ctx.Builder(node->Pos())
-                .Callable("IfPresent")
-                    .Add(0, node->Child(1))
-                    .Lambda(1)
-                        .Param("probArg")
-                        .Callable(node->Content())
-                            .Add(0, node->Child(0))
-                            .Arg(1, "probArg")
-                            .Add(2, node->Child(2))
-                        .Seal()
-                    .Seal()
-                    .Add(2, node->Child(0))
-                .Seal()
-                .Build();
-        }
-
         return ReplaceFuncWithImpl(node, ctx, optCtx);
     };
 

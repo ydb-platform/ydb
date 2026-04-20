@@ -9,6 +9,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -50,30 +51,13 @@ concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
 
-bool IsLocalTableIndex(const Ydb::Table::TableIndex& index) {
-    switch (index.type_case()) {
-        case Ydb::Table::TableIndex::kGlobalIndex:
-        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
-        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
-        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
-        case Ydb::Table::TableIndex::kGlobalJsonIndex:
-        case Ydb::Table::TableIndex::TYPE_NOT_SET:
-            return false;
-        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
-        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
-            return true;
-    }
-}
-
 bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
     if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
         return false;
     }
 
     while (item.NextIndexIdx < item.Table->indexes_size() &&
-           IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx))) {
+           NTableIndex::IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx).type_case())) {
         ++item.NextIndexIdx;
     }
 

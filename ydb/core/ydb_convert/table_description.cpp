@@ -839,24 +839,17 @@ namespace {
 
 template <typename TSettings, typename TProto>
 void FillLocalBloomNgramProto(TProto* ngram, const TSettings& ngramSettings) {
-    const auto derived = NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::BuildDerivedSettings(
-        ngramSettings.has_false_positive_probability()
-            ? ngramSettings.false_positive_probability()
-            : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability,
-        ngramSettings.ngram_size()
-            ? ngramSettings.ngram_size()
-            : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize,
-        ngramSettings.has_case_sensitive()
-            ? ngramSettings.case_sensitive()
-            : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
-    ngram->SetNGrammSize(derived.NgramSize);
-    ngram->SetCaseSensitive(derived.CaseSensitive);
-    ngram->SetFalsePositiveProbability(derived.FalsePositiveProbability);
-    ngram->SetFilterSizeBytes(derived.FilterSizeBytes);
-    ngram->SetHashesCount(derived.HashesCount);
-    // RecordsCount is intentionally not set here: this function is only called for
-    // FPP mode (false_positive_probability). Setting records_count would cause
-    // the index to be misidentified as using the deprecated sizing mode.
+    if (ngramSettings.ngram_size()) {
+        ngram->SetNGrammSize(ngramSettings.ngram_size());
+    }
+
+    if (ngramSettings.has_case_sensitive()) {
+        ngram->SetCaseSensitive(ngramSettings.case_sensitive());
+    }
+
+    if (ngramSettings.has_false_positive_probability()) {
+        ngram->SetFalsePositiveProbability(ngramSettings.false_positive_probability());
+    }
 }
 
 bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc, const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error) {

@@ -2614,16 +2614,23 @@ public:
                         return SyncError();
                     }
 
+                    const auto tableSettingsCount = alterIndexTableSettingsExpr
+                        ? alterIndexTableSettingsExpr.Cast<TCoNameValueTupleList>().Size()
+                        : 0;
+                    const auto indexSettingsCount = alterIndexIndexSettingsExpr
+                        ? alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>().Size()
+                        : 0;
+
                     if (table.Metadata->StoreType == EStoreType::Column) {
-                        if (alterIndexTableSettingsExpr && alterIndexTableSettingsExpr.Cast<TCoNameValueTupleList>().Size() > 0) {
+                        if (tableSettingsCount > 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                "ALTER INDEX with index table settings is not supported for column tables"));
+                                "ALTER INDEX option 'tableSettings' is not supported for column tables; use 'indexSettings'"));
                             return SyncError();
                         }
 
-                        if (!alterIndexIndexSettingsExpr) {
+                        if (indexSettingsCount == 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                "ALTER INDEX for column tables requires index settings"));
+                                "ALTER INDEX for column tables requires non-empty option 'indexSettings'"));
                             return SyncError();
                         }
 
@@ -2778,9 +2785,9 @@ public:
                         }
 
                         alterTableRequest.set_path(std::move(indexTablePaths[0]));
-                        if (alterIndexIndexSettingsExpr && alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>().Size() > 0) {
+                        if (indexSettingsCount > 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                "ALTER INDEX with index settings is not supported for row tables"));
+                                "ALTER INDEX option 'indexSettings' is not supported for row tables; use 'tableSettings'"));
                             return SyncError();
                         }
 

@@ -139,10 +139,9 @@ protected:
             FalsePositiveProbability = hasFpp ? bFilter.GetFalsePositiveProbability()
                                               : TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
                                                     hashesCount, filterSizeBytes, recordsCount);
-        } else if (hasFpp) {
-            FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
         } else {
-            FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+            FalsePositiveProbability = hasFpp ? bFilter.GetFalsePositiveProbability()
+                                              : NDefaults::FalsePositiveProbability;
         }
 
         {

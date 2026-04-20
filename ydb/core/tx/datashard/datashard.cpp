@@ -3625,6 +3625,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         if (ev->Get()->Status != NKikimrProto::OK) {
             StateReportPipe = TActorId();
             ReportState(ctx, State);
+            SendPendingBuildIndexFinalResponses(ctx);
         }
         return;
     }
@@ -3693,6 +3694,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
     if (ev->Get()->ClientId == StateReportPipe) {
         StateReportPipe = TActorId();
         ReportState(ctx, State);
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 

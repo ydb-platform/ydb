@@ -905,7 +905,6 @@ public:
     void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup::TPtr& ev, const TActorContext& ctx);
     void HandleWakeupToRunSchemeChangeRecordsCleanup(const TActorContext& ctx);
-    void ScheduleSchemeChangeRecordsCleanup(const TActorContext& ctx);
     bool CheckSchemeChangeRecordsOverflow(TString& errStr) const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;

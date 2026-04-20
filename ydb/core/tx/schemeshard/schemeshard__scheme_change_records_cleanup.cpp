@@ -2,9 +2,12 @@
 
 namespace NKikimr::NSchemeShard {
 
+// Boot-time safety-net cleanup. Under normal operation ack/unregister
+// delete acked records inline (see TTxAckSchemeChangeRecords), so this tx
+// should find nothing to do on a healthy tablet. Runs exactly once at
+// init as insurance against any record left stranded by a bug in the
+// inline path; no self-rescheduling, no periodic wakeup.
 struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-    bool BatchWasFull = false;
-
     TTxSchemeChangeRecordsCleanup(TSchemeShard* self)
         : TTransactionBase(self)
     {}
@@ -38,9 +41,6 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
             return true;
         }
 
-        ui64 deletedCount = 0;
-        const ui64 maxDeletesPerBatch = 10000;
-
         auto logRowset = db.Table<Schema::SchemeChangeRecords>().Range().Select();
         if (!logRowset.IsReady()) {
             return false;
@@ -51,14 +51,9 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
             if (order > minOrder) {
                 break;
             }
-            if (deletedCount >= maxDeletesPerBatch) {
-                BatchWasFull = true;
-                break;
-            }
 
             db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
             db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
-            ++deletedCount;
 
             if (!logRowset.Next()) {
                 return false;
@@ -68,13 +63,7 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
-        if (BatchWasFull) {
-            ctx.Schedule(TDuration::Seconds(5),
-                new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
-        } else {
-            Self->ScheduleSchemeChangeRecordsCleanup(ctx);
-        }
+    void Complete(const TActorContext&) override {
     }
 };
 
@@ -147,10 +136,6 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsClean
 
 void TSchemeShard::HandleWakeupToRunSchemeChangeRecordsCleanup(const TActorContext& ctx) {
     Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
-}
-
-void TSchemeShard::ScheduleSchemeChangeRecordsCleanup(const TActorContext& ctx) {
-    ctx.Schedule(TDuration::Hours(1), new TEvSchemeShard::TEvWakeupToRunSchemeChangeRecordsCleanup());
 }
 
 } // namespace NKikimr::NSchemeShard

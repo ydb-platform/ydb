@@ -274,7 +274,8 @@ namespace NKikimr::NDDisk {
                 auto& pr = recordIt->second;
                 inflight.DataParts.emplace(partCookie, std::move(ev->Get()->Data));
                 if (inflight.OperationCookies.empty()) {
-                    if (inflight.PartsCount == 0 || inflight.DataParts.size() != inflight.PartsCount) {
+                    if (inflight.PartsCount == 0 || inflight.DataParts.size() != inflight.PartsCount
+                        || inflight.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
                         inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
                         ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
                     } else {
@@ -756,6 +757,15 @@ namespace NKikimr::NDDisk {
             partOp->PrepareWrite(TRope(zeroingData), diskOffset, pr.Sectors[0].ChunkIdx, chunkOffset);
 
             buffer.Size -= pr.Size;
+            for (auto readCookie : pr.ReadInflight) {
+                auto it = PersistentBufferDiskOperationInflight.find(readCookie);
+                if (it != PersistentBufferDiskOperationInflight.end()) {
+                    it->second.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
+                    it->second.ErrorMessage = "Record is erased during read operation inflight";
+                    ReplyReadPersistentBuffer(readCookie);
+                    PersistentBufferDiskOperationInflight.erase(it);
+                }
+            }
             buffer.Records.erase(jt);
             if (buffer.Records.empty()) {
                 PersistentBuffers.erase(it);

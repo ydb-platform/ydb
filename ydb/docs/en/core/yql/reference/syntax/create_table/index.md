@@ -18,7 +18,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
   [, ...],
     INDEX <index_name>
       [GLOBAL]
-      [UNIQUE]
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )

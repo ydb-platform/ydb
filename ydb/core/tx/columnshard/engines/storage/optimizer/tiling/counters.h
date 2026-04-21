@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -49,11 +48,61 @@ public:
     }
 };
 
-class TLevelCounters {
-private:
-    template <typename TPortion>
-    static constexpr bool IsPortionInfoCompatible = std::is_convertible_v<std::shared_ptr<const TPortion>, std::shared_ptr<const NOlap::TPortionInfo>>;
+class TLevelAgents {
+public:
+    const std::shared_ptr<TPortionCategoryCounterAgents> Portions;
 
+    TLevelAgents(const TString& name, NColumnShard::TCommonCountersOwner& baseOwner)
+        : Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, name)) {
+    }
+};
+
+class TGlobalCounters: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+    std::vector<std::shared_ptr<TLevelAgents>> Levels;
+    std::vector<std::shared_ptr<TLevelAgents>> Accumulators;
+    std::shared_ptr<TLevelAgents> LastLevel;
+    std::shared_ptr<TLevelAgents> Tiling;
+
+public:
+    TGlobalCounters()
+        : TBase("TilingCompactionOptimizer") {
+        for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
+            Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
+            Accumulators.emplace_back(std::make_shared<TLevelAgents>("acc=" + ::ToString(i), *this));
+        }
+        LastLevel = std::make_shared<TLevelAgents>("last", *this);
+        Tiling = std::make_shared<TLevelAgents>("tiling", *this);
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildClient(
+        const std::vector<std::shared_ptr<TLevelAgents>>& agentList,
+        const ui32 idx,
+        const TString& debugName)
+    {
+        AFL_VERIFY(idx < agentList.size())("idx", idx)("limit", agentList.size())("type", debugName);
+        return std::make_shared<TPortionCategoryCounters>(*agentList[idx]->Portions);
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildLevelClient(const ui32 levelId) {
+        return BuildClient(Singleton<TGlobalCounters>()->Levels, levelId, "level");
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildAccumulatorClient(const ui32 accId) {
+        return BuildClient(Singleton<TGlobalCounters>()->Accumulators, accId, "accumulator");
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildLastClient() {
+        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->LastLevel->Portions);
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildTilingClient() {
+        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->Tiling->Portions);
+    }
+};
+
+class TLevelCounters {
 public:
     const std::shared_ptr<TPortionCategoryCounters> Portions;
 
@@ -61,82 +110,38 @@ public:
         : Portions(std::move(portions)) {
         AFL_VERIFY(Portions);
     }
-
-    template <typename TPortion>
-    void AddPortion(const std::shared_ptr<const TPortion>& p) const {
-        if constexpr (IsPortionInfoCompatible<TPortion>) {
-            Portions->AddPortion(p);
-        }
-    }
-
-    template <typename TPortion>
-    void RemovePortion(const std::shared_ptr<const TPortion>& p) const {
-        if constexpr (IsPortionInfoCompatible<TPortion>) {
-            Portions->RemovePortion(p);
-        }
-    }
 };
 
-template <typename TPortion>
 class TCounters {
 public:
-    using TLevelCounters = NTiling::TLevelCounters;
+    std::vector<TLevelCounters> Levels;
+    std::vector<TLevelCounters> Accumulators;
+    TLevelCounters LastLevel;
+    TLevelCounters Tiling;
 
-private:
-    class TGlobalCounters: public NColumnShard::TCommonCountersOwner {
-    private:
-        using TBase = NColumnShard::TCommonCountersOwner;
-        THashMap<TString, std::shared_ptr<TPortionCategoryCounterAgents>> Agents;
-        THashMap<TString, std::shared_ptr<TLevelCounters>> Buckets;
-
-        std::shared_ptr<TPortionCategoryCounterAgents> GetBucketAgents(const TString& name) {
-            auto it = Agents.find(name);
-            if (it != Agents.end()) {
-                return it->second;
-            }
-            auto bucket = std::make_shared<TPortionCategoryCounterAgents>(*this, name);
-            Agents.emplace(name, bucket);
-            return bucket;
+    TCounters(): LastLevel(TGlobalCounters::BuildLastClient()), Tiling(TGlobalCounters::BuildTilingClient()) {
+        for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
+            Levels.emplace_back(TGlobalCounters::BuildLevelClient(i));
+            Accumulators.emplace_back(TGlobalCounters::BuildAccumulatorClient(i));
         }
-
-    public:
-        TGlobalCounters()
-            : TBase("TilingCompactionOptimizer") {
-        }
-
-        const TLevelCounters& GetCounter(const TString& name) {
-            auto it = Buckets.find(name);
-            if (it == Buckets.end()) {
-                it = Buckets.emplace(name, std::make_shared<TLevelCounters>(
-                    std::make_shared<TPortionCategoryCounters>(*GetBucketAgents(name)))).first;
-            }
-            return *it->second;
-        }
-    };
-
-public:
-    static const TLevelCounters& GetCounter(const TString& name) {
-        return Singleton<TGlobalCounters>()->GetCounter(name);
     }
 
-    static const TLevelCounters& GetMainCounter() {
-        return GetCounter("tiling");
+    const TLevelCounters& GetLevelCounters(const ui32 levelIdx) const {
+        AFL_VERIFY(levelIdx < Levels.size())("idx", levelIdx)("count", Levels.size());
+        return Levels[levelIdx];
     }
 
-    static const TLevelCounters& GetAccumulatorCounter(const ui32 accIdx = 0) {
-        return GetCounter("acc=" + ::ToString(accIdx));
+    const TLevelCounters& GetAccumulatorCounters(const ui32 accIdx) const {
+        AFL_VERIFY(accIdx < Accumulators.size())("idx", accIdx)("count", Accumulators.size());
+        return Accumulators[accIdx];
     }
 
-    static const TLevelCounters& GetLevelCounter(const ui32 levelIdx) {
-        return GetCounter("level=" + ::ToString(levelIdx));
+    const TLevelCounters& GetLastLevelCounters() const {
+        return LastLevel;
     }
 
-    static const TLevelCounters& GetLastCounter() {
-        return GetCounter("last");
-    }
-
-    static const TLevelCounters& GetMiddleCounter(const ui32 levelIdx) {
-        return GetCounter("middle=" + ::ToString(levelIdx));
+    const TLevelCounters& GetTilingCounters() const {
+        return Tiling;
     }
 };
 

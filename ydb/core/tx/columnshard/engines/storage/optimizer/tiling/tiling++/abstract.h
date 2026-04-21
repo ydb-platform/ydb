@@ -14,7 +14,7 @@ struct CompactionTask {
     ui8 TargetLevel;
 };
 
-template <std::totally_ordered TKey, typename TPortion, typename TCounter>
+template <std::totally_ordered TKey, typename TPortion>
     requires CPortionInfoSlice<TKey, TPortion>
 struct ICompactionUnit {
     using TLevelCounters = NTiling::TLevelCounters;
@@ -26,11 +26,11 @@ struct ICompactionUnit {
     }
 
     virtual void AddPortion(typename TPortion::TConstPtr p) {
-        Counters.AddPortion(p);
+        Counters.Portions->AddPortion(p);
         DoAddPortion(p);
     }
     virtual void RemovePortion(typename TPortion::TConstPtr p) {
-        Counters.RemovePortion(p);
+        Counters.Portions->RemovePortion(p);
         DoRemovePortion(p);
     }
 

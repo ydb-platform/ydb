@@ -213,7 +213,7 @@ public:
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
         , BlobBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Blob/Bytes"))
         , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes"))
-        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders){
+        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders) {
     }
 };
 

@@ -7,15 +7,21 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-template <std::totally_ordered TKey, typename TPortion, typename TCounter>
+/// Owns a single TCounters instance for one tiling compaction graph. Declared as the first base of Tiling so
+/// ICompactionUnit can bind to tiling-level counters while sub-levels share the same TCounters via constructor args.
+struct TTilingCompactionCountersHolder {
+    TCounters Counters;
+};
+
+template <std::totally_ordered TKey, typename TPortion>
     requires CPortionInfoSlice<TKey, TPortion>
-struct Tiling : ICompactionUnit<TKey, TPortion, TCounter> {
-    using TBase = ICompactionUnit<TKey, TPortion, TCounter>;
+struct Tiling : private TTilingCompactionCountersHolder, ICompactionUnit<TKey, TPortion> {
+    using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
 
-    using TAccumulatorSettings = typename Accumulator<TKey, TPortion, TCounter>::AccumulatorSettings;
-    using TLastLevelSettings = typename LastLevel<TKey, TPortion, TCounter>::LastLevelSettings;
-    using TMiddleLevelSettings = typename MiddleLevel<TKey, TPortion, TCounter>::MiddleLevelSettings;
+    using TAccumulatorSettings = typename Accumulator<TKey, TPortion>::AccumulatorSettings;
+    using TLastLevelSettings = typename LastLevel<TKey, TPortion>::LastLevelSettings;
+    using TMiddleLevelSettings = typename MiddleLevel<TKey, TPortion>::MiddleLevelSettings;
 
     struct TilingSettings {
         TAccumulatorSettings AccumulatorSettings;
@@ -38,17 +44,18 @@ struct Tiling : ICompactionUnit<TKey, TPortion, TCounter> {
     }
 
     TilingSettings Settings;
-    Accumulator<TKey, TPortion, TCounter> Accumulator;
-    LastLevel<TKey, TPortion, TCounter> LastLevel;
-    THashMap<ui64, MiddleLevel<TKey, TPortion, TCounter>> MiddleLevels;
+    Accumulator<TKey, TPortion> Accumulator;
+    LastLevel<TKey, TPortion> LastLevel;
+    THashMap<ui64, MiddleLevel<TKey, TPortion>> MiddleLevels;
 
     TIntersectionTree<TKey, ui64> Intersections;
     THashMap<ui64, typename TPortion::TPtr> PortionById;
-    struct TPortionPlacement {
+    /// DEBUG routing snapshot: must match physical home (Accumulator / LastLevel / MiddleLevel) for counter Add/Sub.
+    struct TPortionPlacementForDebug {
         ui8 Level = 0;
         ui64 Width = 0;
     };
-    THashMap<ui64, TPortionPlacement> InternalLevel;
+    THashMap<ui64, TPortionPlacementForDebug> InternalLevelForDebug;
     // NLBuckets::TSimplePortionsGroupInfo PortionsInfo;
 
     void DoActualize() override;

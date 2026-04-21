@@ -6,10 +6,10 @@
 #include <ydb/library/intersection_tree/intersection_tree.h>
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-template <std::totally_ordered TKey, typename TPortion, typename TCounter>
+template <std::totally_ordered TKey, typename TPortion>
     requires CPortionInfoSlice<TKey, TPortion>
-struct LastLevel : ICompactionUnit<TKey, TPortion, TCounter> {
-    using TBase = ICompactionUnit<TKey, TPortion, TCounter>;
+struct LastLevel : ICompactionUnit<TKey, TPortion> {
+    using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     struct LastLevelSettings {
         struct Limit {
@@ -23,7 +23,7 @@ struct LastLevel : ICompactionUnit<TKey, TPortion, TCounter> {
 
     LastLevelSettings Settings;
 
-    LastLevel(LastLevelSettings settings);
+    LastLevel(LastLevelSettings settings, const TCounters& counters);
 
     struct TPortionByIndexKeyEndComparator {
         using is_transparent = void; // Enable heterogeneous lookup
@@ -44,7 +44,7 @@ struct LastLevel : ICompactionUnit<TKey, TPortion, TCounter> {
     using PortionsEndSorted = TSet<typename TPortion::TConstPtr, TPortionByIndexKeyEndComparator>;
     PortionsEndSorted Portions;
     PortionsEndSorted Candidates;
-
+    /// Width (LastLevel.Measure at insert time) for incremental width histogram; paired with DoAdd/DoRemove.
     THashMap<ui64, ui64> WidthByPortionId;
 
     void DoActualize() override;
@@ -54,12 +54,18 @@ struct LastLevel : ICompactionUnit<TKey, TPortion, TCounter> {
     TOptimizationPriority DoGetUsefulMetric() const override;
     std::pair<typename PortionsEndSorted::iterator, typename PortionsEndSorted::iterator> Borders(typename TPortion::TConstPtr p) const;
     ui64 Measure(typename TPortion::TConstPtr p) const;
+
+    /// DEBUG: portion must live here before last-level counters are adjusted.
+    bool HasPortion(typename TPortion::TConstPtr p) const {
+        // Use WidthByPortionId for efficient ID-based lookup instead of set comparator
+        return WidthByPortionId.contains(p->GetPortionId());
+    }
 };
 
-template <std::totally_ordered TKey, typename TPortion, typename TCounter>
+template <std::totally_ordered TKey, typename TPortion>
     requires CPortionInfoSlice<TKey, TPortion>
-struct Accumulator : ICompactionUnit<TKey, TPortion, TCounter> {
-    using TBase = ICompactionUnit<TKey, TPortion, TCounter>;
+struct Accumulator : ICompactionUnit<TKey, TPortion> {
+    using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     struct AccumulatorSettings {
         struct Limit {
@@ -74,7 +80,7 @@ struct Accumulator : ICompactionUnit<TKey, TPortion, TCounter> {
 
     AccumulatorSettings Settings;
 
-    Accumulator(AccumulatorSettings settings, ui32 accIdx = 0);
+    Accumulator(AccumulatorSettings settings, const TCounters& counters);
 
     void DoActualize() override;
     void DoAddPortion(typename TPortion::TConstPtr) override;
@@ -84,12 +90,24 @@ struct Accumulator : ICompactionUnit<TKey, TPortion, TCounter> {
 
     TSet<typename TPortion::TConstPtr> Portions;
     ui64 TotalBlobBytes = 0;
+
+    /// DEBUG: portion must live here before accumulator counters are adjusted.
+    bool HasPortion(typename TPortion::TConstPtr p) const {
+        // Check by portion ID to avoid false positives from pointer comparison
+        const ui64 portionId = p->GetPortionId();
+        for (const auto& existing : Portions) {
+            if (existing->GetPortionId() == portionId) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
-template <std::totally_ordered TKey, typename TPortion, typename TCounter>
+template <std::totally_ordered TKey, typename TPortion>
     requires CPortionInfoSlice<TKey, TPortion>
-struct MiddleLevel : ICompactionUnit<TKey, TPortion, TCounter> {
-    using TBase = ICompactionUnit<TKey, TPortion, TCounter>;
+struct MiddleLevel : ICompactionUnit<TKey, TPortion> {
+    using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     struct MiddleLevelSettings {
         ui64 TriggerHight = 10;
@@ -99,11 +117,31 @@ struct MiddleLevel : ICompactionUnit<TKey, TPortion, TCounter> {
     MiddleLevelSettings Settings;
     ui32 LevelIdx;
 
-    MiddleLevel(MiddleLevelSettings settings, ui32 levelIdx);
+    MiddleLevel(MiddleLevelSettings settings, ui32 levelIdx, const TCounters& counters);
 
     TIntersectionTree<TKey, ui64> Intersections;
     THashMap<ui64, typename TPortion::TConstPtr> PortionById;
+    /// Width at insert time (same value tiling used for routing); paired with AddWidth/RemoveWidth on this bucket.
     THashMap<ui64, ui64> WidthByPortionId;
+
+    void RegisterRoutingWidth(ui64 portionId, ui64 width) {
+        AFL_VERIFY(!WidthByPortionId.contains(portionId))("portion_id", portionId);
+        WidthByPortionId.emplace(portionId, width);
+        this->Counters.Portions->AddWidth(width);
+    }
+
+    void UnregisterRoutingWidth(ui64 portionId) {
+        const auto it = WidthByPortionId.find(portionId);
+        AFL_VERIFY(it != WidthByPortionId.end())("portion_id", portionId);
+        this->Counters.Portions->RemoveWidth(it->second);
+        WidthByPortionId.erase(it);
+    }
+
+    /// DEBUG: portion must be registered here before middle-level counters are adjusted.
+    bool HasPortion(typename TPortion::TConstPtr p) const {
+        const auto it = PortionById.find(p->GetPortionId());
+        return it != PortionById.end() && it->second == p;
+    }
 
     void DoActualize() override;
     void DoAddPortion(typename TPortion::TConstPtr) override;

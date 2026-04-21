@@ -202,10 +202,11 @@ void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorCont
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
     std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "applied_optimizer")("constructor", constructor->GetClassName());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "applied_optimizer")("constructor", constructor->GetClassName())("path_id", PathId);
         return;
     }
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "reset_optimizer")("constructor", constructor->GetClassName());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "reset_optimizer")("constructor", constructor->GetClassName())("path_id", PathId)(
+        "old_optimizer_exists", !!OptimizerPlanner);
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
@@ -216,6 +217,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
         }
         portions.emplace_back(i.second);
     }
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "reset_optimizer_adding_portions")("path_id", PathId)("portions_count", portions.size());
     OptimizerPlanner->ModifyPortions(std::move(portions), {});
 }
 /*

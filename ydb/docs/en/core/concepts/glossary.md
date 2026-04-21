@@ -188,6 +188,9 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
+#### Local Bloom skip index {#local-bloom-skip-index}
+
+**Local Bloom skip index** is a compact value-based filter that speeds up selective queries by allowing the system to skip data chunks that do not contain the requested values. Unlike global [secondary indexes](#secondary-index), it is stored locally in each table shard and does not support composite keys or covering columns. {{ ydb-short-name }} supports the `bloom_filter` and `bloom_ngram_filter` types; their creation and parameters are described in [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom-column).
 
 #### Column family {#column-family}
 

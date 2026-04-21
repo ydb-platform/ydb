@@ -15,6 +15,8 @@
     * `vector_kmeans_tree` — vector index. Described in detail in [{#T}](../create_table/vector_index.md).
     * `fulltext_plain` — basic fulltext index. Described in detail in [{#T}](../create_table/fulltext_index.md).
     * `fulltext_relevance` — fulltext index with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) statistics for relevance scoring. Described in detail in [{#T}](../create_table/fulltext_index.md).
+    * `bloom_filter` — local Bloom skip index. Only `LOCAL` is available. See [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom-column).
+    * `bloom_ngram_filter` — local N-gram Bloom skip index. Only `LOCAL` is available. See [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom-column).
 
 * `<index_columns>` — comma-separated list of column names from the created table that can be used for index searches. Must be specified.
 * `<cover_columns>` — comma-separated list of column names from the created table that will be saved in the index in addition to search columns, providing the ability to get additional data without accessing the table. Empty by default.

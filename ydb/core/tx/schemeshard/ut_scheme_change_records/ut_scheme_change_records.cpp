@@ -773,6 +773,70 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         }
     }
 
+    Y_UNIT_TEST(AckWithLargeBacklogDrainsAcrossMultipleTxs) {
+        // Bounded cleanup: a single Ack tx deletes at most
+        // SchemeChangeCleanupBatchSize rows; the rest drains via a chain
+        // of follow-up TTxSchemeChangeRecordsCleanup txs kicked off from
+        // Complete(). Ack reply must return with correct LastAckedOrder
+        // before the drain completes.
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "backlog:sub", regHandle);
+
+        // Small cap so we can trigger continuation without creating 1000+ records.
+        schemeshard->SchemeChangeCleanupBatchSize = 3;
+
+        constexpr int kRecords = 10;
+        for (int i = 0; i < kRecords; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "B%d"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Find the max order the subscriber needs to ack.
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetch = FetchSchemeChangeRecords(runtime, "backlog:sub", 0, 1000, fetchHandle);
+        UNIT_ASSERT(fetch->Record.EntriesSize() >= kRecords);
+        ui64 latest = 0;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            latest = Max(latest, fetch->Record.GetEntries(i).GetOrder());
+        }
+
+        // Reset the continuation counter right before the ack so we measure
+        // only the chain triggered by the single Ack below.
+        schemeshard->SchemeChangeCleanupTxCount = 0;
+
+        TAutoPtr<IEventHandle> ackHandle;
+        auto* ackRes = AckSchemeChangeRecords(runtime, "backlog:sub", latest, ackHandle);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)ackRes->Record.GetStatus(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ackRes->Record.GetLastAckedOrder(), latest);
+
+        // Drain the continuation chain. Each tx commits synchronously
+        // (SimulateSleep yields the executor) then Complete() may enqueue another.
+        for (int i = 0; i < 50; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        }
+
+        // Ceil(kRecords / batch) continuation txs expected after the ack's
+        // own cleanup exhausted its cap.
+        UNIT_ASSERT_C(schemeshard->SchemeChangeCleanupTxCount >= 3,
+            "Expected >=3 continuation cleanup txs for " << kRecords
+            << " records at batch size 3, got " << schemeshard->SchemeChangeCleanupTxCount);
+    }
+
     Y_UNIT_TEST(PersistsNextSchemeChangeOrderOncePerBatch) {
         // A multi-part DDL must persist the NextSchemeChangeOrder sysparam
         // once for the whole batch, not once per emitted record.

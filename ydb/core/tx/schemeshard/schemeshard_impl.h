@@ -278,11 +278,18 @@ public:
     TLocalPathId NextLocalPathId = 0;
     ui64 NextSchemeChangeOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
+    // Per-tx row cap for DeleteAckedSchemeChangeRecords. Keeps a single
+    // cleanup tx's redo log bounded; leftover work spills into a follow-up
+    // TTxSchemeChangeRecordsCleanup triggered from Complete().
+    ui64 SchemeChangeCleanupBatchSize = 1000;
 
     // Test-only: counts PersistUpdateNextSchemeChangeOrder calls.
     // Used by unit tests to verify that a multi-part DDL persists the
     // NextSchemeChangeOrder sysparam once per batch, not once per record.
     mutable ui64 NextSchemeChangeOrderPersistCount = 0;
+    // Test-only: counts TTxSchemeChangeRecordsCleanup tx Completes.
+    // Used by unit tests to verify the bounded cleanup continuation chain.
+    ui64 SchemeChangeCleanupTxCount = 0;
 
     struct TSubscriberInfo {
         ui64 LastAckedOrder = 0;
@@ -912,7 +919,17 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxSchemeChangeRecordsCleanup();
     NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev);
     void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
-    bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder);
+    // Deletes records with (oldMinOrder, newMinOrder] up to `limit` rows per tx.
+    // Sets `hasMore = true` if the cap was hit with more rows still matching —
+    // the caller should schedule a TTxSchemeChangeRecordsCleanup continuation
+    // from Complete() to drain the rest in bounded follow-up txs.
+    // Returns false if the rowset is not ready (tx will be retried).
+    bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder,
+        ui64 limit, bool& hasMore);
+    // Public wrapper around Execute(CreateTxSchemeChangeRecordsCleanup(), ...)
+    // so that namespace-level tx structs can kick off a continuation tx from
+    // their Complete() without needing protected-member access.
+    void EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx);
     bool CheckSchemeChangeRecordsOverflow(TString& errStr) const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;

@@ -166,6 +166,8 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
 struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr Request;
     THolder<TEvSchemeShard::TEvAckSchemeChangeRecordsResult> Result;
+    bool HasMoreToCleanup = false;
+
     TTxAckSchemeChangeRecords(TSchemeShard* self, TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev)
         : TTransactionBase(self)
         , Request(ev)
@@ -173,6 +175,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        HasMoreToCleanup = false;
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
         const ui64 upToOrder = record.GetUpToOrder();
@@ -211,9 +214,11 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        // Reactive cleanup: delete records that just became stale, in the
-        // same tx. Background cleanup only runs at tablet boot.
-        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
+        // Reactive cleanup: delete records that just became stale in the same
+        // tx, up to SchemeChangeCleanupBatchSize rows. If more remain, drain
+        // them via a TTxSchemeChangeRecordsCleanup chain triggered below.
+        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(),
+                Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
             return false;
         }
 
@@ -225,12 +230,16 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
+        if (HasMoreToCleanup) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
     }
 };
 
 struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvUnregisterSubscriber::TPtr Request;
     THolder<TEvSchemeShard::TEvUnregisterSubscriberResult> Result;
+    bool HasMoreToCleanup = false;
 
     TTxUnregisterSubscriber(TSchemeShard* self, TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev)
         : TTransactionBase(self)
@@ -239,6 +248,7 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        HasMoreToCleanup = false;
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
 
@@ -260,7 +270,8 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Delete();
         Self->Subscribers.erase(subscriberId);
 
-        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
+        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(),
+                Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
             return false;
         }
 
@@ -271,6 +282,9 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
+        if (HasMoreToCleanup) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
     }
 };
 

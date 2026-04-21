@@ -12,6 +12,10 @@ ui64 TSchemeShard::AllocateSchemeChangeOrderInMemory() {
     return ++NextSchemeChangeOrder;
 }
 
+void TSchemeShard::EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx) {
+    Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
+}
+
 void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry) {
     using T = Schema::SchemeChangeRecords;
     db.Table<T>().Key(entry.Order).Update(
@@ -35,7 +39,9 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
     }
 }
 
-bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder) {
+bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder,
+        ui64 limit, bool& hasMore) {
+    hasMore = false;
     if (newMinOrder <= oldMinOrder) {
         return true;
     }
@@ -45,13 +51,19 @@ bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldM
     if (!logRowset.IsReady()) {
         return false;
     }
+    ui64 deleted = 0;
     while (!logRowset.EndOfSet()) {
         ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
         if (order > newMinOrder) {
             break;
         }
+        if (deleted >= limit) {
+            hasMore = true;
+            break;
+        }
         db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
         db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
+        ++deleted;
         if (!logRowset.Next()) {
             return false;
         }

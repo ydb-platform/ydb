@@ -3,25 +3,35 @@
 namespace NKikimr::NSchemeShard {
 
 struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    bool HasMoreToCleanup = false;
+
     TTxSchemeChangeRecordsCleanup(TSchemeShard* self)
         : TTransactionBase(self)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        HasMoreToCleanup = false;
         NIceDb::TNiceDb db(txc.DB);
         const ui64 minOrder = Self->GetMinSubscriberOrder();
         if (minOrder == 0) {
             return true;
         }
-        return Self->DeleteAckedSchemeChangeRecords(db, 0, minOrder);
+        return Self->DeleteAckedSchemeChangeRecords(db, 0, minOrder,
+            Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup);
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext& ctx) override {
+        ++Self->SchemeChangeCleanupTxCount;
+        if (HasMoreToCleanup) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
+    }
 };
 
 struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr Request;
     THolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult> Result;
+    bool HasMoreToCleanup = false;
 
     TTxForceAdvanceSubscriber(TSchemeShard* self, TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev)
         : TTransactionBase(self)
@@ -30,6 +40,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        HasMoreToCleanup = false;
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
 
@@ -61,7 +72,8 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder())) {
+        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(),
+                Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
             return false;
         }
 
@@ -73,6 +85,9 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Request->Sender, Result.Release());
+        if (HasMoreToCleanup) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
     }
 };
 

@@ -149,6 +149,8 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
         }
 
         const bool postpone = InFlightCost + item.Cost > WindowSize && InFlightCount();
+        // const bool postpone = InFlightCost + item.Cost > WindowSize && InFlightCount();
+        // const bool postpone = InFlightCost + item.Cost > WindowSize && InFlightCount();
 
         auto getTypeName = [&]() -> TString {
             switch (item.Event.GetType()) {

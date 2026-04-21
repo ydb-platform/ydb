@@ -16,6 +16,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     enum {
         EvQueueWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvRequestReadiness,
+        EvPostponedPump,
     };
 
     struct TEvQueueWatchdog : TEventLocal<TEvQueueWatchdog, EvQueueWatchdog> {};
@@ -27,6 +28,8 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
             : Cookie(cookie)
         {}
     };
+
+    struct TEvPostponedPump : TEventLocal<TEvPostponedPump, EvPostponedPump> {};
 
     TBSProxyContextPtr BSProxyCtx;
     TString LogPrefix;
@@ -74,6 +77,9 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
 
     bool ExtraBlockChecksSupport = false;
     bool Checksumming = false;
+    bool PostponePump = false;
+
+    TControlWrapper EnablePostponedPumpMs;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -99,6 +105,7 @@ public:
         , Info(info)
         , GType(info->Type)
         , ReconnectTimeoutManager(MinimumReconnectTimeout, ReconnectTimeoutPerRequest)
+        , EnablePostponedPumpMs(200, 0, 60'000)
     {
         Y_ABORT_UNLESS(Info);
     }
@@ -113,6 +120,7 @@ public:
         RequestReadiness(nullptr, ctx);
         UpdateRequestTrackingStats(ctx);
         Become(&TThis::StateFuncWrapper);
+        TControlBoard::RegisterSharedControl(EnablePostponedPumpMs, icb->DSProxyControls.EnablePostponedPumpMs);
     }
 
 private:
@@ -421,7 +429,14 @@ private:
                     }
 
                     Queue.Unwind(msgId, sequenceId, expectedMsgId, expectedSequenceId);
-                    Pump(ctx);
+                    ui64 postponeMs = EnablePostponedPumpMs;
+                    if (postponeMs && Info && Info->GetDeviceType() == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
+                        if (!std::exchange(PostponePump, true)) {
+                            Schedule(TDuration::MilliSeconds(postponeMs), new TEvPostponedPump);
+                        }
+                    } else {
+                        Pump(ctx);
+                    }
                     return;
                 }
 
@@ -892,6 +907,11 @@ private:
         UpdateWatchdogStatus(this->ActorContext());
     }
 
+    void HandlePostponedPump(const TActorContext& ctx) {
+        Pump(ctx);
+        PostponePump = false;
+    }
+
 #if BSQUEUE_EVENT_COUNTERS
 
 #define DEFINE_EVENTS(XX) \
@@ -1007,6 +1027,8 @@ private:
             HFunc(TEvVGenerationChange, HandleGenerationChange)
 
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
+
+            CFunc(TEvPostponedPump::EventType, HandlePostponedPump);
 
             default:
                 Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);

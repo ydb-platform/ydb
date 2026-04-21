@@ -18,7 +18,7 @@ public:
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
         , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height"))
-        , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::TimeBordersMicroseconds) {
+        , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders) {
     }
 };
 

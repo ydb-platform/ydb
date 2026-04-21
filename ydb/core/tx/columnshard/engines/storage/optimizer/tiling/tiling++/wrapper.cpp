@@ -5,7 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling_impl.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -194,240 +194,12 @@ struct TPlannerSettings {
     }
 };
 
-TCoreTiling::TilingSettings MakeCoreSettings(const TPlannerSettings& s) {
-    TCoreTiling::TilingSettings ts;
-    ts.AccumulatorSettings = s.MakeAccumulatorSettings();
-    ts.LastLevelSettings = s.MakeLastLevelSettings();
-    ts.MiddleLevelSettings = s.MakeMiddleLevelSettings();
-    ts.AccumulatorPortionSizeLimit = s.AccumulatorPortionSizeLimit;
-    ts.K = s.K;
-    ts.MiddleLevelCount = TILING_LAYERS_COUNT;
-    return ts;
-}
-
-/// DEBUG: catch bad ModifyPortions batches before Core mutates counters / InternalLevelForDebug.
-void DebugVerifyTilingCoreModifyBatch(
-    const std::vector<std::shared_ptr<TPortionInfo>>& add,
-    const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-    for (const auto& p : remove) {
-        AFL_VERIFY(!!p)("msg", "tiling++ DoModifyPortions: null shared_ptr in remove");
-    }
-    for (const auto& p : add) {
-        AFL_VERIFY(!!p)("msg", "tiling++ DoModifyPortions: null shared_ptr in add");
-    }
-    THashSet<ui64> removeIds;
-    removeIds.reserve(remove.size());
-    for (const auto& p : remove) {
-        const ui64 id = p->GetPortionId();
-        if (removeIds.contains(id)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "msg", "tiling++ DoModifyPortions: duplicate portion_id in remove (second remove would skew counters)")(
-                "portion_id", id)("produced", static_cast<ui32>(p->GetProduced()));
-        }
-        AFL_VERIFY(!removeIds.contains(id))("portion_id", id)("msg", "tiling++ duplicate portion_id in remove");
-        removeIds.insert(id);
-    }
-    THashSet<ui64> addIds;
-    addIds.reserve(add.size());
-    for (const auto& p : add) {
-        const ui64 id = p->GetPortionId();
-        if (addIds.contains(id)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "msg", "tiling++ DoModifyPortions: duplicate portion_id in add (double Add would skew counters)")(
-                "portion_id", id)("produced", static_cast<ui32>(p->GetProduced()));
-        }
-        AFL_VERIFY(!addIds.contains(id))("portion_id", id)("msg", "tiling++ duplicate portion_id in add");
-        addIds.insert(id);
-    }
-}
-
-/// DEBUG: portion must live in exactly one sub-level; `stored_*` comes from InternalLevelForDebug.
-void TilingCoreDebugVerifyPortionHome(
-    const TCoreTiling& core,
-    TPortionInfo::TConstPtr p,
-    ui8 storedLevel,
-    ui64 storedWidth,
-    bool onRemove) {
-    const bool inAcc = core.Accumulator.HasPortion(p);
-    const bool inLast = core.LastLevel.HasPortion(p);
-    ui32 middleHits = 0;
-    ui64 middleKey = 0;
-    for (const auto& [k, ml] : core.MiddleLevels) {
-        if (ml.HasPortion(p)) {
-            ++middleHits;
-            middleKey = k;
-        }
-    }
-    const ui32 homes = static_cast<ui32>(inAcc) + static_cast<ui32>(inLast) + middleHits;
-    const ui32 produced = static_cast<ui32>(p->GetProduced());
-    if (homes != 1) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-            "msg", "tiling++: portion must live in exactly one sub-level")(
-            "on_remove", onRemove)("portion_id", p->GetPortionId())("produced", produced)(
-            "stored_level", (ui32)storedLevel)("stored_width", storedWidth)(
-            "in_accumulator", inAcc)("in_last", inLast)("middle_hits", middleHits);
-    }
-    AFL_VERIFY(homes == 1)("portion_id", p->GetPortionId())("stored_level", storedLevel)("produced", produced);
-
-    if (storedLevel == 0) {
-        if (!(inAcc && !inLast && !middleHits)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "msg", "tiling++: stored_level=accumulator but physical placement disagrees")(
-                "on_remove", onRemove)("portion_id", p->GetPortionId())("produced", produced)(
-                "in_accumulator", inAcc)("in_last", inLast)("middle_hits", middleHits);
-        }
-        AFL_VERIFY(inAcc)("portion_id", p->GetPortionId())("stored_level", storedLevel)("produced", produced);
-        AFL_VERIFY(!inLast)("portion_id", p->GetPortionId())("produced", produced);
-        AFL_VERIFY(!middleHits)("portion_id", p->GetPortionId())("produced", produced);
-    } else if (storedLevel == 1) {
-        if (!(inLast && !inAcc && !middleHits)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "msg", "tiling++: stored_level=last but physical placement disagrees")(
-                "on_remove", onRemove)("portion_id", p->GetPortionId())("produced", produced)(
-                "in_accumulator", inAcc)("in_last", inLast)("middle_hits", middleHits);
-        }
-        AFL_VERIFY(inLast)("portion_id", p->GetPortionId())("stored_level", storedLevel)("produced", produced);
-        AFL_VERIFY(!inAcc)("portion_id", p->GetPortionId())("produced", produced);
-        AFL_VERIFY(!middleHits)("portion_id", p->GetPortionId())("produced", produced);
-    } else {
-        if (!(middleHits == 1 && middleKey == storedLevel && !inAcc && !inLast)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "msg", "tiling++: stored_level=middle but physical placement disagrees")(
-                "on_remove", onRemove)("portion_id", p->GetPortionId())("produced", produced)(
-                "stored_level", (ui32)storedLevel)("physical_middle", middleKey)(
-                "in_accumulator", inAcc)("in_last", inLast)("middle_hits", middleHits);
-        }
-        AFL_VERIFY(middleHits == 1)("portion_id", p->GetPortionId())("stored_level", storedLevel)("produced", produced);
-        AFL_VERIFY(middleKey == storedLevel)("portion_id", p->GetPortionId())(
-            "stored_level", (ui32)storedLevel)("physical_middle", middleKey)("produced", produced);
-        AFL_VERIFY(!inAcc)("portion_id", p->GetPortionId())("produced", produced);
-        AFL_VERIFY(!inLast)("portion_id", p->GetPortionId())("produced", produced);
-    }
-}
 
 } // namespace
 
-/// IOptimizerPlanner that delegates routing and task selection to Tiling (tiling.cpp).
-class TOptimizerPlannerCoreTiling: public IOptimizerPlanner {
-public:
-    TOptimizerPlannerCoreTiling(
-        const TInternalPathId pathId,
-        const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
-        const TPlannerSettings& settings)
-        : IOptimizerPlanner(pathId, std::nullopt)
-        , Core(MakeCoreSettings(settings))
-        , StoragesManager(storagesManager)
-        , PrimaryKeysSchema(primaryKeysSchema)
-        , Settings(settings) {
-        AFL_VERIFY(StoragesManager);
-        Y_UNUSED(PrimaryKeysSchema);
-    }
-
-    TOptimizationPriority DoGetUsefulMetric() const override {
-        return Core.DoGetUsefulMetric();
-    }
-
-    bool DoIsOverloaded() const override {
-        return DoGetUsefulMetric().IsCritical();
-    }
-
+class TTilingOptimizerPlannerConstructor: public IOptimizerPlannerConstructor {
 private:
-    TCoreTiling Core;
-    std::shared_ptr<IStoragesManager> StoragesManager;
-    std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
-    TPlannerSettings Settings;
-
-    void DoModifyPortions(
-        const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override {
-        DebugVerifyTilingCoreModifyBatch(add, remove);
-        for (const auto& p : remove) {
-            const ui64 portionId = p->GetPortionId();
-            const auto lit = Core.InternalLevelForDebug.find(portionId);
-            if (lit == Core.InternalLevelForDebug.end()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                    "event", "tiling++_portion_remove")("phase", "before_core_remove")(
-                    "problem", "portion_id_missing_from_InternalLevelForDebug")("portion_id", portionId)(
-                    "produced", static_cast<ui32>(p->GetProduced()));
-                AFL_VERIFY(false)("reason", "Remove unknown portion");
-            }
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "event", "tiling++_portion_remove")("phase", "before_core_remove")("portion_id", portionId)(
-                "produced", static_cast<ui32>(p->GetProduced()))("level", (ui32)lit->second.Level)(
-                "width", lit->second.Width);
-            TilingCoreDebugVerifyPortionHome(Core, p, lit->second.Level, lit->second.Width, true);
-            Core.RemovePortion(p);
-        }
-        for (const auto& p : add) {
-            const ui64 portionId = p->GetPortionId();
-            const auto existingIt = Core.InternalLevelForDebug.find(portionId);
-            if (existingIt != Core.InternalLevelForDebug.end()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                    "event", "tiling++_portion_add")("phase", "before_core_add")(
-                    "problem", "portion_already_exists_in_optimizer")("portion_id", portionId)(
-                    "produced", static_cast<ui32>(p->GetProduced()))(
-                    "existing_level", (ui32)existingIt->second.Level)("existing_width", existingIt->second.Width)(
-                    "blob_bytes", p->GetTotalBlobBytes())(
-                    "in_accumulator", Core.Accumulator.HasPortion(p))(
-                    "in_last", Core.LastLevel.HasPortion(p));
-            }
-            Core.AddPortion(p);
-            const auto& placed = Core.InternalLevelForDebug.at(p->GetPortionId());
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "event", "tiling++_portion_add")("phase", "after_core_add")("portion_id", p->GetPortionId())(
-                "produced", static_cast<ui32>(p->GetProduced()))("level", (ui32)placed.Level)("width", placed.Width)(
-                "blob_bytes", p->GetTotalBlobBytes());
-            TilingCoreDebugVerifyPortionHome(Core, p, placed.Level, placed.Width, false);
-        }
-        Core.DoActualize();
-    }
-
-    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
-        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
-
-        const auto isLocked = [dataLocksManager](TPortionInfo::TConstPtr p) -> bool {
-            return dataLocksManager &&
-                dataLocksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction).has_value();
-        };
-
-        const auto tasks = Core.GetOptimizationTasks(isLocked);
-        if (tasks.empty()) {
-            return {};
-        }
-        const auto& task = tasks.front();
-
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task.Portions, TSaverContext(StoragesManager));
-        result->SetTargetCompactionLevel(task.TargetLevel);
-        result->SetPortionExpectedSize(Settings.PortionExpectedSize);
-        return {result};
-    }
-
-    void DoActualize(const TInstant /*currentInstant*/) override {
-    }
-
-    NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
-        return {};
-    }
-
-    std::vector<TTaskDescription> DoGetTasksDescription() const override {
-        return {};
-    }
-};
-
-class TOptimizerPlannerCoreTilingConstructor: public IOptimizerPlannerConstructor {
-public:
-    static TString GetClassNameStatic() {
-        return "tiling++";
-    }
-
-    TString GetClassName() const override {
-        return GetClassNameStatic();
-    }
-
-private:
-    static inline const TFactory::TRegistrator<TOptimizerPlannerCoreTilingConstructor> Registrator =
-        TFactory::TRegistrator<TOptimizerPlannerCoreTilingConstructor>(GetClassNameStatic());
-
+    using TBase = IOptimizerPlannerConstructor;
     TPlannerSettings Settings;
 
     void DoSerializeToProto(TProto& proto) const override {
@@ -436,13 +208,12 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            return true;
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")("proto", proto.DebugString());
+            return false;
         }
-        const auto status = Settings.DeserializeFromProto(proto.GetTiling());
+        auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "error", "cannot parse tiling-core compaction optimizer from proto")(
-                "description", status.GetErrorDescription());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")("description", status.GetErrorDescription());
             return false;
         }
         return true;
@@ -452,13 +223,29 @@ private:
         return Settings.DeserializeFromJson(jsonInfo);
     }
 
-    bool DoApplyToCurrentObject(IOptimizerPlanner& /*current*/) const override {
+    bool DoApplyToCurrentObject(IOptimizerPlanner& current) const override {
+        Y_UNUSED(current);
         return false;
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        return std::make_shared<TOptimizerPlannerCoreTiling>(
-            context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
+        Y_UNUSED(context);
+        return TConclusionStatus::Fail("tiling++ planner constructor is not implemented");
+    }
+
+public:
+    static TString GetClassNameStatic() {
+        return "TILING";
+    }
+
+private:
+    static inline const TFactory::TRegistrator<TTilingOptimizerPlannerConstructor> Registrator =
+        TFactory::TRegistrator<TTilingOptimizerPlannerConstructor>(GetClassNameStatic());
+
+public:
+
+    TString GetClassName() const override {
+        return GetClassNameStatic();
     }
 };
 

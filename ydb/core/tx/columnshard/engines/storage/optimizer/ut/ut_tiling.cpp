@@ -2,8 +2,7 @@
 
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/levels_impl.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling_impl.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
@@ -66,11 +65,10 @@ struct TTestPortion {
     }
 };
 
-using TTestCounters = TCounters<TTestPortion>;
-using TTestAccumulator = Accumulator<ui64, TTestPortion, TTestCounters>;
-using TTestLastLevel = LastLevel<ui64, TTestPortion, TTestCounters>;
-using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion, TTestCounters>;
-using TTestTiling = Tiling<ui64, TTestPortion, TTestCounters>;
+using TTestAccumulator = Accumulator<ui64, TTestPortion>;
+using TTestLastLevel = LastLevel<ui64, TTestPortion>;
+using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
+using TTestTiling = Tiling<ui64, TTestPortion>;
 
 TTestPortion::TConstPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);
@@ -96,7 +94,8 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.Overload.Bytes = 1000;
         settings.Overload.Portions = 1000;
 
-        TTestAccumulator accumulator(settings);
+        TCounters counters;
+        TTestAccumulator accumulator(settings, counters);
         const auto p1 = MakePortion(1, 10, 20, 60);
         const auto p2 = MakePortion(2, 30, 40, 60);
         const auto p3 = MakePortion(3, 50, 60, 60);
@@ -118,10 +117,15 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.TriggerHight = 2;
         settings.OverloadHight = 4;
 
-        TTestMiddleLevel middle(settings, 2);
+        TCounters counters;
+        TTestMiddleLevel middle(settings, 2, counters);
+        middle.RegisterRoutingWidth(1, 1);
         middle.AddPortion(MakePortion(1, 0, 10, 1000));
+        middle.RegisterRoutingWidth(2, 1);
         middle.AddPortion(MakePortion(2, 5, 15, 1000));
+        middle.RegisterRoutingWidth(3, 1);
         middle.AddPortion(MakePortion(3, 7, 12, 1000));
+        middle.RegisterRoutingWidth(4, 1);
         middle.AddPortion(MakePortion(4, 20, 30, 1000));
 
         const auto tasks = middle.GetOptimizationTasks(NeverLocked());
@@ -145,7 +149,8 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.Compaction.Portions = 10;
         settings.CandidatePortionsOverload = 3;
 
-        TTestLastLevel lastLevel(settings);
+        TCounters counters;
+        TTestLastLevel lastLevel(settings, counters);
         lastLevel.AddPortion(MakePortion(1, 0, 10, 100));
         lastLevel.AddPortion(MakePortion(2, 20, 30, 100));
         lastLevel.AddPortion(MakePortion(3, 5, 25, 100));

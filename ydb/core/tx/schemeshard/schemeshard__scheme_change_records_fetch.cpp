@@ -297,24 +297,73 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             return true;
         }
 
-        for (ui64 order : record.GetOrders()) {
-            auto metaRowset = db.Table<Schema::SchemeChangeRecords>().Key(order).Select();
+        const auto& requestedOrders = record.GetOrders();
+        if (requestedOrders.empty()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
+            return true;
+        }
+
+        THashSet<ui64> requestedSet(requestedOrders.begin(), requestedOrders.end());
+        ui64 minOrder = Max<ui64>();
+        ui64 maxOrder = 0;
+        for (ui64 o : requestedSet) {
+            minOrder = Min(minOrder, o);
+            maxOrder = Max(maxOrder, o);
+        }
+
+        // Single range scan on metadata, filter by requested set.
+        THashSet<ui64> metaExisting;
+        {
+            auto metaRowset = db.Table<Schema::SchemeChangeRecords>()
+                .GreaterOrEqual(minOrder)
+                .LessOrEqual(maxOrder)
+                .Select();
             if (!metaRowset.IsReady()) {
                 return false;
             }
-            if (!metaRowset.IsValid()) {
-                continue;
+            while (!metaRowset.EndOfSet()) {
+                ui64 order = metaRowset.GetValue<Schema::SchemeChangeRecords::Order>();
+                if (requestedSet.contains(order)) {
+                    metaExisting.insert(order);
+                }
+                if (!metaRowset.Next()) {
+                    return false;
+                }
             }
+        }
 
-            auto detailsRowset = db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Select();
-            if (!detailsRowset.IsReady()) {
+        // Single range scan on bodies, filter by existing set.
+        THashMap<ui64, TString> bodyByOrder;
+        if (!metaExisting.empty()) {
+            auto bodyRowset = db.Table<Schema::SchemeChangeRecordDetails>()
+                .GreaterOrEqual(minOrder)
+                .LessOrEqual(maxOrder)
+                .Select();
+            if (!bodyRowset.IsReady()) {
                 return false;
             }
+            while (!bodyRowset.EndOfSet()) {
+                ui64 order = bodyRowset.GetValue<Schema::SchemeChangeRecordDetails::Order>();
+                if (metaExisting.contains(order)) {
+                    bodyByOrder.emplace(order, bodyRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>());
+                }
+                if (!bodyRowset.Next()) {
+                    return false;
+                }
+            }
+        }
 
+        // Emit one entry per requested occurrence (preserving order and duplicates)
+        // for orders whose metadata exists. Body is empty when details row is absent.
+        for (ui64 order : requestedOrders) {
+            if (!metaExisting.contains(order)) {
+                continue;
+            }
             auto* entry = Result->Record.AddEntries();
             entry->SetOrder(order);
-            if (detailsRowset.IsValid()) {
-                entry->SetBody(detailsRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>());
+            auto it = bodyByOrder.find(order);
+            if (it != bodyByOrder.end()) {
+                entry->SetBody(it->second);
             }
         }
 

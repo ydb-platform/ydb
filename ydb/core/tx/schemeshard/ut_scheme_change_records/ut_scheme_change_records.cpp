@@ -722,4 +722,99 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_C(haveCreateTableBody, "At least one record must have CreateTable body");
         UNIT_ASSERT_C(haveCreateIndexBody, "At least one record must have CreateTableIndex body");
     }
+
+    Y_UNIT_TEST(FetchBodiesReturnsOnlyRequestedSparseOrders) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "bodies:sub", regHandle);
+
+        for (int i = 1; i <= 10; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table%d"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetch = FetchSchemeChangeRecords(runtime, "bodies:sub", 0, 1000, fetchHandle);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fetch->Record.GetStatus(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.EntriesSize(), 10u);
+
+        TVector<ui64> allOrders;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            allOrders.push_back(fetch->Record.GetEntries(i).GetOrder());
+        }
+
+        // Sparse subset: 2nd, 5th, 8th of 10 — spans the full range
+        TVector<ui64> requested = {allOrders[1], allOrders[4], allOrders[7]};
+
+        TAutoPtr<IEventHandle> bodiesHandle;
+        auto* bodies = FetchSchemeChangeRecordBodies(runtime, "bodies:sub", requested, bodiesHandle);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)bodies->Record.GetStatus(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(bodies->Record.EntriesSize(), requested.size());
+
+        THashSet<ui64> requestedSet(requested.begin(), requested.end());
+        for (size_t i = 0; i < static_cast<size_t>(bodies->Record.EntriesSize()); ++i) {
+            const auto& e = bodies->Record.GetEntries(i);
+            UNIT_ASSERT_C(requestedSet.contains(e.GetOrder()),
+                "FetchBodies returned unrequested order " << e.GetOrder());
+            UNIT_ASSERT_C(!e.GetBody().empty(),
+                "FetchBodies returned empty body for order " << e.GetOrder());
+            NKikimrSchemeOp::TModifyScheme body;
+            UNIT_ASSERT(body.ParseFromString(e.GetBody()));
+            UNIT_ASSERT_VALUES_EQUAL((ui32)body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpCreateTable);
+        }
+    }
+
+    Y_UNIT_TEST(FetchBodiesUnorderedAndDuplicateRequestedOrdersHandled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "bodies:sub2", regHandle);
+
+        for (int i = 1; i <= 5; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "T%d"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetch = FetchSchemeChangeRecords(runtime, "bodies:sub2", 0, 1000, fetchHandle);
+        UNIT_ASSERT_VALUES_EQUAL(fetch->Record.EntriesSize(), 5u);
+
+        TVector<ui64> all;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            all.push_back(fetch->Record.GetEntries(i).GetOrder());
+        }
+
+        // Unordered + duplicate + missing (order beyond NextSchemeChangeOrder)
+        TVector<ui64> requested = {all[3], all[0], all[3], all[2]};
+
+        TAutoPtr<IEventHandle> bodiesHandle;
+        auto* bodies = FetchSchemeChangeRecordBodies(runtime, "bodies:sub2", requested, bodiesHandle);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)bodies->Record.GetStatus(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
+
+        THashSet<ui64> returned;
+        for (size_t i = 0; i < static_cast<size_t>(bodies->Record.EntriesSize()); ++i) {
+            returned.insert(bodies->Record.GetEntries(i).GetOrder());
+        }
+        // Dedup expected: each requested order returned at most once
+        UNIT_ASSERT_C(returned.contains(all[0]), "order " << all[0] << " missing");
+        UNIT_ASSERT_C(returned.contains(all[2]), "order " << all[2] << " missing");
+        UNIT_ASSERT_C(returned.contains(all[3]), "order " << all[3] << " missing");
+        UNIT_ASSERT_VALUES_EQUAL(returned.size(), 3u);
+    }
 }

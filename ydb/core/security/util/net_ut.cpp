@@ -178,7 +178,6 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[127.0.0.1]:8080"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:999999"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:65536"));
-        UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[127.0.0.1]:8080"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:256.1.1.1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:port"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:invalid"));

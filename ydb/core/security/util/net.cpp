@@ -7,6 +7,7 @@
 #include <util/network/address.h>
 #include <util/network/ip.h>
 
+#include <functional>
 #include <tuple>
 
 namespace NKikimr::NSecurity {
@@ -50,7 +51,7 @@ TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
         }
     };
 
-    // ipv6:<ipv6> / ipv6:[<ipv6>]:<port>
+    // ipv6:<ipv6> / ipv6:[<ipv6>] / ipv6:[<ipv6>]:<port>
     if (peername.SkipPrefix(IPV6_PREFIX)) {
         return std::invoke(parsePeername, peername, TIpv6Address::TIpType::Ipv6);
     }
@@ -60,7 +61,7 @@ TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
         return std::invoke(parsePeername, peername, TIpv6Address::TIpType::Ipv4);
     }
 
-    // <ipv6> / [ipv6] / [<ipv6>]:<port> / <ipv4> / <ipv4>:<port>
+    // <ipv6> / [<ipv6>] / [<ipv6>]:<port> / <ipv4> / <ipv4>:<port>
     return std::invoke(parsePeername, peername, Nothing());
 }
 

@@ -3372,10 +3372,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvInitiateTabletExternalBoot(tabletId));
 
             TAutoPtr<IEventHandle> handle;
-            auto* result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle);
+            auto* result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle, TDuration::Seconds(1));
             UNIT_ASSERT(result);
         }
-
         {
             const auto tabletInfo = getTabletInfo(tabletId);
             UNIT_ASSERT_VALUES_EQUAL(
@@ -3389,13 +3388,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.DispatchEvents();
 
         {
-            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvInitiateTabletExternalBoot(tabletId));
+            while (1) {
+                runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvInitiateTabletExternalBoot(tabletId));
 
-            TAutoPtr<IEventHandle> handle;
-            auto* result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle);
-            UNIT_ASSERT(result);
+                TAutoPtr<IEventHandle> handle;
+                runtime.GrabEdgeEventsRethrow<TEvHive::TEvBootTabletReply, TEvLocal::TEvBootTablet>(handle, TDuration::Seconds(1));
+                if (handle->GetTypeRewrite() == TEvLocal::TEvBootTablet::EventType) {
+                    break;
+                }
+            }
         }
-
         {
             const auto tabletInfo = getTabletInfo(tabletId);
             Cerr << tabletInfo.ShortDebugString() << Endl;
@@ -3407,7 +3409,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvInitiateTabletExternalBoot(tabletId));
 
             TAutoPtr<IEventHandle> handle;
-            auto* result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle);
+            auto* result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(handle, TDuration::Seconds(1));
             UNIT_ASSERT(result);
         }
         {

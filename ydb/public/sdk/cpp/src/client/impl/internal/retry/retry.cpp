@@ -28,8 +28,10 @@ TBackoffDuration CalcBackoffTime(const TBackoffSettings& settings, std::uint32_t
 
 }
 
-void Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber) {
-    std::this_thread::sleep_for(CalcBackoffTime(settings, retryNumber));
+TDuration Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber) {
+    const auto duration = CalcBackoffTime(settings, retryNumber);
+    std::this_thread::sleep_for(duration);
+    return TDuration::MicroSeconds(static_cast<ui64>(duration.count()));
 }
 
 void AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,

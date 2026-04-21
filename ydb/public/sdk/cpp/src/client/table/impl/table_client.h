@@ -157,6 +157,9 @@ public:
     void CollectRetryStatAsync(EStatus status);
     void CollectRetryStatSync(EStatus status);
 
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryRootSpan();
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(std::uint32_t attempt, std::int64_t backoffMs);
+
 public:
     TClientSettings Settings_;
 
@@ -241,7 +244,7 @@ private:
         auto promise = NewPromise<TDataQueryResult>();
         bool keepInCache = settings.KeepInQueryCache_ && settings.KeepInQueryCache_.value();
 
-        auto obs = MakeObservation("ExecuteDataQuery");
+        auto obs = MakeObservation("ydb.ExecuteDataQuery");
 
         // We don't want to delay call of TSession dtor, so we can't capture it by copy
         // otherwise we break session pool and other clients logic.
@@ -288,6 +291,7 @@ private:
                     sessionPtr->SessionImpl_->AddQueryToCache(*dataQuery);
                 }
 
+                obs->SetPeerEndpoint(status.Endpoint);
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
                     std::move(res), tx, dataQuery, fromCache, queryStats);
 
@@ -347,9 +351,7 @@ private:
             &OperationStatCollector_,
             Tracer_,
             operationName,
-            DbDriverState_->DiscoveryEndpoint,
-            DbDriverState_->Database,
-            DbDriverState_->Log
+            DbDriverState_
         );
     }
 };

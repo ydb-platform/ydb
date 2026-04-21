@@ -1600,13 +1600,17 @@ TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operati
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) {
-    NRetry::Sync::TRetryWithoutSession ctx(*this, operation, settings);
-    return ctx.Execute();
+    return NRetry::Sync::RunSyncRetryWithParentSpan(
+        Impl_,
+        NRetry::Sync::TRetryWithoutSession(*this, operation, settings)
+    );
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) {
-    NRetry::Sync::TRetryWithSession ctx(*this, operation, settings);
-    return ctx.Execute();
+    return NRetry::Sync::RunSyncRetryWithParentSpan(
+        Impl_,
+        NRetry::Sync::TRetryWithSession(*this, operation, settings)
+    );
 }
 
 NThreading::TFuture<void> TTableClient::Stop() {

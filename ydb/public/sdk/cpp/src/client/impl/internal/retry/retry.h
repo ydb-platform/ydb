@@ -21,7 +21,7 @@ class IClientImplCommon;
 
 namespace NYdb::inline Dev::NRetry {
 
-void Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber);
+TDuration Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber);
 void AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
     std::uint32_t retryNumber, const std::function<void()>& fn);
 

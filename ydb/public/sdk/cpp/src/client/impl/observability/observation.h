@@ -14,9 +14,7 @@ public:
         , NSdkStats::TStatCollector::TClientOperationStatCollector* operationCollector
         , std::shared_ptr<NTrace::ITracer> tracer
         , const std::string& operationName
-        , const std::string& discoveryEndpoint
-        , const std::string& database
-        , const TLog& log
+        , const std::shared_ptr<TDbDriverState>& dbDriverState
     );
 
     void SetPeerEndpoint(const std::string& endpoint) noexcept;

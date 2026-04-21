@@ -1,16 +1,25 @@
 #include "observation.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state/state.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 namespace NYdb::inline Dev::NObservability {
 
 TRequestObservation::TRequestObservation(const std::string& ydbClientType
     , NSdkStats::TStatCollector::TClientOperationStatCollector* operationCollector
     , std::shared_ptr<NTrace::ITracer> tracer
     , const std::string& operationName
-    , const std::string& discoveryEndpoint
-    , const std::string& database
-    , const TLog& log
-) : Span_(std::make_shared<TRequestSpan>(std::move(tracer), operationName, discoveryEndpoint, database, log, ydbClientType))
-    , Metrics_(std::make_shared<TRequestMetrics>(operationCollector, operationName, log))
+    , const std::shared_ptr<TDbDriverState>& dbDriverState
+) : Span_(
+        std::make_shared<TRequestSpan>(ydbClientType
+            , std::move(tracer)
+            , operationName
+            , dbDriverState
+        )
+    ), Metrics_(
+        std::make_shared<TRequestMetrics>(operationCollector, operationName, dbDriverState->Log)
+    )
 {}
 
 void TRequestObservation::SetPeerEndpoint(const std::string& endpoint) noexcept {

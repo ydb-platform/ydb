@@ -7,6 +7,7 @@ namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 
 NActors::IActor* CreateAddConsumerActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc);
+NActors::IActor* CreateRemoveConsumerActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDropTopicActor(NGRpcService::IRequestOpCtx* request);
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1

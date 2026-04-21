@@ -11,6 +11,7 @@ SRCS(
     alter_topic.cpp
     common.cpp
     drop_topic.cpp
+    remove_consumer.cpp
 )
 
 END()

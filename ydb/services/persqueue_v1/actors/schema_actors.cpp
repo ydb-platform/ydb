@@ -239,36 +239,36 @@ void TPQDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 //     }
 // }
 
-TRemoveReadRuleActor::TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-    Y_ASSERT(request);
-}
+// TRemoveReadRuleActor::TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request)
+//     : TBase(request, request->GetProtoRequest()->path())
+// {
+//     Y_ASSERT(request);
+// }
 
-void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
-    TBase::Bootstrap(ctx);
-    SendDescribeProposeRequest(ctx);
-    Become(&TBase::StateWork);
-}
+// void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
+//     TBase::Bootstrap(ctx);
+//     SendDescribeProposeRequest(ctx);
+//     Become(&TBase::StateWork);
+// }
 
-void TRemoveReadRuleActor::ModifyPersqueueConfig(
-    TAppData* appData,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(selfInfo);
+// void TRemoveReadRuleActor::ModifyPersqueueConfig(
+//     TAppData* appData,
+//     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+//     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+//     const NKikimrSchemeOp::TDirEntry& selfInfo
+// ) {
+//     Y_UNUSED(selfInfo);
 
-    auto error = RemoveReadRuleFromConfig(
-        groupConfig.MutablePQTabletConfig(),
-        pqGroupDescription.GetPQTabletConfig(),
-        GetProtoRequest()->consumer_name(),
-        appData->PQConfig
-    );
-    if (!error.empty()) {
-        return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error);
-    }
-}
+//     auto error = RemoveReadRuleFromConfig(
+//         groupConfig.MutablePQTabletConfig(),
+//         pqGroupDescription.GetPQTabletConfig(),
+//         GetProtoRequest()->consumer_name(),
+//         appData->PQConfig
+//     );
+//     if (!error.empty()) {
+//         return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error);
+//     }
+// }
 
 TPQCreateTopicActor::TPQCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters)
     : TBase(request, request->GetProtoRequest()->path())

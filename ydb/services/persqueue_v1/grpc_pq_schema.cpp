@@ -235,7 +235,7 @@ void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacili
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Remove read rules request");
-    f.RegisterActor(new NGRpcProxy::V1::TRemoveReadRuleActor(p));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateRemoveConsumerActor(p));
 }
 
 #ifdef DECLARE_RPC

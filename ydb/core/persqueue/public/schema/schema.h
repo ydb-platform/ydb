@@ -67,6 +67,19 @@ struct TAlterTopicSettings {
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings);
 NActors::IActor* CreateAlterTopicActor(NThreading::TPromise<TAlterTopicResponse>&& promise, TAlterTopicSettings&& settings);
 
+//
+// Remove Consumer
+//
+struct TRemoveConsumerSettings {
+    TString Database;
+    TString PeerName;
+    TString Path;
+    TString ConsumerName;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    ui64 Cookie = 0;
+};
+
+NActors::IActor* CreateRemoveConsumerActor(const NActors::TActorId& parentId, TRemoveConsumerSettings&& settings);
 
 //
 // Create Topic

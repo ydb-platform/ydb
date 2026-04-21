@@ -2702,7 +2702,7 @@
 
 - C++
 
-  В [`NYdb::NTopic::TReadSessionSettings`](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/topic/read_session.h) вызовите `WithoutConsumer()`:
+  В `NYdb::NTopic::TReadSessionSettings` вызовите `WithoutConsumer()`:
 
   ```cpp
   auto settings = NYdb::NTopic::TReadSessionSettings()

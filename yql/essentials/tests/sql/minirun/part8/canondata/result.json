@@ -417,9 +417,9 @@
     ],
     "test.test[blocks-agg_singular_type_key-default.txt-Peephole]": [
         {
-            "checksum": "9273da08a3b99431f11b7325005b3f50",
-            "size": 6519,
-            "uri": "https://{canondata_backend}/995452/36420a4a5c1f498a2f7efc13e9ff1f6b3b41fdf9/resource.tar.gz#test.test_blocks-agg_singular_type_key-default.txt-Peephole_/opt.yql"
+            "checksum": "8612381a70977c86cb6e24e2c5d6bbfb",
+            "size": 7442,
+            "uri": "https://{canondata_backend}/1937027/94e7a1867aec1809bba262569f623adc4216950e/resource.tar.gz#test.test_blocks-agg_singular_type_key-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_singular_type_key-default.txt-Results]": [
@@ -438,9 +438,9 @@
     ],
     "test.test[blocks-agg_singular_type_value-default.txt-Peephole]": [
         {
-            "checksum": "a0a7cb4b6b6a29f03a95fc4b896a87ea",
-            "size": 3001,
-            "uri": "https://{canondata_backend}/995452/36420a4a5c1f498a2f7efc13e9ff1f6b3b41fdf9/resource.tar.gz#test.test_blocks-agg_singular_type_value-default.txt-Peephole_/opt.yql"
+            "checksum": "fa427606d0a67bbbfc6e9fb7494f7ecf",
+            "size": 3198,
+            "uri": "https://{canondata_backend}/1937027/94e7a1867aec1809bba262569f623adc4216950e/resource.tar.gz#test.test_blocks-agg_singular_type_value-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_singular_type_value-default.txt-Results]": [
@@ -459,9 +459,9 @@
     ],
     "test.test[blocks-agg_with_optional_short_keys-default.txt-Peephole]": [
         {
-            "checksum": "b6774ec936b1318670817fde88bcd621",
-            "size": 1488,
-            "uri": "https://{canondata_backend}/995452/36420a4a5c1f498a2f7efc13e9ff1f6b3b41fdf9/resource.tar.gz#test.test_blocks-agg_with_optional_short_keys-default.txt-Peephole_/opt.yql"
+            "checksum": "139f632c2ef903974ef086b466245a32",
+            "size": 1671,
+            "uri": "https://{canondata_backend}/1937027/94e7a1867aec1809bba262569f623adc4216950e/resource.tar.gz#test.test_blocks-agg_with_optional_short_keys-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_with_optional_short_keys-default.txt-Results]": [

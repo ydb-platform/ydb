@@ -7,6 +7,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallB
 ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorrruptedMain
 ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorruptedHandoff
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatch
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoin-WithFeatureFlag
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
@@ -39,6 +40,7 @@ ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigration
+ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigrationViaDropCreate
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk

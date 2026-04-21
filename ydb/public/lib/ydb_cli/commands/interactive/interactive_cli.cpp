@@ -6,9 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
-#if defined(YDB_CLI_AI_ENABLED)
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/ai_session_runner.h>
-#endif
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/sql_session_runner.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
@@ -20,6 +18,7 @@
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
+#include <util/generic/scope.h>
 #include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient {
@@ -27,6 +26,88 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 constexpr char VersionResourceName[] = "version.txt";
+
+struct TVersionInfo {
+    TString CliVersion;
+    TString ServerVersion;
+    TString ServerAvailableCheckFail;
+};
+
+TVersionInfo ResolveVersionInfo(const TDriver& driver) {
+    TVersionInfo result;
+
+    try {
+        result.CliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
+    } catch (const std::exception& e) {
+        YDB_CLI_LOG(Debug, "Couldn't read version from resource: " << e.what());
+        result.CliVersion.clear();
+    }
+
+    NQuery::TQueryClient client(driver);
+    const auto selectVersionResult = client.RetryQuery([](NQuery::TSession session) {
+        return session.ExecuteQuery("SELECT version()", NQuery::TTxControl::NoTx());
+    }).ExtractValueSync();
+
+    if (selectVersionResult.IsSuccess()) {
+        try {
+            auto parser = selectVersionResult.GetResultSetParser(0);
+            parser.TryNextRow();
+            result.ServerVersion = parser.ColumnParser(0).GetString();
+        } catch (const std::exception& e) {
+            YDB_CLI_LOG(Error, "Couldn't read version from YDB server:\n" << TStatus(selectVersionResult));
+        }
+    } else {
+        YDB_CLI_LOG(Error, "Couldn't read version from YDB server:\n" << TStatus(selectVersionResult));
+    }
+
+    if (!result.ServerVersion) {
+        const auto select1Status = client.RetryQuery([](NQuery::TSession session) {
+            return session.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx());
+        }).ExtractValueSync();
+
+        if (!select1Status.IsSuccess()) {
+            result.ServerAvailableCheckFail = TStringBuilder() << "Status: " << select1Status.GetStatus() << "Issues:\n" << select1Status.GetIssues().ToString();
+        }
+    }
+
+    return result;
+}
+
+std::vector<ISessionRunner::TPtr> SetupSessions(const TClientCommand::TConfig& config, const TDriver& driver, TInteractiveConfigurationManager::TPtr configManager) {
+    std::vector<ISessionRunner::TPtr> sessions;
+
+    sessions.push_back(CreateSqlSessionRunner({
+        .Driver = driver,
+        .Database = config.Database,
+        .EnableAiInteractive = config.EnableAiInteractive,
+    }));
+
+    if (config.EnableAiInteractive) {
+        TStringBuilder connectionStringBuilder;
+        // config.InitialArgC and config.InitialArgV contain all arguments passed to the CLI
+        for (int i = 0; i < config.InitialArgC; ++i) {
+            if (i > 0) {
+                connectionStringBuilder << " ";
+            }
+            TString arg = config.InitialArgV[i];
+            if (arg.Contains(' ')) {
+                 connectionStringBuilder << "\"" << arg << "\"";
+            } else {
+                 connectionStringBuilder << arg;
+            }
+        }
+
+        sessions.push_back(CreateAiSessionRunner({
+            .ConfigurationManager = configManager,
+            .Database = config.Database,
+            .Driver = driver,
+            .ConnectionString = connectionStringBuilder,
+            .UsageInfoGetter = config.UsageInfoGetter,
+        }));
+    }
+
+    return sessions;
+}
 
 } // anonymous namespace
 
@@ -36,114 +117,43 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName)
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     config.BuildInfoCommandTag = "interactive";
+
     const TDriver driver(config.CreateDriverConfig());
-    const auto versionInfo = ResolveVersionInfo(driver);
-    const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile);
-
-    if (config.EnableAiInteractive) {
-        configurationManager->EnsurePredefinedProfiles(config.AiPredefinedProfiles, config.AiTokenGetter);
+    const auto configManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, !config.EnableAiInteractive);
+    if (auto code = PrintWelcomeMessage(config, driver, configManager)) {
+        return code;
     }
 
-    Cout << "Welcome to YDB CLI";
-    if (versionInfo.CliVersion) {
-        Cout << " " << TLogger::EntityName(versionInfo.CliVersion);
-    }
-    Cout << " " << configurationManager->ModeToString(configurationManager->GetDefaultMode()) << " interactive mode";
-
-    if (versionInfo.ServerVersion) {
-        Cout << " (YDB Server " << TLogger::EntityName(versionInfo.ServerVersion) << ")" << Endl;
-    } else if (versionInfo.ServerAvailableCheckFail) {
-        Cout << Endl;
-        Cerr << Colors.Red() << "Couldn't connect to YDB server:\n" << versionInfo.ServerAvailableCheckFail << Colors.OldColor() << Endl;
-        return EXIT_FAILURE;
-    }
-
-    if (Profile) {
-        Cout << "Connection profile: " << TLogger::EntityName(Profile) << Endl;
-    } else {
-        Cout << "Endpoint: " << TLogger::EntityName(config.Address) << Endl;
-        Cout << "Database: " << TLogger::EntityName(config.Database) << Endl;
-    }
-
-    if (config.EnableAiInteractive) {
-        if (const auto& aiProfile = configurationManager->GetAiProfile(configurationManager->GetActiveAiProfileName())) {
-            Cout << "AI profile: " << TLogger::EntityName(aiProfile->GetName()) << Endl;
-        }
-    }
-
-    TStringBuilder connectionStringBuilder;
-    // config.InitialArgC and config.InitialArgV contain all arguments passed to the CLI
-    for (int i = 0; i < config.InitialArgC; ++i) {
-        if (i > 0) {
-            connectionStringBuilder << " ";
-        }
-        TString arg = config.InitialArgV[i];
-        if (arg.Contains(' ')) {
-             connectionStringBuilder << "\"" << arg << "\"";
-        } else {
-             connectionStringBuilder << arg;
-        }
-    }
-    TString connectionString = connectionStringBuilder;
-
-    ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
-    if (!config.EnableAiInteractive) {
-        activeSession = 0;
-    }
-
-    if (!activeSession && config.EnableAiInteractive) {
-        Cout << "Type YQL query text or type " << TLogger::EntityNameQuoted("/help") << " for more info." << Endl << Endl;
-    } else {
-        Cout << "Type " << TLogger::EntityNameQuoted("/help") << " for more info." << Endl << Endl;
-    }
-
-    Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
-
-    std::vector<ISessionRunner::TPtr> sessions;
-
-    sessions.push_back(CreateSqlSessionRunner({
-        .Driver = driver,
-        .Database = config.Database,
-        .EnableAiInteractive = config.EnableAiInteractive,
-    }));
-
-#if defined(YDB_CLI_AI_ENABLED)
-    if (config.EnableAiInteractive) {
-        sessions.push_back(CreateAiSessionRunner({
-            .ConfigurationManager = configurationManager,
-            .Database = config.Database,
-            .Driver = driver,
-            .ConnectionString = connectionString,
-        }));
-    }
-#else
-    Y_UNUSED(connectionString);
-#endif
-
-    if (activeSession >= sessions.size()) {
-        activeSession = 0;
-    }
+    ui64 activeSession = static_cast<ui64>(configManager->GetInteractiveMode());
+    const auto& sessions = SetupSessions(config, driver, configManager);
+    Y_VALIDATE(activeSession < sessions.size(), "Invalid active session: " << activeSession);
 
     ILineReader::TPtr lineReader;
     if (lineReader = sessions[activeSession]->Setup(); !lineReader) {
-        YDB_CLI_LOG(Error, "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode");
+        YDB_CLI_LOG(Notice, "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode");
         if (sessions.size() > 1) {
              Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
+             configManager->SetInteractiveMode(static_cast<TInteractiveConfigurationManager::EMode>(activeSession));
         } else {
              return EXIT_FAILURE;
         }
     }
 
+    Cout << Endl;
     while (const auto inputOptional = lineReader->ReadLine()) {
+        Y_DEFER { Cout << Endl; };
+
         const auto& input = *inputOptional;
         if (std::holds_alternative<ILineReader::TSwitch>(input)) {
             if (sessions.size() > 1) {
                 activeSession ^= 1;
                 if (lineReader = sessions[activeSession]->Setup()) {
                     YDB_CLI_LOG(Info, "Switching to " << (activeSession ? "AI" : "SQL") << " mode");
+                    configManager->SetInteractiveMode(static_cast<TInteractiveConfigurationManager::EMode>(activeSession));
                 } else {
-                    YDB_CLI_LOG(Error, "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode");
+                    YDB_CLI_LOG(Info, "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode");
                     Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
+                    configManager->SetInteractiveMode(static_cast<TInteractiveConfigurationManager::EMode>(activeSession));
                 }
             }
             continue;
@@ -174,44 +184,57 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TInteractiveCLI::TVersionInfo TInteractiveCLI::ResolveVersionInfo(const TDriver& driver) const {
-    TVersionInfo result;
+int TInteractiveCLI::PrintWelcomeMessage(const TClientCommand::TConfig& config, const TDriver& driver, TInteractiveConfigurationManager::TPtr configManager) const {
+    const auto versionInfo = ResolveVersionInfo(driver);
 
-    try {
-        result.CliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
-    } catch (const std::exception& e) {
-        YDB_CLI_LOG(Error, "Couldn't read version from resource: " << e.what());
-        result.CliVersion.clear();
+    if (!config.EnableAiInteractive) {
+        configManager->SetInteractiveMode(TInteractiveConfigurationManager::EMode::YQL);
     }
 
-    NQuery::TQueryClient client(driver);
-    const auto selectVersionResult = client.RetryQuery([](NQuery::TSession session) {
-        return session.ExecuteQuery("SELECT version()", NQuery::TTxControl::NoTx());
-    }).ExtractValueSync();
+    Cout << "Welcome to YDB CLI";
+    if (versionInfo.CliVersion) {
+        Cout << " " << TLogger::EntityName(versionInfo.CliVersion);
+    }
+    Cout << " " << configManager->ModeToString(configManager->GetInteractiveMode()) << " interactive mode";
 
-    if (selectVersionResult.IsSuccess()) {
-        try {
-            auto parser = selectVersionResult.GetResultSetParser(0);
-            parser.TryNextRow();
-            result.ServerVersion = parser.ColumnParser(0).GetString();
-        } catch (const std::exception& e) {
-            YDB_CLI_LOG(Error, "Couldn't read version from YDB server:\n" << TStatus(selectVersionResult));
-        }
+    if (versionInfo.ServerVersion) {
+        Cout << " (YDB Server " << TLogger::EntityName(versionInfo.ServerVersion) << ")" << Endl;
+    } else if (versionInfo.ServerAvailableCheckFail) {
+        Cout << Endl;
+        Cerr << Colors.Red() << "Couldn't connect to YDB server:\n" << versionInfo.ServerAvailableCheckFail << Colors.OldColor() << Endl;
+        return EXIT_FAILURE;
+    }
+
+    if (Profile) {
+        Cout << "Connection profile: " << TLogger::EntityName(Profile) << Endl;
     } else {
-        YDB_CLI_LOG(Error, "Couldn't read version from YDB server:\n" << TStatus(selectVersionResult));
+        Cout << "Endpoint: " << TLogger::EntityName(config.Address) << Endl;
+        Cout << "Database: " << TLogger::EntityName(config.Database) << Endl;
     }
 
-    if (!result.ServerVersion) {
-        const auto select1Status = client.RetryQuery([](NQuery::TSession session) {
-            return session.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx());
-        }).ExtractValueSync();
+    if (config.EnableAiInteractive && configManager->GetInteractiveMode() == TInteractiveConfigurationManager::EMode::AI) {
+        TString activeProfileName;
+        if (const auto& activeProfileId = configManager->GetActiveAiProfileId()) {
+            if (const auto aiProfile = configManager->ActivateAiProfile(activeProfileId)) {
+                activeProfileName = aiProfile->GetName();
+            }
+        }
 
-        if (!select1Status.IsSuccess()) {
-            result.ServerAvailableCheckFail = ToString(select1Status.GetStatus());
+        if (activeProfileName) {
+            Cout << "Using model: " << TLogger::EntityName(activeProfileName) << Endl;            
+        } else if (!configManager->ActivateAiProfile("", /* printWelcomeMessage */ false)) {
+            configManager->SetInteractiveMode(TInteractiveConfigurationManager::EMode::YQL);
+            Cout << Endl << "Switching to " << configManager->ModeToString(configManager->GetInteractiveMode()) << " interactive mode, use " << TLogger::EntityNameQuoted("/switch") << " to change mode." << Endl;
         }
     }
 
-    return result;
+    if (configManager->GetInteractiveMode() == TInteractiveConfigurationManager::EMode::YQL) {
+        Cout << "Type YQL query text or type " << TLogger::EntityNameQuoted("/help") << " for more info." << Endl;
+    } else {
+        Cout << "Type " << TLogger::EntityNameQuoted("/help") << " for more info or " << TLogger::EntityNameQuoted("/model") << " to select another model." << Endl;
+    }
+
+    return EXIT_SUCCESS;
 }
 
 } // namespace NYdb::NConsoleClient

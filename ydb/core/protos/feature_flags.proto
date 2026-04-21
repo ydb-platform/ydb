@@ -290,4 +290,5 @@ message TFeatureFlags {
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
     optional bool EnableInterpileTrafficOptimization = 253 [default = false];
     optional bool EnableSnapshotsLocking = 254 [default = true];
+    optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
 }

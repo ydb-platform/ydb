@@ -69,7 +69,6 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
-    std::optional<ui32> NumOfConsumers;
     bool EnsureAtMostOne = false;
 
     std::optional<TRBOMetadata> Metadata;
@@ -151,6 +150,10 @@ public:
 
     bool IsSingleConsumer() const {
         return Parents.size() <= 1;
+    }
+
+    ui32 GetNumOfConsumers() const {
+        return Parents.size();
     }
 
     const TTypeAnnotationNode* GetTypeAnn() {

@@ -158,7 +158,7 @@ NUdf::TUnboxedValue DqBuildInputValue(
     const THolderFactory& holderFactory,
     TDqMeteringStats::TInputStatsMeter stats,
     TInstant& startTs,
-    bool& inputConsumed,
+    ui64& inputsConsumed,
     NUdf::IPgBuilder* pgBuilder,
     NKikimr::NMiniKQL::TWatermark* watermark,
     TDqComputeActorWatermarks* watermarksTracker
@@ -168,14 +168,14 @@ NUdf::TUnboxedValue DqBuildInputValue(
             Y_ABORT_UNLESS(inputs.size() == 1);
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputConsumed, watermark, watermarksTracker);
+            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputsConsumed, watermark, watermarksTracker);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
             GetSortColumnsInfo(type, protoSortCols, sortColsInfo);
             YQL_ENSURE(!sortColsInfo.empty());
 
-            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats, startTs, inputConsumed, pgBuilder);
+            return CreateInputMergeValue(type, std::move(inputs), std::move(sortColsInfo), holderFactory, stats, startTs, inputsConsumed, pgBuilder);
         }
         default:
             YQL_ENSURE(false, "Unknown input type: " << (ui32) inputDesc.GetTypeCase());
@@ -269,7 +269,7 @@ public:
         Stats->CreateTs = TInstant::Now();
         if (Context.ComputeCtx) {
             Context.ComputeCtx->StartTs = &Stats->StartTs;
-            Context.ComputeCtx->InputConsumed = &InputConsumed;
+            Context.ComputeCtx->InputsConsumed = &InputsConsumed;
         }
         if (Y_UNLIKELY(CollectFull())) {
             Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
@@ -281,10 +281,21 @@ public:
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
 
+        const bool isProfile = CollectProfile();
+
         NUdf::TLogProviderFunc logProviderFunc = nullptr;
-        if (LogFunc) {
-            logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
-                log(TStringBuilder() << "[" << component << "][" << level << "]: " << message << "\n");
+        if (LogFunc || isProfile) {
+            logProviderFunc = [log=LogFunc, isProfile, this](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                const TString logMessage = (TStringBuilder() << "[" << component << "][" << level << "]: " << message << "\n");
+                if (isProfile && Stats) {
+                    Stats->ComputationLogBuffer.emplace_back(TInstant::Now(), logMessage);
+                    if (Stats->ComputationLogBuffer.size() > 40) {
+                        Stats->ComputationLogBuffer.pop_front();
+                    }
+                }
+                if (log) {
+                    log(logMessage);
+                }
             };
             ComputationLogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc), NUdf::ELogLevel::Debug);
         }
@@ -294,6 +305,10 @@ public:
         auto guard = Guard(Alloc());
         Stats.reset();
         AllocatedHolder.reset();
+    }
+
+    bool CollectProfile() const {
+        return Settings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE;
     }
 
     bool CollectFull() const {
@@ -689,7 +704,7 @@ public:
                         holderFactory,
                         {},
                         Stats->StartTs,
-                        InputConsumed,
+                        InputsConsumed,
                         PgBuilder_.get(),
                         &transform->Watermark,
                         transform->WatermarksTracker ? &*transform->WatermarksTracker : nullptr
@@ -704,7 +719,7 @@ public:
                             holderFactory,
                             {inputStats, transform->TransformOutputType},
                             Stats->StartTs,
-                            InputConsumed,
+                            InputsConsumed,
                             &Watermark,
                             inputUsesWatermarks ? WatermarksTracker : nullptr
                         )
@@ -719,7 +734,7 @@ public:
                             holderFactory,
                             {inputStats, entry->InputItemTypes[i]},
                             Stats->StartTs,
-                            InputConsumed,
+                            InputsConsumed,
                             PgBuilder_.get(),
                             &Watermark,
                             inputUsesWatermarks ? WatermarksTracker : nullptr
@@ -893,7 +908,7 @@ public:
             StopWaiting();
         }
 
-        InputConsumed = false;
+        InputsConsumed = 0;
         auto runStatus = FetchAndDispatch();
         LastFetchTime = TInstant::Now();
         LastFetchStatus = runStatus;
@@ -935,9 +950,11 @@ public:
                 case ERunStatus::PendingInput:
                     // output is checked first => not waiting for output
                     Stats->CurrentWaitOutputStartTime = TInstant::Zero();
-                    if (Y_LIKELY(InputConsumed)) {
+                    ++Stats->InputWaitCount;
+                    if (Y_LIKELY(InputsConsumed)) {
                         // reset waiting start time after each consumed value
                         Stats->CurrentWaitInputStartTime = now;
+                        Stats->TotalInputsConsumed += InputsConsumed;
                     } else {
                         StartWaitingInput();
                         if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {
@@ -948,6 +965,7 @@ public:
                 case ERunStatus::PendingOutput:
                     // waiting for output => not waiting for input
                     Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                    ++Stats->OutputWaitCount;
                     StartWaitingOutput();
                     if (Y_LIKELY(!Stats->CurrentWaitOutputStartTime)) {
                         Stats->CurrentWaitOutputStartTime = now;
@@ -1124,6 +1142,7 @@ private:
                     } else {
                         AllocatedHolder->Output->Consume(std::move(value));
                     }
+                    ++Stats->TotalOutputsProduced;
                     dataConsumed = true;
                     break;
                 }
@@ -1185,7 +1204,7 @@ private:
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;
     TLangVersion LangVer = MinLangVersion;
-    bool InputConsumed = false;
+    ui64 InputsConsumed = 0;
 
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;

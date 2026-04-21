@@ -569,6 +569,10 @@ struct TDqHashCombineTestParams
     bool DisableStateDehydration = false;
 };
 
+using TLogFunc = std::function<void(const TString& msg)>;
+
+#define STATE_LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
+
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
 protected:
@@ -727,7 +731,11 @@ protected:
     [[nodiscard]] bool InitiateSpilling()
     {
         CurrentAsyncTask = InitiateSpillingAsync();
-        return CurrentAsyncTask.CheckPending();
+        const bool pending = CurrentAsyncTask.CheckPending();
+        if (pending) {
+            STATE_LOG("Yielding from the InitiateSpillingAsync coroutine");
+        }
+        return pending;
     }
 
     TCoroTask FlushSpillingInputAsync()
@@ -1121,8 +1129,8 @@ public:
     bool PassthroughKeys = false;
 
     TBaseAggregationState(
-        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputUnpackedWidth,
-        const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes,
+        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, TLogFunc logFunc,
+        size_t inputUnpackedWidth, const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
         const bool forLLVM,
@@ -1134,6 +1142,7 @@ public:
         , Ctx(ctx)
         , MemoryHelper(memoryHelper)
         , MemoryLimit(memoryLimit)
+        , LogFunc(logFunc)
         , ForLLVM(forLLVM)
         , IsAggregation(isAggregator)
         , EnableSpilling(enableSpilling && ctx.SpillerFactory)
@@ -1147,6 +1156,8 @@ public:
         , SourceEmpty(false)
         , TestParams(testParams)
     {
+        STATE_LOG(TStringBuilder() << "New state; aggregator: " << IsAggregation << "; LLVM: " << ForLLVM << "; can spill: " << EnableSpilling);
+
         TempKeyBuffer.resize(KeyTypes.size());
 
         if (!IsAggregation) {
@@ -1217,7 +1228,11 @@ public:
     }
 
     bool RunCurrentAsyncTask() {
-        return CurrentAsyncTask();
+        const bool isPending = CurrentAsyncTask();
+        if (Y_UNLIKELY(CurrentAsyncTask.Handle && LogFunc)) {
+            STATE_LOG(TStringBuilder() << "Ran the current async task; still pending = " << isPending);
+        }
+        return isPending;
     }
 
     virtual ~TBaseAggregationState() {
@@ -1239,6 +1254,7 @@ public:
 protected:
     size_t TryAllocMapForRowCount(size_t rowCount)
     {
+        STATE_LOG(TStringBuilder() << "TryAllocMapForRowCount = " << rowCount);
         // Avoid reallocating the map
         // TODO: although Clear()-ing might be actually more expensive than reallocation
         if (Map) {
@@ -1246,6 +1262,7 @@ protected:
             size_t newCapacity = GetMapCapacity(rowCount);
             if (newCapacity <= oldCapacity) {
                 Map->Clear();
+                STATE_LOG("Map is already large enough");
                 return rowCount;
             }
             Map.Reset(nullptr);
@@ -1268,6 +1285,7 @@ protected:
 
         while (rowCount > LowerFixedRowCount) {
             if (tryAlloc(rowCount)) {
+                STATE_LOG(TStringBuilder() << "Allocated capacity " << Map->GetCapacity() << " for " << rowCount << " rows");
                 return rowCount;
             }
             rowCount = rowCount / 2;
@@ -1276,6 +1294,7 @@ protected:
         // This can emit uncaught TMemoryLimitExceededException if we can't afford even a tiny map
         size_t smallCapacity = GetMapCapacity(LowerFixedRowCount);
         Map.Reset(new TMap(Hasher, Equals, smallCapacity));
+        STATE_LOG(TStringBuilder() << "Allocated fallback small capacity " << smallCapacity << " for " << LowerFixedRowCount << " rows");
         return LowerFixedRowCount;
     }
 
@@ -1337,6 +1356,7 @@ protected:
     }
 
     [[nodiscard]] bool OpenDrain() {
+        STATE_LOG(TStringBuilder() << "Starting drain with map size " << Map->GetSize());
         // This can start an async task which gets completed after another call to ProcessInput()
         // So we must yield if OpenDrain() returns true
         if (!SourceEmpty && IsEstimating && Map->GetSize() > 0) {
@@ -1348,7 +1368,11 @@ protected:
         } else {
             DrainArenaIterator = {};
         }
-        return FlushSpillingInput();
+        const bool pending = FlushSpillingInput();
+        if (pending) {
+            STATE_LOG("Yielding from the FlushSpillingInput coroutine");
+        }
+        return pending;
     }
 
     [[nodiscard]] bool CheckRefillFromPendingBuckets()
@@ -1359,6 +1383,7 @@ protected:
 
         while (HasPendingSpillingBuckets()) {
             if (ReadBackNextSpillingBucket()) {
+                STATE_LOG("Yielding from the ReadBackNextSpillingBucket coroutine");
                 return true;
             }
             if (DrainArenaIterator.Valid) {
@@ -1412,6 +1437,7 @@ protected:
     TUnboxedValueVector EmptyUVs;
 
     size_t MemoryLimit;
+    TLogFunc LogFunc;
     const bool ForLLVM;
     const bool IsAggregation;
     const bool EnableSpilling;
@@ -1466,6 +1492,7 @@ public:
         const TMemoryEstimationHelper& memoryHelper,
         NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
+        TLogFunc logFunc,
         size_t inputWidth,
         size_t outputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
@@ -1480,7 +1507,7 @@ public:
         const TDqHashCombineTestParams testParams
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
+            memInfo, ctx, memoryHelper, memoryLimit, logFunc, inputWidth, nodes, wideFieldsIndex, keyTypes,
             keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
         )
         , OutputRowCounter(outputRowCounter)
@@ -1563,6 +1590,7 @@ public:
                 Store->Clear();
             }
             Draining = false;
+            STATE_LOG("Drain cycle completed");
             return NUdf::EFetchStatus::Finish;
         }
 
@@ -1630,6 +1658,7 @@ public:
         const TMemoryEstimationHelper& memoryHelper,
         NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
+        TLogFunc logFunc,
         const std::vector<TType*>& inputTypes,
         const std::vector<TType*>& outputTypes,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
@@ -1644,7 +1673,7 @@ public:
         const TDqHashCombineTestParams testParams
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
+            memInfo, ctx, memoryHelper, memoryLimit, logFunc, inputTypes.size() - 1, nodes, wideFieldsIndex,
             keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
         )
         , OutputRowCounter(outputRowCounter)
@@ -1654,6 +1683,8 @@ public:
         , OutputColumns(outputTypes.size() - 1)
         , MaxOutputBlockLen(maxOutputBlockLen)
     {
+        STATE_LOG("Block mode");
+
         InputBuffer.resize(InputColumns + 1, TUnboxedValuePod());
         std::transform(InputBuffer.begin(), InputBuffer.end(), Ctx.WideFields.data() + WideFieldsIndex, [&](TUnboxedValue& val) {
             return &val;
@@ -1903,6 +1934,7 @@ public:
             Store->Clear();
         }
 
+        STATE_LOG("Drain cycle completed");
         return NUdf::EFetchStatus::Finish;
     }
 
@@ -2351,7 +2383,10 @@ private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool forLLVM = false) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
         NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("DqHashCombine");
-        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
+        auto logFunc = [logger, logComponent](const TString& msg) {
+            UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, msg);
+        };
 
         NYql::NUdf::TCounter rowCounter;
 
@@ -2362,11 +2397,11 @@ private:
 
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                ctx, MemoryHelper, rowCounter, MemoryLimit, logFunc, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
                 KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                ctx, MemoryHelper, rowCounter, MemoryLimit, logFunc, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
                 KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling, TestParams);
         }
     }
@@ -2440,7 +2475,12 @@ private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
         NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("DqHashCombine");
-        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
+        auto logFunc = [logger, logComponent](const TString& msg) {
+            UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, msg);
+        };
+
+        logFunc("Flow state initialized");
 
         NYql::NUdf::TCounter rowCounter;
 
@@ -2451,11 +2491,11 @@ private:
 
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                ctx, MemoryHelper, rowCounter, MemoryLimit, logFunc, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
                 KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                ctx, MemoryHelper, rowCounter, MemoryLimit, logFunc, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
                 KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling, TestParams);
         }
     }

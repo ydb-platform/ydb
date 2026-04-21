@@ -1,6 +1,20 @@
 -- GitHub issue fields from github_issue_mapping; analytics area/owner + owner hand-off from tests_monitor.
 -- COALESCE fallback: when effective_* columns are NULL (not yet populated), fall back to owner string + area_to_owner_mapping.
 
+-- Mart slice: last N calendar days of ``tests_monitor`` (not ``mute_config.json``).
+$mart_monitor_date_span_days = 1;
+
+-- Mart branch filter: ``main`` plus release branches matching this prefix pattern.
+$mart_main_branch = 'main';
+$mart_stable_branch_like = 'stable-%';
+
+-- ``resolution`` / ``is_muted_or_skipped``: dashboard SLA thresholds (not ``mute_config.json`` windows).
+$resolution_skipped_days_threshold = 14;
+$resolution_muted_delete_candidate_days = 30;
+
+-- Must match ``manual_unmute_ttl_calendar_days`` in ``.github/config/mute_config.json`` (fast-unmute deadline).
+$manual_unmute_ttl_calendar_days = 3;
+
 $normalize = ($raw_area) -> {
     $parts = String::SplitToList(Cast($raw_area AS String), '/');
     RETURN Cast(
@@ -53,7 +67,7 @@ $mfu = (
         github_issue_number AS mfu_issue_number,
         requested_at AS mfu_since,
         window_days AS mfu_window_days,
-        requested_at + 2 * window_days * Interval("P1D") AS mfu_expires_at
+        requested_at + $manual_unmute_ttl_calendar_days * Interval("P1D") AS mfu_expires_at
     FROM `test_mute/fast_unmute_active`
 );
 
@@ -84,8 +98,8 @@ SELECT
     tm.state_change_date_filtered AS state_change_date_filtered,
     tm.days_in_state_filtered AS days_in_state_filtered,
     CAST(CASE
-        WHEN (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN 'Skipped'
-        WHEN tm.days_in_mute_state > 30 THEN 'MUTED: delete candidate'
+        WHEN (tm.state = 'Skipped' AND tm.days_in_state > $resolution_skipped_days_threshold) THEN 'Skipped'
+        WHEN tm.days_in_mute_state > $resolution_muted_delete_candidate_days THEN 'MUTED: delete candidate'
         ELSE 'MUTED: in sla' 
     END
     as String) AS resolution,
@@ -98,7 +112,7 @@ SELECT
     tm.effective_owner_team_changed_date AS effective_owner_team_changed_date,
     CAST(
         CASE
-            WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN TRUE
+            WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > $resolution_skipped_days_threshold) THEN TRUE
             ELSE FALSE
         END AS Uint8
     ) AS is_muted_or_skipped,
@@ -124,6 +138,6 @@ LEFT JOIN $mfu AS mfu
     ON tm.full_name = mfu.full_name
     AND tm.branch = mfu.branch
     AND tm.build_type = mfu.build_type
-WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
-    AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%')
+WHERE tm.date_window >= CurrentUtcDate() - $mart_monitor_date_span_days * Interval("P1D")
+    AND (tm.branch = $mart_main_branch OR tm.branch LIKE $mart_stable_branch_like)
     AND tm.is_test_chunk = 0;

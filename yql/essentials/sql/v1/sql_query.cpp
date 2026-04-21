@@ -2965,7 +2965,6 @@ bool StoreAlterIndexSettingValue(
                                     .NamePosition = id.Pos,
                                     .Value = std::move(parsedValue),
                                     .ValuePosition = ctx.Pos()});
-    });
 
     return true;
 }

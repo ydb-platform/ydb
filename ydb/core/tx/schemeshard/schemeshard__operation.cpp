@@ -108,14 +108,19 @@ bool TSchemeShard::ProcessOperationParts(
         context.IsAllowedPrivateTables = true;
     }
 
+    // Overflow is a whole-schemeshard condition, not per-part; compute it
+    // once for the batch instead of rescanning Subscribers each iteration.
+    TString overflowErr;
+    const bool schemeChangeRecordsOverflow = !context.SS->CheckSchemeChangeRecordsOverflow(overflowErr);
+
     for (auto& part : parts) {
         TString errStr;
         if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-        } else if (!context.SS->CheckSchemeChangeRecordsOverflow(errStr)) {
+        } else if (schemeChangeRecordsOverflow) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
-            response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            response->SetError(NKikimrScheme::StatusResourceExhausted, overflowErr);
         } else {
             response = part->Propose(owner, context);
         }

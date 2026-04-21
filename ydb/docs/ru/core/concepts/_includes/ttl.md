@@ -56,7 +56,7 @@ eviction_time = valueof(ttl_column) + evict_after_seconds
 * Нельзя указать несколько TTL-колонок.
 * Нельзя удалить TTL-колонку. Если это все же требуется, сначала нужно [выключить TTL](../../yql/reference/recipes/ttl.md#disable) на таблице.
 * В качестве типа внешнего хранилища доступен только {{ objstorage-name }}.
-* Для вытеснения данных в приватное S3-совместимое хранилище настройте [внешний источник данных](../datamodel/external_data_source.md) с `AUTH_METHOD="AWS"` и используйте [секреты](../datamodel/secrets.md) в параметрах `AWS_ACCESS_KEY_ID_SECRET_NAME` и `AWS_SECRET_ACCESS_KEY_SECRET_NAME`.
+* Для вытеснения данных в приватное S3-совместимое хранилище настройте [внешний источник данных](../datamodel/external_data_source.md) с `AUTH_METHOD="AWS"` и используйте [CREATE SECRET](../../yql/reference/syntax/create-secret.md) в параметрах `AWS_ACCESS_KEY_ID_SECRET_NAME` и `AWS_SECRET_ACCESS_KEY_SECRET_NAME`.
 * Действие `DELETE` может быть задано только для последнего тира.
 
 ## Настройка {#setting}

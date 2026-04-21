@@ -53,7 +53,7 @@ TString TSearchFilterCreator::GetFilter(const TString& userName) const {
     return "uid=" + escapedUserName;
 }
 
-TString TSearchFilterCreator::GetFormatSearchFilter(const TString& userName) const {
+TString TSearchFilterCreator::GetFormatSearchFilter(const TString& escapedUserName) const {
     const TStringBuf namePlaceHolder = "$username";
     const TString& searchFilter = Settings.GetSearchFilter();
     size_t n = searchFilter.find(namePlaceHolder);
@@ -63,7 +63,7 @@ TString TSearchFilterCreator::GetFormatSearchFilter(const TString& userName) con
     TStringStream result;
     size_t pos = 0;
     while (n != TString::npos) {
-        result << searchFilter.substr(pos, n - pos) << userName;
+        result << searchFilter.substr(pos, n - pos) << escapedUserName;
         pos = n + namePlaceHolder.size();
         n = searchFilter.find(namePlaceHolder, pos);
     }

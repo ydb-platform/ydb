@@ -13,30 +13,9 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
     ```go
     package main
 
-<<<<<<< HEAD
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithBalancer(
-         balancers.PreferLocalDC(
-           balancers.RandomChoice(),
-         ),
-       ),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     ...
-   }
-   ```
-=======
     import (
       "context"
       "os"
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
       "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
@@ -79,14 +58,6 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
       "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
     )
 
-<<<<<<< HEAD
-     db := sql.OpenDB(connector)
-     defer db.Close()
-     ...
-   }
-   ```
-
-=======
     func main() {
       ctx, cancel := context.WithCancel(context.Background())
       defer cancel()
@@ -226,5 +197,4 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

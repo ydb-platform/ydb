@@ -24,8 +24,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
-<<<<<<< HEAD
-=======
 - C#
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
@@ -34,7 +32,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}
 
 ## Initializing a connection {#init}
@@ -918,8 +915,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
       print(f"{meta_key}: {meta_value}")
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   ```c#
@@ -955,7 +950,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
   }
   ```
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}
 
 ### Write in a transaction {#write-tx}
@@ -2221,8 +2215,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
 
 {% endlist %}
-<<<<<<< HEAD
-=======
 
 ### Commit outside the reader {#commit-outside-the-reader}
 
@@ -2248,4 +2240,3 @@ Most often, committing is conveniently done within the reader that has read the 
   ```
 
 {% endlist %}
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))

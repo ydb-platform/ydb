@@ -50,13 +50,7 @@ Below are examples of authentication with a username and password in different {
 
 - Java
 
-<<<<<<< HEAD
-  ```java
-  public void work(String connectionString, String username, String password) {
-      AuthProvider authProvider = new StaticCredentials(username, password);
-=======
   {% list tabs %}
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 
   - Native SDK
 

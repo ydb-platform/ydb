@@ -393,8 +393,6 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
   $ydb = new \YdbPlatform\Ydb\Ydb($config);
   ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   The Python SDK uses the standard `logging` library. To enable a specific logging level:
@@ -410,5 +408,4 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
   The SDK uses the [debug](https://www.npmjs.com/package/debug) library for logging.
   To enable logs, set the `DEBUG` environment variable to filter SDK events, for example `DEBUG=ydbjs:*`.
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

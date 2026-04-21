@@ -78,6 +78,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.http_proxy_port = None
+        self.kafka_api_port = None
+        print("Kafka proxy enabled:", configurator.kafka_proxy_enabled)
         if configurator.kafka_proxy_enabled:
             self.kafka_api_port = port_allocator.kafka_api_port
         if not configurator.simple_config and configurator.http_proxy_enabled:
@@ -248,6 +250,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             )
 
         if self.kafka_api_port is not None:
+            print("Kafka api port=", self.kafka_api_port)
             command.append(
                 "--kafka-port=%s" % self.kafka_api_port,
             )
@@ -341,7 +344,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def pid(self):
         return self.daemon.process.pid
 
-    def kafka_api_port(self):
+    def get_kafka_api_port(self):
         return self.kafka_api_port
 
     def start(self):

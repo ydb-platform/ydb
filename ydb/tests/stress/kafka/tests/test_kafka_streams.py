@@ -22,11 +22,12 @@ class TestYdbTopicWorkload(StressFixture):
         )
 
     def test(self):
+        kafka_api_ports = self.get_kafka_api_ports()
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "--bootstrap", f"http://localhost:{self.kafka_api_port}",
+            "--bootstrap", f"http://localhost:{kafka_api_ports[-1]}",
             "--source-path", "test-topic",
             "--target-path", "target-topic",
             "--consumer", "workload-consumer-0",

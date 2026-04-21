@@ -50,7 +50,7 @@ class StressFixture:
     def get_kafka_api_ports(self):
         ports = []
         for node in self.cluster.nodes.values():
-            ports.append(node.kafka_api_port)
+            ports.append(node.get_kafka_api_port())
         return ports
 
     def _create_serverless_databases(self):

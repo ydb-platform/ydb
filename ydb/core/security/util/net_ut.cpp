@@ -44,6 +44,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsIPv4("1..2.3.4"));                                // double dot
         UNIT_ASSERT(!IsIPv4(" 192.168.1.1"));                            // leading space
         UNIT_ASSERT(!IsIPv4("192.168.1.1 "));                            // trailing space
+        UNIT_ASSERT(!IsIPv4("[192.168.1.1]"));                           // brackets
         UNIT_ASSERT(!IsIPv4("192.168.1.1/24"));                          // CIDR notation
         UNIT_ASSERT(!IsIPv4("192.168.1.1:80"));                          // with port
         UNIT_ASSERT(!IsIPv4("abc.def.ghi.jkl"));                         // alphabetic octets
@@ -78,6 +79,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsIPv6("not-an-ip"));                                    // arbitrary non-IP string
         UNIT_ASSERT(!IsIPv6(":::"));                                          // triple colon is invalid syntax
         UNIT_ASSERT(!IsIPv6("2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234")); // too many groups
+        UNIT_ASSERT(!IsIPv6("[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"));    // brackets
         UNIT_ASSERT(!IsIPv6("2001:db8::85a3::7334"));                         // double :: compression
         UNIT_ASSERT(!IsIPv6("2001:db8:85a3:0000:0000:8a2e:0370:gggg"));       // invalid hex digits
         UNIT_ASSERT(!IsIPv6("12345::1"));                                     // group exceeds 4 hex digits
@@ -92,44 +94,43 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
     }
 
     Y_UNIT_TEST(TestIsGoodPeernameFormat) {
-        // Valid IPv4 peername formats (part 1: <ipv4>)
         UNIT_ASSERT(IsGoodPeernameFormat("127.0.0.1"));
         UNIT_ASSERT(IsGoodPeernameFormat("192.168.1.1"));
         UNIT_ASSERT(IsGoodPeernameFormat("255.255.255.255"));
         UNIT_ASSERT(IsGoodPeernameFormat("0.0.0.0"));
 
-        // Valid IPv4 peername formats (part 2: <ipv4>:<port>)
         UNIT_ASSERT(IsGoodPeernameFormat("127.0.0.1:8080"));
         UNIT_ASSERT(IsGoodPeernameFormat("192.168.1.1:1"));
         UNIT_ASSERT(IsGoodPeernameFormat("10.0.0.1:65535"));
         UNIT_ASSERT(IsGoodPeernameFormat("172.16.0.1:22"));
 
-        // Valid IPv4 peername formats (part 3: ipv4:<ipv4>)
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:127.0.0.1"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:192.168.1.1"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:10.0.0.1"));
 
-        // Valid IPv4 peername formats (part 4: ipv4:<ipv4>:<port>)
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:127.0.0.1:8080"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:192.168.1.1:3000"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:10.0.0.1:22"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:172.16.0.1:65535"));
 
-        // Valid IPv6 peername formats (part 1: <ipv6>)
         UNIT_ASSERT(IsGoodPeernameFormat("::1"));
         UNIT_ASSERT(IsGoodPeernameFormat("2001:db8::1"));
         UNIT_ASSERT(IsGoodPeernameFormat("fe80::1"));
         UNIT_ASSERT(IsGoodPeernameFormat("::"));
         UNIT_ASSERT(IsGoodPeernameFormat("::ffff:192.0.2.1"));
 
-        // Valid IPv6 peername formats (part 2: [<ipv6>]:<port>)
+        UNIT_ASSERT(IsGoodPeernameFormat("[::1]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("[2001:db8::1]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("[fe80::1]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("[::]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("[::ffff:192.0.2.1]"));
+
         UNIT_ASSERT(IsGoodPeernameFormat("[::1]:8080"));
         UNIT_ASSERT(IsGoodPeernameFormat("[2001:db8::1]:3000"));
         UNIT_ASSERT(IsGoodPeernameFormat("[fe80::1]:22"));
         UNIT_ASSERT(IsGoodPeernameFormat("[::]:65535"));
         UNIT_ASSERT(IsGoodPeernameFormat("[::ffff:192.0.2.1]:80"));
 
-        // Valid IPv6 peername formats (part 3: ipv6:<ipv6>)
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:::1"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:2001:0db8:85a3:0000:0000:8a2e:0370:7334"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:2001:db8::1"));
@@ -137,7 +138,13 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:::"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:::ffff:192.0.2.1"));
 
-        // Valid IPv6 peername formats (part 4: ipv6:[<ipv6>]:<port>)
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::1]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[2001:db8::1]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[fe80::1]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::]"));
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::ffff:192.0.2.1]"));
+
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::1]:8080"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:1234"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[2001:db8::1]:3000"));
@@ -145,13 +152,12 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::]:65535"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::ffff:192.0.2.1]:80"));
 
-        // Invalid peername formats
         UNIT_ASSERT(!IsGoodPeernameFormat(""));
         UNIT_ASSERT(!IsGoodPeernameFormat("invalid_format"));
 
-        // Invalid IPv4 formats
         UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:"));
-        UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:0"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("[127.0.0.1]"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("[127.0.0.1]:8080"));
         UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:999999"));
         UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:65536"));
         UNIT_ASSERT(!IsGoodPeernameFormat("256.1.1.1"));
@@ -163,12 +169,13 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsGoodPeernameFormat("1.a.1.1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:port"));
 
-        // Invalid IPv4 with prefix formats
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:2001:db8::1"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[2001:db8::1]"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:1234"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:"));
-        UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:0"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[127.0.0.1]"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[127.0.0.1]:8080"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:999999"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:65536"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:[127.0.0.1]:8080"));
@@ -176,21 +183,19 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:port"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:invalid"));
 
-        // Invalid IPv6 formats
         UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:"));
-        UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:0"));
         UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:999999"));
         UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:65536"));
         UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:port"));
         UNIT_ASSERT(!IsGoodPeernameFormat(":::1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234"));
 
-        // Invalid IPv6 with prefix formats
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:192.168.1.1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:192.168.1.1:3000"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:[192.168.1.1]"));
+        UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:[192.168.1.1]:3000"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:[::1]:"));
-        UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:[::1]:0"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:[::1]:999999"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:[::1]:65536"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:[::1]:port"));
@@ -199,7 +204,6 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
     }
 
     Y_UNIT_TEST(TestParsePeername) {
-        // Valid IPv4 peername formats (part 1: <ipv4>)
         {
             const TString addr{"127.0.0.1"};
             auto res = ParsePeername(addr);
@@ -225,7 +229,6 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
         }
 
-        // Valid IPv4 peername formats (part 2: <ipv4>:<port>)
         {
             const TString addr{"127.0.0.1"};
             const TString port{"8080"};
@@ -259,7 +262,6 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
             UNIT_ASSERT_STRINGS_EQUAL(addr + ":" + port, NAddr::PrintHostAndPort(*res));
         }
 
-        // Valid IPv4 peername formats (part 3: ipv4:<ipv4>)
         {
             const TString addr{"127.0.0.1"};
             auto res = ParsePeername("ipv4:" + addr);
@@ -279,7 +281,6 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
         }
 
-        // Valid IPv4 peername formats (part 4: ipv4:<ipv4>:<port>)
         {
             const TString addr{"127.0.0.1"};
             const TString port{"8080"};
@@ -313,7 +314,6 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
             UNIT_ASSERT_STRINGS_EQUAL(addr + ":" + port, NAddr::PrintHostAndPort(*res));
         }
 
-        // Valid IPv6 peername formats (part 1: <ipv6>)
         {
             const TString addr{"2001:2db8:85a3:7843:dbaf:8a2e:4370:7334"};
             auto res = ParsePeername(addr);
@@ -351,7 +351,43 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
         }
 
-        // Valid IPv6 peername formats (part 2: [<ipv6>]:<port>)
+        {
+            const TString addr{"2001:2db8:85a3:7843:dbaf:8a2e:4370:7334"};
+            auto res = ParsePeername("[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"::1"};
+            auto res = ParsePeername("[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"2001:db8::1"};
+            auto res = ParsePeername("[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"fe89::1"};
+            auto res = ParsePeername("[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"::"};
+            auto res = ParsePeername("[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"::ffff:192.0.2.1"};
+            auto res = ParsePeername("[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+
         {
             const TString addr{"2001:2db8:85a3:7843:dbaf:8a2e:4370:7334"};
             const TString port{"1234"};
@@ -404,7 +440,6 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
 
         }
 
-        // Valid IPv6 peername formats (part 3: ipv6:<ipv6>)
         {
             const TString addr{"::1"};
             auto res = ParsePeername("ipv6:" + addr);
@@ -442,7 +477,43 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
         }
 
-        // Valid IPv6 peername formats (part 4: ipv6:[<ipv6>]:<port>)
+        {
+            const TString addr{"::1"};
+            auto res = ParsePeername("ipv6:[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"2001:2db8:85a3:7843:dbaf:8a2e:4370:7334"};
+            auto res = ParsePeername("ipv6:[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"2001:db8::1"};
+            auto res = ParsePeername("ipv6:[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"fe80::1"};
+            auto res = ParsePeername("ipv6:[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"::"};
+            auto res = ParsePeername("ipv6:[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+        {
+            const TString addr{"::ffff:192.0.2.1"};
+            auto res = ParsePeername("ipv6:[" + addr + "]");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+        }
+
         {
             const TString addr{"::1"};
             const TString port{"8080"};
@@ -492,13 +563,11 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
             UNIT_ASSERT_STRINGS_EQUAL("[" + addr + "]" + ":" + port, NAddr::PrintHostAndPort(*res));
         }
 
-        // Invalid peername formats
         UNIT_ASSERT(!ParsePeername(""));
         UNIT_ASSERT(!ParsePeername("invalid_format"));
 
-        // Invalid IPv4 formats
         UNIT_ASSERT(!ParsePeername("127.0.0.1:"));
-        UNIT_ASSERT(!ParsePeername("127.0.0.1:0"));
+        UNIT_ASSERT(!ParsePeername("[127.0.0.1]"));
         UNIT_ASSERT(!ParsePeername("127.0.0.1:999999"));
         UNIT_ASSERT(!ParsePeername("127.0.0.1:65536"));
         UNIT_ASSERT(!ParsePeername("256.1.1.1"));
@@ -510,12 +579,11 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!ParsePeername("1.a.1.1"));
         UNIT_ASSERT(!ParsePeername("127.0.0.1:port"));
 
-        // Invalid IPv4 with prefix formats
         UNIT_ASSERT(!ParsePeername("ipv4:"));
         UNIT_ASSERT(!ParsePeername("ipv4:2001:db8::1"));
+        UNIT_ASSERT(!ParsePeername("ipv4:[2001:db8::1]"));
         UNIT_ASSERT(!ParsePeername("ipv4:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:1234"));
         UNIT_ASSERT(!ParsePeername("ipv4:127.0.0.1:"));
-        UNIT_ASSERT(!ParsePeername("ipv4:127.0.0.1:0"));
         UNIT_ASSERT(!ParsePeername("ipv4:127.0.0.1:999999"));
         UNIT_ASSERT(!ParsePeername("ipv4:127.0.0.1:65536"));
         UNIT_ASSERT(!ParsePeername("ipv4:[127.0.0.1]:8080"));
@@ -523,21 +591,19 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!ParsePeername("ipv4:127.0.0.1:port"));
         UNIT_ASSERT(!ParsePeername("ipv4:invalid"));
 
-        // Invalid IPv6 formats
         UNIT_ASSERT(!ParsePeername("[::1]:"));
-        UNIT_ASSERT(!ParsePeername("[::1]:0"));
         UNIT_ASSERT(!ParsePeername("[::1]:999999"));
         UNIT_ASSERT(!ParsePeername("[::1]:65536"));
         UNIT_ASSERT(!ParsePeername("[::1]:port"));
         UNIT_ASSERT(!ParsePeername(":::1"));
         UNIT_ASSERT(!ParsePeername("2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234"));
 
-        // Invalid IPv6 with prefix formats
         UNIT_ASSERT(!ParsePeername("ipv6:"));
         UNIT_ASSERT(!ParsePeername("ipv6:192.168.1.1"));
         UNIT_ASSERT(!ParsePeername("ipv6:192.168.1.1:3000"));
+        UNIT_ASSERT(!ParsePeername("ipv6:[192.168.1.1]"));
+        UNIT_ASSERT(!ParsePeername("ipv6:[192.168.1.1]:3000"));
         UNIT_ASSERT(!ParsePeername("ipv6:[::1]:"));
-        UNIT_ASSERT(!ParsePeername("ipv6:[::1]:0"));
         UNIT_ASSERT(!ParsePeername("ipv6:[::1]:999999"));
         UNIT_ASSERT(!ParsePeername("ipv6:[::1]:65536"));
         UNIT_ASSERT(!ParsePeername("ipv6:[::1]:port"));

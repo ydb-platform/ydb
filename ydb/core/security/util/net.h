@@ -18,9 +18,11 @@ bool IsIPv6(TStringBuf address);
 //     4. ipv4:<ipv4>:<port>
 //   IPv6 part:
 //     1. <ipv6>
-//     2. [<ipv6>]:<port>
-//     3. ipv6:<ipv6>
-//     4. ipv6:[<ipv6>]:<port>
+//     2. [<ipv6>]
+//     3. [<ipv6>]:<port>
+//     4. ipv6:<ipv6>
+//     5. ipv6:[<ipv6>]
+//     6. ipv6:[<ipv6>]:<port>
 bool IsGoodPeernameFormat(TStringBuf peername);
 NAddr::IRemoteAddrPtr ParsePeername(TStringBuf peername);
 

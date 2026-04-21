@@ -57,7 +57,7 @@ for _p in (_scripts_dir, os.path.join(_scripts_dir, 'analytics'), _tests_dir):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from mute.fast_unmute_pipeline import BOT_LOGINS, sync
+from mute.fast_unmute_pipeline import sync
 from ydb_wrapper import YDBWrapper
 
 _LOG = logging.getLogger('manual_unmute')

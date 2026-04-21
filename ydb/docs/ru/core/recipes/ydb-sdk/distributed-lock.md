@@ -26,8 +26,6 @@
 
       NYdb::NCoordination::TClient client(driver);
 
-      ThrowOnError(client.CreateNode(nodePath).ExtractValueSync());
-
       auto sessionResult = client.StartSession(nodePath).ExtractValueSync();
       ThrowOnError(sessionResult);
 

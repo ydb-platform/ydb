@@ -7855,9 +7855,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, 0, &starter);
 
-        while (!wasCutHistory) {
-            env.Env.DispatchEvents({});
-        }
+        env->WaitFor("cutting history", [&] { return wasCutHistory; });
 
     }
 
@@ -7922,9 +7920,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, 0, &starter);
 
-        while (!wasCutHistory) {
-            env.Env.DispatchEvents({});
-        }
+        env->WaitFor("cutting history", [&] { return wasCutHistory; });
         UNIT_ASSERT(wasHardBarrier);
     }
 
@@ -7976,9 +7972,71 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, 0, &starter);
 
-        while (!wasCutHistory) {
-            env.Env.DispatchEvents({});
+        env->WaitFor("cutting history", [&] { return wasCutHistory; });
+    }
+
+    Y_UNIT_TEST(TestCutSameGroupTwice) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
+                info->Channels[0].History.emplace_back(1, 0);
+                //info->Channels[1].History.emplace_back(0, 1);
+                info->Channels[1].History.emplace_back(1, 1);
+                info->Channels[1].History.emplace_back(2, 1);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        TRowsModel data;
+        bool wasCutHistory = false;
+        std::set<ui32> barriers;
+        env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTablet::EvCutTabletHistory: {
+                    auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
+                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 1);
+                    UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 2);
+                    wasCutHistory = true;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                case TEvBlobStorage::EvCollectGarbage: {
+                    auto* event = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                    if (event->Hard) {
+                        barriers.insert(event->CollectGeneration);
+                    }
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                default:
+                    return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(new NFake::TEvExecute{ new TTxChangeRoom() });
+        env.SendSync(data.MakeRows(1000, 255));
+        env.SendSync(data.MakeRows(255));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        env->WaitFor("cutting history", [&] { return wasCutHistory; });
+        for (auto b : barriers) {
+            Cerr << b << Endl;
         }
+        UNIT_ASSERT_EQUAL(barriers, (std::set<ui32>{0, 1}));
     }
 }
 

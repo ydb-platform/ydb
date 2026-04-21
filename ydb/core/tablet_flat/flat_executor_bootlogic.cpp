@@ -333,7 +333,7 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
                 SeenBlob(glob.Logo);
             }
         }
-        if (!Result_->Database->GetTableColdParts(tableId).empty()) {
+        if (Result_->GcLogic && !Result_->Database->GetTableColdParts(tableId).empty()) {
             for (const auto& [_, room] : table.Rooms) {
                 Result().GcLogic->HistoryCutter.BecomeUncertain(room.Main);
                 for (auto channel : room.Blobs) {

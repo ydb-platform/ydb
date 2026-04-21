@@ -56,6 +56,9 @@ public:
 
     std::vector<const TTabletChannelInfo::THistoryEntry*> GetHistoryToCut(ui32 channel) const {
         std::vector<const TTabletChannelInfo::THistoryEntry*> result;
+        if (channel > ChannelStats.size()) {
+            return result;
+        }
         if (!ChannelStats[channel].Certain) {
             return result;
         }
@@ -79,6 +82,7 @@ public:
     }
 
     void BecomeUncertain(ui32 channel) {
+        Y_ABORT_UNLESS(channel < ChannelStats.size());
         ChannelStats[channel].Certain = false;
     }
 private:

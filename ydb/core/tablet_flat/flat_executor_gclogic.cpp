@@ -1,6 +1,7 @@
 #include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
 #include <ydb/core/base/tablet.h>
+#include <unordered_set>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -209,6 +210,7 @@ void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
                 channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, historyEntry->GroupID, Generation, true, TGCTime{(historyEntry + 1)->FromGeneration - 1, Max<ui32>()});
             }
             channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
+            ++allHistoryIt;
         }
     }
     ChannelsToCutHistory.clear();

@@ -360,6 +360,30 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         }
     }
 
+    TStateStorageInfo::TRing MakeRing(ui32 ringId, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
+        TStateStorageInfo::TRing ring;
+        ring.IsDisabled = false;
+        ring.UseRingSpecificNodeSelection = useRingSpecificNodeSelection;
+        for (ui32 replicaIdx : xrange(replicasInRing)) {
+            const ui32 nodeId = ringId * 100 + replicaIdx + 1;
+            ring.Replicas.push_back(TActorId(nodeId, ringId, replicaIdx, ringId));
+        }
+        return ring;
+    }
+
+    TStateStorageInfo::TRingGroup MakeRingGroup(std::initializer_list<TStateStorageInfo::TRing> rings) {
+        TStateStorageInfo::TRingGroup group;
+        group.NToSelect = rings.size();
+        group.Rings.assign(rings.begin(), rings.end());
+        return group;
+    }
+
+    TStateStorageRingAvailability MakeRingAvailability(std::initializer_list<bool> availableReplicas) {
+        TStateStorageRingAvailability availability;
+        availability.AvailableReplicas.assign(availableReplicas.begin(), availableReplicas.end());
+        return availability;
+    }
+
     ui64 StabilityRun(ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
         ui64 retHash = 0;
 
@@ -432,6 +456,92 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 3, 5, true), 0.63673, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 9, 1, true), 0.009237, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 9, 8, true), 0.072514, 1e-7);
+    }
+
+    Y_UNIT_TEST(EffectiveUnavailableRingsForRingSpecificClass) {
+        const auto ringGroup = MakeRingGroup({
+            MakeRing(0, 3, true),
+            MakeRing(1, 2, true),
+            MakeRing(2, 4, true),
+            MakeRing(3, 2, true),
+        });
+
+        const TVector<TStateStorageRingAvailability> ringAvailability = {
+            MakeRingAvailability({false, true, true}),
+            MakeRingAvailability({true, true}),
+            MakeRingAvailability({false, false, false, false}),
+            MakeRingAvailability({true, false}),
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CalculateEffectiveUnavailableRings(ringGroup, ringAvailability), 3);
+    }
+
+    Y_UNIT_TEST(EffectiveUnavailableRingsForColumnClass) {
+        const auto ringGroup = MakeRingGroup({
+            MakeRing(0, 2, false),
+            MakeRing(1, 2, false),
+            MakeRing(2, 2, false),
+            MakeRing(3, 2, false),
+        });
+
+        const TVector<TStateStorageRingAvailability> ringAvailability = {
+            MakeRingAvailability({false, true}),
+            MakeRingAvailability({true, false}),
+            MakeRingAvailability({false, true}),
+            MakeRingAvailability({true, true}),
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CalculateEffectiveUnavailableRings(ringGroup, ringAvailability), 2);
+    }
+
+    Y_UNIT_TEST(FullyUnavailableRingAffectsAllColumns) {
+        const auto ringGroup = MakeRingGroup({
+            MakeRing(0, 2, false),
+            MakeRing(1, 2, false),
+            MakeRing(2, 2, false),
+        });
+
+        const TVector<TStateStorageRingAvailability> ringAvailability = {
+            MakeRingAvailability({false, false}),
+            MakeRingAvailability({true, false}),
+            MakeRingAvailability({false, true}),
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CalculateEffectiveUnavailableRings(ringGroup, ringAvailability), 2);
+    }
+
+    Y_UNIT_TEST(EffectiveUnavailableRingsForMixedClasses) {
+        const auto ringGroup = MakeRingGroup({
+            MakeRing(0, 3, true),
+            MakeRing(1, 2, false),
+            MakeRing(2, 2, false),
+            MakeRing(3, 3, false),
+            MakeRing(4, 3, false),
+        });
+
+        const TVector<TStateStorageRingAvailability> ringAvailability = {
+            MakeRingAvailability({true, false, true}),
+            MakeRingAvailability({false, true}),
+            MakeRingAvailability({false, true}),
+            MakeRingAvailability({true, true, false}),
+            MakeRingAvailability({true, false, true}),
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CalculateEffectiveUnavailableRings(ringGroup, ringAvailability), 4);
+    }
+
+    Y_UNIT_TEST(EffectiveUnavailableRingsIsConservativeAcrossDifferentRingSizes) {
+        const auto ringGroup = MakeRingGroup({
+            MakeRing(0, 2, false),
+            MakeRing(1, 4, false),
+        });
+
+        const TVector<TStateStorageRingAvailability> ringAvailability = {
+            MakeRingAvailability({true, false}),
+            MakeRingAvailability({true, true, false, true}),
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CalculateEffectiveUnavailableRings(ringGroup, ringAvailability), 2);
     }
 
     double UniformityRun(ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {

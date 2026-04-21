@@ -1,4 +1,223 @@
 {
+  "Compress": [
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
+      "name": "BZip2"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
+      "name": "Brotli"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
+      "name": "Gzip"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lz4",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lzf",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
+      "name": "Lzma"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lzo",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lzq",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Snappy"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
+      "name": "Zlib"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
+      "name": "Zstd"
+    }
+  ],
+  "Decompress": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "BZip2"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Brotli"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Gzip"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lz4"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzf"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzma"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzo"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzq"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Snappy"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Xz"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Zlib"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Zstd"
+    }
+  ],
+  "Protobuf": [
+    {
+      "isTypeAwareness": true,
+      "name": "Parse",
+      "polyArgs": "[[[];{\"type\"=[\"CallableType\";[];[[\"UniversalStructType\"]];[[[\"DataType\";\"String\"];1u]]]}]]",
+      "resolvedCallableTypes": "[#]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "Serialize",
+      "polyArgs": "[[[];{\"type\"=[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"UniversalStructType\"];1u]]]}]]",
+      "resolvedCallableTypes": "[#]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "TryParse",
+      "polyArgs": "[[[];{\"type\"=[\"CallableType\";[];[[\"OptionalType\";[\"UniversalStructType\"]]];[[[\"DataType\";\"String\"];1u]]]}]]",
+      "resolvedCallableTypes": "[#]"
+    }
+  ],
+  "Streaming": [
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[3u];[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ListType\";[\"DataType\";\"String\"]]]];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Process",
+      "optionalArgCount": 3
+    },
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[3u];[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ListType\";[\"DataType\";\"String\"]]]];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "ProcessInline",
+      "optionalArgCount": 3
+    }
+  ],
+  "TryDecompress": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "BZip2"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Brotli"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Gzip"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lz4"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzf"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzma"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzo"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Lzq"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Snappy"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Xz"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Zlib"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Zstd"
+    }
+  ],
   "DateTime": [
     {
       "argCount": 1,
@@ -1075,20 +1294,6 @@
       "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
       "name": "Replace",
       "runConfigType": "[\"DataType\";\"String\"]"
-    }
-  ],
-  "Protobuf": [
-    {
-      "isTypeAwareness": true,
-      "name": "Parse"
-    },
-    {
-      "isTypeAwareness": true,
-      "name": "Serialize"
-    },
-    {
-      "isTypeAwareness": true,
-      "name": "TryParse"
     }
   ],
   "Re2": [
@@ -2684,205 +2889,6 @@
       "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
       "name": "YPathUint64",
       "optionalArgCount": 1
-    }
-  ],
-  "Compress": [
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
-      "name": "BZip2"
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
-      "name": "Brotli"
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
-      "name": "Gzip"
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
-      "name": "Lz4",
-      "optionalArgCount": 1
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
-      "name": "Lzf",
-      "optionalArgCount": 1
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
-      "name": "Lzma"
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
-      "name": "Lzo",
-      "optionalArgCount": 1
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
-      "name": "Lzq",
-      "optionalArgCount": 1
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Snappy"
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
-      "name": "Zlib"
-    },
-    {
-      "argCount": 2,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
-      "name": "Zstd"
-    }
-  ],
-  "Decompress": [
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "BZip2"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Brotli"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Gzip"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lz4"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzf"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzma"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzo"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzq"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Snappy"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Xz"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Zlib"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Zstd"
-    }
-  ],
-  "Streaming": [
-    {
-      "argCount": 5,
-      "callableType": "[\"CallableType\";[3u];[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ListType\";[\"DataType\";\"String\"]]]];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
-      "name": "Process",
-      "optionalArgCount": 3
-    },
-    {
-      "argCount": 5,
-      "callableType": "[\"CallableType\";[3u];[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ListType\";[\"DataType\";\"String\"]]]];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
-      "name": "ProcessInline",
-      "optionalArgCount": 3
-    }
-  ],
-  "TryDecompress": [
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "BZip2"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Brotli"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Gzip"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lz4"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzf"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzma"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzo"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Lzq"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Snappy"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Xz"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Zlib"
-    },
-    {
-      "argCount": 1,
-      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
-      "name": "Zstd"
     }
   ]
 }

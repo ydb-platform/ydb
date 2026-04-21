@@ -108,6 +108,7 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/core/expr_nodes
     yql/essentials/providers/common/proto
+    yql/essentials/minikql/runtime_settings
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_data_provider.h)

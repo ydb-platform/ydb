@@ -1,6 +1,6 @@
 #pragma once
 
-#include "yql_dispatch.h"
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
 
 #include <yql/essentials/core/yql_type_annotation.h>
 

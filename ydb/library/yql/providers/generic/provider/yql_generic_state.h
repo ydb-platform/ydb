@@ -3,6 +3,7 @@
 #include "yql_generic_settings.h"
 
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>

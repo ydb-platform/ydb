@@ -18,6 +18,7 @@
 #include <yql/essentials/public/udf/udf_log.h>
 
 #include <util/generic/scope.h>
+#include <util/string/ascii.h>
 #include <util/string/join.h>
 
 #ifdef GetMessage
@@ -2869,7 +2870,7 @@ bool TSqlQuery::AlterTableSetTableSetting(
         node.GetRule_table_setting_value3(),
         tableSettings,
         tableType,
-        true);
+        /* alter = */ true);
 }
 
 bool TSqlQuery::AlterTableSetTableSetting(
@@ -2880,7 +2881,7 @@ bool TSqlQuery::AlterTableSetTableSetting(
             entry.GetRule_table_setting_value3(),
             tableSettings,
             tableType,
-            true);
+            /* alter = */ true);
     };
 
     const auto& firstEntry = node.GetRule_alter_table_setting_entry3();
@@ -2893,6 +2894,114 @@ bool TSqlQuery::AlterTableSetTableSetting(
             return false;
         }
     }
+    return true;
+}
+
+namespace {
+
+bool IsIndexSpecificSettingName(TStringBuf name) {
+    return AsciiEqualsIgnoreCase(name, "false_positive_probability") || AsciiEqualsIgnoreCase(name, "ngram_size") || AsciiEqualsIgnoreCase(name, "case_sensitive");
+}
+
+bool ParseAlterIndexSettingValue(
+    TSqlQuery& parser,
+    TContext& ctx,
+    const TIdentifier& id,
+    const TRule_table_setting_value& value,
+    TString& parsedValue) {
+    switch (value.Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue1:
+            parsedValue = to_lower(IdEx(value.GetAlt_table_setting_value1().GetRule_id1(), parser).Name);
+            return true;
+        case TRule_table_setting_value::kAltTableSettingValue2: {
+            const TString stringValue = ctx.Token(value.GetAlt_table_setting_value2().GetToken1());
+            const auto unescaped = StringContent(ctx, ctx.Pos(), stringValue);
+            if (!unescaped) {
+                return false;
+            }
+
+            parsedValue = to_lower(unescaped->Content);
+            return true;
+        }
+        case TRule_table_setting_value::kAltTableSettingValue3:
+            parsedValue = to_lower(ctx.Token(value.GetAlt_table_setting_value3().GetRule_integer1().GetToken1()));
+            return true;
+        case TRule_table_setting_value::kAltTableSettingValue5:
+            ctx.Error() << to_upper(id.Name) << " setting does not support ttl value";
+            return false;
+        case TRule_table_setting_value::kAltTableSettingValue6:
+            parsedValue = to_lower(ctx.Token(value.GetAlt_table_setting_value6().GetRule_bool_value1().GetToken1()));
+            return true;
+        case TRule_table_setting_value::kAltTableSettingValue7:
+            parsedValue = to_lower(ctx.Token(value.GetAlt_table_setting_value7().GetRule_real1().GetToken1()));
+            return true;
+        case TRule_table_setting_value::kAltTableSettingValue4:
+            ctx.Error() << to_upper(id.Name) << " setting does not support split boundaries value";
+            return false;
+        case TRule_table_setting_value::ALT_NOT_SET:
+            YQL_ENSURE(false, "Unreachable");
+    }
+}
+
+bool StoreAlterIndexSettingValue(
+    TSqlQuery& self,
+    TContext& ctx,
+    const TIdentifier& id,
+    const TRule_table_setting_value& value,
+    TIndexDescription::TIndexSettings& indexSettings) {
+    const auto name = to_lower(id.Name);
+    if (indexSettings.contains(name)) {
+        ctx.Error() << "Duplicated " << name;
+        return false;
+    }
+
+    TString parsedValue;
+    if (!ParseAlterIndexSettingValue(self, ctx, id, value, parsedValue)) {
+        return false;
+    }
+
+    indexSettings.emplace(name, TIndexDescription::TIndexSetting{
+                                    .Name = name,
+                                    .NamePosition = id.Pos,
+                                    .Value = std::move(parsedValue),
+                                    .ValuePosition = ctx.Pos()});
+
+    return true;
+}
+
+} // namespace
+
+bool TSqlQuery::AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType) {
+    const auto id = IdEx(node.GetRule_an_id2(), *this);
+    if (IsIndexSpecificSettingName(id.Name)) {
+        return StoreAlterIndexSettingValue(*this, Ctx_, id, node.GetRule_table_setting_value3(), indexSettings);
+    }
+
+    return StoreTableSettingsEntry(id, node.GetRule_table_setting_value3(), tableSettings, tableType, /* alter = */ true);
+}
+
+bool TSqlQuery::AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType) {
+    const auto storeSetting = [&](const TRule_alter_table_setting_entry& entry) {
+        const auto id = IdEx(entry.GetRule_an_id1(), *this);
+        if (IsIndexSpecificSettingName(id.Name)) {
+            return StoreAlterIndexSettingValue(*this, Ctx_, id, entry.GetRule_table_setting_value3(), indexSettings);
+        }
+
+        return StoreTableSettingsEntry(id, entry.GetRule_table_setting_value3(), tableSettings, tableType, /* alter = */ true);
+    };
+
+    const auto& firstEntry = node.GetRule_alter_table_setting_entry3();
+    if (!storeSetting(firstEntry)) {
+        return false;
+    }
+
+    for (auto&& block : node.GetBlock4()) {
+        const auto& entry = block.GetRule_alter_table_setting_entry2();
+        if (!storeSetting(entry)) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -2940,7 +3049,7 @@ void TSqlQuery::AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to&
 bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, TAlterTableParameters& params) {
     const auto indexName = IdEx(node.GetRule_an_id3(), *this);
     params.AlterIndexes.emplace_back(indexName);
-    TTableSettings& indexTableSettings = params.AlterIndexes.back().TableSettings;
+    auto& index = params.AlterIndexes.back();
 
     const auto& action = node.GetRule_alter_table_alter_index_action4();
 
@@ -2948,25 +3057,46 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction1: {
             // SET setting value
             const auto& rule = action.GetAlt_alter_table_alter_index_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!AlterTableSetTableSetting(rule, indexTableSettings, params.TableType)) {
+            if (!AlterTableSetIndexSetting(rule, index.TableSettings, index.IndexSettings, params.TableType)) {
                 return false;
             }
+
             break;
         }
         case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction2: {
             // SET (setting1 = value1, ...)
             const auto& rule = action.GetAlt_alter_table_alter_index_action2().GetRule_alter_table_set_table_setting_compat1();
-            if (!AlterTableSetTableSetting(rule, indexTableSettings, params.TableType)) {
+            if (!AlterTableSetIndexSetting(rule, index.TableSettings, index.IndexSettings, params.TableType)) {
                 return false;
             }
+
             break;
         }
         case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction3: {
             // RESET (setting1, ...)
             const auto& rule = action.GetAlt_alter_table_alter_index_action3().GetRule_alter_table_reset_table_setting1();
-            if (!AlterTableResetTableSetting(rule, indexTableSettings, params.TableType)) {
+            const auto resetSetting = [&](const TRule_an_id& idNode) {
+                const auto id = IdEx(idNode, *this);
+                if (IsIndexSpecificSettingName(id.Name)) {
+                    Ctx_.Error() << "RESET is not supported for index settings";
+                    return false;
+                }
+
+                return ResetTableSettingsEntry(id, index.TableSettings, params.TableType);
+            };
+
+            const auto& firstEntry = rule.GetRule_an_id3();
+            if (!resetSetting(firstEntry)) {
                 return false;
             }
+
+            for (auto&& block : rule.GetBlock4()) {
+                const auto& entry = block.GetRule_an_id2();
+                if (!resetSetting(entry)) {
+                    return false;
+                }
+            }
+
             break;
         }
         case TRule_alter_table_alter_index_action::ALT_NOT_SET:

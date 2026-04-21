@@ -1159,6 +1159,18 @@ class TYqlAtom final: public TYqlAtomBase<TYqlAtom, false> {
 class TFileYqlAtom final: public TYqlAtomBase<TFileYqlAtom, true> {
     using TBase = TYqlAtomBase<TFileYqlAtom, true>;
     using TBase::TBase;
+
+    bool IsLiteral() const override {
+        return false;
+    }
+
+    TString GetLiteralType() const override {
+        YQL_ENSURE(false, "TFileYqlAtom should not be evaluated to a literal value");
+    }
+
+    TString GetLiteralValue() const override {
+        YQL_ENSURE(false, "TFileYqlAtom should not be evaluated to a literal value");
+    }
 };
 
 class TTryMember final: public TCallNode {

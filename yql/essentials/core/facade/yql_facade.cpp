@@ -1893,6 +1893,13 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
                 writer.OnInt64Scalar(TypeCtx_->LineageStats.Duration);
                 writer.OnEndMap();
             }
+            if (TypeCtx_->LineageStats.Version > 0) {
+                writer.OnKeyedItem("Version");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Version);
+                writer.OnEndMap();
+            }
         writer.OnEndMap();
     }
 

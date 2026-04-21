@@ -4189,6 +4189,14 @@ Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsCompatIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(AlterTableAlterIndexSetLocalBloomFppIsCorrect) {
+    const auto result = SqlToYql(R"sql(
+             USE ydb;
+             ALTER TABLE table ALTER INDEX idx SET (false_positive_probability = 0.06);
+         )sql");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
 Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
     ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
                         "<main>:1:55: Error: READ_REPLICAS_SETTINGS reset is not supported\n");

@@ -91,7 +91,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
                 InsertOrCrash(waitingFiberIds, fiberId);
 
                 YT_LOG_DEBUG("Fiber introspection completed (FiberId: %x)",
-                    info.FiberId);
+                    fiberId);
             };
             if (!fiber->TryLockForIntrospection(&state, onIntrospectionLockAcquired)) {
                 YT_LOG_DEBUG("Failed to lock fiber for introspection (FiberId: %x, State: %v)",

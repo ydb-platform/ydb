@@ -1,6 +1,8 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 using namespace NYql;
 using namespace NYql::NNodes;
 

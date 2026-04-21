@@ -164,7 +164,7 @@ namespace NActors {
 
     NHPTimer::STime TActivationContext::GetCurrentEventEnqueuedTimestampTs() {
         Y_ABORT_UNLESS(TlsThreadContext);
-        return TlsThreadContext->MailboxContext.EventEnqueuedTimestamp;
+        return TlsThreadContext->EventEnqueuedTimestampTs();
     }
 
     TInstant TActivationContext::GetCurrentEventEnqueuedTimestamp() {
@@ -175,7 +175,7 @@ namespace NActors {
 
     NHPTimer::STime TActivationContext::GetCurrentMailboxScheduledTimestampTs() {
         Y_ABORT_UNLESS(TlsThreadContext);
-        return TlsThreadContext->MailboxContext.ScheduledTimestamp;
+        return TlsThreadContext->MailboxScheduledTimestampTs();
     }
 
     TInstant TActivationContext::GetCurrentMailboxScheduledTimestamp() {
@@ -186,12 +186,12 @@ namespace NActors {
 
     ui64 TActivationContext::GetCurrentEventDeliveryTimeUs() {
         Y_ABORT_UNLESS(TlsThreadContext);
-        return TlsThreadContext->MailboxContext.EventDeliveryTimeUs;
+        return TlsThreadContext->EventDeliveryTimeUs();
     }
 
     ui64 TActivationContext::GetCurrentActivationTimeUs() {
         Y_ABORT_UNLESS(TlsThreadContext);
-        return TlsThreadContext->MailboxContext.ActivationTimeUs;
+        return TlsThreadContext->ActivationTimeUs();
     }
 
     void TActivationContext::EnableMailboxStats() {

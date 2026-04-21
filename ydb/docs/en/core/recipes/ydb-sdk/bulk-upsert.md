@@ -88,9 +88,6 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
   }
   ```
 
-<<<<<<< HEAD
-- Go (database/sql)
-=======
   {% endcut %}
 
   {% cut "Bulk upsert `CSV` data" %}
@@ -227,7 +224,6 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
   {% endcut %}
 
   - database/sql
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 
     The {{ ydb-short-name }} `database/sql` driver does not support non-transactional bulk insert.
     For bulk insert, use [transactional insert](./upsert.md).
@@ -321,8 +317,6 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     }
   ```
 
-<<<<<<< HEAD
-=======
     In Spring Boot, Hibernate, JOOQ, and other ORM stacks on JDBC you can run native YQL (including from repositories and `@Query`). The driver tries to optimize large inserts; `UPDATE`, `INSERT`, `DELETE`, `UPSERT` through JDBC are batched on the driver side when appropriate.
 
   {% endlist %}
@@ -416,5 +410,4 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

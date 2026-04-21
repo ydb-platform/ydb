@@ -1,10 +1,6 @@
 # Random choice
 
-<<<<<<< HEAD
-The {{ ydb-short-name }} SDK uses the `random_choice` algorithm by default.
-=======
 The {{ ydb-short-name }} SDK uses the `random_choice` (uniform random) balancing algorithm by default, except the C++ SDK, which defaults to ["prefer the nearest data center"](./balancing-prefer-local.md).
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 
 Below are examples of explicitly setting the "random choice" balancing algorithm in different {{ ydb-short-name }} SDKs.
 
@@ -19,28 +15,9 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
     ```go
     package main
 
-<<<<<<< HEAD
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithBalancer(
-         balancers.RandomChoice(),
-       ),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     ...
-   }
-   ```
-=======
     import (
       "context"
       "os"
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
       "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
@@ -81,14 +58,6 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
       "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
     )
 
-<<<<<<< HEAD
-     db := sql.OpenDB(connector)
-     defer db.Close()
-     ...
-   }
-   ```
-
-=======
     func main() {
       ctx, cancel := context.WithCancel(context.Background())
       defer cancel()
@@ -226,5 +195,4 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

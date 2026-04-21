@@ -278,12 +278,10 @@ public:
     TLocalPathId NextLocalPathId = 0;
     ui64 NextSchemeChangeOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
-    // Advances whenever any in-flight op is assigned a PlanStep. Used by
-    // Fetch to report a monotonic WatermarkPlanStep: when TxInFlight is
-    // empty, the raw min would drop to 0, so we report this ceiling
-    // instead. Coordinator PlanSteps are globally monotonic, so this
-    // value is always a safe upper bound for completed work.
-    ui64 MaxObservedOpPlanStep = 0;
+    // Monotonic ceiling of coordinator plan steps ever assigned to an op.
+    // Used to seed WatermarkPlanStep in Fetch when TxInFlight is empty;
+    // persisted as SysParam_LastAssignedPlanStep so it survives reboot.
+    ui64 LastAssignedPlanStep = 0;
     // Per-tx row cap for DeleteAckedSchemeChangeRecords. Keeps a single
     // cleanup tx's redo log bounded; leftover work spills into a follow-up
     // TTxSchemeChangeRecordsCleanup triggered from Complete().
@@ -893,6 +891,7 @@ public:
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
+    void PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const;
     ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
     // Caller is responsible for a single PersistUpdateNextSchemeChangeOrder
     // at the end of its tx; use for multi-record batches.

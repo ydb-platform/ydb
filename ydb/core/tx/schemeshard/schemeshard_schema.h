@@ -2517,6 +2517,7 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_MaxIncompatibleChange = 11;
     static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12;
     static constexpr ui64 SysParam_NextSchemeChangeOrder = 13;
+    static constexpr ui64 SysParam_LastAssignedPlanStep = 14;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

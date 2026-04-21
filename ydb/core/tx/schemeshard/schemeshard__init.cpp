@@ -1365,6 +1365,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextPathId, Self->NextLocalPathId));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextShardIdx, Self->NextLocalShardIdx));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextSchemeChangeOrder, Self->NextSchemeChangeOrder));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_LastAssignedPlanStep, Self->LastAssignedPlanStep));
 
         {
             auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
@@ -3631,8 +3632,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 txState.MinStep =       txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::MinStep>(InvalidStepId);
                 txState.PlanStep =      txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::PlanStep>(InvalidStepId);
-                if (txState.PlanStep != InvalidStepId && ui64(txState.PlanStep) > Self->MaxObservedOpPlanStep) {
-                    Self->MaxObservedOpPlanStep = ui64(txState.PlanStep);
+                // Belt-and-braces for pre-SysParam_LastAssignedPlanStep tablets:
+                // fold any surviving TxInFlight PlanStep into the ceiling.
+                if (txState.PlanStep != InvalidStepId && ui64(txState.PlanStep) > Self->LastAssignedPlanStep) {
+                    Self->LastAssignedPlanStep = ui64(txState.PlanStep);
                 }
 
                 TString extraData =     txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::ExtraBytes>("");

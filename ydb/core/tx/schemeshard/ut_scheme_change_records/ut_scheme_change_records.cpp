@@ -544,6 +544,33 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 << result.WatermarkPlanStep);
     }
 
+    Y_UNIT_TEST(WatermarkSurvivesTabletReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "reboot:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "T1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto before = ReadSchemeChangeRecordsFull(runtime);
+        UNIT_ASSERT_C(before.WatermarkPlanStep > 0,
+            "Pre-reboot watermark should be > 0, got: " << before.WatermarkPlanStep);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        auto after = ReadSchemeChangeRecordsFull(runtime);
+        UNIT_ASSERT_C(after.WatermarkPlanStep >= before.WatermarkPlanStep,
+            "Post-reboot watermark must not regress: before="
+                << before.WatermarkPlanStep << " after=" << after.WatermarkPlanStep);
+    }
+
     Y_UNIT_TEST(WatermarkReflectsInFlightPlanStep) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

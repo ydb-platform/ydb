@@ -168,7 +168,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         // so this is the tightest safe upper bound and never regresses.
         const ui64 watermark = (currentMinInFlight != 0)
             ? currentMinInFlight
-            : Self->MaxObservedOpPlanStep;
+            : Self->LastAssignedPlanStep;
         Result->Record.SetWatermarkPlanStep(watermark);
 
         return true;

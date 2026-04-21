@@ -3697,6 +3697,11 @@ void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const
     ++NextSchemeChangeOrderPersistCount;
 }
 
+void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_LastAssignedPlanStep).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(LastAssignedPlanStep)));
+}
+
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr) const {
     if (Subscribers.empty()) {
         return true;

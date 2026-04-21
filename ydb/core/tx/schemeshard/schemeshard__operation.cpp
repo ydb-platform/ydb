@@ -706,6 +706,15 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                         << ", message: " << record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
+        // Plan step is monotonic per coordinator, so advance the ceiling
+        // once per message rather than per op. Persisting keeps the
+        // WatermarkPlanStep monotonic across reboots.
+        if (ui64(step) > Self->LastAssignedPlanStep) {
+            Self->LastAssignedPlanStep = ui64(step);
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUpdateLastAssignedPlanStep(db);
+        }
+
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
             const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo());
@@ -738,9 +747,6 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                 // for scheme change records persistence (not all operations set it themselves)
                 if (auto* txState = Self->FindTx(opId)) {
                     txState->PlanStep = step;
-                    if (ui64(step) > Self->MaxObservedOpPlanStep) {
-                        Self->MaxObservedOpPlanStep = ui64(step);
-                    }
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};

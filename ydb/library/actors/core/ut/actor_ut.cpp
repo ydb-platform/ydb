@@ -754,6 +754,111 @@ Y_UNIT_TEST_SUITE(TestAliases) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
+    using namespace NThreading;
+
+    struct TQueueTimestamps {
+        NHPTimer::STime EventEnqueuedTimestamp = 0;
+        NHPTimer::STime MailboxScheduledTimestamp = 0;
+        ui64 EventDeliveryTimeUs = 0;
+        ui64 ActivationTimeUs = 0;
+        NHPTimer::STime ObservedTimestamp = 0;
+    };
+
+    struct TQueueTimestampActor : TActorBootstrapped<TQueueTimestampActor> {
+        TPromise<void> Ready;
+        TPromise<TQueueTimestamps> Done;
+
+        TQueueTimestampActor(TPromise<void> ready, TPromise<TQueueTimestamps> done)
+            : Ready(std::move(ready))
+            , Done(std::move(done))
+        {}
+
+        void Bootstrap() {
+            TActivationContext::SetOverwrittenEventsPerMailbox(1);
+            Ready.SetValue();
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            TQueueTimestamps timestamps;
+            timestamps.EventEnqueuedTimestamp = TActivationContext::GetCurrentEventEnqueuedTimestampTs();
+            timestamps.MailboxScheduledTimestamp = TActivationContext::GetCurrentMailboxScheduledTimestampTs();
+            timestamps.EventDeliveryTimeUs = TActivationContext::GetCurrentEventDeliveryTimeUs();
+            timestamps.ActivationTimeUs = TActivationContext::GetCurrentActivationTimeUs();
+            timestamps.ObservedTimestamp = GetCycleCountFast();
+            Done.SetValue(std::move(timestamps));
+            PassAway();
+        }
+    };
+
+    Y_UNIT_TEST(CurrentQueueTimestamps) {
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+
+        ui64 ts = GetCycleCountFast();
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
+        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
+            harmonizer->AddPool(setup->Executors[i].Get());
+        }
+        setup->Scheduler = new TBasicSchedulerThread;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TPromise<void> readyPromise = NewPromise<void>();
+        TFuture<void> ready = readyPromise.GetFuture();
+        TPromise<TQueueTimestamps> donePromise = NewPromise<TQueueTimestamps>();
+        TFuture<TQueueTimestamps> done = donePromise.GetFuture();
+
+        const TActorId actorId = actorSystem.Register(new TQueueTimestampActor(std::move(readyPromise), std::move(donePromise)));
+        ready.GetValueSync();
+        actorSystem.Send(actorId, new TEvents::TEvWakeup());
+
+        const TQueueTimestamps timestamps = done.GetValueSync();
+        actorSystem.Stop();
+
+        UNIT_ASSERT_C(timestamps.EventEnqueuedTimestamp > 0, "missing current event enqueue timestamp");
+        UNIT_ASSERT_C(timestamps.MailboxScheduledTimestamp > 0, "missing current mailbox schedule timestamp");
+        UNIT_ASSERT_C(
+            timestamps.EventDeliveryTimeUs <= static_cast<ui64>(Ts2Us(timestamps.ObservedTimestamp - timestamps.EventEnqueuedTimestamp)),
+            "event delivery time must match enqueue timestamp"
+                << ": deliveryUs=" << timestamps.EventDeliveryTimeUs
+                << " eventTs=" << timestamps.EventEnqueuedTimestamp
+                << " observedTs=" << timestamps.ObservedTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.ActivationTimeUs <= static_cast<ui64>(Ts2Us(timestamps.ObservedTimestamp - timestamps.MailboxScheduledTimestamp)),
+            "activation time must match mailbox scheduled timestamp"
+                << ": activationUs=" << timestamps.ActivationTimeUs
+                << " mailboxTs=" << timestamps.MailboxScheduledTimestamp
+                << " observedTs=" << timestamps.ObservedTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.ActivationTimeUs <= timestamps.EventDeliveryTimeUs,
+            "activation time must not exceed event delivery time"
+                << ": activationUs=" << timestamps.ActivationTimeUs
+                << " deliveryUs=" << timestamps.EventDeliveryTimeUs);
+        UNIT_ASSERT_C(
+            timestamps.EventEnqueuedTimestamp <= timestamps.MailboxScheduledTimestamp,
+            "event timestamp must not be after mailbox scheduling"
+                << ": event=" << timestamps.EventEnqueuedTimestamp
+                << " mailbox=" << timestamps.MailboxScheduledTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.MailboxScheduledTimestamp <= timestamps.ObservedTimestamp,
+            "mailbox timestamp must not be in the future"
+                << ": mailbox=" << timestamps.MailboxScheduledTimestamp
+                << " observed=" << timestamps.ObservedTimestamp);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TestStateFunc) {
     struct TTestActorWithExceptionsStateFunc : TActor<TTestActorWithExceptionsStateFunc> {
         static constexpr char ActorName[] = "TestActorWithExceptionsStateFunc";

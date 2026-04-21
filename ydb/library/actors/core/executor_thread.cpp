@@ -45,6 +45,12 @@ LWTRACE_USING(ACTORLIB_PROVIDER)
 namespace NActors {
     constexpr TDuration TExecutorThread::DEFAULT_TIME_PER_MAILBOX;
 
+    namespace {
+        ui64 CalculateWaitingTimeUs(NHPTimer::STime startTs, NHPTimer::STime finishTs) {
+            return finishTs > startTs ? static_cast<ui64>(Ts2Us(finishTs - startTs)) : 0;
+        }
+    }
+
     TExecutorThread::TExecutorThread(
             TWorkerId workerId,
             TActorSystem* actorSystem,
@@ -182,7 +188,8 @@ namespace NActors {
         ThreadCtx.ExecutionContext.PreemptionSubscribed.push_back(actorId);
     }
 
-    TExecutorThread::TProcessingResult TExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution) {
+    TExecutorThread::TProcessingResult TExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution,
+            NHPTimer::STime mailboxScheduledTimestampTs) {
         EXECUTOR_THREAD_DEBUG(EDebugLevel::Activation, "Execute mailbox");
         Y_ABORT_UNLESS(mailbox, "mailbox must be not null");
         Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
@@ -211,9 +218,12 @@ namespace NActors {
 
         ThreadCtx.ResetOverwrittenEventsPerMailbox();
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
+        ThreadCtx.SetMailboxScheduledTimestampTs(mailboxScheduledTimestampTs);
         for (; execCtx.ExecutedEvents < ThreadCtx.OverwrittenEventsPerMailbox(); execCtx.ExecutedEvents++) {
             if (std::unique_ptr<IEventHandle> evExt = mailbox->Pop()) {
                 EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "mailbox->Pop()");
+                ThreadCtx.SetEventEnqueuedTimestampTs(evExt->SendTime);
+                ThreadCtx.SetEventDeliveryTimeUs(CalculateWaitingTimeUs(evExt->SendTime, hpprev));
                 recipient = evExt->GetRecipientRewrite();
                 actor = mailbox->FindActor(recipient.LocalId());
                 if (!actor) {
@@ -242,7 +252,10 @@ namespace NActors {
                     CurrentActorScheduledEventsCounter = 0;
 
                     if (firstEvent) {
-                        double usec = ExecutionStats.AddActivationStats(mailbox->ScheduleMoment, hpprev);
+                        ThreadCtx.SetActivationTimeUs(CalculateWaitingTimeUs(mailboxScheduledTimestampTs, hpprev));
+                        double usec = mailboxScheduledTimestampTs
+                            ? ExecutionStats.AddActivationStats(mailboxScheduledTimestampTs, hpprev)
+                            : 0;
                         if (usec > 500) {
                             GLOBAL_LWPROBE(ACTORLIB_PROVIDER, SlowActivation, TlsThreadContext->Pool()->PoolId, usec / 1000.0);
                         }
@@ -407,6 +420,7 @@ namespace NActors {
 
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
+        ThreadCtx.ResetMailboxContext();
         if (mailbox->IsEmpty() && mailbox->CanReclaim()) {
             ThreadCtx.FreeMailbox(mailbox);
         } else {
@@ -442,7 +456,7 @@ namespace NActors {
         i64 execCycles = 0;
         i64 nonExecCycles = 0;
 
-        auto executeActivation = [&](TMailbox* mailbox, bool isTailExecution) {
+        auto executeActivation = [&](TMailbox* mailbox, bool isTailExecution, NHPTimer::STime mailboxScheduledTimestampTs) {
             EXECUTOR_THREAD_DEBUG(EDebugLevel::Activation, "executeActivation");
             LWTRACK(ActivationBegin, ThreadCtx.ExecutionContext.Orbit, ThreadCtx.PoolId(), ThreadCtx.WorkerId());
             readyActivationCount++;
@@ -452,7 +466,7 @@ namespace NActors {
                     nonExecCycles += hpnow - hpprev;
                     hpprev = hpnow;
                     {
-                        auto result = Execute(mailbox, isTailExecution);
+                        auto result = Execute(mailbox, isTailExecution, mailboxScheduledTimestampTs);
                         if (result.IsPreempted) {
                             TlsThreadContext->ChangeCapturedSendingType(ESendingType::Lazy);
                         }
@@ -489,7 +503,7 @@ namespace NActors {
             if (TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail)) {
                 TMailbox* mailbox = ThreadCtx.CaptureMailbox(nullptr);
                 Y_ABORT_UNLESS(mailbox, "activation must be not null");
-                executeActivation(mailbox, true);
+                executeActivation(mailbox, true, 0);
                 continue;
             }
             TMailbox* capturedMailbox = ThreadCtx.CaptureMailbox(nullptr);
@@ -504,7 +518,7 @@ namespace NActors {
                 EXECUTOR_THREAD_DEBUG(EDebugLevel::Activation, "no activation");
                 break;
             }
-            executeActivation(mailbox, false);
+            executeActivation(mailbox, false, mailbox->ScheduleMoment);
         }
     }
 

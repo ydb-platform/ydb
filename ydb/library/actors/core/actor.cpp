@@ -155,6 +155,26 @@ namespace NActors {
         return NHPTimer::GetSeconds(GetCurrentEventTicks());
     }
 
+    NHPTimer::STime TActivationContext::GetCurrentEventEnqueuedTimestampTs() {
+        Y_ABORT_UNLESS(TlsThreadContext);
+        return TlsThreadContext->MailboxContext.EventEnqueuedTimestamp;
+    }
+
+    NHPTimer::STime TActivationContext::GetCurrentMailboxScheduledTimestampTs() {
+        Y_ABORT_UNLESS(TlsThreadContext);
+        return TlsThreadContext->MailboxContext.ScheduledTimestamp;
+    }
+
+    ui64 TActivationContext::GetCurrentEventDeliveryTimeUs() {
+        Y_ABORT_UNLESS(TlsThreadContext);
+        return TlsThreadContext->MailboxContext.EventDeliveryTimeUs;
+    }
+
+    ui64 TActivationContext::GetCurrentActivationTimeUs() {
+        Y_ABORT_UNLESS(TlsThreadContext);
+        return TlsThreadContext->MailboxContext.ActivationTimeUs;
+    }
+
     void TActivationContext::EnableMailboxStats() {
         TlsActivationContext->Mailbox.EnableStats();
     }

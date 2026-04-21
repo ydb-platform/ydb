@@ -45,6 +45,8 @@ defaults:
 
 jobs:
   build:
+    # Skip scheduled runs in forks; manual dispatch still works everywhere
+    if: github.event_name != 'schedule' || github.repository == 'ydb-platform/ydb'
     uses: ./.github/workflows/build_binaries.yml
     with:
       build-target: ${{ inputs.build-target || 'ydb/apps/ydb' }}
@@ -58,7 +60,7 @@ jobs:
 
   notify:
     needs: build
-    if: always() && (success() || failure())
+    if: failure()
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -67,6 +69,15 @@ jobs:
           sparse-checkout: .github/scripts/telegram
       - name: Install dependencies
         run: pip install requests
+      - name: Collect failed platform names
+        id: failed-platforms
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FAILED=$(gh run view ${{ github.run_id }} --repo ${{ github.repository }} \
+            --json jobs --jq '[.jobs[] | select(.conclusion == "failure") | .name] | join(", ")')
+          echo "Failed platforms: $FAILED"
+          echo "platforms=$FAILED" >> "$GITHUB_OUTPUT"
       - name: Send Telegram notification
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
@@ -74,12 +85,13 @@ jobs:
           BUILD_TARGET="${{ inputs.build-target || 'ydb/apps/ydb' }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CHAT_ID="${{ inputs.telegram-chat-id || '311589523' }}"
-          if [ "${{ needs.build.result }}" == "success" ]; then
-            STATUS="OK"
+          FAILED="${{ steps.failed-platforms.outputs.platforms }}"
+          if [ -n "$FAILED" ]; then
+            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. Failed: ${FAILED}. [View run](${RUN_URL})"
           else
-            STATUS="FAILED"
+            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. [View run](${RUN_URL})"
           fi
           python .github/scripts/telegram/send_telegram_message.py \
             --bot-token "$TELEGRAM_BOT_TOKEN" \
             --chat-id "$CHAT_ID" \
-            --message "Nightly build check ${STATUS} for *${BUILD_TARGET}*. [View run](${RUN_URL})"
+            --message "$MESSAGE"

@@ -39,7 +39,7 @@ defaults:
 
 jobs:
   build-matrix:
-    name: Build platform matrix
+    name: Platform matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -80,7 +80,7 @@ jobs:
   build-platform-specific-binary:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
-    name: Build ${{ matrix.os }} binary
+    name: ${{ matrix.os }}
     needs: build-matrix
     runs-on: ${{ matrix.runner }}
     defaults:

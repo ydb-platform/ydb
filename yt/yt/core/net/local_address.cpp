@@ -99,7 +99,7 @@ void SetLocalHostName(TStringBuf hostName) noexcept
 {
     NYT::NDetail::EnableErrorOriginOverrides();
 
-    static NThreading::TForkAwareSpinLock Lock;
+    static YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock);
     auto guard = Guard(Lock);
 
     LocalHostName.Write(hostName);

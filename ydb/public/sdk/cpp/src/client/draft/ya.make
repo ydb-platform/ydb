@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    ydb_actor_tracing.cpp
     ydb_backup.cpp
     ydb_bridge.cpp
     ydb_dynamic_config.cpp

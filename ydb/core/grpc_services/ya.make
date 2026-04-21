@@ -23,6 +23,7 @@ SRCS(
     rpc_alter_table.cpp
     rpc_backup.cpp
     rpc_begin_transaction.cpp
+    rpc_actor_tracing.cpp
     rpc_bridge.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
@@ -117,6 +118,7 @@ PEERDIR(
     contrib/libs/xxhash
     library/cpp/cgiparam
     library/cpp/digest/old_crc
+    ydb/core/actor_tracing
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common

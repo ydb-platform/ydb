@@ -601,8 +601,9 @@ namespace NActors {
                     NWilson::TTraceId(v2.TraceId),
                     v2.Checksum,
 #if IC_FORCE_HARDENED_PACKET_CHECKS
-                    v2.Len
+                    v2.Len,
 #endif
+                    v2.InterconnectSequenceId
                 };
 
                 Metrics->IncInputChannelsIncomingEvents(channel);

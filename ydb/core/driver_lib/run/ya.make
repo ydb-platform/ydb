@@ -36,6 +36,7 @@ PEERDIR(
     library/cpp/string_utils/parse_size
     library/cpp/svnversion
     ydb/core/actorlib_impl
+    ydb/core/actor_tracing
     ydb/core/audit
     ydb/core/audit/audit_config
     ydb/core/audit/heartbeat_actor
@@ -153,6 +154,7 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
     ydb/public/sdk/cpp/src/library/grpc/client
+    ydb/services/actor_tracing
     ydb/services/auth
     ydb/services/backup
     ydb/services/bridge

@@ -130,6 +130,10 @@ enum class ERequestType: size_t {
     NBS_WRITEBLOCKS,
     NBS_READBLOCKS,
 
+    ACTOR_TRACING_START,
+    ACTOR_TRACING_STOP,
+    ACTOR_TRACING_FETCH,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

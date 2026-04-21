@@ -2,6 +2,7 @@
 #include "ydb_config.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
+#include "ydb_actor_tracing.h"
 #include "ydb_debug.h"
 #include "ydb_service_auth.h"
 #include "ydb_service_discovery.h"
@@ -235,6 +236,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandSql>());
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
+    AddCommand(std::make_unique<TCommandActorTracing>());
     AddCommand(std::make_unique<TCommandDebug>());
     AddHiddenCommand(std::make_unique<TCommandScripting>()); // TODO: remove in next major version
     AddHiddenCommand(std::make_unique<TCommandYql>()); // TODO: remove in next major version

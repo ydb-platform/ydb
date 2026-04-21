@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package Ydb.ActorTracing.V1;
+option java_package = "com.yandex.ydb.actor_tracing.v1";
+
+import "ydb/public/api/protos/ydb_actor_tracing.proto";
+
+service ActorTracingService {
+    rpc TraceStart(ActorTracing.TraceStartRequest) returns (ActorTracing.TraceStartResponse);
+    rpc TraceStop(ActorTracing.TraceStopRequest) returns (ActorTracing.TraceStopResponse);
+    rpc TraceFetch(ActorTracing.TraceFetchRequest) returns (ActorTracing.TraceFetchResponse);
+}

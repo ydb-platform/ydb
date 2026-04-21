@@ -198,6 +198,7 @@ struct TKikimrEvents : TEvents {
         ES_NBS_V2_SERVICE = 4275,
         ES_FORCED_COMPACTION = 4276,
         ES_NBS_V2_SS_PROXY = 4277,
+        ES_TRACING = 4278,
     };
 };
 

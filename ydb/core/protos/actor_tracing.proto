@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package NKikimrActorTracing;
+
+message TEvTraceStartRequest {
+    repeated uint32 SubtreeNodeIds = 1;
+}
+
+message TEvTraceStopRequest {
+    repeated uint32 SubtreeNodeIds = 1;
+}
+
+message TEvTraceFetchRequest {
+    repeated uint32 SubtreeNodeIds = 1;
+}
+
+message TEvTraceStartResponse {
+    bool Success = 1;
+    string Error = 2;
+}
+
+message TEvTraceStopResponse {
+    bool Success = 1;
+    string Error = 2;
+}
+
+message TEvTraceFetchResponse {
+    bool Success = 1;
+    string Error = 2;
+    bytes TraceData = 3;
+}

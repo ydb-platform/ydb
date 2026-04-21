@@ -169,6 +169,7 @@ namespace NActors {
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
         }
+        Tracer = NTracing::CreateActorTracer(!!loggerSettings ? loggerSettings->TracerSettings : NTracing::TSettings{});
     }
 
     TActorSystem::~TActorSystem() {
@@ -564,6 +565,10 @@ namespace NActors {
 
     TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
         return CpuManager->GetBasicExecutorPools();
+    }
+
+    NTracing::IActorTracer* TActorSystem::GetActorTracer() const {
+        return Tracer.Get();
     }
 
 }

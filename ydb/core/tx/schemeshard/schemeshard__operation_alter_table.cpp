@@ -793,6 +793,10 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
+    if (!context.SS->IsLocalId(parent.Base()->PathId)) {
+        return {CreateReject(id, NKikimrScheme::EStatus::StatusPreconditionFailed, "Cannot alter migrated index")};
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     {

@@ -68,6 +68,9 @@ public:
                             leader.WasAliveSinceCutHistory = false;
                         }
                     }
+                    if (BootingSuppressed && External && leader.ChannelProfileNewGroup.any()) {
+                        leader.InitiateAssignTabletGroups();
+                    }
                     BLOG_D("THive::TTxStartTablet::Execute, Sending TEvBootTablet(" << leader.ToString() << ")"
                             << " to node " << Local.NodeId()
                             << " storage " << leader.TabletStorageInfo->ToString());

@@ -2162,7 +2162,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_VALUES_EQUAL(desc.TopicSettings().PartitionsCount(), 1);
             auto res = client.AlterTopic("/Root/Table/Stream", TAlterTopicSettings()
                 .SetSettings(desc.TopicSettings()).PartitionsCount(2)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR, res.GetIssues().ToString());
         }
 
         // try to update retention period

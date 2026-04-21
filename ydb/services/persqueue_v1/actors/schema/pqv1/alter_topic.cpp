@@ -25,8 +25,11 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
-        const bool /*isCdcStream*/
+        const bool isCdcStream
     ) override {
+        if (isCdcStream) {
+            return {Ydb::StatusIds::SCHEME_ERROR, "Full alter of CDC stream is forbidden"};
+        }
         return ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, LocalDc);
     }
 

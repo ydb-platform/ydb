@@ -92,6 +92,22 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   Both provided examples use ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)) block.
   It allows to automatically close  client and transport on leaving this block, considering both classes extends `AutoCloseable`.
 
+- JavaScript
+
+  ```javascript
+  const t = topic(driver);
+
+  await using reader = t.createReader({
+    topic: "/Root/demo-topic",
+    consumer: "demo-consumer",
+  });
+
+  await using writer = t.createWriter({
+    topic: "/Root/demo-topic",
+    producer: "demo-producer",
+  });
+  ```
+  
 {% endlist %}
 
 ## Managing topics {#manage}
@@ -163,6 +179,22 @@ The topic path is mandatory. Other parameters are optional.
                   .build());
   ```
 
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.createTopic(
+    create(CreateTopicRequestSchema, {
+      path: "/path-to-my-topic",
+      partitioningSettings: {
+        minActivePartitions: 1n,
+        maxActivePartitions: 100n,
+      },
+      consumers: [{ name: "my-consumer" }],
+    }),
+  );
+  ```
+
 {% endlist %}
 
 ### Updating a topic {#alter-topic}
@@ -231,6 +263,18 @@ When you update a topic, you must specify the topic path and the parameters to b
                   .build());
   ```
 
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.alterTopic(
+    create(AlterTopicRequestSchema, {
+      path: "/path-to-my-topic",
+      addConsumers: [{ name: "my-consumer-2" }],
+    }),
+  );
+  ```
+
 {% endlist %}
 
 ### Getting topic information {#describe-topic}
@@ -285,6 +329,17 @@ When you update a topic, you must specify the topic path and the parameters to b
   TopicDescription description = topicDescriptionResult.getValue();
   ```
 
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.describeTopic(
+    create(DescribeTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
+  ```
+
 {% endlist %}
 
 ### Deleting a topic {#drop-topic}
@@ -315,6 +370,17 @@ To delete a topic, just specify the path to it.
 
   ```java
   topicClient.dropTopic(topicPath);
+  ```
+
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.dropTopic(
+    create(DropTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
   ```
 
 {% endlist %}
@@ -428,6 +494,15 @@ Only connections with matching [producer and message group](../../concepts/topic
               logger.error("Init failed with ex: ", ex);
               return null;
           });
+  ```
+
+- JavaScript
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+  });
   ```
 
 {% endlist %}
@@ -568,6 +643,19 @@ Only connections with matching [producer and message group](../../concepts/topic
   }
   ```
 
+- JavaScript
+
+  ```javascript
+  // Write a message to the internal buffer.
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // To send immediately, call flush.
+  await writer.flush();
+
+  // Or close the writer.
+  await writer.close();
+  ```
+
 {% endlist %}
 
 ### Message writes with storage confirmation on the server
@@ -630,7 +718,8 @@ Only connections with matching [producer and message group](../../concepts/topic
 
   There are two ways to get a message write acknowledgement from the server:
 
-  * `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
+  - `flush()` - waits until all the messages previously written to the internal buffer are acknowledged.
+  - `write_with_ack(...)` - sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
 
   ```python
   # Put multiple messages to the internal buffer and then wait
@@ -690,6 +779,28 @@ Only connections with matching [producer and message group](../../concepts/topic
                   }
               }
           });
+  ```
+
+- JavaScript
+
+  All messages are written to an internal buffer. There are three mechanisms they reach the server: two automatic and one manual. The manual path is calling `writer.flush`, which returns the last seqNo persisted on the server. Automatic flushes happen when:
+  - The internal buffer exceeds `maxBufferBytes` (default 256 MiB).
+  - The periodic flush interval `flushIntervalMs` ticks (default 10 ms).
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+    // Callback that is called when writer receives an acknowledgment for a message.
+    onAck: (seqNo, status) => {
+      console.log("ACK", seqNo, status);
+    },
+  })
+
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // Get the latest seqNo confirmed by the server.
+  await writer.flush();
   ```
 
 {% endlist %}
@@ -755,9 +866,29 @@ For more details on using data compression for topics, see [here](../../concepts
           .build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using writer = t.createWriter({
+    codec: Codec.RAW,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.GZIP,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.LZOP,
+  });
+
+  await using writer = t.createWriter({
+    codec: 10000, // CUSTOM (allowed range: 10000–19999)
+  });
+  ```
+
 {% endlist %}
 
-### Writing messages in no-deduplication mode
+### Writing messages in no-deduplication mode {#nodedup}
 
 {% list tabs group=lang %}
 
@@ -858,6 +989,16 @@ All the metadata provided when writing a message is sent to a consumer with the 
   message = reader.receive_message()
   for meta_key, meta_value in message.metadata_items.items():
       print(f"{meta_key}: {meta_value}")
+  ```
+
+- JavaScript
+
+  ```javascript
+  writer.write(Buffer.from("Hello, world!", "utf-8"), {
+    metadataItems: {
+      "meta-key": new TextEncoder().encode("meta-value"),
+    },
+  });
   ```
 
 {% endlist %}
@@ -1021,6 +1162,10 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 ## Reading messages {#reading}
@@ -1169,6 +1314,15 @@ Topic can have several Consumers and for each of them server stores its own read
           });
   ```
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+  });
+  ```
+
 {% endlist %}
 
 Additional options are used to specify multiple topics and other parameters.
@@ -1228,6 +1382,53 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
           .build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      partitionIds: [1n, 2n, 3n],
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      maxLag: "1s", // number, import('ms').StringValue, protobuf Duration
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      readFrom: new Date(), // number, Date, protobuf Timestamp
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: [
+      {
+        path: topicPath,
+        partitionIds: [1n, 2n, 3n],
+      },
+      {
+        path: topicPath2,
+        maxLag: "1s",
+      },
+      {
+        path: topicPath3,
+        readFrom: new Date(),
+      },
+      // ...
+    ],
+    consumer: consumerName,
+  });
+  ```
+
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -1261,6 +1462,10 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 - Java
 
   The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -1312,6 +1517,15 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   Reading messages one-by-one is not supported in async Reader.
 
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for await (let msg of batch) {
+    }
+  }
+  ```
+
 {% endlist %}
 
 #### Reading message batches
@@ -1359,6 +1573,13 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
      batch = reader.receive_batch()
      process(batch)
    ```
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+  }
+  ```
 
 - Java (sync)
 
@@ -1445,6 +1666,16 @@ If a commit fails with an error, the application should log it and continue; it 
          });
   ```
 
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for (let msg of batch) {
+      await reader.commit(msg);
+    }
+  }
+  ```
+
 {% endlist %}
 
 #### Reading message batches with commits
@@ -1522,6 +1753,14 @@ If a commit fails with an error, the application should log it and continue; it 
                      logger.info("message batch committed successfully");
                  }
              });
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    await reader.commit(batch);
   }
   ```
 
@@ -1618,6 +1857,21 @@ Instead of committing messages, the client application may track reading progres
 
   The `setReadFrom` setting is used for reading only messages with write timestamps no less than the given one.
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+    onPartitionSessionStart: (evt) => {
+      return {
+        readOffset: 0n,
+        commitOffset: 0n,
+      };
+    },
+  });
+  ```
+
 {% endlist %}
 
 ### Reading without a Consumer {#no-consumer}
@@ -1650,6 +1904,10 @@ Reading progress is usually saved on a server for each Consumer. However, such p
               .build());
   }
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -1797,6 +2055,10 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 
@@ -1878,6 +2140,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
   }
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 #### Hard reading interruption {#hard-stop}
@@ -1949,6 +2215,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
   }
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2105,5 +2375,21 @@ In case of a _hard interruption_, the client receives a notification that it is 
   ```
 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+{% endlist %}
+
+### Commit outside the reader {#commit-outside-the-reader}
+
+Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a separate process. In such cases, a method of committing outside the reader is necessary.
+
+{% list tabs group=lang %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}

@@ -2933,6 +2933,27 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                           expectedResult);
     }
 
+
+    ui32 CountOperators(const NJson::TJsonValue& jsonPlan, const std::string& opName) {
+        Y_ASSERT(jsonPlan.IsMap());
+        const auto& opMap = jsonPlan.GetMapSafe();
+
+        size_t operatorCount = 0;
+
+        if (auto it = opMap.find("op_name"); it != opMap.end() && it->second.GetStringSafe() == opName) {
+            ++ operatorCount;
+        }
+
+        if (auto it = opMap.find("args"); it != opMap.end()) {
+            for (const auto& child : it->second.GetArraySafe()) {
+                operatorCount += CountOperators(child, opName);
+            }
+        }
+
+        return operatorCount;
+
+    }
+
     // A flat 3-way join on TPCH tables with overridden statistics and fixed
     // join order & type to only test SE, not anything around it
     Y_UNIT_TEST(ShuffleEliminationSimpleJoin) {
@@ -2947,7 +2968,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         NKikimrKqp::TKqpSetting statsSetting;
         statsSetting.SetName("OptOverrideStatistics");
         statsSetting.SetValue(R"({
-            "/Root/customer": {"n_rows": 150000, "byte_size": 15000000},
+            "/Root/customer": {"n_rows":  150000, "byte_size":  15000000},
             "/Root/orders":   {"n_rows": 1500000, "byte_size": 150000000},
             "/Root/lineitem": {"n_rows": 6000000, "byte_size": 600000000}
         })");
@@ -2960,14 +2981,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(session, "schema/tpch.sql", /*useColumnStore*/ true);
 
+        // Fix the order to only test shuffle elimination, not the join order.
         const TString query = R"(
             PRAGMA ydb.CostBasedOptimizationLevel = "4";
             PRAGMA ydb.OptShuffleElimination = "true";
-            PRAGMA ydb.OptimizerHints =
-            '
-                JoinType(c o Shuffle)
-                JoinType(o l Shuffle)
-            ';
+            PRAGMA ydb.OptimizerHints = 'JoinOrder((l o) c)';
 
             SELECT c.c_custkey, o.o_orderkey, l.l_linenumber
             FROM `/Root/customer` c
@@ -2977,6 +2995,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         auto queryDb = kikimr.GetQueryClient();
         auto querySession = queryDb.GetSession().GetValueSync().GetSession();
+
         auto result = querySession.ExecuteQuery(query,
             NYdb::NQuery::TTxControl::NoTx(),
             NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
@@ -2999,6 +3018,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         });
 
         Cout << "Detailed plan: " << detailedPlan.GetStringRobust() << Endl;
+
+        // We expect approximately this plan (unnecessary details omited):
+        // ┌> Join (GraceJoin)
+        // ├─┬> HashShuffle (o_custkey)
+        // │ └─┬> Join (GraceJoin, l_orderkey = o_orderkey)
+        // │   ├─┬> HashShuffle (l_orderkey)
+        // │   │ └──> TableFullScan (Table: lineitem)
+        // │   └──> TableFullScan (Table: orders)
+        // └──> TableFullScan (Table: customer)
+
+        // I.e. shuffles for customer table and orders table should be eliminated
+        // leaving us with only two:
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(detailedPlan, "HashShuffle"), 2u);
     }
 
     /*

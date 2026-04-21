@@ -10,6 +10,7 @@ _MUTE_CONFIG_PATH = os.path.normpath(
 _REQUIRED_KEYS = (
     'manual_unmute_window_days',
     'manual_unmute_min_runs',
+    'manual_unmute_ttl_calendar_days',
     'mute_window_days',
     'unmute_window_days',
     'delete_window_days',
@@ -81,3 +82,7 @@ def get_manual_unmute_window_days():
 
 def get_manual_unmute_min_runs():
     return _positive_int('manual_unmute_min_runs')
+
+
+def get_manual_unmute_ttl_calendar_days():
+    return _positive_int('manual_unmute_ttl_calendar_days')

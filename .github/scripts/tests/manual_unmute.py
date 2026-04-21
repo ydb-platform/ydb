@@ -2,25 +2,26 @@
 
 """Manual fast-unmute state machine.
 
-When a user manually closes a mute issue as Completed, every test listed in
-that issue that is currently still muted gets a row in the YDB table
-``fast_unmute_active``. While a row exists, `create_new_muted_ya.py` evaluates
-the test against a shorter unmute window (see `mute_config.json`) instead of
-the default one. Rows are cleaned up when the test is either unmuted, fails
-during the fast window, or the window expires.
+When a user manually closes a mute issue as Completed, every listed test that
+is still muted in CI gets a row in ``fast_unmute_active``. While a row exists,
+``create_new_muted_ya.py`` uses the short window from ``mute_config.json``.
 
-If fast-unmute **reverts** (failure in the short window), rows are removed; the
-GitHub issue is **reopened**, org Project **Status** → **Muted**, ``COMMENT_FAIL``
-is posted, and the ``manual-fast-unmute`` label is removed once no
-``fast_unmute_active`` rows remain for that issue.
+**During TTL** (``manual_unmute_ttl_calendar_days``): if a test becomes unmuted
+in monitor data, only that row is removed; automation may post a short
+**progress** comment while other tests on the same issue are still tracked.
 
-When tests **pass** fast-unmute (no longer muted in monitor), a **success**
-comment explains they will drop from ``muted_ya`` on the next mute automation
-run; the label is removed when the last fast-unmute row for that issue is gone.
+**Before TTL ends**, if every tracked test for the issue has left ``is_muted`` in
+CI, all rows are gone → **success** comment, org project **Status → Unmuted**,
+``manual-fast-unmute`` label removed (issue stays closed).
 
-If **only some** tests unmute while others still have ``fast_unmute_active`` rows,
-the issue is **reopened**, Status → **Muted**, remaining rows are cleared, a
-**partial** comment lists unmuted vs still-tracked tests, and the label is removed.
+**After TTL**: if any tracked row is still muted, **all** rows for that issue are
+removed, the issue is **reopened**, **Status → Muted**, one **deadline** comment
+(lists who already unmuted vs who is still muted vs tracking cleared early),
+label removed.
+
+``create_new_muted_ya`` still decides short-window unmute; rows in
+``fast_unmute_active`` are removed only when the test is unmuted in CI or when
+the TTL path runs for the issue.
 
 Entering fast-unmute does **not** reopen the issue (issue stays closed); tracking
 uses YDB and the ``manual-fast-unmute`` label.
@@ -70,6 +71,7 @@ from mute_constants import (
     get_manual_unmute_currently_muted_lookback_days,
     get_manual_unmute_issue_closed_lookback_days,
     get_manual_unmute_min_runs,
+    get_manual_unmute_ttl_calendar_days,
     get_manual_unmute_window_days,
     get_mute_window_days,
 )
@@ -87,6 +89,7 @@ LABEL_NAME = MANUAL_FAST_UNMUTE_GITHUB_LABEL
 # Org project board (same as ``update_mute_issues.PROJECT_ID``).
 PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN = 'Observation'
 PROJECT_STATUS_ON_FAST_UNMUTE_FAIL = 'Muted'
+PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS = 'Unmuted'
 
 _LABEL_ID_CACHE = {}
 
@@ -111,51 +114,53 @@ COMMENT_ENTER = """🚀 **Fast-unmute started**
 
 {closer_mention_line}You closed this issue as completed. The issue stays **closed**; automation registered fast-unmute in YDB and added the `manual-fast-unmute` label.
 
-The listed tests are still muted in the repo, but CI now evaluates them on a **shorter unmute window** ({window_days} calendar days, min {min_runs} clean runs) until they qualify for automatic unmute or fail that window:
+The listed tests are still muted in the repo, but CI now evaluates them on a **shorter unmute window** ({window_days} calendar days, min {min_runs} clean runs) until they qualify for automatic unmute:
 
 {tests_bullet_list}
 
 **What happens next**
 
-- If the tests stay green within the window → they are unmuted automatically (this issue is not reopened for that).
-- If any of these tests fails during the window → the test leaves fast-unmute; the issue is **reopened**, project status returns to **Muted**, and a comment is posted.
+- **While time runs** (``manual_unmute_ttl_calendar_days`` calendar days per row from registration): if a test is already **unmuted in CI data**, only its fast-unmute row is removed; you may see a short **progress** comment if other tests on this issue are still tracked.
+- **All tests unmuted in CI before anyone hits the deadline** → success comment, project **Status → Unmuted**, fast-unmute label removed (this issue stays **closed**).
+- **After the deadline**, if any test is **still muted** in CI → this issue is **reopened**, **Status → Muted**, all fast-unmute rows for this issue are cleared, one summary comment, label removed.
 - No action needed from you. Please do not edit `muted_ya.txt` manually.
 
 🔗 Workflow run: {workflow_run_url}
 """
 
 
-COMMENT_FAIL = """⚠️ **Fast-unmute reverted**
-
-The following tests failed during the fast-unmute window and are back on the default unmute criteria:
-
-{tests_bullet_list}
-
-{also_unmuted_section}🔗 Workflow run: {workflow_run_url}
-"""
-
-
 COMMENT_SUCCESS = """✅ **Fast-unmute completed**
 
-All tests from this issue passed the fast-unmute window (they are no longer muted in CI data). They will be removed from `muted_ya` on the next mute automation run that updates the repo — no action needed from you.
+All tests from this issue are **no longer muted** in CI data before the fast-unmute deadline. They will be removed from `muted_ya` on the next mute automation run that updates the repo — no action needed from you.
+
+Project **Status** → **Unmuted**. The `manual-fast-unmute` label is removed.
 
 🔗 Workflow run: {workflow_run_url}
 """
 
 
-COMMENT_PARTIAL_FAST_UNMUTE = """🔀 **Fast-unmute: partial completion**
+COMMENT_PROGRESS = """📌 **Fast-unmute: progress**
 
-Some tests already look **unmuted** in the latest CI data — they will disappear from `muted_ya` when the next mute automation run updates the repo.
+While the deadline is still running for other tests on this issue, these are **already unmuted** in CI data — the fast-unmute row was removed only for them:
 
-Other tests from this issue are **still muted** in CI (or had not yet met the short-window unmute rules). This run **stops** fast-unmute for the whole issue: automation removed the remaining fast-unmute tracking for those tests, so they again follow only the **normal** mute/unmute rules. That is **not** the same as failing the fast-unmute window (no failing run triggered the revert path).
-
-**Unmuted in CI (pending `muted_ya` update):**
 {unmuted_bullets}
 
-**Still muted in CI (fast-unmute tracking cleared in this run):**
-{not_unmuted_bullets}
+🔗 Workflow run: {workflow_run_url}
+"""
 
-Project **Status** → **Muted**. The `manual-fast-unmute` label is removed.
+
+COMMENT_TTL_INCOMPLETE = """⏱️ **Fast-unmute: deadline passed**
+
+The fast-unmute calendar limit (**{ttl_days}** days from row registration) has passed, but at least one test is **still muted** in CI. Fast-unmute tracking for **this whole issue** is cleared, the issue is **reopened**, project **Status** → **Muted**, and the `manual-fast-unmute` label is removed.
+
+**Already unmuted in CI (pending `muted_ya` update):**
+{graduated_bullets}
+
+**Still muted after the deadline:**
+{stuck_bullets}
+
+**Tracking cleared early (same issue, deadline not reached for that row):**
+{cleared_other_bullets}
 
 🔗 Workflow run: {workflow_run_url}
 """
@@ -196,20 +201,6 @@ def _coerce_dt(value):
     if isinstance(value, float):
         return datetime.datetime.fromtimestamp(value, tz=datetime.timezone.utc)
     return None
-
-
-_MONITOR_EPOCH = datetime.date(1970, 1, 1)
-
-
-def _date_window_to_days(date_window):
-    """Normalize ``tests_monitor.date_window`` to days since 1970-01-01 (matches create_new_muted_ya)."""
-    if date_window is None:
-        return None
-    if isinstance(date_window, datetime.datetime):
-        date_window = date_window.date()
-    if isinstance(date_window, datetime.date):
-        return (date_window - _MONITOR_EPOCH).days
-    return int(date_window)
 
 
 def create_manual_unmute_table(ydb_wrapper, table_path):
@@ -296,62 +287,6 @@ def fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type):
     return result
 
 
-def fetch_monitor_outcomes_in_days(ydb_wrapper, tests_monitor_path, branch, build_type, lookback_days):
-    """Daily rows from ``tests_monitor`` for one branch/build (bounded scan).
-
-    In CI, a failed run that is muted is stored as status ``mute`` → ``mute_count``;
-    non-muted failures are ``fail_count`` (see ``transform_build_results.mute_test_result`` /
-    ``upload_tests_results``).     Fast-unmute **rollback** counts only ``fail_count``: while the test
-    is still muted, failures accumulate in ``mute_count``; summing both would immediately exceed
-    zero for any active mute and wrongly trigger ``failed during window`` right after insert.
-    The row for the **calendar day of** ``requested_at`` is still skipped when scoring rollback:
-    daily aggregates mix runs before and after the request, and the same day may carry both
-    ``fail_count`` and ``mute_count``. Anchor per-row by ``requested_at`` so pre-entry history
-    never counts (C1 review).
-    """
-    query = f"""
-    SELECT full_name, date_window, fail_count, mute_count
-    FROM `{tests_monitor_path}`
-    WHERE branch = '{_escape(branch)}'
-        AND build_type = '{_escape(build_type)}'
-        AND date_window >= CurrentUtcDate() - {int(lookback_days)} * Interval("P1D")
-    """
-    return ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_outcomes_window')
-
-
-def bad_outcomes_in_day_range(
-    monitor_rows,
-    full_name,
-    since_days_inclusive,
-    skip_fail_counts_on_day_ordinal=None,
-):
-    """Sum ``fail_count`` only for ``full_name`` on monitor days ``>= since_days_inclusive``.
-
-    Rollback tracks **unmuted** failures only; ``mute_count`` is omitted (see
-    ``fetch_monitor_outcomes_in_days``). Same trailing calendar span idea as
-    ``aggregate_test_data(..., period_days)`` in ``create_new_muted_ya``, bounded below by
-    fast-unmute entry so pre-entry history never counts (C1).
-
-    ``skip_fail_counts_on_day_ordinal``: days since 1970-01-01 for the fast-unmute **request
-    date** (UTC). That day's ``tests_monitor`` row is omitted: it aggregates the whole UTC day,
-    including activity before ``requested_at``, and may still show ``fail_count`` while the test
-    was muted earlier the same day.
-    """
-    if since_days_inclusive is None:
-        return 0
-    total = 0
-    for row in monitor_rows:
-        if row.get('full_name') != full_name:
-            continue
-        dw = _date_window_to_days(row.get('date_window'))
-        if dw is None or dw < since_days_inclusive:
-            continue
-        if skip_fail_counts_on_day_ordinal is not None and dw == skip_fail_counts_on_day_ordinal:
-            continue
-        total += int(row.get('fail_count') or 0)
-    return total
-
-
 def fetch_issue_closers(issue_numbers):
     """Return {issue_number: {'login': str, 'type': 'User'|'Bot'|''}}.
 
@@ -370,7 +305,7 @@ def fetch_issue_closers(issue_numbers):
             subqueries.append(
                 f"""
                 n{number}: issue(number: {number}) {{
-                    timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {{
+                    timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {{
                         nodes {{
                             ... on ClosedEvent {{
                                 actor {{ __typename login }}
@@ -394,13 +329,12 @@ def fetch_issue_closers(issue_numbers):
             login = ''
             actor_type = ''
             if node:
+                # ``last: 1`` returns the most recent close; ``nodes[0]`` is that event.
                 events = (node.get('timelineItems') or {}).get('nodes') or []
-                for event in reversed(events):
-                    actor = event.get('actor') or {}
-                    login = actor.get('login') or ''
-                    actor_type = actor.get('__typename') or ''
-                    if login:
-                        break
+                event = events[0] if events else {}
+                actor = event.get('actor') or {}
+                login = actor.get('login') or ''
+                actor_type = actor.get('__typename') or ''
             result[number] = {'login': login, 'type': actor_type}
     return result
 
@@ -896,16 +830,15 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
 
 
 def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
-    """Drop rows that have served their purpose, failed, or expired.
-
-    TTL uses ``window_days`` stored on each row (captured at enter time).
-    """
+    """Drop rows: unmuted in CI, or whole issue on TTL miss."""
     rows = fetch_all_rows(ydb_wrapper, table_path)
     if not rows:
         return
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     run_url = workflow_run_url()
+    ttl_days = get_manual_unmute_ttl_calendar_days()
+    ttl_delta = datetime.timedelta(days=ttl_days)
 
     grouped = {}
     for row in rows:
@@ -914,7 +847,6 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             continue
         grouped.setdefault(key, []).append(row)
 
-    fails_by_issue = {}
     affected_issues = set()
     issues_cleared_via_unmute = set()
     unmuted_tests_by_issue = defaultdict(list)
@@ -928,39 +860,17 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
 
     grace_ttl_snapshot = grace_ttl_calendar_days(get_mute_window_days(), get_manual_unmute_window_days())
 
+    issues_ttl_shutdown = set()
+    ttl_stuck_tests_by_issue = defaultdict(list)
+
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
-        # Failure lookback must cover the longest row TTL (2 × window_days per row).
-        check_window = max(2 * int(r['window_days']) for r in group_rows)
-        monitor_rows = fetch_monitor_outcomes_in_days(
-            ydb_wrapper, tests_monitor_path, branch, build_type, check_window
-        )
         for row in group_rows:
             full_name = row.get('full_name')
             if not full_name:
                 continue
             requested_at = _coerce_dt(row.get('requested_at'))
             issue_number = row.get('github_issue_number')
-            row_window = int(row['window_days'])
-            ttl = datetime.timedelta(days=row_window * 2)
-
-            # Rollback uses the same *rolling* calendar window width as manual unmute in
-            # create_new_muted_ya (``manual_unmute_window_days`` == row_window), not a cumulative
-            # sum since entry. Stale reds from before the fix age out of the trailing window; we
-            # still ignore any day strictly before fast-unmute entry (max with requested_at date).
-            today = now.date()
-            trailing_start = today - datetime.timedelta(days=row_window - 1)
-            if requested_at:
-                entry_date = requested_at.astimezone(datetime.timezone.utc).date()
-                effective_start = max(trailing_start, entry_date)
-            else:
-                effective_start = trailing_start
-            since_days = (effective_start - _MONITOR_EPOCH).days
-            entry_day_ordinal = None
-            if requested_at:
-                entry_day_ordinal = (
-                    requested_at.astimezone(datetime.timezone.utc).date() - _MONITOR_EPOCH
-                ).days
 
             if full_name not in currently_muted:
                 if grace_table_path:
@@ -989,68 +899,61 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
                 logging.info('manual_unmute_cleanup: %s (already unmuted)', full_name)
                 continue
 
-            if bad_outcomes_in_day_range(
-                monitor_rows,
-                full_name,
-                since_days,
-                skip_fail_counts_on_day_ordinal=entry_day_ordinal,
-            ) > 0:
-                delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
-                delete_count += 1
+            if requested_at and (now - requested_at) > ttl_delta:
                 if issue_number:
-                    affected_issues.add(int(issue_number))
-                    fails_by_issue.setdefault(int(issue_number), []).append(full_name)
-                logging.info('manual_unmute_cleanup: %s (failed during window)', full_name)
+                    inum = int(issue_number)
+                    issues_ttl_shutdown.add(inum)
+                    ttl_stuck_tests_by_issue[inum].append(full_name)
+                    affected_issues.add(inum)
+                logging.info(
+                    'manual_unmute_cleanup: %s (ttl %s calendar days exceeded, still muted)',
+                    full_name,
+                    ttl_days,
+                )
                 continue
 
-            if requested_at and (now - requested_at) > ttl:
-                delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
-                delete_count += 1
-                if issue_number:
-                    affected_issues.add(int(issue_number))
-                logging.info('manual_unmute_cleanup: %s (window expired)', full_name)
+    ttl_bulk_removed_by_issue = defaultdict(set)
+    if issues_ttl_shutdown:
+        for row in fetch_all_rows(ydb_wrapper, table_path):
+            inn = row.get('github_issue_number')
+            if inn is None or int(inn) not in issues_ttl_shutdown:
+                continue
+            fn, br, bt = row.get('full_name'), row.get('branch'), row.get('build_type')
+            if not fn or not br or not bt:
+                continue
+            delete_row(ydb_wrapper, table_path, fn, br, bt)
+            delete_count += 1
+            ttl_bulk_removed_by_issue[int(inn)].add(fn)
+            logging.info('manual_unmute_cleanup: %s (bulk clear issue #%s after ttl)', fn, int(inn))
 
     if affected_issues:
         remaining = count_rows_per_issue(ydb_wrapper, table_path, affected_issues)
         issues_to_delabel = {num for num in affected_issues if remaining.get(num, 0) == 0}
         issue_ids = _fetch_issue_node_ids(affected_issues)
 
-        partial_issues = {
-            int(n)
-            for n in issues_cleared_via_unmute
-            if int(n) not in fails_by_issue and remaining.get(int(n), 0) > 0
-        }
-        if partial_issues:
-            table_snapshot = fetch_all_rows(ydb_wrapper, table_path)
-        for issue_number in sorted(partial_issues):
-            still_rows = [
-                r
-                for r in table_snapshot
-                if int(r.get('github_issue_number') or 0) == issue_number
-            ]
-            not_unmuted = sorted({r['full_name'] for r in still_rows if r.get('full_name')})
-            unmuted_list = sorted(set(unmuted_tests_by_issue.get(issue_number, [])))
-            for r in still_rows:
-                fn, br, bt = r.get('full_name'), r.get('branch'), r.get('build_type')
-                if fn and br and bt:
-                    delete_row(ydb_wrapper, table_path, fn, br, bt)
-                    delete_count += 1
+        for issue_number in sorted(issues_ttl_shutdown):
             issue_id = issue_ids.get(issue_number)
             if not issue_id:
                 logging.warning(
-                    'manual_unmute: partial fast-unmute for issue #%s: cleared YDB rows but no GitHub node id',
+                    'manual_unmute: ttl shutdown for issue #%s: YDB cleared but no GitHub node id',
                     issue_number,
                 )
                 continue
+            stuck = sorted(set(ttl_stuck_tests_by_issue.get(issue_number, [])))
+            graduated = sorted(set(unmuted_tests_by_issue.get(issue_number, [])))
+            bulk_all = sorted(ttl_bulk_removed_by_issue.get(issue_number, set()))
+            cleared_other = sorted(set(bulk_all) - set(stuck))
             reopen_issue(issue_id)
             add_issue_comment(
                 issue_id,
-                COMMENT_PARTIAL_FAST_UNMUTE.format(
-                    unmuted_bullets=_format_bullet_list(unmuted_list)
-                    if unmuted_list
+                COMMENT_TTL_INCOMPLETE.format(
+                    ttl_days=ttl_days,
+                    graduated_bullets=_format_bullet_list(graduated)
+                    if graduated
                     else '- _(none)_',
-                    not_unmuted_bullets=_format_bullet_list(not_unmuted)
-                    if not_unmuted
+                    stuck_bullets=_format_bullet_list(stuck) if stuck else '- _(none)_',
+                    cleared_other_bullets=_format_bullet_list(cleared_other)
+                    if cleared_other
                     else '- _(none)_',
                     workflow_run_url=run_url,
                 ),
@@ -1058,40 +961,30 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             _set_manual_unmute_project_board_status(
                 issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_FAIL
             )
-            remove_label_from_issue(issue_id)
 
-        for issue_number, failed_tests in fails_by_issue.items():
+        for issue_number in sorted(issues_cleared_via_unmute):
+            if remaining.get(issue_number, 0) == 0:
+                continue
+            if issue_number in issues_ttl_shutdown:
+                continue
             issue_id = issue_ids.get(issue_number)
             if not issue_id:
                 continue
-            also_unmuted = sorted(
-                set(unmuted_tests_by_issue.get(issue_number, [])) - set(failed_tests)
-            )
-            also_unmuted_section = ''
-            if also_unmuted:
-                also_unmuted_section = (
-                    'These tests **passed** the fast-unmute window in the same sync '
-                    '(they will leave `muted_ya` on the next mute workflow update):\n\n'
-                    + _format_bullet_list(also_unmuted)
-                    + '\n\n'
-                )
-            reopen_issue(issue_id)
+            names = sorted(set(unmuted_tests_by_issue.get(issue_number, [])))
+            if not names:
+                continue
             add_issue_comment(
                 issue_id,
-                COMMENT_FAIL.format(
-                    tests_bullet_list=_format_bullet_list(failed_tests),
-                    also_unmuted_section=also_unmuted_section,
+                COMMENT_PROGRESS.format(
+                    unmuted_bullets=_format_bullet_list(names),
                     workflow_run_url=run_url,
                 ),
-            )
-            _set_manual_unmute_project_board_status(
-                issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_FAIL
             )
 
         success_comment_issues = (
             issues_to_delabel
             & issues_cleared_via_unmute
-            - set(fails_by_issue.keys())
+            - issues_ttl_shutdown
         )
         for issue_number in sorted(success_comment_issues):
             issue_id = issue_ids.get(issue_number)
@@ -1100,6 +993,9 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             add_issue_comment(
                 issue_id,
                 COMMENT_SUCCESS.format(workflow_run_url=run_url),
+            )
+            _set_manual_unmute_project_board_status(
+                issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
             )
 
         for issue_number in issues_to_delabel:

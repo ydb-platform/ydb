@@ -1,6 +1,7 @@
 {
   "manual_unmute_window_days": 2,
   "manual_unmute_min_runs": 2,
+  "manual_unmute_ttl_calendar_days": 3,
   "mute_window_days": 4,
   "unmute_window_days": 7,
   "delete_window_days": 7,

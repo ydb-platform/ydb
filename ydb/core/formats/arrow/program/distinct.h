@@ -3,8 +3,6 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-// Stateful DISTINCT by a single key column.
-// Keeps only the first occurrence of each key across multiple Apply() calls.
 class TDistinctProcessor: public IResourceProcessor {
 private:
     using TBase = IResourceProcessor;
@@ -30,4 +28,3 @@ public:
 };
 
 } // namespace NKikimr::NArrow::NSSA
-

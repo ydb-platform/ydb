@@ -32,7 +32,6 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     FetchedDistinct += rows;
 
     if (FetchedDistinct >= Limit) {
-        // Stop producing new sources; allow current source to be sent further (it may overshoot limit).
         if (Collection) {
             Collection->Clear();
         }
@@ -42,4 +41,3 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 }
 
 } // namespace NKikimr::NOlap::NReader::NSimple
-

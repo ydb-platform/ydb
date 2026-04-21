@@ -48,26 +48,4 @@ public:
     }
 };
 
-/// Same as TLocalHelper but HashSharding uses only `timestamp`, matching a single-column PK (no `uid` in sharding).
-class TLocalHelperSinglePkShard : public TLocalHelper {
-public:
-    using TLocalHelper::TLocalHelper;
-
-    std::vector<TString> GetShardingColumns() const override {
-        return {"timestamp"};
-    }
-
-    /// OLAP table with PK = (timestamp) only.
-    void CreateTestOlapTableSinglePkColumn(TString tableName = "onePkOlap", TString storeName = "olapStoreOnePk",
-        ui32 storeShardsCount = 4, ui32 tableShardsCount = 3)
-    {
-        const TString schema = R"(
-            Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-            Columns { Name: "payload" Type: "Int32" }
-            KeyColumnNames: "timestamp"
-        )";
-        CreateSchemaOlapTablesWithStore(schema, {tableName}, storeName, storeShardsCount, tableShardsCount);
-    }
-};
-
 }

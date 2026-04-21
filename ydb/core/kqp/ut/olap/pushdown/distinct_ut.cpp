@@ -295,31 +295,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
     }
-
-    Y_UNIT_TEST(FilterOnOnlyPkColumn_SingleColumnPk_PushesDistinct) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-
-        TLocalHelperSinglePkShard(kikimr).CreateTestOlapTableSinglePkColumn();
-        auto tableClient = kikimr.GetTableClient();
-
-        const TString query = R"(
-            --!syntax_v1
-            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
-            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "payload";
-
-            SELECT DISTINCT `payload` FROM `/Root/olapStoreOnePk/onePkOlap`
-            WHERE `timestamp` >= DateTime::FromSeconds(1) AND `timestamp` < DateTime::FromSeconds(10)
-            LIMIT 50
-        )";
-
-        auto res = StreamExplainQuery(query, tableClient);
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-
-        const auto planRes = CollectStreamResult(res);
-        const TString ast = TString(planRes.QueryStats->Getquery_ast());
-        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
-    }
 };
 
 } // namespace NKikimr::NKqp

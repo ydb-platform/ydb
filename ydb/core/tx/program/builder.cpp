@@ -446,8 +446,6 @@ TConclusionStatus TProgramBuilder::ReadDistinct(const NKikimrSSA::TProgram::TDis
         return TConclusionStatus::Fail("Distinct: KeyColumn is not set");
     }
     const ui32 keyId = distinct.GetKeyColumn().GetId();
-    // Ensure column exists/registered in resolver map.
-    GetColumnInfo(distinct.GetKeyColumn());
     Builder.Add(std::make_shared<TDistinctProcessor>(keyId));
     return TConclusionStatus::Success();
 }

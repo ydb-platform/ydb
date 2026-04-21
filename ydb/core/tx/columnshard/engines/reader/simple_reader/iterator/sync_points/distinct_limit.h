@@ -5,15 +5,11 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-// Early-stop controller for DISTINCT+LIMIT pushdown.
-// Counts number of rows produced after DISTINCT (i.e. number of distinct keys),
-// and stops scanning once it reaches the requested limit (or more).
 class TSyncPointDistinctLimitControl: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
     const ui64 Limit;
     ui64 FetchedDistinct = 0;
-    /// Sources for which we already applied limit accounting using full batch row count (no ChunkToReply yet).
     std::unordered_set<ui32> SourcesWithFullBatchDistinctCount;
 
     virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
@@ -41,4 +37,3 @@ public:
 };
 
 } // namespace NKikimr::NOlap::NReader::NSimple
-

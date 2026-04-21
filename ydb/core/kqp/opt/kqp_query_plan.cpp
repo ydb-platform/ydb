@@ -1325,8 +1325,8 @@ private:
 
                 ui32 currentOperatorId = 0;
 
-                auto aggr = [](const TExprNode::TPtr& n) {
-                    return static_cast<bool>(TMaybeNode<TKqpOlapAgg>(n));
+                auto aggr = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeAggregation = TMaybeNode<TKqpOlapAgg>(n)) { return true; } return false;
                 };
 
                 if (auto maybeKqpOlapAggregation = FindNode(olapTable.Process().Body().Ptr(), aggr)) {
@@ -1343,8 +1343,8 @@ private:
                     operatorId = currentOperatorId;
                 }
 
-                auto distinctPred = [](const TExprNode::TPtr& n) {
-                    return static_cast<bool>(TMaybeNode<TKqpOlapDistinct>(n));
+                auto distinctPred = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeDistinct = TMaybeNode<TKqpOlapDistinct>(n)) { return true; } return false;
                 };
 
                 if (auto maybeKqpOlapDistinct = FindNode(olapTable.Process().Body().Ptr(), distinctPred)) {
@@ -1360,8 +1360,8 @@ private:
                     operatorId = currentOperatorId;
                 }
 
-                auto pred = [](const TExprNode::TPtr& n) {
-                    return static_cast<bool>(TMaybeNode<TKqpOlapFilter>(n));
+                auto pred = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
 
                 if (auto maybeKqpOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {

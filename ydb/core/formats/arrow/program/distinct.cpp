@@ -12,15 +12,13 @@ static TString ScalarKey(const std::shared_ptr<arrow::Scalar>& scalar) {
     if (!scalar || !scalar->is_valid) {
         return "NULL";
     }
-    // ToString() is stable enough for test/UT usage; include type id to avoid collisions across types.
+
     return TStringBuilder() << (ui32)scalar->type->id() << ":" << scalar->ToString();
 }
 
 TConclusion<IResourceProcessor::EExecutionResult> TDistinctProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const
 {
-    // We read the key column as a plain array to iterate row-by-row.
-    // Note: collection filter is applied inside TAccessorsCollection, so we take the accessor with current filter already applied.
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> keyColumns;
     if (nodeContext.GetRemoveResourceIds().contains(KeyColumnId)) {
         keyColumns = context.MutableResources().ExtractAccessors({KeyColumnId});
@@ -51,7 +49,6 @@ TConclusion<IResourceProcessor::EExecutionResult> TDistinctProcessor::DoExecute(
             distinctFilter.Add(false, recordsCount);
         }
     } else {
-        // Walk through underlying Arrow chunks.
         auto chunked = keyAccessor->GetChunkedArray();
         for (const auto& chunk : chunked->chunks()) {
             for (int64_t i = 0; i < chunk->length(); ++i) {
@@ -72,4 +69,3 @@ TConclusion<IResourceProcessor::EExecutionResult> TDistinctProcessor::DoExecute(
 }
 
 } // namespace NKikimr::NArrow::NSSA
-

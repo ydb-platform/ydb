@@ -730,14 +730,18 @@
         return labels.join(',');
     }
 
-    // Encode a '/'-separated path for use as a URL query parameter value embedded in
-    // the GitHub issue body (passed as a URL parameter that GitHub decodes once).
-    // Each path segment is URL-encoded, then '%' signs are doubled so that
-    // after GitHub's decoding, the encoded characters (e.g. %2B for '+') survive intact.
-    function encodePathForBodyUrl(path) {
+    // Encode each '/'-separated segment with encodeURIComponent; '/' stays a separator
+    // (so '+' in a test name becomes %2B, not a space).
+    function encodePathSegmentsForUrl(path) {
         return path.split('/').map(function(part) {
-            return encodeURIComponent(part).replace(/%/g, '%25');
+            return encodeURIComponent(part);
         }).join('/');
+    }
+
+    // Same as encodePathSegmentsForUrl, then double '%' for values embedded in the
+    // GitHub issue-creation URL body=... (GitHub decodes once; %252B → %2B in markdown).
+    function encodePathForBodyUrl(path) {
+        return encodePathSegmentsForUrl(path).replace(/%/g, '%25');
     }
 
     function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, successRates, logUrls, errorText, reportUrl) {
@@ -914,11 +918,7 @@
         const full_name = test.trim();
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
-        // Encode each path segment but keep '/' as separator, so '+' becomes '%2B'
-        const encodedFullName = full_name.split('/').map(function(part) {
-            return encodeURIComponent(part);
-        }).join('/');
-        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodedFullName + "&build_type=" + encodeURIComponent(buildPreset);
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodePathSegmentsForUrl(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
         window.open(url, '_blank');
     }
 

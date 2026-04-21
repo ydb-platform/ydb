@@ -1378,6 +1378,8 @@
     - Native SDK
 
       ```python
+      import ydb
+
       def search_items_vector_as_bytes(
           pool: ydb.QuerySessionPool,
           table_name: str,
@@ -1709,6 +1711,8 @@
     - Native SDK
 
       ```python
+      import ydb
+
       def search_items_vector_as_float_list(
           pool: ydb.QuerySessionPool,
           table_name: str,
@@ -1920,6 +1924,17 @@
     - Native SDK
 
       ```python
+      import os
+      import ydb
+
+      def print_results(items):
+          if len(items) == 0:
+              print("No items found")
+              return
+
+          for item in items:
+              print(f"[score={item['score']}] {item['id']}: {item['document']}")
+
       def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
           pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
 
@@ -1990,96 +2005,112 @@
           )
           print_results(items)
 
-        def print_results(items):
-            if len(items) == 0:
-                print("No items found")
-                return
-
-            for item in items:
-                print(f"[score={item['score']}] {item['id']}: {item['document']}")
-      ```
-
-    - Native SDK (asyncio)
-
-      ```python
-        async def drop_vector_table_if_exists(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
-            await pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
-
-            print("Vector table dropped")
-
-        async def main(
-            ydb_endpoint: str,
-            ydb_database: str,
-            ydb_credentials: ydb.AbstractCredentials,
-            table_name: str,
-            index_name: str,
-        ):
-            async with ydb.aio.Driver(
-                endpoint=ydb_endpoint,
-                database=ydb_database,
-                credentials=ydb_credentials,
-            ) as driver:
-                await driver.wait(5, fail_fast=True)
-                pool = ydb.aio.QuerySessionPool(driver)
-
-                await drop_vector_table_if_exists(pool, table_name)
-
-                await create_vector_table(pool, table_name)
-
-                items = [
-                    {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
-                    {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
-                    {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
-                    {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
-                    {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
-                    {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
-                    {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
-                    {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
-                    {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
-                ]
-
-                await insert_items_vector_as_bytes(pool, table_name, items)
-
-                items = await search_items_vector_as_bytes(
-                    pool,
-                    table_name,
-                    embedding=[1, 0, 0],
-                    strategy="CosineSimilarity",
-                    limit=3,
-                )
-                print_results(items)
-
-                await add_vector_index(
-                    pool,
-                    driver,
-                    table_name,
-                    index_name=index_name,
-                    strategy="similarity=cosine",
-                    dimension=3,
-                    levels=1,
-                    clusters=3,
-                )
-
-                items = await search_items_vector_as_bytes(
-                    pool,
-                    table_name,
-                    embedding=[1, 0, 0],
-                    index_name=index_name,
-                    strategy="CosineSimilarity",
-                    limit=3,
-                )
-                print_results(items)
-
-                await pool.stop()
+          pool.stop()
+          driver.stop()
 
         if __name__ == "__main__":
-            asyncio.run(main(
+            main(
                 ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
                 ydb_database=os.environ.get("YDB_DATABASE", "/local"),
                 ydb_credentials=ydb.credentials_from_env_variables(),
                 table_name="ydb_vector_search",
                 index_name="ydb_vector_index",
-            ))
+            )
+      ```
+
+    - Native SDK (Asyncio)
+
+      ```python
+      import os
+      import ydb
+      import asyncio
+
+      def print_results(items):
+          if len(items) == 0:
+              print("No items found")
+              return
+
+          for item in items:
+              print(f"[score={item['score']}] {item['id']}: {item['document']}")
+
+      async def drop_vector_table_if_exists(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
+          await pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
+
+          print("Vector table dropped")
+
+      async def main(
+          ydb_endpoint: str,
+          ydb_database: str,
+          ydb_credentials: ydb.AbstractCredentials,
+          table_name: str,
+          index_name: str,
+      ):
+          async with ydb.aio.Driver(
+              endpoint=ydb_endpoint,
+              database=ydb_database,
+              credentials=ydb_credentials,
+          ) as driver:
+              await driver.wait(5, fail_fast=True)
+              pool = ydb.aio.QuerySessionPool(driver)
+
+              await drop_vector_table_if_exists(pool, table_name)
+
+              await create_vector_table(pool, table_name)
+
+              items = [
+                  {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
+                  {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
+                  {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
+                  {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
+                  {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
+                  {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
+                  {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
+                  {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
+                  {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
+              ]
+
+              await insert_items_vector_as_bytes(pool, table_name, items)
+
+              items = await search_items_vector_as_bytes(
+                  pool,
+                  table_name,
+                  embedding=[1, 0, 0],
+                  strategy="CosineSimilarity",
+                  limit=3,
+              )
+              print_results(items)
+
+              await add_vector_index(
+                  pool,
+                  driver,
+                  table_name,
+                  index_name=index_name,
+                  strategy="similarity=cosine",
+                  dimension=3,
+                  levels=1,
+                  clusters=3,
+              )
+
+              items = await search_items_vector_as_bytes(
+                  pool,
+                  table_name,
+                  embedding=[1, 0, 0],
+                  index_name=index_name,
+                  strategy="CosineSimilarity",
+                  limit=3,
+              )
+              print_results(items)
+
+              await pool.stop()
+
+      if __name__ == "__main__":
+          asyncio.run(main(
+              ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
+              ydb_database=os.environ.get("YDB_DATABASE", "/local"),
+              ydb_credentials=ydb.credentials_from_env_variables(),
+              table_name="ydb_vector_search",
+              index_name="ydb_vector_index",
+          ))
       ```
 
     {% endlist %}

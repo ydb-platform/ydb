@@ -14,7 +14,7 @@
 namespace NKikimr::NKqp {
 namespace {
 
-constexpr size_t SQL_TEXT_MAX_SIZE = 4000;
+constexpr size_t SQL_TEXT_MAX_SIZE = 20000;
 constexpr TStringBuf SENSITIVE_QUERY_PLACEHOLDER =
     "[query may contain sensitive data, text is not shown]";
 
@@ -55,152 +55,135 @@ struct TJsonExtra {
     TVector<TTableStat> Tables;
 };
 
-void WriteJsonChunks(TStringBuf poolId, const TString& reqId, TStringBuf sessionId, TStringBuf userSID,
-                     TStringBuf eventName, TStringBuf requestText,
-                     const NYql::TIssues& issues,
-                     const TJsonExtra& extra,
-                     TInstant timestamp, TMaybe<TInstant> endTime = Nothing())
+void WriteJsonEntry(TStringBuf poolId, const TString& reqId, TStringBuf sessionId, TStringBuf userSID,
+                    TStringBuf eventName, TStringBuf requestText,
+                    const NYql::TIssues& issues,
+                    const TJsonExtra& extra,
+                    TInstant timestamp, TMaybe<TInstant> endTime = Nothing())
 {
-    // Split requestText into UTF-8-safe chunks using standard Utf8TruncateRobust
-    std::vector<TStringBuf> chunks;
-    if (requestText.empty()) {
-        chunks.emplace_back();
-    } else {
-        TStringBuf remaining = requestText;
-        while (!remaining.empty()) {
-            TStringBuf chunk = Utf8TruncateRobust(remaining, SQL_TEXT_MAX_SIZE);
-            if (chunk.empty()) {
-                // Degenerate case: first byte is invalid UTF-8, skip it to make progress
-                chunk = remaining.Head(std::min(remaining.size(), SQL_TEXT_MAX_SIZE));
-            }
-            chunks.push_back(chunk);
-            remaining.Skip(chunk.size());
+    bool truncated = false;
+    TStringBuf loggedText = requestText;
+    if (SQL_TEXT_MAX_SIZE > 0 && loggedText.size() > SQL_TEXT_MAX_SIZE) {
+        loggedText = Utf8TruncateRobust(loggedText, SQL_TEXT_MAX_SIZE);
+        if (loggedText.empty()) {
+            loggedText = requestText.Head(SQL_TEXT_MAX_SIZE);
         }
+        truncated = true;
     }
 
-    const size_t total = chunks.size();
+    TStringStream ss;
+    NJsonWriter::TBuf json(NJsonWriter::HEM_RELAXED, &ss);
 
-    for (size_t i = 0; i < total; ++i) {
-        TStringStream ss;
-        NJsonWriter::TBuf json(NJsonWriter::HEM_RELAXED, &ss);
-
-        json.BeginObject();
-        json.WriteKey("timestamp").WriteString(timestamp.ToString());
-        if (endTime) {
-            json.WriteKey("end_time").WriteString(endTime->ToString());
-        }
-        json.WriteKey("req_id").WriteString(reqId);
-        json.WriteKey("pool").WriteString(poolId);
-        json.WriteKey("session").WriteString(sessionId);
-        json.WriteKey("user").WriteString(userSID);
-        json.WriteKey("event").WriteString(eventName);
-        json.WriteKey("chunk").WriteInt(i + 1);
-        json.WriteKey("total").WriteInt(total);
-        if (i + 1 == total) {
-            json.WriteKey("last_chunk").WriteBool(true);
-        }
-
-        if (!chunks[i].empty()) {
-            json.WriteKey("query_text").WriteString(chunks[i]);
-        }
-
-        if (!issues.Empty()) {
-            json.WriteKey("issues").WriteString(issues.ToOneLineString());
-        }
-
-        // Emit metadata (database, query_type, stats, etc.) only in the first chunk so
-        // log aggregators don't receive N duplicated copies for a multi-chunk query.
-        if (i == 0) {
-            if (extra.Database) {
-                json.WriteKey("database").WriteString(extra.Database);
-            }
-            if (extra.DatabaseId) {
-                json.WriteKey("database_id").WriteString(extra.DatabaseId);
-            }
-            if (extra.Cluster) {
-                json.WriteKey("cluster").WriteString(extra.Cluster);
-            }
-            if (extra.NodeId > 0) {
-                json.WriteKey("node_id").WriteULongLong(extra.NodeId);
-            }
-            if (extra.NodeName) {
-                json.WriteKey("node_name").WriteString(extra.NodeName);
-            }
-            if (extra.QueryType) {
-                json.WriteKey("query_type").WriteString(extra.QueryType);
-            }
-            if (extra.Action) {
-                json.WriteKey("action").WriteString(extra.Action);
-            }
-            if (extra.ApplicationName) {
-                json.WriteKey("application").WriteString(extra.ApplicationName);
-            }
-            if (extra.ClientAddress) {
-                json.WriteKey("client_address").WriteString(extra.ClientAddress);
-            }
-            if (extra.CommandTag) {
-                json.WriteKey("command_tag").WriteString(extra.CommandTag);
-            }
-            if (extra.ParametersSize > 0) {
-                json.WriteKey("parameters_size").WriteULongLong(extra.ParametersSize);
-            }
-            if (extra.Status) {
-                json.WriteKey("status").WriteString(extra.Status);
-            }
-            if (extra.DurationUs >= 0) {
-                json.WriteKey("duration_us").WriteLongLong(extra.DurationUs);
-            }
-            if (extra.CpuTimeUs >= 0) {
-                json.WriteKey("cpu_time_us").WriteLongLong(extra.CpuTimeUs);
-            }
-            if (extra.CompileCacheHit >= 0) {
-                json.WriteKey("compile_cache_hit").WriteBool(extra.CompileCacheHit == 1);
-            }
-            if (extra.ReadRows > 0) {
-                json.WriteKey("read_rows").WriteULongLong(extra.ReadRows);
-            }
-            if (extra.ReadBytes > 0) {
-                json.WriteKey("read_bytes").WriteULongLong(extra.ReadBytes);
-            }
-            if (extra.WriteRows > 0) {
-                json.WriteKey("write_rows").WriteULongLong(extra.WriteRows);
-            }
-            if (extra.WriteBytes > 0) {
-                json.WriteKey("write_bytes").WriteULongLong(extra.WriteBytes);
-            }
-            if (extra.AffectedShards > 0) {
-                json.WriteKey("affected_shards").WriteULongLong(extra.AffectedShards);
-            }
-            if (extra.ConsumedRu > 0) {
-                json.WriteKey("consumed_ru").WriteULongLong(extra.ConsumedRu);
-            }
-            if (!extra.Tables.empty()) {
-                json.WriteKey("tables").BeginList();
-                for (const auto& t : extra.Tables) {
-                    json.BeginObject();
-                    json.WriteKey("path").WriteString(t.Path);
-                    if (t.ReadRows > 0) {
-                        json.WriteKey("read_rows").WriteULongLong(t.ReadRows);
-                    }
-                    if (t.ReadBytes > 0) {
-                        json.WriteKey("read_bytes").WriteULongLong(t.ReadBytes);
-                    }
-                    if (t.WriteRows > 0) {
-                        json.WriteKey("write_rows").WriteULongLong(t.WriteRows);
-                    }
-                    if (t.WriteBytes > 0) {
-                        json.WriteKey("write_bytes").WriteULongLong(t.WriteBytes);
-                    }
-                    json.EndObject();
-                }
-                json.EndList();
-            }
-        }
-
-        json.EndObject();
-
-        _KQP_REQ_LOG(ss.Str());
+    json.BeginObject();
+    json.WriteKey("timestamp").WriteString(timestamp.ToString());
+    if (endTime) {
+        json.WriteKey("end_time").WriteString(endTime->ToString());
     }
+    json.WriteKey("req_id").WriteString(reqId);
+    json.WriteKey("pool").WriteString(poolId);
+    json.WriteKey("session").WriteString(sessionId);
+    json.WriteKey("user").WriteString(userSID);
+    json.WriteKey("event").WriteString(eventName);
+
+    if (!loggedText.empty()) {
+        json.WriteKey("query_text").WriteString(loggedText);
+    }
+    if (truncated) {
+        json.WriteKey("query_text_truncated").WriteBool(true);
+    }
+
+    if (!issues.Empty()) {
+        json.WriteKey("issues").WriteString(issues.ToOneLineString());
+    }
+
+    if (extra.Database) {
+        json.WriteKey("database").WriteString(extra.Database);
+    }
+    if (extra.DatabaseId) {
+        json.WriteKey("database_id").WriteString(extra.DatabaseId);
+    }
+    if (extra.Cluster) {
+        json.WriteKey("cluster").WriteString(extra.Cluster);
+    }
+    if (extra.NodeId > 0) {
+        json.WriteKey("node_id").WriteULongLong(extra.NodeId);
+    }
+    if (extra.NodeName) {
+        json.WriteKey("node_name").WriteString(extra.NodeName);
+    }
+    if (extra.QueryType) {
+        json.WriteKey("query_type").WriteString(extra.QueryType);
+    }
+    if (extra.Action) {
+        json.WriteKey("action").WriteString(extra.Action);
+    }
+    if (extra.ApplicationName) {
+        json.WriteKey("application").WriteString(extra.ApplicationName);
+    }
+    if (extra.ClientAddress) {
+        json.WriteKey("client_address").WriteString(extra.ClientAddress);
+    }
+    if (extra.CommandTag) {
+        json.WriteKey("command_tag").WriteString(extra.CommandTag);
+    }
+    if (extra.ParametersSize > 0) {
+        json.WriteKey("parameters_size").WriteULongLong(extra.ParametersSize);
+    }
+    if (extra.Status) {
+        json.WriteKey("status").WriteString(extra.Status);
+    }
+    if (extra.DurationUs >= 0) {
+        json.WriteKey("duration_us").WriteLongLong(extra.DurationUs);
+    }
+    if (extra.CpuTimeUs >= 0) {
+        json.WriteKey("cpu_time_us").WriteLongLong(extra.CpuTimeUs);
+    }
+    if (extra.CompileCacheHit >= 0) {
+        json.WriteKey("compile_cache_hit").WriteBool(extra.CompileCacheHit == 1);
+    }
+    if (extra.ReadRows > 0) {
+        json.WriteKey("read_rows").WriteULongLong(extra.ReadRows);
+    }
+    if (extra.ReadBytes > 0) {
+        json.WriteKey("read_bytes").WriteULongLong(extra.ReadBytes);
+    }
+    if (extra.WriteRows > 0) {
+        json.WriteKey("write_rows").WriteULongLong(extra.WriteRows);
+    }
+    if (extra.WriteBytes > 0) {
+        json.WriteKey("write_bytes").WriteULongLong(extra.WriteBytes);
+    }
+    if (extra.AffectedShards > 0) {
+        json.WriteKey("affected_shards").WriteULongLong(extra.AffectedShards);
+    }
+    if (extra.ConsumedRu > 0) {
+        json.WriteKey("consumed_ru").WriteULongLong(extra.ConsumedRu);
+    }
+    if (!extra.Tables.empty()) {
+        json.WriteKey("tables").BeginList();
+        for (const auto& t : extra.Tables) {
+            json.BeginObject();
+            json.WriteKey("path").WriteString(t.Path);
+            if (t.ReadRows > 0) {
+                json.WriteKey("read_rows").WriteULongLong(t.ReadRows);
+            }
+            if (t.ReadBytes > 0) {
+                json.WriteKey("read_bytes").WriteULongLong(t.ReadBytes);
+            }
+            if (t.WriteRows > 0) {
+                json.WriteKey("write_rows").WriteULongLong(t.WriteRows);
+            }
+            if (t.WriteBytes > 0) {
+                json.WriteKey("write_bytes").WriteULongLong(t.WriteBytes);
+            }
+            json.EndObject();
+        }
+        json.EndList();
+    }
+
+    json.EndObject();
+
+    _KQP_REQ_LOG(ss.Str());
 }
 
 TString MakeRequestId(const TKqpQueryState& state) {
@@ -295,7 +278,7 @@ TString TLogQuery::LogStarted(const TKqpQueryState& state) {
         }
         extra.ParametersSize = state.ParametersSize;
 
-        WriteJsonChunks(
+        WriteJsonEntry(
             poolId,
             reqId,
             sessionId,
@@ -407,7 +390,7 @@ void TLogQuery::LogCompleted(const TKqpQueryState& state,
             extra.Tables.push_back(std::move(ts));
         }
 
-        WriteJsonChunks(
+        WriteJsonEntry(
             poolId,
             reqId,
             sessionId,
@@ -451,7 +434,7 @@ void TLogQuery::LogForwardedCompleted(const TString& queryText,
 
         TString loggedText = IsQueryAllowedToLog(queryText) ? queryText : TString(SENSITIVE_QUERY_PLACEHOLDER);
 
-        WriteJsonChunks(poolId, reqId, {}, {}, "completed", loggedText, issues, extra,
+        WriteJsonEntry(poolId, reqId, {}, {}, "completed", loggedText, issues, extra,
                         startTime, now);
     });
     log.Log();

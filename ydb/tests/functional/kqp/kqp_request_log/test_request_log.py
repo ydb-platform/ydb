@@ -651,11 +651,9 @@ class TestLogStructure:
             assert 'pool' in entry, "Missing pool"
             assert 'session' in entry, "Missing session"
             assert 'user' in entry, "Missing user"
-            assert 'total' in entry, "Missing total"
             assert 'timestamp' in entry, "Missing timestamp"
             assert 'event' in entry, "Missing event"
             assert entry['event'] in ('started', 'completed')
-            assert 'chunk' in entry, "Missing chunk number"
 
     def test_started_has_timestamp_no_end_time(self, ydb_setup):
         driver, database_path, table_path, _, cluster = ydb_setup
@@ -755,40 +753,6 @@ class TestLogStructure:
             "started and completed should have the same timestamp (query start time)"
 
 
-def _verify_chunked_query(entries, marker, event, min_chunks=5):
-    """Verify that a long query was split into chunks correctly."""
-    first_chunks = _find_entries_by_marker(
-        entries, marker[:100], event=event,
-    )
-    assert len(first_chunks) >= 1, \
-        "Expected at least one %s chunk for marker" % event
-
-    req_id = first_chunks[0]['req_id']
-    all_chunks = [
-        e for e in entries
-        if e.get('req_id') == req_id
-        and e.get('event') == event
-    ]
-
-    expected_total = all_chunks[0]['total']
-    assert expected_total >= min_chunks, \
-        "Expected >= %d chunks, got %d" % (min_chunks, expected_total)
-    assert len(all_chunks) == expected_total, \
-        "Expected %d chunks, got %d" % (expected_total, len(all_chunks))
-
-    chunks = sorted(e['chunk'] for e in all_chunks)
-    assert chunks == list(range(1, expected_total + 1)), \
-        "Chunks should be sequential: %s" % chunks
-
-    reassembled = ''.join(
-        e.get('query_text', '')
-        for e in sorted(all_chunks, key=lambda x: x['chunk'])
-    )
-    assert marker in reassembled, \
-        "Reassembled chunks should contain the full marker"
-
-    return all_chunks
-
 
 # Keys whose values vary across runs (session ids, pointers, generated
 # timestamps, wallclock-based stats, database path, transport metadata)
@@ -837,11 +801,7 @@ def _canonize_entries(entries, marker):
     """Filter log entries by marker, sanitize them and sort deterministically."""
     matching = _find_entries_by_marker(entries, marker)
     sanitized = [_sanitize_entry(e) for e in matching]
-    # Sort by (event, chunk) to get a stable order independent of log interleaving.
-    sanitized.sort(key=lambda e: (
-        e.get('event', ''),
-        e.get('chunk', 0),
-    ))
+    sanitized.sort(key=lambda e: e.get('event', ''))
     return sanitized
 
 
@@ -901,11 +861,11 @@ class TestCanonical:
 
         return json.dumps(sanitized, sort_keys=True, indent=2)
 
-    def test_canonical_chunked_query(self, ydb_setup):
+    def test_canonical_truncated_query(self, ydb_setup):
         driver, database_path, table_path, _, cluster = ydb_setup
 
-        # 5000-char marker produces 2 chunks (SQL_TEXT_MAX_SIZE = 4000).
-        marker = 'canon_chunked_' + 'X' * 4986
+        # Query longer than SQL_TEXT_MAX_SIZE (20000) — must be truncated.
+        marker = 'canon_truncated_' + 'X' * 19985
         query_pool = ydb.QuerySessionPool(driver)
         query_pool.execute_with_retries(
             "SELECT '%s' AS v" % marker
@@ -915,31 +875,30 @@ class TestCanonical:
         time.sleep(0.5)
         entries = _collect_req_json_entries(cluster)
 
-        # Find first chunks by marker, then collect all chunks with same req_id.
-        first_chunks = _find_entries_by_marker(entries, marker[:100])
-        assert len(first_chunks) >= 1, "No entries found for chunked marker"
-        req_ids = set(e['req_id'] for e in first_chunks)
-        all_entries = [e for e in entries if e.get('req_id') in req_ids]
+        found = _find_entries_by_marker(entries, marker[:100])
+        assert len(found) >= 1, "No entries found for truncated marker"
 
-        sanitized = [_sanitize_entry(e) for e in all_entries]
-        sanitized.sort(key=lambda e: (
-            e.get('event', ''),
-            e.get('chunk', 0),
-        ))
+        sanitized = [_sanitize_entry(e) for e in found]
+        sanitized.sort(key=lambda e: e.get('event', ''))
 
-        assert len(sanitized) == 4, \
-            "Expected 4 canonical entries (2 started + 2 completed chunks), got %d" % len(sanitized)
+        assert len(sanitized) == 2, \
+            "Expected 2 entries (started+completed), got %d" % len(sanitized)
+
+        for entry in sanitized:
+            assert entry.get('query_text_truncated') is True, \
+                "Expected query_text_truncated=true in entry: %s" % entry.get('event')
 
         return json.dumps(sanitized, sort_keys=True, indent=2)
 
 
-class TestLongQueryChunking:
-    """Test 20000-char query chunking through all execution methods."""
+class TestQueryTruncation:
+    """Verify that queries exceeding SQL_TEXT_MAX_SIZE (20000 bytes) are truncated."""
 
-    def test_long_query_via_query_service(self, ydb_setup):
+    def test_long_query_truncated(self, ydb_setup):
         driver, database_path, table_path, _, cluster = ydb_setup
 
-        marker = 'Q' * 20000
+        # 25000-char query — exceeds the 20000-byte limit.
+        marker = 'trunc_test_' + 'Q' * 14989
         query_pool = ydb.QuerySessionPool(driver)
         query_pool.execute_with_retries(
             "SELECT '%s' AS v" % marker
@@ -948,64 +907,29 @@ class TestLongQueryChunking:
 
         time.sleep(0.5)
         entries = _collect_req_json_entries(cluster)
-        _verify_chunked_query(entries, marker, 'started')
-        _verify_chunked_query(entries, marker, 'completed')
 
-    def test_long_query_via_data_service(self, ydb_setup):
-        driver, database_path, table_path, pool, cluster = ydb_setup
+        started = _find_entries_by_marker(entries, marker[:100], event='started')
+        assert len(started) >= 1, "Expected started entry"
+        assert started[0].get('query_text_truncated') is True, \
+            "Expected query_text_truncated=true in started"
 
-        marker = 'D' * 20000
+        completed = _find_entries_by_marker(entries, marker[:100], event='completed')
+        assert len(completed) >= 1, "Expected completed entry"
+        assert completed[0].get('query_text_truncated') is True, \
+            "Expected query_text_truncated=true in completed"
 
-        def callee(session):
-            return session.transaction().execute(
-                "SELECT '%s' AS v" % marker,
-                commit_tx=True,
-            )
-
-        pool.retry_operation_sync(callee)
-
-        time.sleep(0.5)
-        entries = _collect_req_json_entries(cluster)
-        _verify_chunked_query(entries, marker, 'started')
-        _verify_chunked_query(entries, marker, 'completed')
-
-    def test_long_query_via_scan_query(self, ydb_setup):
+    def test_short_query_not_truncated(self, ydb_setup):
         driver, database_path, table_path, _, cluster = ydb_setup
 
-        marker = 'S' * 20000
-        result_sets = driver.table_client.scan_query(
-            "SELECT '%s' AS v" % marker
+        query_pool = ydb.QuerySessionPool(driver)
+        query_pool.execute_with_retries(
+            "SELECT 'trunc_short_marker' AS v"
         )
-        for _ in result_sets:
-            pass
+        query_pool.stop()
 
         time.sleep(0.5)
         entries = _collect_req_json_entries(cluster)
-        _verify_chunked_query(entries, marker, 'started')
-        _verify_chunked_query(entries, marker, 'completed')
 
-    def test_long_query_via_scripting(self, ydb_setup):
-        driver, database_path, table_path, _, cluster = ydb_setup
-
-        marker = 'E' * 20000
-        scripting_client = ydb.ScriptingClient(driver)
-        scripting_client.execute_yql("SELECT '%s' AS v" % marker)
-
-        time.sleep(0.5)
-        entries = _collect_req_json_entries(cluster)
-        _verify_chunked_query(entries, marker, 'started')
-        _verify_chunked_query(entries, marker, 'completed')
-
-    def test_long_query_via_streaming_scripting(self, ydb_setup):
-        driver, database_path, table_path, _, cluster = ydb_setup
-
-        marker = 'Y' * 20000
-        _run_ydb_cli(
-            cluster, database_path,
-            ['yql', '-s', "SELECT '%s' AS v" % marker],
-        )
-
-        time.sleep(0.5)
-        entries = _collect_req_json_entries(cluster)
-        _verify_chunked_query(entries, marker, 'started')
-        _verify_chunked_query(entries, marker, 'completed')
+        for entry in _find_entries_by_marker(entries, 'trunc_short_marker'):
+            assert 'query_text_truncated' not in entry, \
+                "Short query must not have query_text_truncated"

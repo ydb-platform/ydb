@@ -4,6 +4,8 @@
         "registry_endpoint": "https://devtools-registry.s3.yandex.net"
     },
     "resources": {
+        "11789649364": "{registry_endpoint}/11789649364",
+        "11789665637": "{registry_endpoint}/11789665637",
         "11469222610": "{registry_endpoint}/11469222610",
         "11469225421": "{registry_endpoint}/11469225421",
         "6277415836": "{registry_endpoint}/6277415836",
@@ -2175,6 +2177,8 @@
         "7663495611": "{registry_endpoint}/7663495611"
     },
     "resources_descriptions": {
+        "11789649364": "/Users/pazus/arc/arcadia/devtools/ktlint_build/package_darwin.json",
+        "11789665637": "/Users/pazus/arc/arcadia/devtools/ktlint_build/package_darwin.json",
         "11469222610": "AST_INDEX_EXECUTABLE-linux-aarch64-none-ast-index-v3.30.0-linux-arm64.tar.gz",
         "11469225421": "AST_INDEX_EXECUTABLE-linux-none-ast-index-v3.30.0-linux-x86_64.tar.gz",
         "6277415836": "Allure 2.29.0",

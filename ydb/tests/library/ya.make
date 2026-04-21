@@ -80,6 +80,7 @@ PEERDIR(
     contrib/python/setuptools
     contrib/python/six
     ydb/public/sdk/python
+    library/python/port_manager
     library/python/svn_version
     library/python/testing/yatest_common
     ydb/core/protos

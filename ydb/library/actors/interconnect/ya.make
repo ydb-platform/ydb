@@ -75,6 +75,7 @@ PEERDIR(
     ydb/library/actors/util
     ydb/library/actors/wilson
     library/cpp/digest/crc32c
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
@@ -101,4 +102,5 @@ RECURSE_FOR_TESTS(
     ut
     ut_fat
     ut_huge_cluster
+    ut_kernel_liveness
 )

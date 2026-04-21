@@ -13,6 +13,7 @@
 #include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
 
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -308,10 +309,13 @@ private:
             finalCypressPaths.emplace_back(ptr->first);
         }
 
-        const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+        auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+        TMaybe<TString> parentOutputHash;
         if (queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
-                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
+                TYtNodeHashCalculator hashCalculator(State_, cluster, config);
+                parentOutputHash = hashCalculator.GetParentOutputHash(*input);
+                operationHash = hashCalculator.GetHash(*optimizedNode);
                 if (!operationHash.empty()) {
                     THashBuilder builder;
                     builder << TYtNodeHashCalculator::MakeSalt(settings, cluster) << operationHash << snaphsotsResult.size();
@@ -354,7 +358,6 @@ private:
             }
         }
 
-
         return State_->Gateway->Run(optimizedNode, ctx,
             IYtGateway::TRunOptions(State_->SessionId)
                 .UserDataBlocks(files)
@@ -365,6 +368,7 @@ private:
                 .Config(std::move(config))
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
+                .OutputHash(parentOutputHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)
@@ -814,7 +818,8 @@ private:
         if (!delegatedNode) {
             const auto clusterStr = op.DataSink().Cluster().StringValue();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
-            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr);
+            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr, State_->UseSecureTmp, State_->Types->OperationOptions);
+            const ui64 nativeTypeCompat = config->NativeYtTypeCompatibility.Get(clusterStr).GetOrElse(NTCF_LEGACY);
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 
@@ -836,6 +841,7 @@ private:
                 auto rowSpec = TYqlRowSpecInfo(tmpTable.RowSpec());
                 NYT::TNode spec;
                 rowSpec.FillCodecNode(spec[YqlRowSpecAttribute]);
+                UpdateNativeYtTypeFlags(spec, nativeTypeCompat);
                 outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
                 type = NCommon::TypeToYsonNode(rowSpec.GetExtendedType(ctx));
             }

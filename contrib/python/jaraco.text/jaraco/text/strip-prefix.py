@@ -1,5 +1,7 @@
 import sys
 
+import typer
+
 from jaraco.text import Stripper
 
 
@@ -14,3 +16,6 @@ def strip_prefix() -> None:
     123
     """
     sys.stdout.writelines(Stripper.strip_prefix(sys.stdin).lines)
+
+
+__name__ == '__main__' and typer.run(strip_prefix)  # type: ignore[func-returns-value]

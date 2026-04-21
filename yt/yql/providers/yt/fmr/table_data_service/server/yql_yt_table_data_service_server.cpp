@@ -113,6 +113,7 @@ public:
     {
         THttpServer::TOptions opts;
         opts.AddBindAddress(Host_, Port_);
+        opts.SetThreads(settings.Threads);
         HttpServer_ = MakeHolder<THttpServer>(this, opts.EnableKeepAlive(true).EnableCompression(true));
 
         THandler putTableDataServiceHandler = std::bind(&TTableDataServiceServer::PutTableDataServiceHandler, this, std::placeholders::_1);

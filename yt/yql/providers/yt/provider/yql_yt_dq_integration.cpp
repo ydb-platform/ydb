@@ -487,6 +487,9 @@ public:
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
                             AddMessage(ctx, "dynamic store read", skipIssues, ytState->PassiveExecution);
                             return false;
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddMessage(ctx, "rls table", skipIssues, ytState->PassiveExecution);
+                            return false;
                         }
 
                         chunksCount += tableInfo->Stat->ChunkCount;
@@ -635,6 +638,9 @@ public:
                             return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic store read");
+                            return Nothing();
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddErrorWrap(ctx, node_->Pos(), "rls table");
                             return Nothing();
                         } else { //
                             if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {

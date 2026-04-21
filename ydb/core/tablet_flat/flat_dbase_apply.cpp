@@ -2,6 +2,7 @@
 #include "util_fmt_abort.h"
 
 #include <ydb/core/base/localdb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr {
@@ -148,8 +149,42 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &tableInfo = *Table(table);
 
         if (delta.HasByKeyFilter()) {
-            bool enabled = delta.GetByKeyFilter();
-            changes |= ChangeTableSetting(table, tableInfo.ByKeyFilter, enabled);
+            // Legacy: convert ByKeyFilter bool to a prefix entry for full key
+            using TPrefix = TScheme::TTableInfo::TByKeyFilterPrefix;
+            ui32 keyCount = tableInfo.KeyColumns.size();
+            auto prefixes = tableInfo.ByKeyFilterPrefixes;
+            if (delta.GetByKeyFilter()) {
+                auto it = std::lower_bound(prefixes.begin(), prefixes.end(), TPrefix{keyCount, 0});
+                if (it == prefixes.end() || it->PrefixLength != keyCount) {
+                    prefixes.insert(it, TPrefix{keyCount, DefaultBloomFilterFpp});
+                }
+            } else {
+                auto it = std::lower_bound(prefixes.begin(), prefixes.end(), TPrefix{keyCount, 0});
+                if (it != prefixes.end() && it->PrefixLength == keyCount) {
+                    prefixes.erase(it);
+                }
+            }
+            changes |= ChangeTableSetting(table, tableInfo.ByKeyFilterPrefixes, prefixes);
+        }
+
+        if (delta.ByKeyFilterPrefixesSize() > 0) {
+            using TPrefix = TScheme::TTableInfo::TByKeyFilterPrefix;
+            ui32 keyCount = tableInfo.KeyColumns.size();
+            TMap<ui32, double> prefixMap;
+            for (const auto& p : delta.GetByKeyFilterPrefixes()) {
+                ui32 len = p.GetPrefixLength();
+                if (len > 0) {
+                    Y_ENSURE(len <= keyCount,
+                        "Bloom filter prefix " << len << " exceeds key column count " << keyCount);
+                    double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : DefaultBloomFilterFpp;
+                    prefixMap[len] = fpp;
+                }
+            }
+            TVector<TPrefix> prefixes;
+            for (const auto& [len, fpp] : prefixMap) {
+                prefixes.push_back(TPrefix{len, fpp});
+            }
+            changes |= ChangeTableSetting(table, tableInfo.ByKeyFilterPrefixes, prefixes);
         }
 
         if (delta.HasEraseCacheEnabled()) {

@@ -472,7 +472,7 @@ private:
 
         if (types.empty() && names.empty()) {
             ConsumeIdentifier(/*allowQuotedIdentifier*/ true);
-            if (Y_UNLIKELY(IsAtEnd())) {
+            if (IsAtEnd()) [[unlikely]] {
                 THROW_ERROR_EXCEPTION("Unexpected end of string encountered, expected '>' or ',' or ':'");
             }
             if (CurrentCharacter() == ':') {
@@ -489,7 +489,7 @@ private:
         }
 
         for (;;) {
-            if (Y_UNLIKELY(IsAtEnd())) {
+            if (IsAtEnd()) [[unlikely]] {
                 THROW_ERROR_EXCEPTION("Unexpected end of string encountered, expected '>' or ','");
             }
 
@@ -538,11 +538,11 @@ private:
 
     void ConsumeCharacterOrThrow(char character)
     {
-        if (Y_UNLIKELY(IsAtEnd())) {
+        if (IsAtEnd()) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Unexpected end of string encountered, expected %qv", character);
         }
 
-        if (Y_LIKELY(CurrentCharacter() == character)) {
+        if (CurrentCharacter() == character) [[likely]] {
             Step();
             ConsumeWhitespaces();
         } else {

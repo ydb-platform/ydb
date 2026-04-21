@@ -6,11 +6,19 @@
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/version.h"
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+#  include <cstdint>
+#endif
+
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace trace
 {
 
-enum class SpanKind
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+enum class SpanKind : std::uint8_t
+#else
+enum class SpanKind  // NOLINT(performance-enum-size)
+#endif
 {
   kInternal,
   kServer,
@@ -24,7 +32,11 @@ constexpr char kSpanKey[]       = "active_span";
 constexpr char kIsRootSpanKey[] = "is_root_span";
 
 // StatusCode - Represents the canonical set of status codes of a finished Span.
-enum class StatusCode
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+enum class StatusCode : std::uint8_t
+#else
+enum class StatusCode  // NOLINT(performance-enum-size)
+#endif
 {
   kUnset,  // default status
   kOk,     // Operation has completed successfully.

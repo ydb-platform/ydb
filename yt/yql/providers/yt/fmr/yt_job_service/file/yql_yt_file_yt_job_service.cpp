@@ -58,6 +58,14 @@ public:
         Y_ENSURE(fragmentResultsYson.size() == 1);
     }
 
+    bool HasPingError() const override {
+        return false;
+    }
+
+    TString GetPingError() const override {
+        return {};
+    }
+
 private:
     TString SessionId_;
     TString FilePath_;

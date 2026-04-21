@@ -4,6 +4,7 @@
 
 #include <yql/essentials/utils/utf8.h>
 #include <yql/essentials/utils/fetch/fetch.h>
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/std_allocator.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -18,7 +19,6 @@
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
 #include <util/digest/numeric.h>
-#include <util/string/cast.h>
 
 #include <openssl/sha.h>
 
@@ -2118,7 +2118,8 @@ bool CompareExpressions(const TExprNode*& one, const TExprNode*& two, TArguments
 
     switch (two->Type()) {
         case TExprNode::Arguments: {
-            ui32 i1 = 0U, i2 = 0U;
+            ui32 i1 = 0U;
+            ui32 i2 = 0U;
             one->ForEachChild([&](const TExprNode& arg) { argumentsMap.emplace(&arg, std::make_pair(level, ++i1)); });
             two->ForEachChild([&](const TExprNode& arg) { argumentsMap.emplace(&arg, std::make_pair(level, ++i2)); });
             return true;
@@ -2792,6 +2793,21 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, u
     return ConvertToAst(root, exprContext, settings);
 }
 
+TExprNode::~TExprNode() {
+    // YQLOVERYT-51: Investigating the reasons of non-deleted nodes
+    if (!Dead() || UseCount()) {
+        if (std::uncaught_exceptions() > 0) {
+            YQL_CLOG(ERROR, Core) << "Node #" << UniqueId_ << Endl << FormatCurrentException();
+        }
+    }
+
+    Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
+                   UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
+    Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
+                   UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
+    DestroyPtrs();
+}
+
 void TExprNode::DestroyNode(TExprNode::TPtr& node, TExprNode*& root) {
     if (!node) {
         return;
@@ -3291,10 +3307,8 @@ ui32 TVariantExprType::MakeFlags(const TTypeAnnotationNode* underlyingType) {
             return ret;
         }
         default:
-            break;
+            return 0; // Validate will handle it
     }
-
-    ythrow yexception() << "unexpected underlying type" << *underlyingType;
 }
 
 bool TDictExprType::Validate(TPosition position, TExprContext& ctx) const {
@@ -3857,7 +3871,8 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
     TNodesPairSet visited;
     map.reserve(argsMap.size());
     std::for_each(argsMap.cbegin(), argsMap.cend(), [&](const TNodeMap<ui32>::value_type& v) { map.emplace(v.first, std::make_pair(0U, v.second)); });
-    auto l = &one, r = &two;
+    auto l = &one;
+    auto r = &two;
     return CompareExpressions(l, r, map, level, visited);
 }
 

@@ -2,7 +2,7 @@
 
 namespace NKikimr::NOlap::NReader {
 
-LWTRACE_DEFINE_PROVIDER(YDB_CS_READER);
+LWTRACE_DEFINE_PROVIDER(YDB_CS_SCAN);
 
 }
 

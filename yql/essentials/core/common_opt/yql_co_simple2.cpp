@@ -950,7 +950,8 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     if (const auto width = node->ChildrenSize() >> 1U; width > 1U) {
-        TNodeSet predicates(width), branches(width);
+        TNodeSet predicates(width);
+        TNodeSet branches(width);
         for (auto i =0U; i < node->ChildrenSize() - 1U; ++i) {
             predicates.emplace(node->Child(i));
             branches.emplace(node->Child(++i));

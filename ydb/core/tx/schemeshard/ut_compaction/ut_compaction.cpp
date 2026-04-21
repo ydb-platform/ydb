@@ -153,6 +153,39 @@ void CreateTable(
     env.TestWaitNotification(runtime, txId, schemeshardId);
 }
 
+void CreateIndexedTable(
+    TTestActorRuntime &runtime,
+    TTestEnv& env,
+    const char* path,
+    const char* name,
+    ui32 shardsCount,
+    ui64& txId,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    TestCreateIndexedTable(runtime, schemeshardId, ++txId, path,
+        Sprintf(R"____(
+            TableDescription {
+                Name: "%s"
+                Columns { Name: "key"  Type: "Uint32"}
+                Columns { Name: "value" Type: "Utf8"}
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: %d
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: %d
+                        MaxPartitionsCount: %d
+                    }
+                }
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )____", name, shardsCount, shardsCount, shardsCount));
+    env.TestWaitNotification(runtime, txId, schemeshardId);
+}
+
 void CreateTableWithData(
     TTestActorRuntime &runtime,
     TTestEnv& env,
@@ -165,6 +198,28 @@ void CreateTableWithData(
     CreateTable(runtime, env, path, name, shardsCount, txId, schemeshardId);
 
     WriteData(runtime, name, 0, 100);
+}
+
+void CreateIndexedTableWithData(
+    TTestActorRuntime &runtime,
+    TTestEnv& env,
+    const char* path,
+    const char* name,
+    ui32 shardsCount,
+    ui64& txId,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    CreateIndexedTable(runtime, env, path, name, shardsCount, txId, schemeshardId);
+
+    TString tablePath = TStringBuilder() << path << '/' << name;
+
+    for (ui64 i = 0; i < 100; ++i) {
+        WriteRow(runtime, ++txId, tablePath, i % shardsCount, i,
+            TStringBuilder()
+            << "IpZ1ONrTzKUUglFR1mUoJZn1aslLKQV92To28e6knr3WH4UIsUf9s1rZ0tQ0pOSV1516iBgirQKkHqwbpQOxGng7ZBcR5ZA5yfOPQB2FDRfG0gNHmTW4jqccbNZoH6jD"
+            << (i * 1000)
+        );
+    }
 }
 
 THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig() {
@@ -1824,6 +1879,51 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         );
     }
 
+    Y_UNIT_TEST(SchemeshardShouldCompactIndexImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+        auto infoIndex = GetPathInfo(runtime, "/MyRoot/Simple/ValueIndex/indexImplTable");
+
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple/ValueIndex/indexImplTable");
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex/indexImplTable");
+        ui64 compactionId = txId;
+
+        for (auto shard: info.Shards) {
+            CheckShardNotBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+            CheckShardNotBorrowedCompacted(runtime, info.UserTable, shard, info.OwnerId);
+        }
+
+        for (auto shard: infoIndex.Shards) {
+            CheckShardBackgroundCompacted(runtime, infoIndex.UserTable, shard, infoIndex.OwnerId);
+            CheckShardNotBorrowedCompacted(runtime, infoIndex.UserTable, shard, infoIndex.OwnerId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_DONE
+        );
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactWrongPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex", 1, Ydb::StatusIds::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(SchemeshardShouldCompactAfterRestart) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -2120,6 +2220,28 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 2);
             UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(CheckGetOperationShardsCounting) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 10, ++txId);
+
+        {
+            TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 10);
+            ui64 compactionId = txId;
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+            auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
+            UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 10);
         }
     }
 

@@ -39,11 +39,22 @@ namespace NTable {
         Reset   = 3,    /* Reset cell or row to default */
     };
 
+    /**
+     * Lock modes with higher strength have higher numerical values
+     *
+     * Bit mask values also have some assigned meaning:
+     *
+     * 001 = indicates key (unique index) columns cannot be modified by transactions
+     * 010 = indicates non-key columns cannot be modified by other transactions
+     * 100 = indicates row may be modified by the lock owner
+     */
     enum class ELockMode : ui8 {
         None = 0,
-        Shared = 1,
-        Exclusive = 2,
-        Multi = 3,
+        KeyShared = 1,      /* 001 = conflicts with Exclusive */
+        Shared = 3,         /* 011 = conflicts with Exclusive, NoKeyExclusive */
+        NoKeyExclusive = 5, /* 101 = conflicts with Exclusive, NoKeyExclusive, Shared */
+        Exclusive = 6,      /* 110 = conflicts with Exclusive, NoKeyExclusive, Shared, KeyShared */
+        Multi = 7,          /* 111 = multiple transactions with lock modes stored elsewhere */
     };
 
     enum class ECellOp : ui8 { /* cell operation code */

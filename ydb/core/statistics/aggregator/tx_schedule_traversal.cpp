@@ -43,7 +43,8 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
         Self->ScheduleNextAnalyze(db, ctx);
 
         // Next, if there is no analyze operation, try to schedule background traversal.
-        if (!Self->TraversalPathId && Self->EnableBackgroundColumnStatsCollection) {
+        if (!Self->TraversalPathId
+                && Self->StatisticsConfig.GetEnableBackgroundColumnStatsCollection()) {
             Self->ScheduleNextBackgroundTraversal(db);
         }
         return true;

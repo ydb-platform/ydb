@@ -23,7 +23,7 @@ private:
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
+        const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/, const TMayUsePortion& /*mayUsePortion*/) const override {
         return std::nullopt;
     }
 
@@ -76,7 +76,7 @@ private:
     virtual ui64 DoGetWeight(bool highPriority) const override;
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
-    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const override;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const override;
     virtual ui64 GetExpectedPortionSize() const override {
         return ExpectedBlobsSize;
     }

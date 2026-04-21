@@ -2,6 +2,8 @@
 
 #include "parse_tree.h"
 
+#include <yql/essentials/utils/yql_panic.h>
+
 namespace NSQLTranslationV1 {
 
 TToken Beginning(const TRule_select_stmt& rule) {
@@ -20,7 +22,7 @@ TToken Beginning(const TRule_select_kind& rule) {
         case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt3:
             return block.GetAlt3().GetRule_select_core1().GetToken2();
         case NSQLv1Generated::TRule_select_kind_TBlock2::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 

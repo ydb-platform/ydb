@@ -66,11 +66,11 @@ bool TResult::IsError() const {
 }
 
 TExecutor::TExecutor(
-    const TJsonPathPtr path,
+    TJsonPathPtr path,
     const TJsonNodes& input,
     const TVariablesMap& variables,
     const IValueBuilder* valueBuilder)
-    : Reader_(path)
+    : Reader_(std::move(path))
     , Input_(input)
     , Variables_(variables)
     , ValueBuilder_(valueBuilder)

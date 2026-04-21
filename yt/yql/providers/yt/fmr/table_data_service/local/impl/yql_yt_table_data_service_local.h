@@ -6,7 +6,7 @@
 namespace NYql::NFmr {
 
 struct TTableDataServiceSettings {
-    ui64 MaxDataWeight = 10000000000;
+    ui64 MaxDataWeight = 50000000000;
 };
 
 ILocalTableDataService::TPtr MakeLocalTableDataService(const TTableDataServiceSettings& settings = TTableDataServiceSettings());

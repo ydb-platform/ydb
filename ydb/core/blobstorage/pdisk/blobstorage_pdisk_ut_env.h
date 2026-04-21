@@ -40,6 +40,7 @@ public:
         std::optional<bool> RandomizeMagic = std::nullopt;
         std::optional<ui64> NonceRandNum = std::nullopt;
         bool UseRdmaAllocator = false;
+        bool EnablePDiskSpaceColorOverride = false;
     };
 
 private:
@@ -105,6 +106,7 @@ public:
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
         pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
+        pDiskConfig->FeatureFlags.SetEnablePDiskSpaceColorOverride(Settings.EnablePDiskSpaceColorOverride);
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
         pDiskConfig->NonceRandNum = Settings.NonceRandNum;

@@ -1,0 +1,22 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config '"OptimizerFlags" '"ToFlowOverCollect"))
+
+(let input (AsList
+  (Int32 '1)
+  (Int32 '2)
+  (Int32 '3)
+  (Int32 '4)
+))
+
+(let output (Collect (FromFlow (Map (ToFlow (Collect (FromFlow (Map (ToFlow input)
+    (lambda '(item) (+ item (Int32 '1)))
+  ))))
+  (lambda '(item) (* item (Int32 '2)))
+))))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) output '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

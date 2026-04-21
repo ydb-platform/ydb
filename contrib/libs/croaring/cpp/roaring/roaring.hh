@@ -687,6 +687,15 @@ class Roaring {
     }
 
     /**
+     * Compute how many bytes would be read by readSafe.  Returns 0 if the
+     * serialized data is invalid.
+     * This is meant to be compatible with the Java and Go versions.
+     */
+    static size_t serializedSizeInBytesSafe(const char *buf, size_t maxbytes) {
+        return api::roaring_bitmap_portable_deserialize_size(buf, maxbytes);
+    }
+
+    /**
      * How many bytes are required to serialize this bitmap (meant to be
      * compatible with Java and Go versions)
      *

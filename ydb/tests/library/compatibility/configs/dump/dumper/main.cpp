@@ -5,6 +5,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <util/string/split.h>
 #include <util/system/env.h>
+#include <util/generic/set.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
@@ -12,9 +13,10 @@
 
 using namespace google::protobuf;
 
-void Proto2Json(const Message& proto, NJson::TJsonValue& json);
+void Proto2Json(const Message& proto, TSet<TString> printedMessages, NJson::TJsonValue& json);
 
 void PrintSingleFieldValue(const Message& proto,
+                     const TSet<TString>& printedMessages,
                      const FieldDescriptor& field,
                      NJson::TJsonValue& json) {
     #define FIELD_TO_JSON(EProtoCppType, ProtoGet)                         \
@@ -36,7 +38,7 @@ void PrintSingleFieldValue(const Message& proto,
 
         case FieldDescriptor::CPPTYPE_MESSAGE: {
             json.SetType(NJson::JSON_MAP);
-            Proto2Json(reflection->GetMessage(proto, &field), json);
+            Proto2Json(reflection->GetMessage(proto, &field), printedMessages, json);
             break;
         }
 
@@ -52,84 +54,70 @@ void PrintSingleFieldValue(const Message& proto,
     #undef FIELD_TO_JSON
 }
 
-void PrintRepeatedFieldValue(const Message& proto,
-                     const FieldDescriptor& field,
-                     NJson::TJsonValue& json, size_t index) {
-    #define FIELD_TO_JSON(EProtoCppType, ProtoGet)                         \
-        case FieldDescriptor::EProtoCppType: {                             \
-            json = reflection->ProtoGet(proto, &field, index); \
-            break;                                                         \
-        }
-
-    const Reflection* reflection = proto.GetReflection();
+NJson::TJsonValue GetRepeatedFieldValue(const FieldDescriptor& field, const TSet<TString>& printedMessages) {
     switch (field.cpp_type()) {
-        FIELD_TO_JSON(CPPTYPE_INT32, GetRepeatedInt32);
-        FIELD_TO_JSON(CPPTYPE_INT64, GetRepeatedInt64);
-        FIELD_TO_JSON(CPPTYPE_UINT32, GetRepeatedUInt32);
-        FIELD_TO_JSON(CPPTYPE_UINT64, GetRepeatedUInt64);
-        FIELD_TO_JSON(CPPTYPE_DOUBLE, GetRepeatedDouble);
-        FIELD_TO_JSON(CPPTYPE_FLOAT, GetRepeatedFloat);
-        FIELD_TO_JSON(CPPTYPE_BOOL, GetRepeatedBool);
-        FIELD_TO_JSON(CPPTYPE_STRING, GetRepeatedString);
-
         case FieldDescriptor::CPPTYPE_MESSAGE: {
-            json.SetType(NJson::JSON_MAP);
-            Proto2Json(reflection->GetRepeatedMessage(proto, &field, index), json);
-            break;
+            NJson::TJsonValue json(NJson::JSON_NULL);
+            Proto2Json(*MessageFactory::generated_factory()->GetPrototype(field.message_type()), printedMessages, json);
+            return json;
         }
 
         case FieldDescriptor::CPPTYPE_ENUM: {
-            json = reflection->GetRepeatedEnum(proto, &field, index)->name();
-            break;
+            return field.enum_type()->DebugString();
         }
 
         default:
-            ythrow yexception() << "Unknown protobuf field type: "
-                                << static_cast<int>(field.cpp_type()) << ".";
+            return NJson::JSON_NULL;
     }
-    #undef FIELD_TO_JSON
 }
 
 void PrintSingleField(const Message& proto,
+                     const TSet<TString>& printedMessages,
                      const FieldDescriptor& field,
                      NJson::TJsonValue& json, TStringBuf key) {
         Y_ABORT_UNLESS(!field.is_repeated(), "field is repeated.");
         json[key]["id"] = field.number();
         json[key]["file"] = field.file()->name();
-        PrintSingleFieldValue(proto, field, json[key]["default-value"]);
+        PrintSingleFieldValue(proto, printedMessages, field, json[key]["default-value"]);
 }
 
-    void PrintRepeatedField(const Message& proto,
-                                                const FieldDescriptor& field,
-                                                NJson::TJsonValue& json, TStringBuf key) {
+void PrintRepeatedField(const FieldDescriptor& field, const TSet<TString>& printedMessages,
+                        NJson::TJsonValue& json, TStringBuf key) {
         Y_ABORT_UNLESS(field.is_repeated(), "field isn't repeated.");
-        const Reflection* reflection = proto.GetReflection();
         json[key]["id"] = field.number();
         json[key]["file"] = field.file()->name();
         auto& array = json[key].InsertValue("default-value", NJson::TJsonArray());
-        for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
-            PrintRepeatedFieldValue(proto, field, array.AppendValue(NJson::JSON_UNDEFINED), i);
+        auto value = GetRepeatedFieldValue(field, printedMessages);
+        if (!value.IsNull()) {
+            NJson::TJsonValue valueMeta;
+            valueMeta["id"] = field.number();
+            valueMeta["file"] = field.file()->name();
+            valueMeta["default-value"] = value;
+            array.AppendValue(valueMeta);
         }
     }
 
-void PrintField(const Message& proto,
+void PrintField(const Message& proto, const TSet<TString>& printedMessages,
                 const FieldDescriptor& field,
                 NJson::TJsonValue& json, TStringBuf key) {
     if (field.is_repeated())
-        PrintRepeatedField(proto, field, json, key);
+        PrintRepeatedField(field, printedMessages, json, key);
     else
-        PrintSingleField(proto, field, json, key);
+        PrintSingleField(proto, printedMessages, field, json, key);
 }
 
-void Proto2Json(const Message& proto, NJson::TJsonValue& json) {
+void Proto2Json(const Message& proto, TSet<TString> printedMessages, NJson::TJsonValue& json) {
         const auto* descriptor = proto.GetDescriptor();
         Y_ASSERT(descriptor);
 
+        if (!printedMessages.emplace(descriptor->full_name()).second) {
+            return;
+        };
         // Iterate over all non-extension fields
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
             const FieldDescriptor* field = descriptor->field(f);
             Y_ASSERT(field);
-            PrintField(proto, *field, json, field->name());
+            PrintField(proto, printedMessages, *field, json, field->name());
         }
 
         // Check extensions via ListFields
@@ -140,7 +128,7 @@ void Proto2Json(const Message& proto, NJson::TJsonValue& json) {
         for (const auto* field : fields) {
             Y_ASSERT(field);
             if (field->is_extension()) {
-                PrintField(proto, *field, json, field->full_name());
+                PrintField(proto, printedMessages, *field, json, field->full_name());
             }
         }
 
@@ -156,7 +144,7 @@ int main(int argc, const char** argv) {
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
     const auto defaultConf = NKikimrConfig::TAppConfig::default_instance();
     NJson::TJsonValue json;
-    Proto2Json(defaultConf, json["proto"]);
+    Proto2Json(defaultConf, {}, json["proto"]);
     json["branch"] = branch;
     json["commit"] = commit;
     NJson::WriteJson(&Cout, &json, true, true);

@@ -1743,6 +1743,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                     if (sortConstraintEnabled) {
                         TKeySelectorBuilder builder(path.Pos(), ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
                         builder.ProcessRowSpec(*mapOutTable.RowSpec);
+                        builder.FillRowSpecSort(*mapOutTable.RowSpec, useNativeYtDefaultColumnOrder);
                         if (builder.NeedMap()) {
                             mapper = builder.MakeRemapLambda(true);
                         }
@@ -1828,6 +1829,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         if (sortConstraintEnabled && outTable.RowSpec->IsSorted()) {
             TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
             builder.ProcessRowSpec(*outTable.RowSpec);
+            builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             if (builder.NeedMap()) {
                 mapper = builder.MakeRemapLambda(true);
             }

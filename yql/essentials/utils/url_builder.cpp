@@ -12,7 +12,7 @@ TUrlBuilder::TUrlBuilder(TString uri)
 }
 
 TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
-    Params_.emplace_back(TParam{name, value});
+    Params_.emplace_back(TParam{.Name = name, .Value = value});
     return *this;
 }
 

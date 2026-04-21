@@ -1,5 +1,6 @@
 #include "actualization.h"
 #include "bulk_upsert.h"
+#include "check_counter.h"
 #include "compaction.h"
 #include "execute.h"
 #include "select.h"
@@ -21,6 +22,7 @@ namespace {
         {"FAST_PORTIONS_CLEANUP", []() { return std::make_shared<TFastPortionsCleanupCommand>(); }},
         {"ONE_COMPACTION", []() { return std::make_shared<TOneCompactionCommand>(); }},
         {"ONE_ACTUALIZATION", []() { return std::make_shared<TOneActualizationCommand>(); }},
+        {"CHECK_COUNTER", []() { return std::make_shared<TCheckCounterCommand>(); }},
         {"RESTART_TABLETS", []() { return std::make_shared<TRestartTabletsCommand>(); }}
     };
 

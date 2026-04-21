@@ -251,6 +251,7 @@ public:
         for (const auto& item : Heap_) {
             item.Bucket->Drain();
         }
+        Heap_.clear();
     }
 
     bool BeginExecute(TEnqueuedAction* action, int index)

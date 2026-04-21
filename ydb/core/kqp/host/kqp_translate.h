@@ -164,6 +164,11 @@ public:
         return IsAmbiguityError;
     }
 
+    TKqpTranslationSettingsBuilder& SetYqlSelect(TMaybe<NSQLTranslation::EYqlSelect> yqlSelect) {
+        YqlSelect = yqlSelect;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     ui16 KqpYqlSyntaxVersion = 1;
@@ -184,6 +189,7 @@ private:
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;
+    TMaybe<NSQLTranslation::EYqlSelect> YqlSelect = {};
 };
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);

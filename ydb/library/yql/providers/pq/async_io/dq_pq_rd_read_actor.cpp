@@ -320,7 +320,7 @@ private:
         ui64 QueuedRows = 0;
     };
 
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     TMap<NActors::TActorId, TSession> Sessions;
     THashMap<ui64, NActors::TActorId> ReadActorByEventQueueId;
     // Set on Children
@@ -357,7 +357,7 @@ public:
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
@@ -547,7 +547,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent,
         const TString& cluster)
@@ -582,7 +582,12 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     YQL_ENSURE(outputItemType->IsStruct(), "Output type " << outputTypeYson << " is not struct");
     const auto structType = static_cast<TStructType*>(outputItemType);
 
-    // Build input schema and unpacker (for data comes from RowDispatcher)
+    const TStringBuf format = SourceParams.GetFormat();
+    const TStringBuf normalizedFormat = format.empty() ? TStringBuf("raw") : format;
+    YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
+        "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
+
+    // Build input schema and unpacker (packed rows from row dispatcher; not raw csv/json strings)
     TVector<TType* const> inputTypeParts;
     inputTypeParts.reserve(SourceParams.ColumnsSize());
     ColumnIndexes.resize(structType->GetMembersCount());
@@ -613,9 +618,9 @@ void TDqPqRdReadActor::Init() {
 }
 
 void TDqPqRdReadActor::InitChild() {
-    for (auto& [partitionKey, offset]: Parent->PartitionToOffset) {
-        if (Cluster == partitionKey.Cluster) {
-            NextOffsetFromRD[partitionKey.PartitionId] = offset;
+    for (auto& [partitionKey, info]: Parent->Partitions) {
+        if (Cluster == partitionKey.Cluster && info.Offset) {
+            NextOffsetFromRD[partitionKey.PartitionId] = *info.Offset;
         }
     }
     StartingMessageTimestamp = Parent->StartingMessageTimestamp;
@@ -819,7 +824,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         watermark = readyBatch.Watermark;
         usedSpace += readyBatch.UsedSpace;
         freeSpace -= readyBatch.UsedSpace;
-        PartitionToOffset[readyBatch.PartitionKey] = readyBatch.NextOffset;
+        Partitions[readyBatch.PartitionKey].Offset = readyBatch.NextOffset;
         SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
     } while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty());
 
@@ -936,7 +941,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         SRC_LOG_T("NextOffsetFromRD [" << partitionId << "]= " << itNextOffset->second);
         if (Parent->ReadyBuffer.empty()) {
             auto partitionKey = TPartitionKey { Cluster, partitionId };
-            Parent->PartitionToOffset[partitionKey] = itNextOffset->second;
+            Parent->Partitions[partitionKey].Offset = itNextOffset->second;
         }
     }
 }
@@ -1628,7 +1633,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway,
+    const IPqStaticGateway::TPtr& pqGateway,
     bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();

@@ -9,9 +9,10 @@ PY3TEST()
         test_delete_all_after_inserts.py
     )
 
-    IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    REQUIREMENTS(cpu:2)
+    IF (SANITIZER_TYPE)
         SIZE(LARGE)
-        TAG(ya:fat)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ELSE()
         SIZE(MEDIUM)
     ENDIF()

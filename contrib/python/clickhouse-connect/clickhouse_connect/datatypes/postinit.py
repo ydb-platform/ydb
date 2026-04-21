@@ -1,7 +1,18 @@
 from clickhouse_connect.datatypes import registry, dynamic, geometric
+from clickhouse_connect.datatypes.base import TypeDef
+from clickhouse_connect.datatypes.container import Map
 
-dynamic.SHARED_DATA_TYPE = registry.get_from_name('Array(String, String)')
 dynamic.STRING_DATA_TYPE = registry.get_from_name('String')
+
+# Build a private Map(String, String) for JSON shared data decoding.
+# We must NOT reuse the cached registry instance because we replace
+# value_type with SharedDataString (reads raw bytes, encoding=None).
+# Mutating the cached instance would break all normal Map(String, String) columns.
+_shared_map = Map(TypeDef((), (), ('String', 'String')))
+_shared_map.value_type = dynamic.SharedDataString(dynamic.STRING_DATA_TYPE.type_def)
+dynamic.SHARED_DATA_TYPE = _shared_map
+
+dynamic.SHARED_VARIANT_TYPE = dynamic.SharedVariant(dynamic.STRING_DATA_TYPE.type_def)
 
 point = 'Tuple(Float64, Float64)'
 ring = f'Array({point})'

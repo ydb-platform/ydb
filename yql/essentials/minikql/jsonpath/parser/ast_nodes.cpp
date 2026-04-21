@@ -24,7 +24,7 @@ TRootNode::TRootNode(TPosition pos, TAstNodePtr expr, EJsonPathMode mode)
 {
 }
 
-const TAstNodePtr TRootNode::GetExpr() const {
+TAstNodePtr TRootNode::GetExpr() const {
     return Expr_;
 }
 
@@ -93,11 +93,11 @@ TMemberAccessNode::TMemberAccessNode(TPosition pos, TString member, TAstNodePtr 
 {
 }
 
-const TStringBuf TMemberAccessNode::GetMember() const {
+TStringBuf TMemberAccessNode::GetMember() const {
     return Member_;
 }
 
-const TAstNodePtr TMemberAccessNode::GetInput() const {
+TAstNodePtr TMemberAccessNode::GetInput() const {
     return Input_;
 }
 
@@ -111,7 +111,7 @@ TWildcardMemberAccessNode::TWildcardMemberAccessNode(TPosition pos, TAstNodePtr 
 {
 }
 
-const TAstNodePtr TWildcardMemberAccessNode::GetInput() const {
+TAstNodePtr TWildcardMemberAccessNode::GetInput() const {
     return Input_;
 }
 
@@ -130,7 +130,7 @@ const TVector<TArrayAccessNode::TSubscript>& TArrayAccessNode::GetSubscripts() c
     return Subscripts_;
 }
 
-const TAstNodePtr TArrayAccessNode::GetInput() const {
+TAstNodePtr TArrayAccessNode::GetInput() const {
     return Input_;
 }
 
@@ -144,7 +144,7 @@ TWildcardArrayAccessNode::TWildcardArrayAccessNode(TPosition pos, TAstNodePtr in
 {
 }
 
-const TAstNodePtr TWildcardArrayAccessNode::GetInput() const {
+TAstNodePtr TWildcardArrayAccessNode::GetInput() const {
     return Input_;
 }
 
@@ -163,7 +163,7 @@ EUnaryOperation TUnaryOperationNode::GetOp() const {
     return Operation_;
 }
 
-const TAstNodePtr TUnaryOperationNode::GetExpr() const {
+TAstNodePtr TUnaryOperationNode::GetExpr() const {
     return Expr_;
 }
 
@@ -187,11 +187,11 @@ EBinaryOperation TBinaryOperationNode::GetOp() const {
     return Operation_;
 }
 
-const TAstNodePtr TBinaryOperationNode::GetLeftExpr() const {
+TAstNodePtr TBinaryOperationNode::GetLeftExpr() const {
     return LeftExpr_;
 }
 
-const TAstNodePtr TBinaryOperationNode::GetRightExpr() const {
+TAstNodePtr TBinaryOperationNode::GetRightExpr() const {
     return RightExpr_;
 }
 
@@ -269,11 +269,11 @@ TFilterPredicateNode::TFilterPredicateNode(TPosition pos, TAstNodePtr predicate,
 {
 }
 
-const TAstNodePtr TFilterPredicateNode::GetPredicate() const {
+TAstNodePtr TFilterPredicateNode::GetPredicate() const {
     return Predicate_;
 }
 
-const TAstNodePtr TFilterPredicateNode::GetInput() const {
+TAstNodePtr TFilterPredicateNode::GetInput() const {
     return Input_;
 }
 
@@ -292,7 +292,7 @@ EMethodType TMethodCallNode::GetType() const {
     return Type_;
 }
 
-const TAstNodePtr TMethodCallNode::GetInput() const {
+TAstNodePtr TMethodCallNode::GetInput() const {
     return Input_;
 }
 
@@ -307,11 +307,11 @@ TStartsWithPredicateNode::TStartsWithPredicateNode(TPosition pos, TAstNodePtr in
 {
 }
 
-const TAstNodePtr TStartsWithPredicateNode::GetInput() const {
+TAstNodePtr TStartsWithPredicateNode::GetInput() const {
     return Input_;
 }
 
-const TAstNodePtr TStartsWithPredicateNode::GetPrefix() const {
+TAstNodePtr TStartsWithPredicateNode::GetPrefix() const {
     return Prefix_;
 }
 
@@ -329,7 +329,7 @@ TExistsPredicateNode::TExistsPredicateNode(TPosition pos, TAstNodePtr input)
 {
 }
 
-const TAstNodePtr TExistsPredicateNode::GetInput() const {
+TAstNodePtr TExistsPredicateNode::GetInput() const {
     return Input_;
 }
 
@@ -347,7 +347,7 @@ TIsUnknownPredicateNode::TIsUnknownPredicateNode(TPosition pos, TAstNodePtr inpu
 {
 }
 
-const TAstNodePtr TIsUnknownPredicateNode::GetInput() const {
+TAstNodePtr TIsUnknownPredicateNode::GetInput() const {
     return Input_;
 }
 
@@ -366,7 +366,7 @@ TLikeRegexPredicateNode::TLikeRegexPredicateNode(TPosition pos, TAstNodePtr inpu
 {
 }
 
-const TAstNodePtr TLikeRegexPredicateNode::GetInput() const {
+TAstNodePtr TLikeRegexPredicateNode::GetInput() const {
     return Input_;
 }
 

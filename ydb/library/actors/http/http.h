@@ -34,6 +34,13 @@ void TrimEnd(TString& target, char delim);
 TString GetObfuscatedData(TString data, const THeaders& headers);
 TString ToHex(size_t value);
 bool IsReadableContent(TStringBuf contentType);
+bool IsValidMethod(TStringBuf s);
+bool IsValidURL(TStringBuf s);
+bool IsValidProtocol(TStringBuf s);
+bool IsValidVersion(TStringBuf s);
+bool IsValidStatus(TStringBuf s);
+bool IsValidMessage(TStringBuf s);
+bool IsValidHeaderData(TStringBuf s);
 
 class TCompressContext {
 public:
@@ -296,6 +303,7 @@ public:
         target += maxSource.substr(0, pos);
         source.Skip(pos);
         if (target.size() > maxLen) {
+            target = {};
             Stage = EParseStage::Error;
             return false;
         }
@@ -335,6 +343,9 @@ public:
     }
 
     bool ProcessHeaderValue(TStringBuf& header) {
+        if (!IsValidHeaderData(header)) {
+            return false;
+        }
         TStringBuf name;
         TStringBuf value;
         if (!header.TrySplit(':', name, value)) {

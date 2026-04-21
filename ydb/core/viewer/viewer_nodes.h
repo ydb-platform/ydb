@@ -256,24 +256,21 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetDataCenter() const {
-            if (NodeInfo.Location.GetDataCenterId()) {
-                return NodeInfo.Location.GetDataCenterId();
-            }
             return SystemState.GetLocation().GetDataCenter();
         }
 
         TString GetRack() const {
-            if (NodeInfo.Location.GetRackId()) {
-                return NodeInfo.Location.GetRackId();
-            }
             return SystemState.GetLocation().GetRack();
         }
 
         TString GetPileName() const {
-            if (NodeInfo.Location.GetBridgePileName()) {
-                return NodeInfo.Location.GetBridgePileName().value_or("");
-            }
             return SystemState.GetLocation().GetBridgePileName();
+        }
+
+        void MergeInterconnectLocation() {
+            NActorsInterconnect::TNodeLocation location;
+            NodeInfo.Location.Serialize(&location, false);
+            SystemState.MutableLocation()->MergeFrom(location);
         }
 
         void Cleanup() {
@@ -501,6 +498,8 @@ class TJsonNodes : public TViewerPipeClient {
             if (Disconnected) {
                 if (SystemState.HasDisconnectTime()) {
                     return static_cast<int>(GetDisconnectTime().Seconds()) - static_cast<int>(now.Seconds()); // negative for disconnected nodes
+                } else if (SystemState.HasStartTime()) {
+                    return static_cast<int>(now.Seconds()) - static_cast<int>(GetStartTime().Seconds());
                 } else {
                     return std::nullopt;
                 }
@@ -761,6 +760,9 @@ class TJsonNodes : public TViewerPipeClient {
 
         void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState, TInstant now) {
             SystemState.MergeFrom(systemState);
+            // we received valid data, so the node should not be considered disconnected
+            Disconnected = false;
+            Problems = false;
             Cleanup();
             CalcDatabase();
             CalcCpuUsage();
@@ -984,10 +986,16 @@ class TJsonNodes : public TViewerPipeClient {
             case EPeerRole::Any:
                 return true;
             case EPeerRole::Database:
+                if (Database == DomainPath) {
+                    return IsStaticNode(nodeStateInfo);
+                }
                 return GetScopeId(nodeStateInfo.GetScopeId()) == FilterPeerScopeId;
             case EPeerRole::Static:
                 return IsStaticNode(nodeStateInfo);
             case EPeerRole::Other:
+                if (Database == DomainPath) {
+                    return !IsStaticNode(nodeStateInfo);
+                }
                 return GetScopeId(nodeStateInfo.GetScopeId()) != FilterPeerScopeId && !IsStaticNode(nodeStateInfo);
             default:
                 return false;
@@ -1885,6 +1893,8 @@ public:
                     for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
                         TNode& node = NodeData.emplace_back();
                         node.NodeInfo = ni;
+                        node.MergeInterconnectLocation();
+
                         if (ni.Host && !node.SystemState.GetHost()) {
                             node.SystemState.SetHost(ni.Host);
                         }

@@ -4,6 +4,7 @@
 #include "log.h"
 #include "params.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/proto/records.pb.h>
@@ -50,55 +51,72 @@ private:
             // Validate
             const TReceipt receipt = DecodeReceiptHandle(entry.GetReceiptHandle()); // can throw
             RLOG_SQS_DEBUG("Decoded receipt handle: " << receipt);
-            if (receipt.GetShard() >= Shards_) {
-                throw yexception() << "Invalid shard: " << receipt.GetShard();
-            }
 
-            const bool isFifo = IsFifoQueue();
-            if (isFifo && !receipt.GetMessageGroupId()) {
-                throw yexception() << "No message group id";
-            }
+            if (receipt.GetSource() == TReceipt::Table) {
+                if (receipt.GetShard() >= Shards_) {
+                    throw yexception() << "Invalid shard: " << receipt.GetShard();
+                }
 
-            auto& shardInfo = ShardInfo_[receipt.GetShard()];
-            // Create request
-            if (!shardInfo.Request_) {
-                ++RequestsToLeader_;
-                shardInfo.Request_ = MakeHolder<TSqsEvents::TEvDeleteMessageBatch>();
-                shardInfo.Request_->Shard = receipt.GetShard();
-                shardInfo.Request_->RequestId = RequestId_;
-            }
+                const bool isFifo = IsFifoQueue();
+                if (isFifo && !receipt.GetMessageGroupId()) {
+                    throw yexception() << "No message group id";
+                }
 
-            // Add new message to shard request
-            if (IsBatch_) {
-                shardInfo.RequestToReplyIndexMapping_.push_back(requestIndexInBatch);
-            }
-            shardInfo.Request_->Messages.emplace_back();
-            auto& msgReq = shardInfo.Request_->Messages.back();
-            msgReq.Offset = receipt.GetOffset();
-            const TInstant lockTimestamp = TInstant::MilliSeconds(receipt.GetLockTimestamp());
-            msgReq.LockTimestamp = lockTimestamp;
-            if (isFifo) {
-                msgReq.MessageGroupId = receipt.GetMessageGroupId();
-                msgReq.ReceiveAttemptId = receipt.GetReceiveRequestAttemptId();
-            }
+                auto& shardInfo = ShardInfo_[receipt.GetShard()];
+                // Create request
+                if (!shardInfo.Request_) {
+                    ++RequestsToLeader_;
+                    shardInfo.Request_ = MakeHolder<TSqsEvents::TEvDeleteMessageBatch>();
+                    shardInfo.Request_->Shard = receipt.GetShard();
+                    shardInfo.Request_->RequestId = RequestId_;
+                }
 
-            // Calc metrics
-            const TDuration processingDuration = TActivationContext::Now() - lockTimestamp;
-            this->Send(
-                QueueLeader_,
-                new TSqsEvents::TEvLocalCounterChanged(
-                    TSqsEvents::TEvLocalCounterChanged::ECounterType::ClientMessageProcessingDuration,
-                    processingDuration.MilliSeconds()
-                )
-            );
+                // Add new message to shard request
+                if (IsBatch_) {
+                    shardInfo.RequestToReplyIndexMapping_.push_back(requestIndexInBatch);
+                }
+                shardInfo.Request_->Messages.emplace_back();
+                auto& msgReq = shardInfo.Request_->Messages.back();
+                msgReq.Offset = receipt.GetOffset();
+                const TInstant lockTimestamp = TInstant::MilliSeconds(receipt.GetLockTimestamp());
+                msgReq.LockTimestamp = lockTimestamp;
+                if (isFifo) {
+                    msgReq.MessageGroupId = receipt.GetMessageGroupId();
+                    msgReq.ReceiveAttemptId = receipt.GetReceiveRequestAttemptId();
+                }
+
+                // Calc metrics
+                const TDuration processingDuration = TActivationContext::Now() - lockTimestamp;
+                this->Send(
+                    QueueLeader_,
+                    new TSqsEvents::TEvLocalCounterChanged(
+                        TSqsEvents::TEvLocalCounterChanged::ECounterType::ClientMessageProcessingDuration,
+                        processingDuration.MilliSeconds()
+                    )
+                );
+            } else if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
+                if (IsBatch_) {
+                    MLPRequestToReplyIndexMapping_.push_back(requestIndexInBatch);
+                }
+
+                MLPRequest_.Messages.emplace_back(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
+            } else {
+                if (IsBatch_) {
+                    ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(requestIndexInBatch),
+                        TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed);
+                } else {
+                    ProcessAnswer(Response_.MutableDeleteMessage(),
+                        TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed);
+                }
+            }
         } catch (...) {
             RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());
             MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);
         }
     }
 
-    void ProcessAnswer(TDeleteMessageResponse* resp, const TSqsEvents::TEvDeleteMessageBatchResponse::TMessageResult& answer) {
-        switch (answer.Status) {
+    void ProcessAnswer(TDeleteMessageResponse* resp, const TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus& status) {
+        switch (status) {
             case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK: {
                 break;
             }
@@ -139,7 +157,19 @@ private:
                     Send(QueueLeader_, shardInfo.Request_.Release());
                 }
             }
-        } else {
+        }
+
+        if (!MLPRequest_.Messages.empty()) {
+            MLPRequest_.DatabasePath = GetDatabaseName();
+            MLPRequest_.TopicName = GetTopicName();
+            MLPRequest_.Consumer = ConsumerName;
+
+            Register(NPQ::NMLP::CreateCommitter(SelfId(), std::move(MLPRequest_)));
+
+            ++RequestsToLeader_;
+        }
+
+        if (!RequestsToLeader_) {
             SendReplyAndDie();
         }
     }
@@ -152,6 +182,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
             hFunc(TSqsEvents::TEvDeleteMessageBatchResponse, HandleDeleteMessageBatchResponse);
+            hFunc(NPQ::NMLP::TEvChangeResponse, Handle);
         }
     }
 
@@ -163,12 +194,44 @@ private:
             for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
                 const size_t entryIndex = shardInfo.RequestToReplyIndexMapping_[i];
                 Y_ABORT_UNLESS(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize());
-                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), ev->Get()->Statuses[i]);
+                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), ev->Get()->Statuses[i].Status);
             }
         } else {
             Y_ABORT_UNLESS(RequestsToLeader_ == 1);
             Y_ABORT_UNLESS(ev->Get()->Statuses.size() == 1);
-            ProcessAnswer(Response_.MutableDeleteMessage(), ev->Get()->Statuses[0]);
+            ProcessAnswer(Response_.MutableDeleteMessage(), ev->Get()->Statuses[0].Status);
+        }
+
+        --RequestsToLeader_;
+        if (RequestsToLeader_ == 0) {
+            SendReplyAndDie();
+        }
+    }
+
+    void Handle(NPQ::NMLP::TEvChangeResponse::TPtr& ev) {
+        auto& messages = ev->Get()->Messages;
+
+        auto status = [&](const auto& message) {
+            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                return TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
+            }
+            return message.Success ?
+                  TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK
+                : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
+        };
+
+        if (IsBatch_) {
+            Y_ABORT_UNLESS(messages.size() == MLPRequestToReplyIndexMapping_.size());
+            for (size_t i = 0, size = messages.size(); i < size; ++i) {
+                const size_t entryIndex = MLPRequestToReplyIndexMapping_[i];
+                Y_ABORT_UNLESS(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize());
+
+                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), status(messages[i]));
+            }
+        } else {
+            Y_ABORT_UNLESS(RequestsToLeader_ == 1);
+            Y_ABORT_UNLESS(ev->Get()->Messages.size() == 1);
+            ProcessAnswer(Response_.MutableDeleteMessage(), status(messages[0]));
         }
 
         --RequestsToLeader_;
@@ -194,6 +257,8 @@ private:
     };
     size_t RequestsToLeader_ = 0;
     std::vector<TShardInfo> ShardInfo_;
+    NPQ::NMLP::TCommitterSettings MLPRequest_;
+    std::vector<size_t> MLPRequestToReplyIndexMapping_;
 };
 
 IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

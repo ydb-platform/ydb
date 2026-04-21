@@ -6,108 +6,119 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc-metadata"
-  )
+    ```go
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithCredentials(),
-      yc.WithInternalCA(), // append Yandex Cloud certificates
+    import (
+      "context"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      yc "github.com/ydb-platform/ydb-go-yc-metadata"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        yc.WithCredentials(),
+        yc.WithInternalCA(), // append Yandex Cloud certificates
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc-metadata"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithCredentials(),
-      yc.WithInternalCA(), // append Yandex Cloud certificates
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      yc "github.com/ydb-platform/ydb-go-yc-metadata"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        yc.WithCredentials(),
+        yc.WithInternalCA(), // append Yandex Cloud certificates
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString) {
-      AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString) {
+        AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      Properties props = new Properties();
-      props.setProperty("useMetadata", "true");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("useMetadata", "true");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Опцию useMetadata также можно указать прямо в JDBC URL
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Опцию useMetadata также можно указать прямо в JDBC URL
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC передайте те же JDBC URL и параметры (`useMetadata` в URL или в свойствах источника данных), что и в примере выше.
+
+  {% endlist %}
+
+- JavaScript
 
   {% include [auth-metadata](../../_includes/nodejs/auth-metadata.md) %}
 
@@ -141,24 +152,26 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  var metadataProvider = new MetadataProvider();
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;EnableMetadataCredentials=True");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  // Await initial IAM token.
-  await metadataProvider.Initialize();
+  Для Entity Framework и linq2db используйте тот же connectionString.
 
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: metadataProvider
-  );
+- Rust
 
-  await using var driver = await Driver.CreateInitialized(config);
+  ```rust
+  use ydb::{ClientBuilder, MetadataUrlCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(MetadataUrlCredentials::new())
+      .client()?;
   ```
 
 - PHP

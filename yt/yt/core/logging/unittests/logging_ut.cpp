@@ -1478,7 +1478,7 @@ TEST_P(TLoggingTagsTest, All)
     }
 
     auto threadLocalTagGuard = hasThreadMessageTag
-        ? std::optional(TFiberMessageTagGuard("ThreadLocalTag"))
+        ? std::optional(TFiberMessageTagGuard("ThreadLocalTag", TFiberMessageTagGuard::EMode::Replace))
         : std::nullopt;
 
     if (hasMessageTag) {

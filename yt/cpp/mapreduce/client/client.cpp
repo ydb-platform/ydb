@@ -90,6 +90,11 @@ bool IsNoSuchTransactionError(const TErrorResponse& e)
     return e.GetError().ContainsErrorCode(NClusterErrorCodes::NTransactionClient::NoSuchTransaction);
 }
 
+bool IsResolveError(const TErrorResponse& e)
+{
+    return e.GetError().ContainsErrorCode(NClusterErrorCodes::NYTree::ResolveError);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
@@ -1689,7 +1694,7 @@ ITransactionPingerPtr TClient::GetTransactionPinger()
 {
     auto g = Guard(Lock_);
     if (!TransactionPinger_) {
-        TransactionPinger_ = CreateTransactionPinger(Context_.Config, Context_.UseTLS);
+        TransactionPinger_ = CreateTransactionPinger(Context_.Config);
     }
     return TransactionPinger_;
 }
@@ -1733,7 +1738,8 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
             configProfile);
 
         try {
-            clusterConfigNode = Get(clusterConfigPath, TGetOptions());
+            TExpectedErrorGuard guard(IsResolveError);
+            clusterConfigNode = Get(clusterConfigPath, TGetOptions().ReadFrom(EMasterReadKind::Cache));
         } catch (const TErrorResponse& error) {
             if (!error.IsResolveError()) {
                 throw;

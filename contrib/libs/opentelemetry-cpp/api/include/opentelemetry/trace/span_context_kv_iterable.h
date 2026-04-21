@@ -18,7 +18,12 @@ namespace trace
 class SpanContextKeyValueIterable
 {
 public:
-  virtual ~SpanContextKeyValueIterable() = default;
+  SpanContextKeyValueIterable()                                               = default;
+  virtual ~SpanContextKeyValueIterable()                                      = default;
+  SpanContextKeyValueIterable(const SpanContextKeyValueIterable &)            = default;
+  SpanContextKeyValueIterable &operator=(const SpanContextKeyValueIterable &) = default;
+  SpanContextKeyValueIterable(SpanContextKeyValueIterable &&)                 = default;
+  SpanContextKeyValueIterable &operator=(SpanContextKeyValueIterable &&)      = default;
 
   /**
    * Iterate over SpanContext/key-value pairs

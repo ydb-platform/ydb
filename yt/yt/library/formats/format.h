@@ -25,15 +25,9 @@ struct ISchemalessFormatWriter
 
     virtual i64 GetWrittenSize() const = 0;
 
-    virtual i64 GetEncodedRowBatchCount() const
-    {
-        return 0;
-    }
+    virtual i64 GetEncodedRowBatchCount() const = 0;
 
-    virtual i64 GetEncodedColumnarBatchCount() const
-    {
-        return 0;
-    }
+    virtual i64 GetEncodedColumnarBatchCount() const = 0;
 
     [[nodiscard]] virtual TFuture<void> Flush() = 0;
 

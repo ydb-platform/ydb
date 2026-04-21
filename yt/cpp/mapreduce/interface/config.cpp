@@ -449,7 +449,6 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("node_reader_format").Value(::ToString(config.NodeReaderFormat))
         .Item("protobuf_format_with_descriptors").Value(config.ProtobufFormatWithDescriptors)
         .Item("connection_pool_size").Value(config.ConnectionPoolSize)
-        .Item("file_cache_replication_factor").Value(config.FileCacheReplicationFactor)
         .Item("cache_lock_timeout_per_gb").Value(config.CacheLockTimeoutPerGb.ToString())
         .Item("cache_upload_deduplication_mode")
             .Value(TEnumTraits<EUploadDeduplicationMode>::ToString(config.CacheUploadDeduplicationMode))
@@ -458,6 +457,8 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("api_file_path_options").Value(config.ApiFilePathOptions)
         .Item("use_abortable_response").Value(config.UseAbortableResponse)
         .Item("enable_debug_metrics").Value(config.EnableDebugMetrics)
+        .Item("use_halting_response").Value(config.UseHaltingResponse)
+        .Item("halting_response_bytes_limit").Value(config.HaltingResponseBytesLimit)
         .Item("enable_local_mode_optimization").Value(config.EnableLocalModeOptimization)
         .Item("write_stderr_successful_jobs").Value(config.WriteStderrSuccessfulJobs)
         .Item("trace_http_requests_mode").Value(::ToString(config.TraceHttpRequestsMode))
@@ -527,7 +528,6 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("node_reader_format", config.NodeReaderFormat);
     DESERIALIZE_ITEM("protobuf_format_with_descriptors", config.ProtobufFormatWithDescriptors);
     DESERIALIZE_ITEM("connection_pool_size", config.ConnectionPoolSize);
-    DESERIALIZE_ITEM("file_cache_replication_factor", config.FileCacheReplicationFactor);
     DESERIALIZE_ITEM("cache_lock_timeout_per_gb", config.CacheLockTimeoutPerGb);
     DESERIALIZE_ITEM("cache_upload_deduplication_mode", config.CacheUploadDeduplicationMode);
     DESERIALIZE_ITEM("cache_upload_deduplication_threshold", config.CacheUploadDeduplicationThreshold);
@@ -535,6 +535,8 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("api_file_path_options", config.ApiFilePathOptions);
     DESERIALIZE_ITEM("use_abortable_response", config.UseAbortableResponse);
     DESERIALIZE_ITEM("enable_debug_metrics", config.EnableDebugMetrics);
+    DESERIALIZE_ITEM("use_halting_response", config.UseHaltingResponse);
+    DESERIALIZE_ITEM("halting_response_bytes_limit", config.HaltingResponseBytesLimit);
     DESERIALIZE_ITEM("enable_local_mode_optimization", config.EnableLocalModeOptimization);
     DESERIALIZE_ITEM("write_stderr_successful_jobs", config.WriteStderrSuccessfulJobs);
     DESERIALIZE_ITEM("trace_http_requests_mode", config.TraceHttpRequestsMode);

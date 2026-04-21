@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
@@ -40,6 +41,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxChunksToDefragInflight(10, 1, 1000)
     , FreshCompMaxInFlightWrites(10, 1, 1000)
     , FreshCompMaxInFlightReads(10, 1, 1000)
+    , HullCompFreeSpaceThresholdPerMille(2000, 0, 100'000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
     , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
@@ -60,9 +62,11 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxInProgressSyncCount(0, 0, 1000)
     , EnablePhantomFlagStorage(1, 0, 1)
     , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
+    , EnableChunkKeeper(0, 0, 1)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
+    , MaxActiveCompactionsPerPDisk(0, 0, 1'000'000)
     , CostMetricsParametersByMedia({
         TCostMetricsParameters{200},
         TCostMetricsParameters{50},
@@ -200,6 +204,11 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+
+        hFunc(TEvInterpilePut, Handle);
+        hFunc(TEvBlobStorage::TEvPutResult, Handle);
+
+        hFunc(TEvNodeWardenListLocalDDisks, Handle);
 
         default:
             EnqueuePendingMessage(ev);
@@ -389,7 +398,6 @@ void TNodeWarden::Bootstrap() {
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-
         TControlBoard::RegisterLocalControl(EnablePutBatching, icb->BlobStorage.EnablePutBatching);
         TControlBoard::RegisterLocalControl(EnableVPatch, icb->BlobStorage.EnableVPatch);
         TControlBoard::RegisterSharedControl(EnableLocalSyncLogDataCutting, icb->VDiskControls.EnableLocalSyncLogDataCutting);
@@ -407,6 +415,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(HullCompFullCompPeriodSec, icb->VDiskControls.HullCompFullCompPeriodSec);
         TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
         TControlBoard::RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, icb->VDiskControls.GarbageThresholdToRunFullCompactionPerMille);
+        TControlBoard::RegisterSharedControl(HullCompFreeSpaceThresholdPerMille, icb->VDiskControls.HullCompFreeSpaceThresholdPerMille);
         TControlBoard::RegisterSharedControl(DefragThrottlerBytesRate, icb->VDiskControls.DefragThrottlerBytesRate);
 
         TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);
@@ -424,10 +433,12 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(MaxInProgressSyncCount, icb->VDiskControls.MaxInProgressSyncCount);
         TControlBoard::RegisterSharedControl(EnablePhantomFlagStorage, icb->VDiskControls.EnablePhantomFlagStorage);
         TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
+        TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
 
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksHDD, icb->PDiskControls.MaxCommonLogChunksHDD);
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksSSD, icb->PDiskControls.MaxCommonLogChunksSSD);
         TControlBoard::RegisterSharedControl(CommonStaticLogChunks, icb->PDiskControls.CommonStaticLogChunks);
+        TControlBoard::RegisterSharedControl(MaxActiveCompactionsPerPDisk, icb->PDiskControls.MaxActiveCompactionsPerPDisk);
 
         TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 icb->VDiskControls.BurstThresholdNsHDD);
@@ -488,6 +499,10 @@ void TNodeWarden::Bootstrap() {
 
     // create bridge syncer rate quoter
     SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
+
+    // start compaction broker
+    actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
+        CreateCompBrokerActor(MaxActiveCompactionsPerPDisk, AppData()->Counters)));
 
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();

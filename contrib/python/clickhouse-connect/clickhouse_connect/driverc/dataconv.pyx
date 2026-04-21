@@ -25,19 +25,7 @@ from clickhouse_connect.driver.errors import NONE_IN_NULLABLE_COLUMN
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def pivot(data: Sequence, unsigned long long start, unsigned long long end):
-    cdef unsigned long long row_count = end - start
-    cdef unsigned long long col_count = len(data[0])
-    cdef object result = PyTuple_New(col_count)
-    cdef object col, v
-    for x in range(col_count):
-        col = PyTuple_New(row_count)
-        PyTuple_SET_ITEM(result, x, col)
-        Py_INCREF(col)
-        for y in range(row_count):
-            v = data[y + start][x]
-            PyTuple_SET_ITEM(col, y, v)
-            Py_INCREF(v)
-    return result
+    return tuple(zip(*data[start:end]))
 
 
 @cython.wraparound(False)
@@ -195,7 +183,7 @@ def read_uuid_col(ResponseBuffer buffer, unsigned long long num_rows):
 @cython.wraparound(False)
 def read_nullable_array(ResponseBuffer buffer, array_type: str, unsigned long long num_rows, object null_obj):
     if num_rows == 0:
-        return ()
+        return []
     cdef unsigned long long x = 0
     cdef size_t item_size = struct.calcsize(array_type)
     cdef cvarray cy_array = cvarray((num_rows,), item_size, array_type, mode='c', allocate_buffer=False)
@@ -206,12 +194,10 @@ def read_nullable_array(ResponseBuffer buffer, array_type: str, unsigned long lo
     memcpy(<void *>null_map, <void *>buffer.read_bytes_c(num_rows), num_rows)
 
     cy_array.data = buffer.read_bytes_c(num_rows * item_size)
-    cdef object column = tuple(memoryview(cy_array))
+    cdef object column = list(memoryview(cy_array))
     for x in range(num_rows):
         if null_map[x] != 0:
-            Py_DECREF(column[x])
-            Py_INCREF(null_obj)
-            PyTuple_SET_ITEM(column, x, null_obj)
+            column[x] = null_obj
     PyMem_Free(<void *>null_map)
     return column
 
@@ -220,14 +206,14 @@ def read_nullable_array(ResponseBuffer buffer, array_type: str, unsigned long lo
 @cython.wraparound(False)
 def build_nullable_column(source: Sequence, char * null_map, object null_obj):
     cdef unsigned long long num_rows = len(source), x
-    cdef object column = PyTuple_New(num_rows), v
+    cdef object column = [], v
+    cdef object app = column.append
     for x in range(num_rows):
         if null_map[x] == 0:
             v = source[x]
         else:
             v = null_obj
-        Py_INCREF(v)
-        PyTuple_SET_ITEM(column, x, v)
+        app(v)
     return column
 
 
@@ -235,15 +221,15 @@ def build_nullable_column(source: Sequence, char * null_map, object null_obj):
 @cython.wraparound(False)
 def build_lc_nullable_column(index: Sequence, keys: array.array, object null_obj):
     cdef unsigned long long num_rows = len(keys), x, y
-    cdef object column = PyTuple_New(num_rows), v
+    cdef object column = [], v
+    cdef object app = column.append
     for x in range(num_rows):
         y = keys[x]
         if y == 0:
             v = null_obj
         else:
             v = index[y]
-        Py_INCREF(v)
-        PyTuple_SET_ITEM(column, x, v)
+        app(v)
     return column
 
 

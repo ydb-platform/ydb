@@ -127,7 +127,7 @@ std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(c
         chunks.insert(chunks.end(), arr->chunks().begin(), arr->chunks().end());
         pos += i->GetRecordsCount();
     }
-    return std::make_shared<arrow::ChunkedArray>(std::move(chunks));
+    return std::make_shared<arrow::ChunkedArray>(std::move(chunks), GetDataType());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

@@ -273,20 +273,35 @@ struct TWriteBackupCollectionSettings {
 };
 
 struct TWriteSecretSettings {
+public:
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Value;
+    NNodes::TMaybeNode<NNodes::TCoAtom> ValueParamName;
     NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
+    bool HasError = false;
 
+public:
     TWriteSecretSettings(
         NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& valueParamName,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
     )
         : Mode(std::move(mode))
         , Value(std::move(value))
+        , ValueParamName(std::move(valueParamName))
         , InheritPermissions(std::move(inheritPermissions))
     {
     }
+
+    static TWriteSecretSettings CreateWithError() {
+        TWriteSecretSettings result;
+        result.HasError = true;
+        return result;
+    }
+
+private:
+    TWriteSecretSettings() = default;
 };
 
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,

@@ -720,7 +720,14 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 
     Y_UNIT_TEST(ArrowToYdbConverter) {
-        std::vector<TDataRow> rows = TestRows();
+        std::vector<TDataRow> rows;
+        for (size_t i = 0; i < 50; ++i) { // converter process elements in cycles with 32 elems, then tail
+            std::vector<TDataRow> tmp = TestRows();
+            rows.insert(rows.end(), tmp.begin(), tmp.end());
+        }
+        // Special case: empty strings
+        rows.back().String.clear();
+        rows.back().Utf8.clear();
 
         std::vector<TOwnedCellVec> cellRows;
         for (const TDataRow& row : rows) {

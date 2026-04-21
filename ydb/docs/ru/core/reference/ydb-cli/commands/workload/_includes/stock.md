@@ -27,7 +27,7 @@
 Посмотрите описание команды для запуска нагрузки:
 
 ```bash
-{{ ydb-cli }} workload init --help
+{{ ydb-cli }} workload stock init --help
 ```
 
 ### Доступные параметры {#init_options}

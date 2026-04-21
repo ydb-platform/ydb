@@ -10,7 +10,6 @@
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface/yql_yt_coordinator_service_interface.h>
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/impl/yql_yt_coordinator_service_impl.h>
 #include <yt/yql/providers/yt/fmr/gc_service/impl/yql_yt_gc_service_impl.h>
-#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/yql_yt_default_stage_operation_manager.h>
 
 namespace NYql::NFmr {
 
@@ -19,12 +18,14 @@ struct TFmrCoordinatorSettings {
     ui32 WorkersNum;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TIntrusivePtr<ITimeProvider> TimeProvider;
+
+    // Default setting. Spetify inside default_operation_settings.yaml
     TDuration IdempotencyKeyStoreTime = TDuration::Seconds(10);
     TDuration TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
-    TDuration WorkerDeadlineLease = TDuration::Seconds(5); // Number of seconds to wait for worker ping
+    TDuration WorkerDeadlineLease = TDuration::Seconds(25);
     TDuration TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(1);
-    TDuration SessionInactivityTimeout = TDuration::Minutes(5);
-    TDuration HealthCheckInterval = TDuration::Seconds(30);
+    TDuration SessionInactivityTimeout = TDuration::Minutes(30);
+    TDuration HealthCheckInterval = TDuration::Seconds(1);
 
     TFmrCoordinatorSettings();
 };

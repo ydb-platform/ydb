@@ -29,28 +29,50 @@ namespace {
         return e.ContainsErrorCode(NClusterErrorCodes::NYTree::ResolveError) ||
             e.ContainsErrorCode(NClusterErrorCodes::NCypressClient::ConcurrentTransactionLockConflict);
     }
+
+    EQueryCacheMode InitCacheMode(EQueryCacheMode mode, const TString& hash, bool refreshOnly = false) {
+        if (hash.empty()) {
+            return EQueryCacheMode::Disable;
+        }
+        if (refreshOnly) {
+            switch (mode) {
+                case EQueryCacheMode::Normal:
+                    return EQueryCacheMode::Refresh;
+                case EQueryCacheMode::Readonly:
+                    return EQueryCacheMode::Disable;
+                default:
+                    return mode;
+            }
+        }
+        return mode;
+    }
 }
 
 TFsQueryCacheItem::TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir,
     const TString& hash, const TString& outputTablePath)
-    : TQueryCacheItemBase<TFsQueryCacheItem>(hash.empty() ? EQueryCacheMode::Disable : config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable))
+    : TQueryCacheItemBase<TFsQueryCacheItem>(InitCacheMode(config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable), hash))
     , OutputTablePaths(1, outputTablePath)
     , CachedPaths(1, TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(hash) + ".tmp"))
 {
 }
 
 TFsQueryCacheItem::TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir,
-    const TString& hash, const TVector<TString>& outputTablePaths)
-    : TQueryCacheItemBase<TFsQueryCacheItem>(hash.empty() ? EQueryCacheMode::Disable : config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable))
+    const TString& hash, const TVector<TString>& outputTablePaths, const TMaybe<TString>& singleOutputHash)
+    : TQueryCacheItemBase<TFsQueryCacheItem>(InitCacheMode(config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable), hash, singleOutputHash.Defined()))
     , OutputTablePaths(outputTablePaths)
 {
-    for (size_t i = 0; i < outputTablePaths.size(); ++i) {
-        auto outputHash = (THashBuilder() << hash << i).Finish();
-        CachedPaths.push_back(TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(outputHash) + ".tmp"));
+    if (singleOutputHash) {
+        YQL_ENSURE(outputTablePaths.size() == 1);
+        CachedPaths.push_back(TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(*singleOutputHash) + ".tmp"));
+    } else {
+        for (size_t i = 0; i < outputTablePaths.size(); ++i) {
+            auto outputHash = (THashBuilder() << hash << i).Finish();
+            CachedPaths.push_back(TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(outputHash) + ".tmp"));
+        }
     }
 }
 
-NThreading::TFuture<bool> TFsQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr& /*queue*/) {
+NThreading::TFuture<bool> TFsQueryCacheItem::LookupImpl(const TAsyncQueue::TWeakPtr& /*queue*/) {
     for (auto cachePath: CachedPaths) {
         Cerr << "Check path: " << cachePath << "\n";
         if (!cachePath.Exists()) {
@@ -102,11 +124,12 @@ void TFsQueryCacheItem::StoreImpl() {
 }
 
 TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCache::TEntry::TPtr& entry, const TString& hash,
+    const TMaybe<TString>& singleOutputHash,
     const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs,
     const TString& userName, const TString& tmpFolder, const NYT::TNode& mergeSpec,
     const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
     const std::pair<TString, TString>& logCtx)
-    : TQueryCacheItemBase<TYtQueryCacheItem>(hash.empty() ? EQueryCacheMode::Disable : mode)
+    : TQueryCacheItemBase<TYtQueryCacheItem>(InitCacheMode(mode, hash, singleOutputHash.Defined()))
     , Entry(entry)
     , DstTables(dstTables)
     , DstSpecs(dstSpecs)
@@ -119,11 +142,18 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
     , TableAttrs(tableAttrs)
 {
     if (!hash.empty()) {
-        for (size_t i = 0; i < dstTables.size(); ++i) {
-            auto outputHash = (THashBuilder() << hash << i).Finish();
-            auto path = MakeCachedPath(outputHash);
+        if (singleOutputHash) {
+            YQL_ENSURE(dstTables.size() == 1);
+            auto path = MakeCachedPath(*singleOutputHash);
             CachedPaths.push_back(path);
-            SortedCachedPaths[path] = i;
+            SortedCachedPaths[path] = 0;
+        } else {
+            for (size_t i = 0; i < dstTables.size(); ++i) {
+                auto outputHash = (THashBuilder() << hash << i).Finish();
+                auto path = MakeCachedPath(outputHash);
+                CachedPaths.push_back(path);
+                SortedCachedPaths[path] = i;
+            }
         }
     }
 }
@@ -148,7 +178,7 @@ TString TYtQueryCacheItem::MakeCachedPath(const TString& hash) {
     return TString::Join(CachePath, "/", hex.substr(0, 2), "/", hex.substr(2, 2), "/", hex);
 }
 
-NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr& queue) {
+NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TWeakPtr& queue) {
     if (Entry->CacheTxId) {
         return NThreading::MakeFuture<bool>(false);
     }
@@ -194,7 +224,7 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr&
     return futureLock.Apply([queue, cachedPaths = CachedPaths, dstTables = DstTables, entry = Entry,
                              useExpirationTimeout = UseExpirationTimeout, logCtx = LogCtx](const auto& f) {
         f.GetValue();
-        return queue->Async([=]() {
+        return TAsyncQueue::Async(queue, [=]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             bool hit = true;
             try {

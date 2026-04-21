@@ -66,8 +66,8 @@ protected:
         return 0;
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
-        return nullptr;
+    virtual TMinMax DoGetMinMaxScalars() const override {
+        Y_ABORT("Not implemented");
     }
 
     virtual TLocalDataAddress DoGetLocalData(
@@ -83,8 +83,8 @@ protected:
         if (OthersData) {
             others = OthersData->ApplyFilter(filter, Settings);
         }
-        return std::make_shared<TSubColumnsPartialArray>(Header,
-            PartialColumnsData.ApplyFilter(filter), std::move(others), GetDataType(), filter.GetFilteredCountVerified());
+        return std::make_shared<TSubColumnsPartialArray>(
+            Header, PartialColumnsData.ApplyFilter(filter), std::move(others), GetDataType(), filter.GetFilteredCountVerified());
     }
 
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
@@ -99,7 +99,8 @@ protected:
 public:
     TSubColumnsPartialArray(TSubColumnsHeader&& header, const ui32 recordsCount, const std::shared_ptr<arrow::DataType>& dataType)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
-        , Header(std::move(header)) {
+        , Header(std::move(header))
+    {
     }
 
     virtual bool HasWholeDataVolume() const override {
@@ -140,8 +141,8 @@ public:
         return !!OthersData;
     }
 
-    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
-        const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const bool deserialize);
+    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const std::shared_ptr<NArrow::TColumnFilter>& applyFilter,
+        const bool deserialize);
 
     bool IsOtherColumn(const TString& colName) const {
         return !!Header.GetOtherStats().GetKeyIndexOptional(std::string_view(colName.data(), colName.size()));
@@ -152,12 +153,12 @@ public:
     }
 
     TSubColumnsPartialArray(const TSubColumnsHeader& header, TPartialColumnsData&& columnsData,
-        std::optional<NSubColumns::TOthersData>&& othersData,
-        const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount)
+        std::optional<NSubColumns::TOthersData>&& othersData, const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
-        , Header(std::move(header))
+        , Header(header)
         , PartialColumnsData(std::move(columnsData))
-        , OthersData(std::move(othersData)) {
+        , OthersData(std::move(othersData))
+    {
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {

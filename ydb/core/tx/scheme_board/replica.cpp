@@ -935,7 +935,7 @@ private:
             }
 
             if (curPathId < pathId) {
-                log("Update description by newest path form tenant schemeshard");
+                log("Update description by newest path from tenant schemeshard");
                 SoftDeleteDescription(desc->GetPathId());
                 Descriptions.DeleteIndex(path);
                 RelinkSubscribers(desc, path);
@@ -943,7 +943,7 @@ private:
 
             UpsertDescription(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
-        } else if (curDomainId < domainId) {
+        } else if (PathIdLessThan(curDomainId, domainId)) {
             log("Update description by newest path with newer domainId");
             Descriptions.DeleteIndex(path);
             RelinkSubscribers(desc, path);

@@ -268,16 +268,6 @@ BELONGS ya.make
     Files with this license:
         COPYING [1:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 5b15e264792e2331822f29845c9ccb89
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/xmltok_ns.c [9:16]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 5dfac5100c0fddc6767d62cc0dd74042
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -328,7 +318,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        expat_external.h [9:18]
         lib/internal.h [28:36]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 61052a80fd00eeac5fb41a5ab5fdeff7
@@ -541,7 +530,10 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         expat.h [9:23]
+        expat_external.h [9:18]
         lib/xmlparse.c [9:48]
+        lib/xmlrole.c [9:20]
+        lib/xmltok.c [9:28]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a5c66b2d6998a1fbabcc4f2885ad5707
 BELONGS ya.make
@@ -695,6 +687,16 @@ BELONGS ya.make
         lib/xmltok_impl.h [9:12]
         lib/xmltok_ns.c [9:16]
 
+KEEP     COPYRIGHT_SERVICE_LABEL cf64bd5a77360037063bb4ddd03a3414
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/xmltok_ns.c [9:16]
+
 KEEP     COPYRIGHT_SERVICE_LABEL d0ad63453f438c5e9e6c9450d6cc5c9c
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -778,16 +780,6 @@ BELONGS ya.make
     Files with this license:
         lib/xmlparse.c [9:48]
 
-KEEP     COPYRIGHT_SERVICE_LABEL e526eb605bd716769dd1ed15786af827
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/xmlrole.c [9:20]
-
 KEEP     COPYRIGHT_SERVICE_LABEL ebfc8916f87fa083c3bac896843e5622
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -847,7 +839,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/xmltok.c [9:28]
         lib/xmltok.h [9:15]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fea018c6e4e19bc6bd4ac263c015567a

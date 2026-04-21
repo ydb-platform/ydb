@@ -1,7 +1,3 @@
-RECURSE_FOR_TESTS(
-    ut
-)
-
 LIBRARY()
 
 SRCS(
@@ -42,4 +38,8 @@ END()
 
 RECURSE(
     bin
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
+#include "datashard_failpoints.h"
 #include "read_iterator.h"
 
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -2595,20 +2596,17 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         });
     }
 
-    Y_UNIT_TEST_TWIN(ShouldReadFromHeadWithConflict, UseSink) {
+    Y_UNIT_TEST(ShouldReadFromHeadWithConflict) {
         // Similar to ShouldReadFromHead, but there is conflicting hanged operation.
         // We will read all at once thus should not block
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             // Blocked volatile transactions block reads, disable
             .SetEnableDataShardVolatileTransactions(false)
-            .SetEnableDataShardWriteAlwaysVolatile(false)
-            .SetAppConfig(app);
+            .SetEnableDataShardWriteAlwaysVolatile(false);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -2653,7 +2651,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ShouldReadFromHeadToMvccWithConflict, UseSink) {
+    Y_UNIT_TEST(ShouldReadFromHeadToMvccWithConflict) {
         // Similar to ShouldProperlyOrderConflictingTransactionsMvcc, but we read HEAD
         //
         // In this test HEAD read waits conflicting transaction: first time we read from HEAD and
@@ -2661,11 +2659,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -2746,7 +2741,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ShouldProperlyOrderConflictingTransactionsMvcc, UseSink) {
+    Y_UNIT_TEST(ShouldProperlyOrderConflictingTransactionsMvcc) {
         // 1. Start read-write multishard transaction: readset will be blocked
         // to hang transaction. Write is the key we want to read.
         // 2a. Check that we can read prior blocked step.
@@ -2759,11 +2754,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -3734,20 +3726,17 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         helper.CheckLockBroken(tableName, 10, {11, 11, 11}, lockTxId, *readResult1);
     }
 
-    Y_UNIT_TEST_TWIN(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2, EvWrite) {
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2) {
         // Almost the same as ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips:
         // 1. tx1: read some **non-existing** range1
         // 2. tx2: upsert into range2 > range1 range and commit.
         // 3. tx1: read range2 -> lock should be broken
 
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         TTestHelper helper(serverSettings);
 
@@ -4018,6 +4007,63 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         };
 
         NKikimr::NTestTli::CheckRegexMatch(ss.Str(), regexToMatchCount);
+    }
+
+    Y_UNIT_TEST(ShouldAbortInCheckReadWhenTableIsDropped) {
+        // Regression test for https://github.com/ydb-platform/ydb/issues/36147
+
+        TTestHelper helper;
+        auto& runtime = *helper.Server->GetRuntime();
+
+        const auto& table = helper.Tables.at("table-1");
+        const ui64 tabletId = table.TabletId;
+
+        // Block immediate writes at BlockFailPoint
+        TBlockOperationsFailPoint::TGuard blockGuard;
+
+        // Send an immediate write — it will add itself to the dependency tracker
+        // then block at BlockFailPoint. Its purpose is to block the DropTable operation until
+        // blockGuard is unlocked.
+        auto writeReq = helper.MakeWriteRequest("table-1", ++helper.TxId, {99, 99, 99, 99});
+        runtime.SendToPipe(tabletId, helper.Sender, writeReq.release());
+        runtime.WaitFor("write blocked", [&]{ return blockGuard.size() >= 1; });
+
+        // Block TEvActivateLowExecution sent to the tablet executor to delay execution
+        // of the TEvRead that we will send later.
+        TBlockEvents<IEventHandle> blockedActivations(runtime,
+            [&](const IEventHandle::TPtr& ev) {
+                return ev->GetTypeName().Contains("TEvActivateLowExecution");
+            });
+
+        // Send a read without a snapshot — it is enqueued as a low-priority local tx and will
+        // not execute until TEvActivateLowExecution is delivered to the tablet executor.
+        auto request = GetBaseReadRequest(
+            table.TableId, table.UserTable.GetDescription(), 1, NKikimrDataEvents::FORMAT_CELLVEC);
+        AddRangeQuery<ui64>(*request, {Min<ui64>(),}, true, {Max<ui64>(),}, true);
+        // Key point: this causes the read op to get upgraded to a repeatable read, and subsequently
+        // get blocked on the DropTable in the ExecuteRead unit.
+        request->Record.SetMaxRows(1);
+        helper.SendReadAsync("table-1", request.release());
+
+        runtime.WaitFor("blocked low-priority executor activation",
+            [&]{ return blockedActivations.size() >= 1; });
+
+        // Drop the table while the read is queued in the low priority executor queue.
+        // Schema-change transactions go through the regular executor queue (TEvActivateExecution),
+        // so they are not affected by the block above.
+        AsyncDropTable(helper.Server, helper.Sender, "/Root", "table-1");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // Unblock execution of the read. It will now get added to the pipeline and 
+        // would start executing if there were no additional checks on the presence of DropTable.
+        blockedActivations.Stop().Unblock();
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // Unblock the DropTable execution.
+        blockGuard.Unblock();
+
+        auto readResult = helper.WaitReadResult(TDuration::Seconds(5));
+        UNIT_ASSERT_C(readResult, "The read should not deadlock with the drop table op");
     }
 }
 

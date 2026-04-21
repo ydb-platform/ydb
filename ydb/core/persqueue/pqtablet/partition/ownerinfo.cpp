@@ -1,4 +1,6 @@
 #include "ownerinfo.h"
+
+#include <ydb/core/persqueue/events/global.h>
 #include <util/generic/guid.h>
 #include <util/string/escape.h>
 

@@ -4,6 +4,7 @@
 #include "topic_workload_describe.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 using namespace NYdb::NConsoleClient;
@@ -62,6 +63,11 @@ void TCommandWorkloadTopicInit::Config(TConfig& config)
         .Optional()
         .Hidden()
         .StoreTrue(&Scenario.CleanupPolicyCompact);
+
+    config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
+        .Optional()
+        .Hidden()
+        .StoreMappedResult(&Scenario.PartitionsPerTablet, ParsePartitionPerTabletValue);
 }
 
 void TCommandWorkloadTopicInit::Parse(TConfig& config)

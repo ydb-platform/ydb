@@ -882,7 +882,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
@@ -917,7 +917,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtBlockTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
@@ -1032,9 +1032,15 @@ public:
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
+            bool isUniversal;
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1, isUniversal);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
         }
 

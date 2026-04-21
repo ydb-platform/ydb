@@ -237,7 +237,7 @@ public:
         }
     }
 
-    void PrepareImpl(IAsyncIoOperation *op, void *data, size_t size, size_t offset, IAsyncIoOperation::EType type) {
+    void PrepareImpl(IAsyncIoOperation *op, void *data, ui64 size, ui64 offset, IAsyncIoOperation::EType type) {
         TAsyncIoOperation *operation = static_cast<TAsyncIoOperation*>(op);
         operation->File = File.Get();
         operation->Data = data;
@@ -254,7 +254,7 @@ public:
         PrepareImpl(op, const_cast<void*>(source), size, offset, IAsyncIoOperation::EType::PWrite);
     }
 
-    void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) override {
+    void PreparePTrim(IAsyncIoOperation *op, ui64 size, ui64 offset) override {
         PrepareImpl(op, nullptr, size, offset, IAsyncIoOperation::EType::PTrim);
     }
 

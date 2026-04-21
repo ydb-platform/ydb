@@ -18,7 +18,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/transform/yql_lazy_init.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -201,6 +201,12 @@ public:
                     }
 
                     cluster = TString(node.Child(1)->Content());
+                    if (to_lower(*cluster) == "default") {
+                        cluster = State_->Gateway->GetDefaultClusterName();
+                        node.ChildRef(1) = ctx.NewAtom(node.Pos(), *cluster);
+                        return true;
+                    }
+
                     const bool validate = State_->Configuration->ValidateClusters.Get().GetOrElse(DEFAULT_VALIDATE_CLUSTERS);
                     if (validate && *cluster != "$all" && *cluster != YtUnspecifiedCluster && !State_->Gateway->GetClusterServer(*cluster)) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster: " << *cluster));

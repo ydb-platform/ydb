@@ -16,6 +16,7 @@
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 
 #include <yql/essentials/utils/prefetch.h>
+#include <yql/essentials/utils/runtime_dispatch.h>
 
 #include <arrow/scalar.h>
 #include <arrow/array/array_primitive.h>
@@ -1757,19 +1758,7 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
     PrepareKeys(keys, totalKeysSize, isFixed);
 
     const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
-    if (filterColumn) {
-        if (aggsParams.empty()) {
-            return MakeBlockCombineHashedWrapper<true, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideStream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
-        } else {
-            return MakeBlockCombineHashedWrapper<false, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideStream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
-        }
-    } else {
-        if (aggsParams.empty()) {
-            return MakeBlockCombineHashedWrapper<true, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideStream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
-        } else {
-            return MakeBlockCombineHashedWrapper<false, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideStream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
-        }
-    }
+    return YQL_RUNTIME_DISPATCH(MakeBlockCombineHashedWrapper, 2, aggsParams.empty(), static_cast<bool>(filterColumn), totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideStream, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
 }
 
 IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

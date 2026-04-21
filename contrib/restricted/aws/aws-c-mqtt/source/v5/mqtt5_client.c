@@ -590,6 +590,55 @@ static void s_enqueue_operation_front(struct aws_mqtt5_client *client, struct aw
     s_reevaluate_service_task(client);
 }
 
+/* This is used to move the aws_mqtt5_manual_pub_ack_entry stored in the active table to cancelled table. We don't
+ * simply clear out the active table because we need to keep the entries in memory until we are fully done with them. */
+static int s_manual_pub_ack_transfer(void *context, struct aws_hash_element *element) {
+    struct aws_hash_table *manual_pub_ack_cancelled_control_id_table = context;
+
+    struct aws_mqtt5_manual_pub_ack_entry *manual_pub_ack_entry = element->value;
+    // Add the control id to the destination table
+    if (aws_hash_table_put(manual_pub_ack_cancelled_control_id_table, element->key, element->value, NULL)) {
+        return AWS_COMMON_HASH_TABLE_ITER_ERROR;
+    }
+    // incref the ref_count because when this entry is removed from the original set it will decref.
+    aws_ref_count_acquire(&manual_pub_ack_entry->ref_count);
+
+    // We simply continue here and will clear (and thus decref) after we finish iterating.
+    return AWS_COMMON_HASH_TABLE_ITER_CONTINUE;
+}
+
+/* This is called when the manual publish acknowledgement entry is removed from a hashset to properly decref on removal
+ */
+static void s_aws_mqtt5_manual_pub_ack_entry_decref(void *value) {
+    struct aws_mqtt5_manual_pub_ack_entry *manual_pub_ack_entry = value;
+    if (manual_pub_ack_entry != NULL) {
+        aws_ref_count_release(&manual_pub_ack_entry->ref_count);
+    }
+}
+
+/* When a disconnect or stop occurs all publish acknowledgements become invalid. We clear packet ids which may be reused
+ * by the server and transfer manual publish acknowledgement entries from the active table to the cancelled table
+ * to provide better communication if the user attempts to invoke a publish acknowledgement they think they have control
+ * over. */
+static void s_aws_mqtt5_reset_manual_pub_ack_tables(
+    struct aws_mqtt5_client_operational_state *client_operational_state) {
+    size_t count = aws_hash_table_get_entry_count(&client_operational_state->manual_pub_ack_control_id_table);
+    if (count > 0) {
+        AWS_LOGF_DEBUG(
+            AWS_LS_MQTT5_CLIENT,
+            "id=%p: Clearing %zu PUBACKs under user control. Previously controlled PUBACKs are no longer valid and "
+            "have been cancelled.",
+            (void *)client_operational_state->client,
+            count);
+        aws_hash_table_clear(&client_operational_state->manual_pub_ack_packet_id_table);
+        aws_hash_table_foreach(
+            &client_operational_state->manual_pub_ack_control_id_table,
+            s_manual_pub_ack_transfer,
+            &client_operational_state->manual_pub_ack_cancelled_control_id_table);
+        aws_hash_table_clear(&client_operational_state->manual_pub_ack_control_id_table);
+    }
+}
+
 static void s_aws_mqtt5_client_operational_state_reset(
     struct aws_mqtt5_client_operational_state *client_operational_state,
     int completion_error_code,
@@ -604,9 +653,13 @@ static void s_aws_mqtt5_client_operational_state_reset(
     if (is_final) {
         aws_priority_queue_clean_up(&client_operational_state->operations_by_ack_timeout);
         aws_hash_table_clean_up(&client_operational_state->unacked_operations_table);
+        aws_hash_table_clean_up(&client_operational_state->manual_pub_ack_control_id_table);
+        aws_hash_table_clean_up(&client_operational_state->manual_pub_ack_packet_id_table);
+        aws_hash_table_clean_up(&client_operational_state->manual_pub_ack_cancelled_control_id_table);
     } else {
         aws_priority_queue_clear(&client->operational_state.operations_by_ack_timeout);
         aws_hash_table_clear(&client_operational_state->unacked_operations_table);
+        s_aws_mqtt5_reset_manual_pub_ack_tables(client_operational_state);
     }
 }
 
@@ -617,7 +670,8 @@ static void s_change_current_state_to_stopped(struct aws_mqtt5_client *client) {
 
     s_aws_mqtt5_client_operational_state_reset(&client->operational_state, AWS_ERROR_MQTT5_USER_REQUESTED_STOP, false);
 
-    /* Stop works as a complete session wipe, and so the next time we connect, we want it to be clean */
+    /* Stop works as a complete session wipe, and so the next time we connect, we want it to be clean unless
+     * client session behavior type is set to AWS_MQTT5_CSBT_REJOIN_ALWAYS. */
     client->has_connected_successfully = false;
 
     s_aws_mqtt5_client_emit_stopped_lifecycle_event(client);
@@ -1811,7 +1865,10 @@ static void s_insert_node_before_predicate_failure(
     aws_linked_list_insert_before(current_node, node);
 }
 
-static int s_aws_mqtt5_client_queue_puback(struct aws_mqtt5_client *client, uint16_t packet_id) {
+static int s_aws_mqtt5_client_queue_puback(
+    struct aws_mqtt5_client *client,
+    uint16_t packet_id,
+    const struct aws_mqtt5_manual_publish_acknowledgement_completion_options *completion_options) {
     AWS_PRECONDITION(client != NULL);
 
     const struct aws_mqtt5_packet_puback_view puback_view = {
@@ -1819,7 +1876,8 @@ static int s_aws_mqtt5_client_queue_puback(struct aws_mqtt5_client *client, uint
         .reason_code = AWS_MQTT5_PARC_SUCCESS,
     };
 
-    struct aws_mqtt5_operation_puback *puback_op = aws_mqtt5_operation_puback_new(client->allocator, &puback_view);
+    struct aws_mqtt5_operation_puback *puback_op =
+        aws_mqtt5_operation_puback_new(client->allocator, &puback_view, completion_options);
 
     if (puback_op == NULL) {
         return AWS_OP_ERR;
@@ -1883,20 +1941,25 @@ static void s_aws_mqtt5_client_connected_on_packet_received(
 
             aws_mqtt5_callback_set_manager_on_publish_received(&client->callback_manager, publish_view);
 
-            /* Send a puback if QoS 1+ */
             if (publish_view->qos != AWS_MQTT5_QOS_AT_MOST_ONCE) {
+                // Check if this PUBLSIH packet is manually controlled
+                struct aws_hash_element *elem = NULL;
+                aws_hash_table_find(
+                    &client->operational_state.manual_pub_ack_packet_id_table, &publish_view->packet_id, &elem);
 
-                int result = s_aws_mqtt5_client_queue_puback(client, publish_view->packet_id);
-                if (result != AWS_OP_SUCCESS) {
-                    int error_code = aws_last_error();
-                    AWS_LOGF_ERROR(
-                        AWS_LS_MQTT5_CLIENT,
-                        "id=%p: decode failure with error %d(%s)",
-                        (void *)client,
-                        error_code,
-                        aws_error_debug_str(error_code));
+                /* This PUBLISH isn't a manually controlled PUBACK. We schedule the PUBACK to be sent immediately. */
+                if (elem == NULL) {
+                    if (s_aws_mqtt5_client_queue_puback(client, publish_view->packet_id, NULL)) {
+                        int error_code = aws_last_error();
+                        AWS_LOGF_ERROR(
+                            AWS_LS_MQTT5_CLIENT,
+                            "id=%p: decode failure with error %d(%s)",
+                            (void *)client,
+                            error_code,
+                            aws_error_debug_str(error_code));
 
-                    s_aws_mqtt5_client_shutdown_channel(client, error_code);
+                        s_aws_mqtt5_client_shutdown_channel(client, error_code);
+                    }
                 }
             }
             break;
@@ -2430,6 +2493,243 @@ error:
     return AWS_OP_ERR;
 }
 
+struct aws_mqtt5_manual_pub_ack_task {
+    struct aws_task task;
+    struct aws_allocator *allocator;
+    struct aws_mqtt5_client *client;
+    uint64_t pub_ack_control_id;
+    struct aws_mqtt5_manual_publish_acknowledgement_completion_options completion_options;
+};
+
+static void s_mqtt5_manual_pub_ack_task_fn(struct aws_task *task, void *arg, enum aws_task_status status) {
+    (void)task;
+
+    struct aws_mqtt5_manual_pub_ack_task *manual_pub_ack_task = arg;
+    struct aws_mqtt5_client *client = manual_pub_ack_task->client;
+    uint64_t pub_ack_control_id = manual_pub_ack_task->pub_ack_control_id;
+
+    if (status != AWS_TASK_STATUS_RUN_READY) {
+        goto cleanup;
+    }
+
+    AWS_FATAL_ASSERT(aws_event_loop_thread_is_callers_thread(client->loop));
+
+    enum aws_mqtt5_manual_publish_acknowledgement_result puback_result = AWS_MQTT5_MPAR_SUCCESS;
+
+    struct aws_hash_element *elem = NULL;
+    aws_hash_table_find(&client->operational_state.manual_pub_ack_control_id_table, &pub_ack_control_id, &elem);
+
+    // We can schedule the PUBACK as an mqtt operation if it exists in the control id table.
+    if (elem != NULL) {
+        struct aws_mqtt5_manual_pub_ack_entry *manual_pub_ack_entry =
+            (struct aws_mqtt5_manual_pub_ack_entry *)(elem->value);
+
+        AWS_LOGF_DEBUG(
+            AWS_LS_MQTT5_CLIENT,
+            "id=%p: Scheuduling puback for control id: %llu for packet id: %d \n",
+            (void *)client,
+            (unsigned long long)manual_pub_ack_entry->pub_ack_control_id,
+            manual_pub_ack_entry->packet_id);
+
+        uint16_t packet_id = manual_pub_ack_entry->packet_id;
+
+        aws_hash_table_remove(&client->operational_state.manual_pub_ack_packet_id_table, &packet_id, NULL, NULL);
+        // This removal from the control id table will also deallocate the manual publish acknowledgement entry.
+        aws_hash_table_remove(
+            &client->operational_state.manual_pub_ack_control_id_table, &pub_ack_control_id, NULL, NULL);
+
+        if (s_aws_mqtt5_client_queue_puback(client, packet_id, &manual_pub_ack_task->completion_options)) {
+            // this failure doesn't trigger the completion so we do it here before cleanup.
+            puback_result = AWS_MQTT5_MPAR_CRT_FAILURE;
+            goto completion;
+        }
+
+        // Completion will be handled by the puback mqtt operation so we go to cleanup.
+        goto cleanup;
+    }
+
+    // If the control id isn't in the active table, check if it's been cancelled.
+    aws_hash_table_find(
+        &client->operational_state.manual_pub_ack_cancelled_control_id_table, &pub_ack_control_id, &elem);
+    if (elem != NULL) {
+        AWS_LOGF_DEBUG(
+            AWS_LS_MQTT5_CLIENT,
+            "id=%p: pub_ack_control_id: %llu has been cancelled due to a disconnection.",
+            (void *)client,
+            (unsigned long long)pub_ack_control_id);
+
+        // A cancelled control id has been used so it can be cleared from the table and deallocated. We only report
+        // a cancellation once. Past that we will simply treat it as invalid.
+        aws_hash_table_remove(
+            &client->operational_state.manual_pub_ack_cancelled_control_id_table, &pub_ack_control_id, NULL, NULL);
+        puback_result = AWS_MQTT5_MPAR_PUBACK_CANCELLED;
+        goto completion;
+    }
+
+    AWS_LOGF_DEBUG(
+        AWS_LS_MQTT5_CLIENT,
+        "id=%p: pub_ack_control_id: %llu is not tracked in any way.",
+        (void *)client,
+        (unsigned long long)pub_ack_control_id);
+    puback_result = AWS_MQTT5_MPAR_PUBACK_INVALID;
+
+completion:
+    // We call the completion callback here in cases where there is no PUBACK operation scheduled on the client.
+    if (manual_pub_ack_task->completion_options.completion_callback != NULL) {
+        manual_pub_ack_task->completion_options.completion_callback(
+            puback_result, manual_pub_ack_task->completion_options.completion_user_data);
+    }
+
+cleanup:
+    aws_mqtt5_client_release(manual_pub_ack_task->client);
+    aws_mem_release(manual_pub_ack_task->allocator, manual_pub_ack_task);
+}
+
+// Schedules task to process a manual publish acknowledgement for provided pub_ack_control_id
+int aws_mqtt5_client_invoke_publish_acknowledgement(
+    struct aws_mqtt5_client *client,
+    uint64_t pub_ack_control_id,
+    const struct aws_mqtt5_manual_publish_acknowledgement_completion_options *completion_options) {
+    AWS_PRECONDITION(client != NULL);
+
+    struct aws_mqtt5_manual_pub_ack_task *manual_pub_ack_task =
+        aws_mem_calloc(client->allocator, 1, sizeof(struct aws_mqtt5_manual_pub_ack_task));
+
+    aws_task_init(
+        &manual_pub_ack_task->task, s_mqtt5_manual_pub_ack_task_fn, manual_pub_ack_task, "Mqtt5ManualPubackTask");
+    manual_pub_ack_task->allocator = client->allocator;
+    manual_pub_ack_task->client = aws_mqtt5_client_acquire(client);
+    manual_pub_ack_task->pub_ack_control_id = pub_ack_control_id;
+    if (completion_options != NULL) {
+        manual_pub_ack_task->completion_options = *completion_options;
+    }
+
+    aws_event_loop_schedule_task_now(client->loop, &manual_pub_ack_task->task);
+
+    return AWS_OP_SUCCESS;
+}
+
+static void s_aws_mqtt5_manual_pub_ack_entry_destroy(void *object) {
+    if (object == NULL) {
+        return;
+    }
+    struct aws_mqtt5_manual_pub_ack_entry *manual_pub_ack_entry = object;
+    aws_mem_release(manual_pub_ack_entry->allocator, manual_pub_ack_entry);
+}
+
+static struct aws_mqtt5_manual_pub_ack_entry *s_aws_mqtt_manual_pub_ack_entry_new(
+    struct aws_allocator *allocator,
+    uint16_t packet_id,
+    uint64_t pub_ack_control_id) {
+
+    struct aws_mqtt5_manual_pub_ack_entry *manual_pub_ack_entry =
+        aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_manual_pub_ack_entry));
+
+    manual_pub_ack_entry->allocator = allocator;
+    aws_ref_count_init(
+        &manual_pub_ack_entry->ref_count, manual_pub_ack_entry, s_aws_mqtt5_manual_pub_ack_entry_destroy);
+    manual_pub_ack_entry->packet_id = packet_id;
+    manual_pub_ack_entry->pub_ack_control_id = pub_ack_control_id;
+
+    return manual_pub_ack_entry;
+}
+
+uint64_t aws_mqtt5_client_acquire_publish_acknowledgement(
+    struct aws_mqtt5_client *client,
+    const struct aws_mqtt5_packet_publish_view *publish_view) {
+    AWS_PRECONDITION(client != NULL);
+    AWS_PRECONDITION(publish_view != NULL);
+    /* This should only ever be called by the user within the publish received callback */
+    AWS_FATAL_ASSERT(aws_event_loop_thread_is_callers_thread(client->loop));
+
+    if (publish_view->qos == AWS_MQTT5_QOS_AT_MOST_ONCE) {
+        return 0;
+    }
+
+    /* First check if the packet_id for the PUBLISH is already being controlled. This can potentialy be the case if a
+     * PUBLISH that has its PUBACK acquired but hasn't been sent for long enough that the broker has sent the PUBLISH
+     * packet again. */
+    struct aws_hash_element *elem = NULL;
+    aws_hash_table_find(&client->operational_state.manual_pub_ack_packet_id_table, &publish_view->packet_id, &elem);
+    if (elem != NULL) {
+        /* In this case we simply provide the same control_id that was already sent before. We do not want to create a
+         * second control_id with the same packet_id. It is the user's responsibility to know that they have two PUBACKs
+         * for the same PUBLISH. */
+        struct aws_mqtt5_manual_pub_ack_entry *entry = elem->value;
+        return entry->pub_ack_control_id;
+    }
+
+    // The current_control_packet_id is incremented each time a new manual publish acknowledgement is scheduled.
+    uint64_t current_control_packet_id = client->operational_state.next_mqtt5_pub_ack_control_id;
+    struct aws_mqtt5_manual_pub_ack_entry *manual_pub_ack =
+        s_aws_mqtt_manual_pub_ack_entry_new(client->allocator, publish_view->packet_id, current_control_packet_id);
+
+    /* Allows lookup of manual publish acknowledgement entries by packet id. */
+    if (aws_hash_table_put(
+            &client->operational_state.manual_pub_ack_packet_id_table,
+            &manual_pub_ack->packet_id,
+            manual_pub_ack,
+            NULL)) {
+        int error_code = aws_last_error();
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT5_CLIENT,
+            "id=%p: Failed to insert manual publish acknowledgement entry into packet ID table: %d(%s)",
+            (void *)client,
+            error_code,
+            aws_error_debug_str(error_code));
+        goto cleanup;
+    }
+    /* We incref here because the packet_id table also has a ref to the manual_pub_ack */
+    aws_ref_count_acquire(&manual_pub_ack->ref_count);
+
+    /* Allows lookup of manual publish acknowledgement entries by control id */
+    if (aws_hash_table_put(
+            &client->operational_state.manual_pub_ack_control_id_table,
+            &manual_pub_ack->pub_ack_control_id,
+            manual_pub_ack,
+            NULL)) {
+        int error_code = aws_last_error();
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT5_CLIENT,
+            "id=%p: Failed to insert manual publish acknowledgement entry into control ID table: %d(%s)",
+            (void *)client,
+            error_code,
+            aws_error_debug_str(error_code));
+        // clean up the manual publish acknowledgement entry from the packet id table and deallocate.
+        aws_hash_table_remove(
+            &client->operational_state.manual_pub_ack_packet_id_table, &manual_pub_ack->packet_id, NULL, NULL);
+        goto cleanup;
+    }
+
+    /* Increment next_mqtt5_pub_ack_control_id for next use */
+    client->operational_state.next_mqtt5_pub_ack_control_id = current_control_packet_id + 1;
+
+    size_t in_flight_unacked_publishes =
+        aws_hash_table_get_entry_count(&client->operational_state.manual_pub_ack_control_id_table);
+    if (in_flight_unacked_publishes >= 100) {
+        AWS_LOGF_WARN(
+            AWS_LS_MQTT5_CLIENT,
+            "id=%p: 100 or more PUBACKs under user control: %zu. AWS IoT Core limits of 100 in-flight has been met or "
+            "exceeded.",
+            (void *)client,
+            in_flight_unacked_publishes);
+    } else {
+        AWS_LOGF_DEBUG(
+            AWS_LS_MQTT5_CLIENT,
+            "id=%p: manual publish acknowledgement control taken for a PUBLISH packet. Current in-flight PUBACKs under "
+            "user control: "
+            "%zu",
+            (void *)client,
+            in_flight_unacked_publishes);
+    }
+
+    return manual_pub_ack->pub_ack_control_id;
+
+cleanup:
+    aws_mem_release(manual_pub_ack->allocator, manual_pub_ack);
+    return 0;
+}
+
 static bool s_needs_packet_id(const struct aws_mqtt5_operation *operation) {
     switch (operation->packet_type) {
         case AWS_MQTT5_PT_SUBSCRIBE:
@@ -2523,6 +2823,39 @@ int aws_mqtt5_client_operational_state_init(
         return AWS_OP_ERR;
     }
 
+    if (aws_hash_table_init(
+            &client_operational_state->manual_pub_ack_packet_id_table,
+            allocator,
+            DEFAULT_MQTT5_OPERATION_TABLE_SIZE,
+            aws_mqtt_hash_uint16_t,
+            aws_mqtt_compare_uint16_t_eq,
+            NULL,
+            s_aws_mqtt5_manual_pub_ack_entry_decref)) {
+        return AWS_OP_ERR;
+    }
+
+    if (aws_hash_table_init(
+            &client_operational_state->manual_pub_ack_control_id_table,
+            allocator,
+            DEFAULT_MQTT5_OPERATION_TABLE_SIZE,
+            aws_mqtt_hash_uint64_t,
+            aws_mqtt_compare_uint64_t_eq,
+            NULL,
+            s_aws_mqtt5_manual_pub_ack_entry_decref)) {
+        return AWS_OP_ERR;
+    }
+
+    if (aws_hash_table_init(
+            &client_operational_state->manual_pub_ack_cancelled_control_id_table,
+            allocator,
+            DEFAULT_MQTT5_OPERATION_TABLE_SIZE,
+            aws_mqtt_hash_uint64_t,
+            aws_mqtt_compare_uint64_t_eq,
+            NULL,
+            s_aws_mqtt5_manual_pub_ack_entry_decref)) {
+        return AWS_OP_ERR;
+    }
+
     if (aws_priority_queue_init_dynamic(
             &client_operational_state->operations_by_ack_timeout,
             allocator,
@@ -2533,6 +2866,7 @@ int aws_mqtt5_client_operational_state_init(
     }
 
     client_operational_state->next_mqtt_packet_id = 1;
+    client_operational_state->next_mqtt5_pub_ack_control_id = 1;
     client_operational_state->current_operation = NULL;
     client_operational_state->client = client;
 
@@ -2647,6 +2981,8 @@ void aws_mqtt5_client_on_disconnection_update_operational_state(struct aws_mqtt5
 
     aws_hash_table_clear(&client->operational_state.unacked_operations_table);
     aws_priority_queue_clear(&client->operational_state.operations_by_ack_timeout);
+
+    s_aws_mqtt5_reset_manual_pub_ack_tables(client_operational_state);
 
     /*
      * Prevents inbound resolution on the highly unlikely, illegal server behavior of sending a PUBLISH before
@@ -2841,8 +3177,8 @@ static uint64_t s_aws_mqtt5_client_compute_next_operation_flow_control_service_t
  * Estimate the # of ethernet frames (max 1444 bytes) and add in potential TLS framing and padding values per.
  *
  * TODO: query IoT Core to determine if this calculation is needed after all
- * TODO: may eventually want to expose the ethernet frame size here as a configurable option for networks that have a
- * lower MTU
+ * TODO: may eventually want to expose the ethernet frame size here as a configurable option for networks that have
+ * a lower MTU
  *
  * References:
  *  https://tools.ietf.org/id/draft-mattsson-uta-tls-overhead-01.xml#rfc.section.3
@@ -3129,9 +3465,9 @@ int aws_mqtt5_client_service_operational_state(struct aws_mqtt5_client_operation
                  *  sporadically fail because the PINGRESP is processed before the write completion callback is
                  *  invoked.
                  *
-                 *  (2) Enqueue the ping - if the current operation is a large payload over a poor connection, it may
-                 *  be an arbitrarily long time before the current operation completes and the ping even has a chance
-                 *  to go out, meaning we will trigger a ping time out before it's even sent.
+                 *  (2) Enqueue the ping - if the current operation is a large payload over a poor connection, it
+                 * may be an arbitrarily long time before the current operation completes and the ping even has a
+                 * chance to go out, meaning we will trigger a ping time out before it's even sent.
                  *
                  *  Given a reasonable io message size, this is the best place to set the timeout.
                  */

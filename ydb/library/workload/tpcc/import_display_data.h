@@ -44,6 +44,7 @@ struct TImportState {
         ELOAD_INDEXED_TABLES = 0,
         ELOAD_TABLES_BUILD_INDICES,
         EWAIT_INDICES,
+        EWAIT_COMPACTION,
         ESUCCESS
     };
 
@@ -63,7 +64,9 @@ struct TImportState {
         , IndexedRangesLoaded(other.IndexedRangesLoaded.load(std::memory_order_relaxed))
         , RangesLoaded(other.RangesLoaded.load(std::memory_order_relaxed))
         , IndexBuildStates(other.IndexBuildStates)
+        , CompactionStates(other.CompactionStates)
         , CurrentIndex(other.CurrentIndex)
+        , CurrentCompaction(other.CurrentCompaction)
         , ApproximateDataSize(other.ApproximateDataSize)
     {
     }
@@ -76,7 +79,9 @@ struct TImportState {
             IndexedRangesLoaded.store(other.IndexedRangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             RangesLoaded.store(other.RangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             IndexBuildStates = other.IndexBuildStates;
+            CompactionStates = other.CompactionStates;
             CurrentIndex = other.CurrentIndex;
+            CurrentCompaction = other.CurrentCompaction;
             ApproximateDataSize = other.ApproximateDataSize;
         }
         return *this;
@@ -96,7 +101,9 @@ struct TImportState {
     // single threaded
 
     std::vector<TIndexBuildState> IndexBuildStates;
+    std::vector<TIndexBuildState> CompactionStates;
     size_t CurrentIndex = 0;
+    size_t CurrentCompaction = 0;
     size_t ApproximateDataSize = 0;
 };
 
@@ -109,7 +116,7 @@ struct TImportStatusData {
     int ElapsedSeconds = 0;
     int EstimatedTimeLeftMinutes = 0;
     int EstimatedTimeLeftSeconds = 0;
-    bool IsWaitingForIndices = false;
+    bool IsWaitingForPostLoadOps = false;
     bool IsLoadingTablesAndBuildingIndices = false;
 };
 

@@ -4,6 +4,8 @@ import logging
 import os
 import time
 
+import pytest
+
 from .conftest import (
     run_with_assert,
     create_user,
@@ -13,6 +15,7 @@ from .conftest import (
     DATABASE,
     USE_SECRET_GRANTS,
 )
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
@@ -556,3 +559,84 @@ def test_migration_to_new_secrets_in_transfer(db_fixture, ydb_cluster):
     assert_transfer_has_skipped_the_last_change(user1_config, table_name, messages_cnt - 1)
     _fix_auth_with_new_secret(user1_config, "TRANSFER", transfer_name, secret_name)
     assert_transfer_has_processed_all_changes(user1_config, table_name, messages_cnt)
+
+
+@pytest.mark.parametrize("secret_setup", ["create_with_param", "create_empty_then_alter_with_param"])
+def test_set_secret_value_with_param(db_fixture, ydb_cluster, secret_setup):
+    """Create secret via parameter (CREATE or CREATE+ALTER with $value), then use it in async replication."""
+    user_password = '1234'
+    run_with_assert(db_fixture, f"CREATE USER user1 PASSWORD '{user_password}';")
+    user1_config = ydb.DriverConfig(
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        database=DATABASE,
+        credentials=ydb.StaticCredentials.from_user_password("user1", user_password),
+    )
+    provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table", "ydb.granular.alter_schema"])
+
+    table_name = 'table'
+    replica_name = 'replica'
+    replication_name = 'replication'
+    connection_string = f"grpc://{ydb_cluster.nodes[1].host}:{ydb_cluster.nodes[1].port}/?database={DATABASE}"
+    secret_name = 'user_password_secret'
+    secret_value = user_password
+
+    def run_query_with_param(config, query, value):
+        parameters = {"$value": (value, ydb.PrimitiveType.Utf8.proto)}
+        with ydb.Driver(config) as driver:
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                pool.execute_with_retries(query, parameters=parameters)
+
+    def create_secret_with_param(config, name, value):
+        query = f"DECLARE $value AS Utf8; CREATE SECRET `{name}` WITH (value = $value);"
+        run_query_with_param(config, query, value)
+
+    def create_secret_empty(config, name):
+        run_with_assert(config, f"CREATE SECRET `{name}` WITH (value = '');")
+
+    def alter_secret_with_param(config, name, value):
+        query = f"ALTER SECRET `{name}` WITH (value = $value);"
+        run_query_with_param(config, query, value)
+
+    def prepare_secret(config, name, value, setup_kind):
+        if setup_kind == 'create_with_param':
+            create_secret_with_param(config, name, value)
+        elif setup_kind == 'create_empty_then_alter_with_param':
+            create_secret_empty(config, name)
+            alter_secret_with_param(config, name, value)
+        else:
+            raise ValueError(f"Unknown secret_setup: {setup_kind}")
+
+    def create_table_for_replication(table_name):
+        run_with_assert(
+            user1_config,
+            f'CREATE TABLE `{table_name}` (Key Uint64, PRIMARY KEY (Key));',
+        )
+
+    def insert_one_row_into_table(table_name, rows_cnt):
+        run_with_assert(
+            user1_config,
+            f'INSERT INTO `{table_name}` (Key) VALUES ({rows_cnt});',
+        )
+        return rows_cnt + 1
+
+    def create_async_replication(replication_name, replica_name, table_name, connection_string, secret_name):
+        run_with_assert(
+            user1_config,
+            f"""
+                CREATE ASYNC REPLICATION `{replication_name}` FOR `{table_name}` AS `{replica_name}` WITH (
+                    CONNECTION_STRING="{connection_string}",
+                    USER = "user1",
+                    PASSWORD_SECRET_PATH = "{secret_name}"
+                );
+            """,
+        )
+
+    def assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt):
+        _wait_for_rows_count(user1_config, replica_name, rows_cnt, wait_for_the_first_success=True)
+
+    create_table_for_replication(table_name)
+    rows_cnt = 0
+    rows_cnt = insert_one_row_into_table(table_name, rows_cnt)
+    prepare_secret(user1_config, secret_name, secret_value, secret_setup)
+    create_async_replication(replication_name, replica_name, table_name, connection_string, secret_name)
+    assert_replication_has_processed_all_changes(user1_config, replica_name, rows_cnt)

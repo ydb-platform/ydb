@@ -75,6 +75,7 @@ struct TEnvironmentSetup {
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
         const bool StartFakeWilsonCollectors = false;
+        const bool EnableChunkKeeper = true;
     };
 
     const TSettings Settings;
@@ -441,6 +442,7 @@ struct TEnvironmentSetup {
                         auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
+                        drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
                         auto& ns = config->NameserviceConfig;
@@ -532,8 +534,13 @@ config:
                     auto& icbControl = icb.ICB_CONTROL_PATH;                                \
                     TControlWrapper control(defaultVal, minVal, maxVal);                    \
                     TControlBoard::RegisterSharedControl(control, icbControl);              \
-                    control = currentValue;                                                 \
-                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});  \
+                    TIcbControlKey key{nodeId, #ICB_CONTROL_PATH};                          \
+                    if (IcbControls.contains(key)) {                                        \
+                        control = (i64)IcbControls[key];                                    \
+                    } else {                                                                \
+                        control = currentValue;                                             \
+                    }                                                                       \
+                    IcbControls[key] = std::move(control);                                  \
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -562,10 +569,12 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
+                ADD_ICB_CONTROL(PDiskControls.MaxActiveCompactionsPerPDisk, 0, 0, 1'000'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
-
+                ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
+                ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL
 
                 {
@@ -1260,5 +1269,11 @@ config:
             Y_ABORT_UNLESS(it != IcbControls.end());
             it->second = value;
         }
+    }
+
+    void SetPDiskStatusFlags(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        auto it = PDiskMockStates.find({nodeId, pdiskId});
+        UNIT_ASSERT_C(it != PDiskMockStates.end(), "PDisk not found: nodeId# " << nodeId << " pdiskId# " << pdiskId);
+        it->second->SetStatusFlags(color);
     }
 };

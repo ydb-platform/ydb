@@ -5,6 +5,8 @@
 #endif
 #undef COROUTINE_INL_H_
 
+#include <library/cpp/yt/threading/execution_stack.h>
+
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -13,7 +15,7 @@ namespace NDetail {
 
 template <CInvocable<void()> TBody>
 TCoroutineBase::TCoroutineBase(TBody body, EExecutionStackKind stackKind)
-    : CoroutineStack_(CreateExecutionStack(stackKind))
+    : CoroutineStack_(GetPooledExecutionStack(stackKind))
 {
     TTrampoLine trampoline(&body, this);
 

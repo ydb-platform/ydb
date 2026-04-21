@@ -131,6 +131,7 @@ private:
     void PropagateFastStatistics();
     size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
         size_t lastSSIndex, bool useSizeLimit, ui64 cookie);
+    TDuration GetPropagateInterval();
 
     void Handle(TEvStatistics::TEvAnalyze::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
@@ -249,14 +250,11 @@ private:
 
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
-    bool EnableBackgroundColumnStatsCollection = false;
+
+    NKikimrConfig::TStatisticsConfig StatisticsConfig;
 
     static constexpr size_t StatsOptimizeFirstNodesCount = 3; // optimize first nodes - fast propagation
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message
-
-    TDuration PropagateIntervalDedicated;
-    TDuration PropagateIntervalServerless;
-    TDuration PropagateInterval = TDuration::Seconds(5);
 
     static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);
 

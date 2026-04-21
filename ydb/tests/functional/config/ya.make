@@ -17,8 +17,7 @@ SPLIT_FACTOR(10)
 
 REQUIREMENTS(ram:32 cpu:32)
 SIZE(LARGE)
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
 ELSE()

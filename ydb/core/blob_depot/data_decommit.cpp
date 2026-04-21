@@ -97,9 +97,9 @@ namespace NKikimr::NBlobDepot {
                     if (Self->Data->ScanRange(*ScanRange, &txc, &Progress, callback)) { // scan has been finished completely
                         ScanRange.reset();
                         if (IssueRangeAfter) {
-                            std::apply([&](auto&&... args) {
-                                InvokeOtherActor(*Actor, &TResolveDecommitActor::IssueRange, std::move(args)...);
-                            }, *IssueRangeAfter);
+                            auto&& [tabletId, from, to, mustRestoreFirst] = *IssueRangeAfter;
+                            InvokeOtherActor(*Actor, &TResolveDecommitActor::IssueRange, tabletId, from, to, mustRestoreFirst);
+                            IssueRangeAfter.reset();
                         }
                         return true;
                     } else { // some data remains

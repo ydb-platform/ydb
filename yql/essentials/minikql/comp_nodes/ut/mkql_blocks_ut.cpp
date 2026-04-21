@@ -331,15 +331,15 @@ void TestChunked(bool withBlockExpand) {
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)};
     });
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
+    node = pb.WideToBlocks(pb.FromFlow(node));
     if (withBlockExpand) {
         node = pb.BlockExpandChunked(node);
         // WideTakeBlocks won't work on chunked blocks
-        node = pb.WideTakeBlocks(pb.FromFlow(node), pb.NewDataLiteral<ui64>(19));
+        node = pb.WideTakeBlocks(node, pb.NewDataLiteral<ui64>(19));
         node = pb.ToFlow(pb.WideFromBlocks(node));
     } else {
         // WideFromBlocks should support chunked blocks
-        node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
+        node = pb.ToFlow(pb.WideFromBlocks(node));
         node = pb.Take(node, pb.NewDataLiteral<ui64>(19));
     }
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {

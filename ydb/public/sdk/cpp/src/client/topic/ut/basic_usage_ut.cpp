@@ -53,9 +53,8 @@ TString SerializeDataChunk(ui64 seqNo, const TString& payload) {
 }
 
 TWriteMessage CreateMessage(std::string_view payload, const std::string& key, ui64 seqNo) {
-    TWriteMessage msg(payload);
+    TWriteMessage msg(key, payload);
     msg.SeqNo(seqNo);
-    msg.Key(key);
     return msg;
 }
 
@@ -66,6 +65,72 @@ struct TExample {
 
 std::string Serialize(const TExample& value) {
     return value.Payload;
+}
+
+// Reads exactly expectedCount messages from the topic and asserts that within each partition
+// messages are ordered by seqNo (strictly increasing). Uses provided client, topic path and consumer.
+void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
+                                         const std::string& topicPath,
+                                         const std::string& consumerName,
+                                         const std::string& expectedPayload,
+                                         size_t expectedCount,
+                                         TDuration timeout = TDuration::Seconds(30)) {
+    struct TMessageInfo {
+        ui64 PartitionId;
+        std::string ProducerId;
+        ui64 SeqNo;
+        std::string Data;
+    };
+    std::vector<TMessageInfo> messages;
+    messages.reserve(expectedCount);
+    NThreading::TPromise<void> donePromise = NThreading::NewPromise<void>();
+
+    TTopicReadSettings topicSettings(topicPath);
+    topicSettings.ReadFromTimestamp(TInstant::Zero());
+
+    auto readSettings = TReadSessionSettings()
+        .ConsumerName(consumerName)
+        .AutoPartitioningSupport(true)
+        .AppendTopics(topicSettings);
+
+    readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
+        for (auto& msg : ev.GetMessages()) {
+            messages.push_back(TMessageInfo{
+                msg.GetPartitionSession()->GetPartitionId(),
+                TString(msg.GetProducerId()),
+                msg.GetSeqNo(),
+                TString(msg.GetData()),
+            });
+        }
+        if (messages.size() >= expectedCount) {
+            donePromise.SetValue();
+        }
+    }, true);
+
+    auto readSession = client.CreateReadSession(readSettings);
+    UNIT_ASSERT_C(donePromise.GetFuture().Wait(timeout),
+        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << messages.size());
+    readSession->Close(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
+        "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
+
+    // SeqNo ordering is guaranteed within one producer stream.
+    // Multiple producers can write into the same partition with independent seqNo sequences.
+    std::map<std::pair<ui64, std::string>, std::vector<ui64>> byPartitionAndProducer;
+    for (const auto& m : messages) {
+        UNIT_ASSERT_VALUES_EQUAL(m.Data, expectedPayload);
+        byPartitionAndProducer[{m.PartitionId, m.ProducerId}].push_back(m.SeqNo);
+    }
+    for (const auto& [key, seqNos] : byPartitionAndProducer) {
+        const auto& [partitionId, producerId] = key;
+        for (size_t i = 1; i < seqNos.size(); ++i) {
+            UNIT_ASSERT_C(seqNos[i] > seqNos[i - 1],
+                "Partition " << partitionId << ", producerId " << producerId
+                << ": expected seqNo strictly increasing, got "
+                << seqNos[i - 1] << " then " << seqNos[i] << " at index " << i);
+        }
+    }
 }
 
 // Write a message with binary (non-UTF8) producer ID using direct tablet communication
@@ -164,6 +229,9 @@ static std::string FindKeyForBucket(size_t bucket, size_t bucketsCount) {
 void CreateTopicWithAutoPartitioning(TTopicClient& client) {
     TCreateTopicSettings createSettings;
         createSettings
+            .BeginAddConsumer()
+                .ConsumerName(TEST_CONSUMER)
+            .EndAddConsumer()
             .BeginConfigurePartitioningSettings()
             .MinActivePartitions(2)
             .MaxActivePartitions(100)
@@ -178,7 +246,7 @@ void CreateTopicWithAutoPartitioning(TTopicClient& client) {
 }
 
 void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count,
-    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10)
+    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10, ui64 shuffleRatio = 1, TDuration shuffleDelay = TDuration::MilliSeconds(10))
 {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -194,9 +262,21 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     TTopicClient topicClient = setup.MakeClient();
 
-    auto WaitTasks = [&, timeout = TInstant::Now() + TDuration::Seconds(60)](auto f, size_t c) {
-        while (f() < c) {
-            UNIT_ASSERT(timeout > TInstant::Now());
+    auto WaitTasks = [&](auto f, size_t c) {
+        const auto hardTimeout = TInstant::Now() + TDuration::Seconds(60);
+        const auto shuffleTimeout = TInstant::Now() + shuffleDelay;
+        while (true) {
+            const auto fVal = f();
+            if (fVal >= c * shuffleRatio) {
+                return;
+            }
+
+            const auto now = TInstant::Now();
+            if (fVal >= c && now > shuffleTimeout) {
+                return;
+            }
+
+            UNIT_ASSERT_GE(hardTimeout, now);
             ReadSession->WaitEvent();
             std::this_thread::sleep_for(100ms);
         };
@@ -208,28 +288,23 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         WaitTasks([&]() { return e->GetExecutedCount(); }, count);
     };
 
-    auto RunTasks = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto RunTask = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(RunTasks);
 
-    auto PlanTasksAndRestart = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto PlanTaskAndRestart = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
 
         setup.GetServer().KillTopicPqrbTablet(JoinPath({TString(setup.MakeDriverConfig().GetDatabase()), TString(setup.GetTopicPath())}));
         std::this_thread::sleep_for(100ms);
 
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(PlanTasksAndRestart);
-
 
     NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
     TAtomic lastOffset = 0u;
@@ -250,11 +325,12 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     ui32 restartCount = 0;
     while (AtomicGet(lastOffset) + 1 < count) {
         if (restartCount < maxRestartsCount && i % restartPeriod == 1) {
-            PlanTasksAndRestart(decompressor, {i++});
+            PlanTaskAndRestart(decompressor);
             restartCount++;
         } else {
-            RunTasks(decompressor, {i++});
+            RunTask(decompressor);
         }
+        i++;
     }
 
     ReadSession->Close(TDuration::MilliSeconds(10));
@@ -945,6 +1021,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
     }
 
+    Y_UNIT_TEST(ReadWithRestartsAndLargeDataAndShuffle) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = std::make_shared<TSyncExecutor>();
+        auto decompressor = CreateThreadPoolManagedExecutor(1);
+
+        TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(setup.GetConsumerName())
+            .MaxMemoryUsageBytes(10_MB)
+            .DecompressionExecutor(decompressor)
+            .AppendTopics(setup.GetTopicPath())
+            // .DirectRead(EnableDirectRead)
+            ;
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW)
+            .CompressionExecutor(compressor);
+
+        std::uint32_t count = 3000;
+        std::string message(8'000, 'x');
+
+        WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor, 7, 10, 10);
+    }
+
     Y_UNIT_TEST(ConflictingWrites) {
 
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
@@ -995,9 +1097,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         std::atomic<size_t> acksCount{0};
         std::atomic<size_t> closedCount{0};
@@ -1021,10 +1123,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const ui64 messages = 5;
         for (ui64 i = 0; i < messages; ++i) {
             std::string payload = "payload";
-            TWriteMessage msg(payload);
+            TWriteMessage msg("key-" + ToString(i), payload);
             msg.SeqNo(i + 1);
-            msg.Key("key-" + ToString(i));
-            UNIT_ASSERT_C(session->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         UNIT_ASSERT_C(session->Close(TDuration::Seconds(30)).IsSuccess(), "Failed to close keyed write session");
@@ -1041,10 +1142,30 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         UNIT_ASSERT_EXCEPTION(setup.MakeClient().CreateProducer(writeSettings), TContractViolation);
+    }
+
+    Y_UNIT_TEST(Producer_IsNotSupportedForFederation) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        auto config = setup.MakeDriverConfig();
+        config.SetEndpoint("logbroker.yandex.net:2135");
+
+        TDriver driver(config);
+        TTopicClient federatedLikeClient(driver);
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+
+        UNIT_ASSERT_EXCEPTION(federatedLikeClient.CreateProducer(writeSettings), TContractViolation);
     }
 
     Y_UNIT_TEST(Producer_SessionClosedDueToUserError) {
@@ -1057,17 +1178,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto session = publicClient.CreateProducer(writeSettings);
 
         std::string payload = "msg0";
-        TWriteMessage msg(payload);
+        TWriteMessage msg("key", payload);
         msg.SeqNo(0);
-        msg.Key("key");
-        UNIT_ASSERT_C(session->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+        UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         auto flushResult = session->Flush().GetValueSync();
         UNIT_ASSERT_C(flushResult.IsClosed(), "Failed to flush producer");
         UNIT_ASSERT_C(flushResult.ClosedDescription->GetStatus() == EStatus::BAD_REQUEST, "Status is not BAD_REQUEST");
@@ -1094,9 +1214,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto session = publicClient.CreateProducer(writeSettings);
 
@@ -1109,17 +1229,15 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto seqNo = 1;
         for (ui64 i = 0; i < count0; ++i) {
             std::string payload = "msg0";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key0, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key0);
-            UNIT_ASSERT_C(session->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
         for (ui64 i = 0; i < count1; ++i) {
             std::string payload = "msg1";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key1, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key1);
-            UNIT_ASSERT_C(session->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         UNIT_ASSERT_C(session->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close keyed write session");
@@ -1177,7 +1295,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
             return std::string{key};
         });
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = publicClient.CreateProducer(writeSettings);
         auto rawProducer = std::dynamic_pointer_cast<TProducer>(producer);
@@ -1198,10 +1316,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }
 
             std::string payload = "msg";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(i + 1);
-            msg.Key(key);
-            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
@@ -1223,7 +1340,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
     }
 
-    Y_UNIT_TEST(Producer_EventLoop_Acks) {
+    Y_UNIT_TEST(Producer_WriteManyMessages) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
 
@@ -1235,8 +1352,40 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
+
+        auto producer = client.CreateProducer(writeSettings);
+        std::string payload = "data";
+
+        const ui64 count = 3000;
+        for (ui64 i = 1; i <= count; ++i) {
+            auto key = CreateGuidAsString();
+            TWriteMessage msg(key, payload);
+            msg.SeqNo(i);
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
+        }
+
+        UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), payload, count);
+    }
+
+    Y_UNIT_TEST(Producer_AutoSeqNo) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        auto client = setup.MakeClient();
+
+        TProducerSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
 
@@ -1244,14 +1393,25 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(i);
-            msg.Key(key);
-            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        auto producer2 = client.CreateProducer(writeSettings);
+        std::string payload = "data";
+        for (ui64 i = 1; i <= count; ++i) {
+            auto key = CreateGuidAsString();
+            TWriteMessage msg(key, payload);
+            UNIT_ASSERT_C(producer2->Write(std::move(msg)).IsQueued(), "Failed to write message");
+        }
+        UNIT_ASSERT_C(producer2->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+        UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), payload, count * 2);
     }
 
     Y_UNIT_TEST(Producer_WriteToClosedProducer) {
@@ -1266,8 +1426,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
 
@@ -1275,19 +1435,17 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(i);
-            msg.Key(key);
-            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
 
         std::string payload = "data";
-        TWriteMessage msg(payload);
+        TWriteMessage msg(CreateGuidAsString(), payload);
         msg.SeqNo(count + 1);
-        msg.Key(CreateGuidAsString());
         auto writeResult = producer->Write(std::move(msg));
         UNIT_ASSERT_C(writeResult.IsError(), "Failed to write message");
         UNIT_ASSERT_C(writeResult.ErrorMessage == "producer is closed", "Error message is not correct");
@@ -1306,8 +1464,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
 
@@ -1324,12 +1482,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 for (ui64 i = 0; i < perThread; ++i) {
                     const ui64 seqNo = nextSeqNo.fetch_add(1);
                     std::string payload = "data";
-                    TWriteMessage msg(payload);
+                    TWriteMessage msg(key, payload);
                     msg.SeqNo(seqNo);
-                    msg.Key(key);
                     auto writeResult = producer->Write(std::move(msg));
                     UNIT_ASSERT_C(
-                        writeResult.IsSuccess(),
+                        writeResult.IsQueued(),
                         "Failed to write message"
                     );
                 }
@@ -1356,8 +1513,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(5));
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
 
@@ -1367,10 +1524,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 0; i < messages; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key);
-            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
@@ -1379,17 +1535,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 0; i < messages; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key);
-            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
     }
 
-    Y_UNIT_TEST(KeyedWriteSession_BoundPartitionChooser_SplitPartition_MultiThreadedAcksOrder) {
+    Y_UNIT_TEST(Producer_BoundPartitionChooser_SplitPartition_MultiThreadedAcksOrder) {
         NKikimr::NPQ::NTest::TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -1405,7 +1560,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
             return std::string{key};
         });
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
 
@@ -1415,10 +1570,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             for (ui64 i = 1; i <= messages; ++i) {
                 auto key = CreateGuidAsString();
                 std::string payload = "data";   
-                TWriteMessage msg(payload);
+                TWriteMessage msg(key, payload);
                 msg.SeqNo(i);
-                msg.Key(key);
-                UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+                UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
             }
         });
 
@@ -1435,7 +1589,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(30)).IsSuccess(), "Failed to close producer");
     }
 
-    Y_UNIT_TEST(KeyedWriteSession_CloseTimeout) {
+    Y_UNIT_TEST(Producer_CloseTimeout) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3);
 
@@ -1446,18 +1600,17 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.MaxBlock(TDuration::Seconds(30));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
 
         for (int i = 0; i < 1000; ++i) {
             std::string payload = "message-" + ToString(i);
-            TWriteMessage msg(payload);
+            TWriteMessage msg("key1", payload);
             msg.SeqNo(i + 1);
-            msg.Key("key1");
-            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
         // Test Close timeout
@@ -1469,7 +1622,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // block longer than the timeout and that the session eventually closes successfully.
         UNIT_ASSERT_C(
             result.IsSuccess() || result.IsTimeout(),
-            TStringBuilder() << "Failed to close keyed write session, status: " << static_cast<int>(result.Status)
+            TStringBuilder() << "Failed to close producer, status: " << static_cast<int>(result.Status)
         );
         const TDuration actualDuration = TInstant::Now() - startTime;
         
@@ -1499,7 +1652,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings1.ProducerIdPrefix("autopartitioning_keyed_1");
         writeSettings1.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
         writeSettings1.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings1.MaxBlock(TDuration::Seconds(30));
+        writeSettings1.MaxBlockTimeout(TDuration::Seconds(30));
 
         TProducerSettings writeSettings2 = writeSettings1;
         writeSettings2.ProducerIdPrefix("autopartitioning_keyed_2");
@@ -1518,7 +1671,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             if (key.empty()) {
                 key = "lalala";
             }
-            UNIT_ASSERT_C(s->Write(CreateMessage(payload, key, seqNo)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(s->Write(CreateMessage(payload, key, seqNo)).IsQueued(), "Failed to write message");
         };
 
         {
@@ -1589,6 +1742,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer3->Close(TDuration::Seconds(30)).IsSuccess());
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, 14);
     }
 
     Y_UNIT_TEST(AutoPartitioning_Producer_SmallMessages) {
@@ -1609,7 +1764,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings1.ProducerIdPrefix("autopartitioning_keyed_small_1");
         writeSettings1.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
         writeSettings1.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings1.MaxBlock(TDuration::Seconds(30));
+        writeSettings1.MaxBlockTimeout(TDuration::Seconds(30));
 
         TProducerSettings writeSettings2 = writeSettings1;
         writeSettings2.ProducerIdPrefix("autopartitioning_keyed_small_2");
@@ -1628,7 +1783,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto writeMessage = [&](std::shared_ptr<IProducer> s, std::string_view payload, ui64 seqNo) {
             auto key = keys[seqNo % keys.size()];
             if (key.empty()) key = "a";
-            UNIT_ASSERT_C(s->Write(CreateMessage(payload, key, seqNo)).IsSuccess(), "Failed to write message");
+            UNIT_ASSERT_C(s->Write(CreateMessage(payload, key, seqNo)).IsQueued(), "Failed to write message");
         };
 
         {
@@ -1665,6 +1820,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(producer1->Close(TDuration::Seconds(30)).IsSuccess());
         UNIT_ASSERT(producer2->Close(TDuration::Seconds(30)).IsSuccess());
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, totalMessages);
     }
 
     Y_UNIT_TEST(Producer_BasicWrite) {
@@ -1678,13 +1835,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(10_KB, 'a');
 
         for (ui64 i = 0; i < 100; ++i) {    
-            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
+            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsQueued());
         }
 
         UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
@@ -1701,6 +1858,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     
         UNIT_ASSERT_EQUAL(messagesWritten, 100);
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(1)).IsSuccess(), "Failed to close producer");
+
+        ReadMessagesAndAssertOrderedBySeqNo(client, setup.GetTopicPath(TEST_TOPIC), setup.GetConsumerName(), msgData, 100);
     }
 
     Y_UNIT_TEST(TypedProducer_BasicWrite) {
@@ -1716,11 +1875,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        writeSettings.KeyProducer([](const TWriteMessage& message) -> std::string {
-            return ToString(MurmurHash<std::uint64_t>(message.Data.data(), message.Data.size()));
-        });
-        writeSettings.MaxBlock(TDuration::Seconds(1));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(1));
 
         auto producer = client.CreateTypedProducer<TExample>(writeSettings);
 
@@ -1729,7 +1885,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 0; i < messageCount; ++i) {
             auto payload = CreateGuidAsString();
             sentPayloads.push_back(payload);
-            UNIT_ASSERT(producer->Write(TExample{.Payload = payload}).IsSuccess());
+            UNIT_ASSERT(producer->Write(TExample{.Payload = payload}).IsQueued());
         }
 
         UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
@@ -1776,9 +1932,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.SubSessionIdleTimeout(TDuration::MilliSeconds(500));
-        writeSettings.MaxBlock(TDuration::Seconds(1));
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(1));
 
         auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         const auto& partitions = describeResult.GetTopicDescription().GetPartitions();
@@ -1787,20 +1943,26 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto producer = client.CreateProducer(writeSettings);
         auto producerRaw = dynamic_cast<TProducer*>(producer.get());
         auto msgData = TString(10_KB, 'a');
-
-        for (ui64 i = 0; i < 3; ++i) {
-            for (const auto& partition : partitions) {
-                for (ui64 i = 0; i < 10; ++i) {
-                    TWriteMessage msg(msgData);
-                    msg.Partition(partition.GetPartitionId());
-                    UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
-                }
-                UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());    
-                UNIT_ASSERT((producerRaw->GetIdleSessionsCount() == 1 && producerRaw->GetSessionsCount() == 1) ||
-                    (producerRaw->GetIdleSessionsCount() == 0 && producerRaw->GetSessionsCount() == 0));
-                Sleep(TDuration::Seconds(1));
+        for (const auto& partition : partitions) {
+            for (ui64 i = 0; i < 10; ++i) {
+                TWriteMessage msg(partition.GetPartitionId(), msgData);
+                UNIT_ASSERT(producer->Write(std::move(msg)).IsQueued());
             }
         }
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+
+        size_t idleSessionsCount = 0;
+        size_t sessionsCount = 0;
+        for (int i = 0; i < 5; ++i) {
+            idleSessionsCount = producerRaw->GetIdleSessionsCount();
+            sessionsCount = producerRaw->GetSessionsCount();
+            if (idleSessionsCount == 0 && sessionsCount == 0) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(idleSessionsCount == 0 && sessionsCount == 0, "Idle session count: " << idleSessionsCount << ", sessions count: " << sessionsCount);
 
         {
             auto describeResult = client.DescribeTopic(TEST_TOPIC, TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
@@ -1810,102 +1972,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 UNIT_ASSERT(stats);
                 messagesWritten += stats->GetEndOffset() - stats->GetStartOffset();
             }
-            UNIT_ASSERT_EQUAL(messagesWritten, 150);
+            UNIT_ASSERT_EQUAL(messagesWritten, 50);
         }
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
-    }
-
-    Y_UNIT_TEST(Producer_CustomKeyProducerFunction) {
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
-
-        // Capture partition ids in the same order as DescribeTopic returns them
-        // (the keyed session uses the same DescribeTopic ordering to map hash bucket -> partition id).
-        auto publicClient = setup.MakeClient();
-        auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
-        auto before = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
-        UNIT_ASSERT_C(before.IsSuccess(), before.GetIssues().ToOneLineString());
-        const auto& beforePartitions = before.GetTopicDescription().GetPartitions();
-        UNIT_ASSERT_VALUES_EQUAL(beforePartitions.size(), 2);
-        const ui64 partitionId0 = beforePartitions[0].GetPartitionId();
-        const ui64 partitionId1 = beforePartitions[1].GetPartitionId();
-
-        constexpr auto keyAttributeName = "__key";
-
-        TProducerSettings writeSettings;
-        writeSettings
-            .Path(setup.GetTopicPath(TEST_TOPIC))
-            .Codec(ECodec::RAW);
-        writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.KeyProducer([](const TWriteMessage& message) -> std::string {
-            for (const auto& [attributeName, attributeValue] : message.MessageMeta_) {
-                if (attributeName == keyAttributeName) {
-                    return attributeValue;
-                }
-            }
-            return "";
-        });
-        writeSettings.MaxBlock(TDuration::Seconds(1));
-
-        auto producer = publicClient.CreateProducer(writeSettings);
-
-        const std::string key0 = FindKeyForBucket(0, 2);
-        const std::string key1 = FindKeyForBucket(1, 2);
-
-        const ui64 count0 = 7;
-        const ui64 count1 = 11;
-
-        auto seqNo = 1;
-        for (ui64 i = 0; i < count0; ++i) {
-            std::string payload = "msg0";
-            TWriteMessage msg(payload);
-            msg.SeqNo(seqNo++);
-            msg.MessageMeta_.emplace_back(keyAttributeName, key0);
-            UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
-        }
-        for (ui64 i = 0; i < count1; ++i) {
-            std::string payload = "msg1";
-            TWriteMessage msg(payload);
-            msg.SeqNo(seqNo++);
-            msg.MessageMeta_.emplace_back(keyAttributeName, key1);
-            UNIT_ASSERT(producer->Write(std::move(msg)).IsSuccess());
-        }
-
-        UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
-        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, count0 + count1);
-        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().LastWrittenSeqNo, seqNo - 1);
-
-        auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
-        UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
-        const auto& afterPartitions = after.GetTopicDescription().GetPartitions();
-        UNIT_ASSERT_VALUES_EQUAL(afterPartitions.size(), 2);
-
-        std::unordered_map<ui64, ui64> endOffsets;
-        for (const auto& p : afterPartitions) {
-            auto stats = p.GetPartitionStats();
-            UNIT_ASSERT(stats.has_value());
-            endOffsets[p.GetPartitionId()] = stats->GetEndOffset();
-        }
-
-        auto it0 = endOffsets.find(partitionId0);
-        auto it1 = endOffsets.find(partitionId1);
-        UNIT_ASSERT(it0 != endOffsets.end());
-        UNIT_ASSERT(it1 != endOffsets.end());
-
-        const ui64 endOffset0 = it0->second;
-        const ui64 endOffset1 = it1->second;
-
-        // Partition ordering in DescribeTopic is not a part of public API contract, so allow swapping.
-        UNIT_ASSERT_VALUES_EQUAL(endOffset0 + endOffset1, count0 + count1);
-        UNIT_ASSERT_C(
-            (endOffset0 == count0 && endOffset1 == count1) || (endOffset0 == count1 && endOffset1 == count0),
-            TStringBuilder() << "Unexpected end offsets distribution: "
-                             << "partitionId0=" << partitionId0 << " endOffset0=" << endOffset0 << ", "
-                             << "partitionId1=" << partitionId1 << " endOffset1=" << endOffset1 << ", "
-                             << "expected (" << count0 << "," << count1 << ") in any order"
-        );
     }
 
     Y_UNIT_TEST(Producer_BlockingWrite) {
@@ -1919,14 +1988,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
-        writeSettings.MaxBlock(TDuration::Seconds(1));
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Seconds(1));
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(10_KB, 'a');
 
         for (ui64 i = 0; i < 100; ++i) {    
-            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
+            UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsQueued());
         }
 
         UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
@@ -1945,14 +2014,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix("simple_blocking_producer_basic_write");
-        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
         writeSettings.MaxMemoryUsage(100_KB);
-        writeSettings.MaxBlock(TDuration::MilliSeconds(1));
+        writeSettings.MaxBlockTimeout(TDuration::MilliSeconds(1));
 
         auto producer = client.CreateProducer(writeSettings);
         auto msgData = TString(1_MB, 'a');
 
-        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsSuccess());
+        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsQueued());
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsTimeout());
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }

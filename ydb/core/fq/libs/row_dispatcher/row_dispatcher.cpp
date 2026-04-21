@@ -364,7 +364,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
-    NYql::IPqGateway::TPtr PqGateway;
+    NYql::IPqStaticGateway::TPtr PqGateway;
     NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
@@ -451,7 +451,7 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
         NActors::TActorId nodesManagerId = {},
@@ -536,7 +536,7 @@ TRowDispatcher::TRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,
@@ -571,7 +571,7 @@ void TRowDispatcher::Bootstrap() {
     auto leaderElection = !config.GetCoordinationNodePath().empty()
         ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
         : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
-    Register(leaderElection.release());
+    Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -1336,6 +1336,7 @@ void TRowDispatcher::UpdateCpuTime() {
     for (auto& [actorId, consumer] : Consumers) {
         consumer->CpuMicrosec += diff;
     }
+    LOG_ROW_DISPATCHER_TRACE("UpdateCpuTime, currentCpuTime " << currentCpuTime << ", diff " << diff);
     LastCpuTime = currentCpuTime;
 }
 
@@ -1352,7 +1353,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,

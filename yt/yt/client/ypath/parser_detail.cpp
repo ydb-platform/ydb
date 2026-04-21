@@ -400,14 +400,25 @@ void ParseRowRanges(NYson::TTokenizer& tokenizer, IAttributeDictionary* attribut
     }
 }
 
-void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& attributes, EYsonFormat ysonFormat)
+void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
     TString attrString;
     TStringOutput output(attrString);
     TYsonWriter writer(&output, ysonFormat, EYsonType::MapFragment);
 
-    BuildYsonAttributesFluently(&writer)
-        .Items(attributes);
+    if (sortAttributes) {
+        auto attributePairs = attributes.ListPairs();
+        std::ranges::sort(attributePairs, [] (const auto& lhs, const auto& rhs) {
+            return lhs.first < rhs.first;
+        });
+        for (const auto& [key, value] : attributePairs) {
+            writer.OnKeyedItem(key);
+            writer.OnRaw(value);
+        }
+    } else {
+        BuildYsonAttributesFluently(&writer)
+            .Items(attributes);
+    }
 
     if (!attrString.empty()) {
         builder->AppendChar(TokenTypeToChar(NYson::ETokenType::LeftAngle));
@@ -485,10 +496,10 @@ std::pair<TYPath, IAttributeDictionaryPtr> ParseRichYPathImpl(TStringBuf str)
     return {std::move(path), attributes};
 }
 
-TString ConvertToStringImpl(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat)
+TString ConvertToString(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
     TStringBuilder builder;
-    AppendAttributes(&builder, attributes, ysonFormat);
+    AppendAttributes(&builder, attributes, ysonFormat, sortAttributes);
     builder.AppendString(path);
     return builder.Flush();
 }

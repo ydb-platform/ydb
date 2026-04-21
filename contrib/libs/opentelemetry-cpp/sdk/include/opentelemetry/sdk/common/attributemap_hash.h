@@ -32,7 +32,7 @@ inline void GetHash(size_t &seed, const T &arg)
 template <class T>
 inline void GetHash(size_t &seed, const std::vector<T> &arg)
 {
-  for (auto v : arg)
+  for (const auto &v : arg)
   {
     GetHash<T>(seed, v);
   }

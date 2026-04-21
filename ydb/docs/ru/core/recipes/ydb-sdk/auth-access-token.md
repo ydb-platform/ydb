@@ -6,43 +6,17 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
-
-- Go (database/sql)
-
-  {% cut "Если используется коннектор для создания подключения к {{ ydb-short-name }}" %}
+  - Native SDK
 
     ```go
     package main
 
     import (
       "context"
-      "database/sql"
       "os"
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
@@ -51,92 +25,128 @@
     func main() {
       ctx, cancel := context.WithCancel(context.Background())
       defer cancel()
-      nativeDriver, err := ydb.Open(ctx,
+      db, err := ydb.Open(ctx,
         os.Getenv("YDB_CONNECTION_STRING"),
         ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
       )
       if err != nil {
         panic(err)
       }
-      defer nativeDriver.Close(ctx)
-      connector, err := ydb.Connector(nativeDriver)
-      if err != nil {
-        panic(err)
-      }
-      db := sql.OpenDB(connector)
-      defer db.Close()
+      defer db.Close(ctx)
       ...
     }
     ```
 
-  {% endcut %}
+  - database/sql
 
-  {% cut "Если используется строка подключения" %}
+    {% cut "Если используется коннектор для создания подключения к {{ ydb-short-name }}" %}
 
-    ```go
-    package main
+      ```go
+      package main
 
-    import (
-      "context"
-      "database/sql"
-      "os"
+      import (
+        "context"
+        "database/sql"
+        "os"
 
-      _ "github.com/ydb-platform/ydb-go-sdk/v3"
-    )
+        "github.com/ydb-platform/ydb-go-sdk/v3"
+      )
 
-    func main() {
-      db, err := sql.Open("ydb", "grpcs://localohost:2135/local?token="+os.Getenv("YDB_TOKEN"))
-      if err != nil {
-        panic(err)
+      func main() {
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+        nativeDriver, err := ydb.Open(ctx,
+          os.Getenv("YDB_CONNECTION_STRING"),
+          ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+        )
+        if err != nil {
+          panic(err)
+        }
+        defer nativeDriver.Close(ctx)
+        connector, err := ydb.Connector(nativeDriver)
+        if err != nil {
+          panic(err)
+        }
+        db := sql.OpenDB(connector)
+        defer db.Close()
+        ...
       }
-      defer db.Close()
-      ...
-    }
-    ```
+      ```
 
-  {% endcut %}
+    {% endcut %}
 
+    {% cut "Если используется строка подключения" %}
+
+      ```go
+      package main
+
+      import (
+        "context"
+        "database/sql"
+        "os"
+
+        _ "github.com/ydb-platform/ydb-go-sdk/v3"
+      )
+
+      func main() {
+        db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
+        if err != nil {
+          panic(err)
+        }
+        defer db.Close()
+        ...
+      }
+      ```
+
+    {% endcut %}
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String accessToken) {
-      AuthProvider authProvider = new TokenAuthProvider(accessToken);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localohost:2135/local")
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String accessToken) {
+        AuthProvider authProvider = new TokenAuthProvider(accessToken);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localhost:2135/local")
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      // Подключение с указанием значения токена аутентификации
-      Properties props1 = new Properties();
-      props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        // Подключение с указанием значения токена аутентификации
+        Properties props1 = new Properties();
+        props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
+            doWork(connection);
+        }
 
-      // Подключение с чтением токена аутентификации из указанного файла
-      Properties props2 = new Properties();
-      props2.setProperty("tokenFile", "~/.ydb_token");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Подключение с чтением токена аутентификации из указанного файла
+        Properties props2 = new Properties();
+        props2.setProperty("tokenFile", "~/.ydb_token");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC используйте ту же JDBC-строку подключения и те же параметры аутентификации, что и выше (например, `spring.datasource.url` с query-параметрами или `spring.datasource.*` для токена и файла токена).
+
+  {% endlist %}
+
+- JavaScript
 
   {% include [auth-access-token](../../_includes/nodejs/auth-access-token.md) %}
 
@@ -170,23 +180,31 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
+  using Ydb.Sdk.Ado;
   using Ydb.Sdk.Auth;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-  const string token = "MY_VERY_SECURE_TOKEN";
+  var builder = new YdbConnectionStringBuilder("Host=localhost;Port=2136;Database=/local")
+  {
+      CredentialsProvider = new TokenProvider("MY_VERY_SECURE_TOKEN")
+  };
 
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new TokenProvider(token)
-  );
+  await using var dataSource = new YdbDataSource(builder);
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
+  
+  Для Entity Framework и linq2db не поддерживается.
 
-  await using var driver = await Driver.CreateInitialized(config);
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(AccessTokenCredentials::from(std::env::var("YDB_TOKEN")?))
+      .client()?;
   ```
 
 - PHP

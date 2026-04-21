@@ -17,14 +17,14 @@ const TStringBuf SectionKeyword = "//! section:keyword";
 const TStringBuf SectionOther = "//! section:other";
 const TStringBuf FragmentPrefix = "fragment ";
 
-const TStringBuf TLexerGrammar::KeywordBlockByName(const TStringBuf name Y_LIFETIME_BOUND) {
+TStringBuf TLexerGrammar::KeywordBlockByName(const TStringBuf name Y_LIFETIME_BOUND) {
     if (name == "TSKIP") {
         return "SKIP";
     }
     return name;
 }
 
-const TString TLexerGrammar::KeywordNameByBlock(const TStringBuf block) {
+TString TLexerGrammar::KeywordNameByBlock(const TStringBuf block) {
     if (TCaseInsensitiveStringBuf(block) == "SKIP") {
         return "TSKIP";
     }

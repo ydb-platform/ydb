@@ -99,4 +99,28 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
             AFL_VERIFY(arrString == R"([["a3","a7"],["b1"],["c0"]])")("string", arrString);
         }
     }
+
+    Y_UNIT_TEST(EmptyChunksAfterFiltering) {
+        auto arr = BuildCompositeArray();
+        auto filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildConstFilter(false, { 19 }));
+        
+        TColumnConstructionContext context;
+        context.SetStartIndex(0).SetRecordsCount(19).SetFilter(filter);
+
+        auto chunkedArray = arr->GetChunkedArray(context);
+        UNIT_ASSERT(chunkedArray != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(chunkedArray->length(), 0);
+        UNIT_ASSERT(chunkedArray->type()->Equals(arrow::utf8()));
+    }
+
+    Y_UNIT_TEST(EmptyChunksDirectCall) {
+        auto arr = BuildCompositeArray();
+        TColumnConstructionContext context;
+        context.SetStartIndex(19).SetRecordsCount(0);
+
+        auto chunkedArray = arr->GetChunkedArray(context);
+        UNIT_ASSERT(chunkedArray != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(chunkedArray->length(), 0);
+        UNIT_ASSERT(chunkedArray->type()->Equals(arrow::utf8()));
+    }
 };

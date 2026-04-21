@@ -1,5 +1,9 @@
 items:
     - name: Transaction lock invalidation
       href: transaction-lock-invalidation.md
+    - name: TLI logging
+      href: tli-logging.md
     - name: OVERLOADED errors
       href: overloaded-errors.md
+    - name: Retry cascade effect
+      href: retry-cascade.md

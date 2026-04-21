@@ -30,8 +30,7 @@ struct TMinus: public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TOu
 
 struct TDecimalMinus: TDecimalUnary<TDecimalMinus> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
-        const auto v = arg.GetInt128();
-        return NYql::NDecimal::IsComparable(v) ? NUdf::TUnboxedValuePod(-v) : arg;
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::Negate(arg.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

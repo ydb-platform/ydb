@@ -23,6 +23,12 @@ public:
   ObservableInstrument(InstrumentDescriptor instrument_descriptor,
                        std::unique_ptr<AsyncWritableMetricStorage> storage,
                        std::shared_ptr<ObservableRegistry> observable_registry);
+
+  ObservableInstrument(const ObservableInstrument &)            = delete;
+  ObservableInstrument(ObservableInstrument &&)                 = delete;
+  ObservableInstrument &operator=(const ObservableInstrument &) = delete;
+  ObservableInstrument &operator=(ObservableInstrument &&)      = delete;
+
   ~ObservableInstrument() override;
 
   void AddCallback(opentelemetry::metrics::ObservableCallbackPtr callback,

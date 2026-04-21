@@ -29,7 +29,6 @@ SRCS(
 
 PEERDIR(
     contrib/libs/ftxui
-    ydb/core/util
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/driver

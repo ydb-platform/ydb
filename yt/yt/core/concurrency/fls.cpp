@@ -67,7 +67,7 @@ TFls::~TFls()
 
 void TFls::Set(int index, TCookie cookie)
 {
-    if (Y_UNLIKELY(index >= std::ssize(Slots_))) {
+    if (index >= std::ssize(Slots_)) [[unlikely]] {
         int newSize = NDetail::FlsSize.load();
         YT_VERIFY(index < newSize);
         Slots_.resize(newSize);

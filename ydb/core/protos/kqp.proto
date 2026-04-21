@@ -16,6 +16,7 @@ import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_query.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
@@ -66,6 +67,7 @@ message TTopicOperationsRequest {
     repeated TopicOffsets Topics = 2;
     optional uint32 SupportivePartition = 3;
     optional uint64 TabletId = 4;
+    optional bool TrackProducerId = 5 [default = true];
 
     message TopicOffsets {
         // Topic path.
@@ -225,7 +227,7 @@ message TRlPath {
 message TEvQueryRequest {
     optional TQueryRequest Request = 1;
     optional string TraceId = 2;
-    optional string UserToken = 3;
+    optional string UserToken = 3 [(Ydb.sensitive) = true];
     optional NActorsProto.TActorId RequestActorId = 4;
     optional string RequestType = 5;
     optional TRlPath RlPath = 6;
@@ -315,9 +317,20 @@ message TEvCloseSessionRequest {
     optional string TraceId = 2;
 }
 
+message TSessionShutdownHint {
+}
+
+message TNodeShutdownHint {
+}
+
 message TCloseSessionResponse {
     optional bytes SessionId = 1;
     optional bool Closed = 2;
+
+    oneof StateHint {
+        TSessionShutdownHint SessionShutdown = 3;
+        TNodeShutdownHint NodeShutdown = 4;
+    }
 }
 
 message TEvCloseSessionResponse {
@@ -339,6 +352,12 @@ message TCompileCacheQueryInfo {
     optional string MetaInfo = 10;
     optional bool IsTruncated = 11;
     optional string Database = 12;
+    // Part of QueryId hash — must match the original query to get a cache hit on warmup.
+    // {QUERY_TYPE_SQL_DML, QUERY_TYPE_SQL_GENERIC_QUERY, QUERY_TYPE_SQL_GENERIC_SCRIPT, etc.}
+    optional string QueryType = 13;
+    // Part of QueryId hash — must match the original query to get a cache hit on warmup.
+    // {SYNTAX_UNSPECIFIED, SYNTAX_YQL_V1, SYNTAX_PG}
+    optional string Syntax = 14;
 }
 
 message TSessionInfo {
@@ -358,6 +377,10 @@ message TSessionInfo {
     optional string UserSID = 14;
     optional bool PgWire = 15 [default = false];
     optional string UserName = 16;
+    optional string WmPoolId = 17;
+    optional string WmState = 18;
+    optional int64 WmEnterTime = 19;
+    optional int64 WmExitTime = 20;
 }
 
 message TEvListSessionsRequest {
@@ -394,6 +417,8 @@ message TEvListCompileCacheQueriesResponse {
     repeated TCompileCacheQueryInfo CacheCacheQueries = 2;
     optional bool Finished = 3;
     optional string ContinuationToken = 4;
+    optional Ydb.StatusIds.StatusCode Status = 5;
+    repeated Ydb.Issue.IssueMessage Issues = 6;
 }
 
 message TKqpSetting {
@@ -495,12 +520,12 @@ message TEvExecuterTxRequest {
     optional TExecuterTxRequest Request = 1;
     optional NActorsProto.TActorId Target = 2;
     optional string TraceId = 3;
-    optional string UserToken = 4;
+    optional string UserToken = 4 [(Ydb.sensitive) = true];
 };
 
 message TExecuterTxResult {
     reserved 3;
-    optional NKikimrMiniKQL.TResult Locks = 4;
+    reserved 4;
     reserved 5; // (deprecated) Stats
     optional NYql.NDqProto.TDqExecutionStats Stats = 6;
     reserved 7;
@@ -622,7 +647,7 @@ message TEvStartKqpTasksRequest {
     optional uint32 LockNodeId = 14;
     optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
-    optional string UserToken = 20;
+    optional string UserToken = 20 [(Ydb.sensitive) = true];
     optional bool SupportShuttingDown = 21 [default = true];
     optional bool EnableWatermarks = 22 [default = false];
 
@@ -889,6 +914,8 @@ message TKqpFullTextSourceSettings {
     message TKqpQuerySettings {
         repeated TKqpColumnMetadataProto Columns = 1;
         optional string Query = 2;
+        // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
+        repeated bytes Tokens = 3;
     }
 
     message TIndexTable {
@@ -934,7 +961,7 @@ message TKqpSysViewSourceSettings {
     optional string TablePath = 7;
     optional bool Reverse = 8;
     repeated NKikimrTx.TKeyRange KeyRanges = 9;
-    optional bytes UserToken = 10;
+    optional bytes UserToken = 10 [(Ydb.sensitive) = true];
 }
 
 message TKqpSequencerSettings {

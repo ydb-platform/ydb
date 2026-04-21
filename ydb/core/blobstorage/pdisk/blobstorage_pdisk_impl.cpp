@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
+#include "blobstorage_pdisk_util_space_color.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/lib/dynamic_control_board_impl.h>
@@ -74,6 +75,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     // 2 - YellowStop
     SemiStrictSpaceIsolation = TControlWrapper(0, 0, 2);
     SemiStrictSpaceIsolationCached = 0;
+    ForcedPDiskSpaceColor = TControlWrapper(0, 0, 60);
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -159,7 +161,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                 (formatSector + FormatSectorSize - sizeof(TDataSectorFooter));
 
             cypher.StartMessage(footer->Nonce);
-            alignas(16) TDiskFormat diskFormat;
+            alignas(16) TDiskFormat diskFormat = {};
             diskFormat.SetEncryptFormat(Cfg->EnableFormatAndMetadataEncryption);
             cypher.Encrypt(&diskFormat, formatSector, sizeof(TDiskFormat));
 
@@ -621,6 +623,15 @@ NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupTyp
     } else {
         TOwner keeperOwner = (ownerGroupType == EOwnerGroupType::Dynamic ? OwnerSystem : OwnerCommonStaticLog);
         res = Keeper.GetSpaceStatusFlags(keeperOwner, &occupancy_);
+    }
+
+    if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+            res = SpaceColorToStatusFlag(static_cast<TColor::E>(forcedColor));
+        } else {
+            P_LOG(PRI_ERROR, BPD01, "ForcedPDiskSpaceColor has invalid value, ignoring", (ForcedPDiskSpaceColor, forcedColor));
+        }
     }
 
     if (occupancy) {
@@ -1672,8 +1683,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetAvailableSize(availableSize);
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
-        pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
-        pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
+        //pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
+        //pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
 
         i64 minSlotSize = Max<i64>();
@@ -1693,6 +1704,10 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         double pdiskUsage = Keeper.GetPDiskUsage();
         pDiskMetrics.SetPDiskUsage(pdiskUsage);
         pdiskState.SetPDiskUsage(pdiskUsage);
+
+        auto pdiskCapacityAlert = Keeper.GetPDiskCapacityAlert();
+        pDiskMetrics.SetPDiskCapacityAlert(pdiskCapacityAlert);
+        pdiskState.SetPDiskCapacityAlert(pdiskCapacityAlert);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -1788,7 +1803,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
         std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic) {
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
-    alignas(16) TDiskFormat format;
+    alignas(16) TDiskFormat format = {};
     format.Clear(Cfg->EnableFormatAndMetadataEncryption);
     format.SetPlainDataChunks(plainDataChunks);
     format.DiskSize = diskSizeBytes;
@@ -1972,9 +1987,6 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
         delete ptr;
     });
-    result->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(), +[](NPDisk::TPersistentBufferFormat* ptr) {
-        delete ptr;
-    });
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
     }
@@ -2146,9 +2158,6 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
     result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
         delete ptr;
     });
-    result->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(), +[](NPDisk::TPersistentBufferFormat* ptr) {
-        delete ptr;
-    });
     if (evYardInit.GetDiskFd) {
         result->DiskFd = BlockDevice->DuplicateFd();
 
@@ -2242,6 +2251,7 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
                 GetUsedChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 AtomicGet(TotalOwners),
                 GetNumActiveSlots(),
+                ExpectedSlotCount,
                 TString(),
                 GetStatusFlags(OwnerSystem, evCheckSpace.OwnerGroupType));
     result->NormalizedOccupancy = occupancy;
@@ -2803,6 +2813,12 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestConfigureScheduler: {
                 const auto& cfgReq = static_cast<TConfigureScheduler&>(*req);
                 SchedulerConfigure(cfgReq.SchedulerCfg, cfgReq.OwnerId);
+                Cfg->SchedulerCfg = cfgReq.SchedulerCfg;
+                if (cfgReq.Sender) {
+                    Mon.YardConfigureScheduler.CountResponse();
+                    PCtx->ActorSystem->Send(cfgReq.Sender,
+                        new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::OK, TString()));
+                }
                 break;
             }
             case ERequestType::RequestWhiteboartReport:
@@ -2967,6 +2983,9 @@ bool TPDisk::Initialize() {
             TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
             REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
             TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
+            if (Cfg->FeatureFlags.GetEnablePDiskSpaceColorOverride()) {
+                REGISTER_LOCAL_CONTROL(ForcedPDiskSpaceColor);
+            }
 
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -3495,7 +3514,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             if (errStatus != NKikimrProto::OK) {
                 P_LOG(PRI_ERROR, BPD01, err.Str());
                 THolder<NPDisk::TEvCheckSpaceResult> result(new NPDisk::TEvCheckSpaceResult(errStatus,
-                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, 0u, err.Str()));
+                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, 0u, 0, err.Str()));
                 PCtx->ActorSystem->Send(ev.Sender, result.Release());
                 Mon.CheckSpace.CountResponse();
                 delete request;

@@ -83,12 +83,12 @@ namespace NKikimr::NSqsTopic::V1 {
             if (auto check = ValidateQueueName(QueueName, false); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
-            if (auto cc = ParseConsumerAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create); !cc.has_value()) {
+            if (auto cc = ParseQueueAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create); !cc.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", cc.error())));
             } else {
-                ConsumerConfig = std::move(cc).value();
+                QueueAttributes = std::move(cc).value();
             }
-            if (auto check = ValidateLimits(ConsumerConfig); !check.has_value()) {
+            if (auto check = ValidateLimits(QueueAttributes); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", check.error())));
             }
             SendDescribeProposeRequest(ctx);
@@ -140,7 +140,7 @@ namespace NKikimr::NSqsTopic::V1 {
                                                                  << "' exists but is not a shared consumer"));
             }
 
-            auto comparison = CompareWithExistingQueueAttributes(pqConfig, *foundConsumer, ConsumerConfig);
+            auto comparison = CompareWithExistingQueueAttributes(pqConfig, *foundConsumer, QueueAttributes);
             if (!comparison.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::VALIDATION_ERROR,
                                                 TStringBuilder() << "Queue attributes mismatch: " << comparison.error()));
@@ -167,12 +167,13 @@ namespace NKikimr::NSqsTopic::V1 {
                     partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
                 }
 
-                topicRequest.mutable_retention_period()->set_seconds(ConsumerConfig.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD).Seconds());
+                topicRequest.mutable_retention_period()->set_seconds(QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD).Seconds());
                 topicRequest.set_partition_write_speed_bytes_per_second(1_MB);
                 topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
+                topicRequest.set_content_based_deduplication(QueueAttributes.ContentBasedDeduplication.GetOrElse(false));
 
                 auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
-                pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(ConsumerConfig.Consumer);
+                pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(QueueAttributes.Consumer);
                 TString error;
                 TYdbPqCodes codes = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicRequest, modifyScheme, AppData(ctx), error,
                                                                                     workingDir, proposal.Record.GetDatabaseName());
@@ -191,9 +192,14 @@ namespace NKikimr::NSqsTopic::V1 {
                 auto* pqDescr = modifyScheme.MutableAlterPersQueueGroup();
                 pqDescr->SetName(name);
                 pqDescr->MutablePQTabletConfig()->CopyFrom(PQGroup.GetPQTabletConfig());
-                pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(ConsumerConfig.Consumer);
+                pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(QueueAttributes.Consumer);
                 pqDescr->MutablePQTabletConfig()->ClearPartitionKeySchema();
                 pqDescr->ClearTotalGroupCount();
+
+                if (QueueAttributes.ContentBasedDeduplication.Defined()) {
+                    pqDescr->MutablePQTabletConfig()->SetContentBasedDeduplication(QueueAttributes.ContentBasedDeduplication.Get());
+                }
+
                 TString error;
                 Ydb::StatusIds::StatusCode code = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(topicRequest, *pqDescr, AppData(ctx), error, false);
                 if (code != Ydb::StatusIds::SUCCESS) {
@@ -253,7 +259,7 @@ namespace NKikimr::NSqsTopic::V1 {
     private:
         TString QueueName;
         TString ConsumerName;
-        TConsumerAttributes ConsumerConfig;
+        TQueueAttributes QueueAttributes;
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
         int RetryCount = 0;

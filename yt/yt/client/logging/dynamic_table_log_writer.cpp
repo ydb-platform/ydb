@@ -100,6 +100,9 @@ public:
         , DroppedEventsCounter_(Profiler_.Counter("/dropped_events"))
         , FlushedEventsCounter_(Profiler_.Counter("/flushed_events"))
         , FlushedBytesCounter_(Profiler_.Counter("/flushed_bytes"))
+    { }
+
+    void InitializeRefCounted()
     {
         FlushExecutor_->Start();
 

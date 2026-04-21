@@ -64,6 +64,9 @@ std::string GetRealPath(const std::string& path);
 //! Checks that given path is relative and points somewhere inside the root directory.
 bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path);
 
+//! Returns |true| if a given path is an absolute
+bool IsAbsolutePath(const std::string& path);
+
 //! Combines two strings into a path. Returns second path if it is absolute.
 std::string CombinePaths(const std::string& path1, const std::string& path2);
 
@@ -207,39 +210,6 @@ void SendfileChunkedCopy(
     const TFile& destination,
     i64 chunkSize);
 
-TFuture<void> ReadBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize);
-
-TFuture<void> WriteBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize,
-    int readSize);
-
-TFuture<void> ReadWriteCopyAsync(
-    const std::string& existingPath,
-    const std::string& newPath,
-    i64 chunkSize);
-
-TFuture<void> ReadWriteCopyAsync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize);
-
-void ReadWriteCopySync(
-    const std::string& existingPath,
-    const std::string& newPath,
-    i64 chunkSize);
-
-void ReadWriteCopySync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize);
-
 //! Copies file chunk after chunk via splice syscall,
 //! releasing thread between chunks.
 void Splice(
@@ -247,9 +217,15 @@ void Splice(
     const TFile& destination,
     i64 chunkSize);
 
+struct TSpliceResult
+{
+    i64 BytesSpliced;
+    TError Error;
+};
+
 //! Asynchronously copies data via splice syscall,
 //! releasing invoker thread when pipe is blocked.
-TFuture<void> SpliceAsync(
+TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
     bool pipeIsSrc,

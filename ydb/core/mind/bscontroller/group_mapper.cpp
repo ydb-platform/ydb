@@ -536,7 +536,8 @@ namespace NKikimr::NBsController {
                 const TPDiskInfo& pdisk,
                 const TTargetDiskConstraints& constraints
             ) {
-                return !constraints.NodeId.has_value() || constraints.NodeId.value() == pdisk.PDiskId.NodeId;
+                return (!constraints.NodeId.has_value() || constraints.NodeId.value() == pdisk.PDiskId.NodeId)
+                    && (!constraints.PDiskId.has_value() || constraints.PDiskId.value() == pdisk.PDiskId);
             }
 
             TAllocateResult AllocateWholeEntity(TAllocateDisk, TGroup& group, const TGroupConstraints& constraints, TUndoLog& undo, ui32 index, TDiskRange range,

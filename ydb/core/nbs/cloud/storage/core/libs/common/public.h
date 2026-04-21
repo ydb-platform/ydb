@@ -47,11 +47,6 @@ constexpr const char* FsId = "fsId";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui32 DefaultBlockSize = 4_KB;
-constexpr ui32 DefaultLocalSSDBlockSize = 512_B;
-
-////////////////////////////////////////////////////////////////////////////////
-
 struct TCallContextBase;
 using TCallContextBasePtr = TIntrusivePtr<TCallContextBase>;
 

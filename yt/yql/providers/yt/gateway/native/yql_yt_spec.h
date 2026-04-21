@@ -73,12 +73,6 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace NPrivate {
-    Y_HAS_MEMBER(SecureParams);
-    Y_HAS_MEMBER(AdditionalSecurityTags);
-    Y_HAS_MEMBER(LayersPaths);
-}
-
 template <class TOptions>
 inline void FillSpec(NYT::TNode& spec,
     const TExecContext<TOptions>& execCtx,

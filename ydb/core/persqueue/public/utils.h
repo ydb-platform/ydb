@@ -1,11 +1,14 @@
 #pragma once
 
-#include <deque>
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+
+namespace NKikimrPQ {
+    class TUpdateBalancerConfig;
+}
 
 namespace NKikimr::NPQ {
 
@@ -40,12 +43,13 @@ public:
         Node() = default;
         Node(Node&&) = default;
         Node(ui32 id, ui64 tabletId);
-        Node(ui32 id, ui64 tabletId, const TString& from, const TString& to);
+        Node(ui32 id, ui64 tabletId, const TString& from, const TString& to, TInstant creationTime);
 
         ui32 Id;
         ui64 TabletId;
         TString From;
         TString To;
+        TInstant CreationTime;
 
         // Direct parents of this node
         std::vector<Node*> DirectParents;
@@ -84,22 +88,6 @@ TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescrip
 
 TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
 TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config);
-
-class TLastCounter {
-    static constexpr size_t MaxValueCount = 2;
-
-public:
-    void Use(const TString& value, const TInstant& now);
-    size_t Count(const TInstant& expirationTime);
-    const TString& LastValue() const;
-
-private:
-    struct Data {
-        TInstant LastUseTime;
-        TString Value;
-    };
-    std::deque<Data> Values;
-};
 
 Y_PURE_FUNCTION bool PreciseReadFromTimestampBehaviourEnabled(const NKikimr::TAppData& appData);
 

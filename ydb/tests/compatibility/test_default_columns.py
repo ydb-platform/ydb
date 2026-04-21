@@ -19,10 +19,15 @@ class TestDefaultColumns(RestartToAnotherVersionFixture):
         if min(self.versions) < (25, 3):
             pytest.skip("Only available since 25-3")
 
+        feature_flags = {
+            "enable_add_colums_with_defaults": True,
+        }
+
+        if min(self.versions) >= (26, 1):
+            feature_flags["enable_set_drop_default_value"] = True
+
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_add_colums_with_defaults": True,
-            }
+            extra_feature_flags=feature_flags
         )
 
     # First way: create table with default columns
@@ -57,6 +62,87 @@ class TestDefaultColumns(RestartToAnotherVersionFixture):
         self.fill_table()
 
         self.add_columns()
+        self.check_table(with_columns=True)
+
+    # Third way: add columns without default, then set default via ALTER COLUMN SET DEFAULT
+    def test_set_default(self):
+        if min(self.versions) < (26, 1):
+            pytest.skip("SET DEFAULT is supported since 26-1")
+
+        self.create_table(with_columns=False)
+        self.add_nullable_columns_no_default()
+
+        self.fill_table()
+        self.check_columns_are_null()
+
+        self.set_default_columns()
+
+        self.clear_table()
+        self.fill_table()
+        self.check_table(with_columns=True)
+
+        self.change_cluster_version()
+
+        self.clear_table()
+        self.fill_table()
+        self.check_table(with_columns=True)
+
+        self.drop_default_columns()
+        self.clear_table()
+        self.fill_table()
+        self.check_columns_are_null()
+
+    # Fourth way (nullable): add columns with default, then drop default via ALTER COLUMN DROP DEFAULT
+    # Without explicit write to nullable column → NULL is substituted
+    def test_drop_default_nullable(self):
+        if min(self.versions) < (26, 1):
+            pytest.skip("DROP DEFAULT is supported since 26-1")
+
+        self.create_table(with_columns=False)
+        self.add_nullable_columns_with_defaults()
+
+        self.fill_table()
+        self.check_table(with_columns=True)
+
+        self.drop_default_columns()
+
+        self.clear_table()
+        self.fill_table()
+        self.check_columns_are_null()
+
+        self.change_cluster_version()
+
+        self.clear_table()
+        self.fill_table()
+        self.check_columns_are_null()
+
+        self.set_default_columns()
+        self.clear_table()
+        self.fill_table()
+        self.check_table(with_columns=True)
+
+    # Fifth way (not null): add NOT NULL columns with default, then drop default via ALTER COLUMN DROP DEFAULT
+    def test_drop_default_not_null(self):
+        if min(self.versions) < (26, 1):
+            pytest.skip("DROP DEFAULT is supported since 26-1")
+
+        self.create_table(with_columns=False)
+        self.add_columns()
+
+        self.fill_table()
+        self.check_table(with_columns=True)
+
+        self.drop_default_columns()
+
+        self.clear_table()
+        self.check_fill_table_fails()
+
+        self.change_cluster_version()
+
+        self.check_fill_table_fails()
+
+        self.set_default_columns()
+        self.fill_table()
         self.check_table(with_columns=True)
 
     def assert_type(self, data_type: str, values: int, values_from_rows):
@@ -152,4 +238,84 @@ class TestDefaultColumns(RestartToAnotherVersionFixture):
             queries.append(query)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in queries:
+                session_pool.execute_with_retries(query)
+
+    def add_nullable_columns_no_default(self):
+        queries = []
+        for name in self.all_types.keys():
+            query = f"""
+                ALTER TABLE `{self.table_name}`
+                ADD COLUMN V_{cleanup_type_name(name)} {name};
+            """
+            queries.append(query)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query in queries:
+                session_pool.execute_with_retries(query)
+
+    def add_nullable_columns_with_defaults(self):
+        queries = []
+        for i, name in enumerate(self.all_types.keys()):
+            query = f"""
+                ALTER TABLE `{self.table_name}`
+                ADD COLUMN V_{cleanup_type_name(name)} {name} DEFAULT {type_to_literal_lambda[name](i)};
+            """
+            queries.append(query)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query in queries:
+                session_pool.execute_with_retries(query)
+
+    def set_default_columns(self):
+        queries = []
+        for i, name in enumerate(self.all_types.keys()):
+            query = f"""
+                ALTER TABLE `{self.table_name}`
+                ALTER COLUMN V_{cleanup_type_name(name)} SET DEFAULT {type_to_literal_lambda[name](i)};
+            """
+            queries.append(query)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query in queries:
+                session_pool.execute_with_retries(query)
+
+    def drop_default_columns(self):
+        queries = []
+        for name in self.all_types.keys():
+            query = f"""
+                ALTER TABLE `{self.table_name}`
+                ALTER COLUMN V_{cleanup_type_name(name)} DROP DEFAULT;
+            """
+            queries.append(query)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query in queries:
+                session_pool.execute_with_retries(query)
+
+    def clear_table(self):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(f"DELETE FROM `{self.table_name}`")
+
+    def check_columns_are_null(self):
+        last_partition_num = 2 ** 64 - self.rows_per_partition - 1
+        projection = ", ".join([f"V_{cleanup_type_name(name)}" for name in self.all_types.keys()])
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for partition_num in range(0, last_partition_num, last_partition_num // (self.partitions_count - 1)):
+                for i in range(self.rows_per_partition):
+                    query = f"""
+                        SELECT {projection} FROM `{self.table_name}` WHERE K1 = {partition_num + i};
+                    """
+                    result_sets = session_pool.execute_with_retries(query)
+                    rows = []
+                    for result_set in result_sets:
+                        rows.extend(result_set.rows)
+                    assert len(rows) == 1
+                    for name in self.all_types.keys():
+                        col_name = f"V_{cleanup_type_name(name)}"
+                        assert rows[0][col_name] is None, \
+                            f"Column {col_name} should be NULL but got {rows[0][col_name]}"
+
+    def check_fill_table_fails(self):
+        query = f"""
+            UPSERT INTO `{self.table_name}` (K1) VALUES (0);
+        """
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            with pytest.raises(Exception):
                 session_pool.execute_with_retries(query)

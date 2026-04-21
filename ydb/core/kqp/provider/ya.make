@@ -34,6 +34,7 @@ PEERDIR(
     ydb/library/aclib/protos
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
+    ydb/core/kqp/opt/cbo
     yql/essentials/core/services
     yql/essentials/minikql
     yql/essentials/public/decimal
@@ -105,6 +106,7 @@ ELSE()
 ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(yql_kikimr_provider.h)
+GENERATE_ENUM_SERIALIZATION(yql_kikimr_gateway.h)
 
 END()
 

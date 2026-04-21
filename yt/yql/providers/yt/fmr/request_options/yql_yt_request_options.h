@@ -7,10 +7,9 @@
 #include <util/string/builder.h>
 #include <vector>
 
-#include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/distributed_session.h>
 #include <yt/yql/providers/yt/fmr/tvm/interface/yql_yt_fmr_tvm_interface.h>
-#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
 namespace NYql::NFmr {
 
@@ -67,7 +66,8 @@ enum class EFmrErrorReason {
     RestartOperation,
     RestartQuery,
     FallbackOperation,
-    UdfTerminate
+    UdfTerminate,
+    WorkerOOM
 };
 
 struct TFmrError {
@@ -91,12 +91,6 @@ public:
 };
 
 EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
-
-struct TSortingColumns {
-    std::vector<TString> Columns;
-    std::vector<ESortOrder> SortOrders;
-    bool operator==(const TSortingColumns&) const = default;
-};
 
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;
@@ -335,6 +329,23 @@ struct TYtWriterSettings {
 struct TStartDistributedWriteOptions {
     TDuration Timeout = TDuration::Minutes(5);
     TDuration PingInterval = TDuration::Seconds(1);
+    ui64 RetriesBeforeThrow = 5;
+    static TStartDistributedWriteOptions FromSpec(const TMaybe<NYT::TNode>& fmrOperationSpec) {
+        TStartDistributedWriteOptions options;
+        if (fmrOperationSpec.Defined() && fmrOperationSpec->IsMap() && fmrOperationSpec->HasKey("distributed_write_session")) {
+            auto& node = (*fmrOperationSpec)["distributed_write_session"];
+            if (node.HasKey("timeout_sec")) {
+                options.Timeout = TDuration::Seconds(node["timeout_sec"].AsInt64());
+            }
+            if (node.HasKey("ping_interval_sec")) {
+                options.PingInterval = TDuration::Seconds(node["ping_interval_sec"].AsInt64());
+            }
+            if (node.HasKey("retries_before_throw")) {
+                options.RetriesBeforeThrow = node["retries_before_throw"].AsInt64();
+            }
+        }
+        return options;
+    }
 };
 
 struct TUploadOperationParams {
@@ -363,6 +374,7 @@ struct TSortedUploadTaskParams {
     TYtTableRef Output;
     TString CookieYson;
     ui64 Order;
+    TSortingColumns SortingColumns;
 };
 
 struct TDownloadOperationParams {

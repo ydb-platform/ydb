@@ -51,6 +51,7 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -96,6 +97,13 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             Runtime.SendToPipe(PipeActor, sender, payload, nodeIndex, cookie);
         }
 
+        auto GetOpenTxs(const TTableId& tableId) {
+            TActorId sender = Runtime.AllocateEdgeActor(GetNodeIndex());
+            Runtime.SendToPipe(PipeActor, sender, new TEvDataShard::TEvGetOpenTxs(tableId.PathId));
+            auto ev = Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            return std::move(ev->Get()->OpenTxs);
+        }
+
     private:
         TTestActorRuntime& Runtime;
         const ui64 TabletId;
@@ -105,21 +113,26 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
 
     class TKeysBuilder {
     public:
-        TKeysBuilder() = default;
+        TKeysBuilder(uint32_t cols = 1): Cols(cols)
+        { }
 
         TKeysBuilder&& Add(i32 key) && {
             Cells.push_back(TCell::Make(key));
-            ++Rows;
+            return std::move(*this);
+        }
+
+        TKeysBuilder&& AddNull() && {
+            Cells.emplace_back();
             return std::move(*this);
         }
 
         TSerializedCellMatrix Build() && {
-            return TSerializedCellMatrix(TSerializedCellMatrix::Serialize(Cells, Rows, 1));
+            return TSerializedCellMatrix(TSerializedCellMatrix::Serialize(Cells, Cells.size()/Cols, Cols));
         }
 
     private:
         TVector<TCell> Cells;
-        size_t Rows = 0;
+        const size_t Cols;
     };
 
     class TLockRowsHelper {
@@ -132,12 +145,12 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
 
         using TRequestModifyCallback = std::function<void(NEvents::TDataEvents::TEvLockRows*)>;
 
-        ui64 SendRequest(const TLockHandle& lock, const TTableId& tableId, TSerializedCellMatrix keys, TRequestModifyCallback callback = {}) {
+        ui64 SendRequest(const TLockHandle& lock, NKikimrDataEvents::ELockMode lockMode, const TTableId& tableId, TSerializedCellMatrix keys, const TRequestModifyCallback& callback = {}) {
             ui64 requestId = NextRequestId++;
             auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(requestId);
             req->Record.SetLockId(lock.GetLockId());
             req->Record.SetLockNodeId(lock.GetLockNodeId());
-            req->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            req->Record.SetLockMode(lockMode);
             req->SetTableId(tableId);
             req->Record.AddColumnIds(1);
             req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
@@ -147,6 +160,10 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             }
             Pipe.Send(Sender, req.release());
             return requestId;
+        }
+
+        ui64 SendRequest(const TLockHandle& lock, const TTableId& tableId, TSerializedCellMatrix keys, const TRequestModifyCallback& callback = {}) {
+            return SendRequest(lock, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE, tableId, keys, callback);
         }
 
         void SendCancel(ui64 requestId) {
@@ -183,20 +200,25 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
 
     class TWaitGraphInterceptor : public THashMap<TRequestId, TWaitGraphEdge> {
     public:
-        TWaitGraphInterceptor(TTestActorRuntime& runtime)
+        TWaitGraphInterceptor(TTestActorRuntime& runtime, bool suppressEvents = true)
             : Runtime(runtime)
             , AddObserver(Runtime.AddObserver<TEvLongTxService::TEvWaitingLockAdd>(
-                [this](auto& ev) {
+                [this, suppressEvents](auto& ev) {
                     auto* msg = ev->Get();
                     (*this)[TRequestId{ ev->Sender, msg->RequestId }] = TWaitGraphEdge{ msg->Lock.LockId, msg->OtherLock.LockId };
-                    // Prevent long tx service from processing this event
-                    ev.Reset();
+                    if (suppressEvents) {
+                        // Prevent long tx service from processing this event
+                        ev.Reset();
+                    }
                 }))
             , RemoveObserver(Runtime.AddObserver<TEvLongTxService::TEvWaitingLockRemove>(
-                [this](auto& ev) {
+                [this, suppressEvents](auto& ev) {
                     auto* msg = ev->Get();
                     (*this).erase(TRequestId{ ev->Sender, msg->RequestId });
-                    // Prevent long tx service from processing this event
+                    if (suppressEvents) {
+                        // Prevent long tx service from processing this event
+                        ev.Reset();
+                    }
                 }))
         {}
 
@@ -1085,6 +1107,736 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             *req->Record.MutableExistingLocks() = res1->Record.GetLocks();
         });
         lockRows.ExpectResult(req7, NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+    }
+
+    Y_UNIT_TEST(SharedLockThenUpgradeToExclusive) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Lock key 1 by lock 1 in shared mode
+        auto req1 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Lock key 1 by lock 1 in exclusive mode
+        auto req2 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req2);
+    }
+
+    Y_UNIT_TEST(MultipleSharedLocksThenUpgradeToExclusive) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockHandle lock3(345, runtime.GetActorSystem(0));
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Lock key 1 by lock 1 in shared mode
+        auto req1 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Lock key 1 by lock 2 in shared mode
+        auto req2 = lockRows.SendRequest(lock2, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req2);
+
+        // Lock key 1 by lock 3 in shared mode
+        auto req3 = lockRows.SendRequest(lock3, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req3);
+
+        // Lock key 1 by lock 1 in exclusive mode
+        auto req4 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "123 -> 345\n");
+
+        // Remove lock 3, req4 should switch to waiting for lock 2
+        lock3.Reset();
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "123 -> 234\n");
+
+        // Remove lock 2, req4 should succeed and upgrade shared lock to exclusive
+        lock2.Reset();
+        lockRows.ExpectResult(req4);
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "");
+    }
+
+    Y_UNIT_TEST(MultipleLockModes) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockHandle lock3(345, runtime.GetActorSystem(0));
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Lock key 1 by lock 1 in key shared mode
+        auto req1 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_SHARED_KEY, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Lock key 1 by lock 2 in no key exclusive mode
+        auto req2 = lockRows.SendRequest(lock2, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE_NO_KEY, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req2);
+
+        // Lock key 1 by lock 3 in exclusive mode
+        auto req3 = lockRows.SendRequest(lock3, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "345 -> 234\n");
+
+        // Remove lock 2, req3 should switch to waiting for lock 1
+        lock2.Reset();
+        lockRows.ExpectNoResult();
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "345 -> 123\n");
+
+        // Remove lock 1, req3 should successfully lock key 1
+        lock1.Reset();
+        lockRows.ExpectResult(req3);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "");
+    }
+
+    Y_UNIT_TEST(DistributedDeadlock) {
+        TPortManager pm;
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(4);
+        auto [runtime, server, sender] = TestCreateServer(pm, serverSettings);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        THashSet<ui32> shardNodeIds;
+        for (ui64 shard : shards) {
+            ui32 nodeId = ResolveTablet(runtime, shard).NodeId();
+            Cerr << "shard: " << shard << " nodeId: " << nodeId << Endl;
+            shardNodeIds.insert(nodeId);
+        }
+
+        TTestPipe pipe1(runtime, shards.at(0));
+        TLockRowsHelper lockRows1(runtime, pipe1);
+        TTestPipe pipe2(runtime, shards.at(1));
+        TLockRowsHelper lockRows2(runtime, pipe2);
+
+        // Choose lock nodes that are distinct from nodes with table shards.
+        TVector<size_t> lockNodeIdxs;
+        for (size_t i = 0; i < runtime.GetNodeCount(); ++i) {
+            if (!shardNodeIds.contains(runtime.GetNodeId(i))) {
+                lockNodeIdxs.push_back(i);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lockNodeIdxs.size(), 2u);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(lockNodeIdxs[0]));
+        TLockHandle lock2(234, runtime.GetActorSystem(lockNodeIdxs[1]));
+
+        TWaitGraphInterceptor waitGraph(runtime, /*suppressEvents=*/false);
+
+        // Lock key 1 by lock 1
+        auto req1 = lockRows1.SendRequest(lock1, tableId, TKeysBuilder().Add(1).Build());
+        lockRows1.ExpectResult(req1);
+
+        // Lock key 11 by lock 2
+        auto req2 = lockRows2.SendRequest(lock2, tableId, TKeysBuilder().Add(11).Build());
+        lockRows2.ExpectResult(req2);
+
+        // Try locking key 1 by lock 2
+        auto req3 = lockRows1.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        lockRows1.ExpectNoResult();
+
+        // Try locking key 11 by lock 1
+        auto req4 = lockRows2.SendRequest(lock1, tableId, TKeysBuilder().Add(11).Build());
+        lockRows2.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "123 -> 234\n"
+            "234 -> 123\n");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
+            // Check that the wait cycle is instantiated in the LongTxService on all nodes.
+            ui32 nodeId = runtime.GetNodeId(nodeIdx);
+            auto sender = runtime.AllocateEdgeActor(nodeIdx);
+            runtime.Send(
+                MakeLongTxServiceID(nodeId), sender,
+                new TEvLongTxService::TEvGetLockWaitGraph, nodeIdx, true);
+            auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvGetLockWaitGraphResult>(sender);
+
+            TVector<std::pair<ui64, ui64>> edges;
+            for (const auto& edge : result->Get()->WaitEdges) {
+                edges.emplace_back(edge.Awaiter.LockId, edge.Blocker.LockId);
+            }
+            std::sort(edges.begin(), edges.end());
+            TStringBuilder wgStr;
+            for (auto& [a, b] : edges) {
+                wgStr << a << " -> " << b << "\n";
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                wgStr,
+                "123 -> 234\n"
+                "234 -> 123\n",
+                "with nodeIdx: " << nodeIdx);
+        }
+
+        // break the wait by aborting the request belonging to the youngest lock
+        // TODO: LongTxService should detect the cycle and break it itself.
+        waitGraph.SendDeadlock(234, 123);
+
+        // The third operation should reply with the STATUS_DEADLOCK
+        lockRows1.ExpectResult(req3, NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK);
+
+        // Perhaps unexpectedly row 11 is still locked until the lock is broken or removed
+        lockRows2.ExpectNoResult();
+
+        // Reset the second lock (it will notify the long tx service and rollback datashard changes)
+        lock2.Reset();
+
+        // Finally req4 should succeed
+        lockRows2.ExpectResult(req4);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "");
+    }
+
+    Y_UNIT_TEST(MultipleSharedLocksCleanupBottomUp) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockHandle lock3(345, runtime.GetActorSystem(0));
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Lock key 1 by lock 1 in shared mode
+        auto req1 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 1u);
+
+        // Lock key 1 by lock 2 in shared mode
+        auto req2 = lockRows.SendRequest(lock2, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req2);
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 2u);
+
+        // Lock key 1 by lock 3 in shared mode
+        auto req3 = lockRows.SendRequest(lock3, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req3);
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 3u);
+
+        // Removing lock 1 should rollback its changes, making MultiTxId for locks [1..2] redundant which is also removed
+        lock1.Reset();
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 1u);
+
+        // Removing lock 2 should cause MultiTxId for locks [2..3] to become an alias for lock 3
+        lock2.Reset();
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 1u);
+
+        // Removing lock 3 should cause the last MultiTxId cleanup, leaving none
+        lock3.Reset();
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 0u);
+    }
+
+    Y_UNIT_TEST(MultipleSharedLocksCleanupTopDown) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockHandle lock3(345, runtime.GetActorSystem(0));
+        TLockHandle lock4(456, runtime.GetActorSystem(0));
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Lock key 1 by lock 1 in shared mode
+        auto req1 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 1u);
+
+        // Lock key 1 by lock 2 in shared mode
+        auto req2 = lockRows.SendRequest(lock2, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req2);
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 2u);
+
+        // Lock key 1 by lock 3 in shared mode
+        auto req3 = lockRows.SendRequest(lock3, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req3);
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 3u);
+
+        // Lock key 1 by lock 4 in shared mode
+        auto req4 = lockRows.SendRequest(lock4, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Build());
+        lockRows.ExpectResult(req4);
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 4u);
+
+        // Removing lock 4 shouldn't change anything, because MultiTxId for locks [1..4] has non-zero locked rows
+        lock4.Reset();
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 4u);
+
+        // Removing lock 3 should cleanup MultiTxId for locks [1..3] and relink MultiTxId [1..4] to [1..2]
+        lock3.Reset();
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 3u);
+
+        // Removing lock 2 makes MultiTxId [1..2] to be a redundant alias for lock 1, which is removed
+        lock2.Reset();
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 2u);
+
+        // Finally removing lock 1 will cause a lock 1 rollback and removal of corresponding MultiTxId
+        lock1.Reset();
+        lockRows.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 0u);
+    }
+
+    Y_UNIT_TEST(MultipleSharedLocksLayers) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockHandle lock3(345, runtime.GetActorSystem(0));
+        TLockHandle lock4(456, runtime.GetActorSystem(0));
+
+        TWaitGraphInterceptor waitGraph(runtime);
+
+        // Lock keys 1..4 by lock 1 in shared mode
+        auto req1 = lockRows.SendRequest(lock1, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(1).Add(2).Add(3).Add(4).Build());
+        lockRows.ExpectResult(req1);
+
+        // Uncommitted:
+        // * lock 1
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 1u);
+
+        // Lock keys 2..5 by lock 2 in shared mode
+        auto req2 = lockRows.SendRequest(lock2, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(2).Add(3).Add(4).Add(5).Build());
+        lockRows.ExpectResult(req2);
+
+        // Uncommitted:
+        // * lock 1
+        // * lock 2
+        // * multi[1, 2]
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 3u);
+
+        // Lock keys 3..6 by lock 3 in shared mode
+        auto req3 = lockRows.SendRequest(lock3, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(3).Add(4).Add(5).Add(6).Build());
+        lockRows.ExpectResult(req3);
+
+        // Uncommitted:
+        // * lock 1
+        // * lock 2
+        // * lock 3
+        // * multi[1, 2]
+        // * multi[multi[1, 2], 3]
+        // * multi[2, 3]
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 6u);
+
+        // Lock keys 4..7 by lock 4 in shared mode
+        auto req4 = lockRows.SendRequest(lock4, NKikimrDataEvents::PESSIMISTIC_SHARED, tableId, TKeysBuilder().Add(4).Add(5).Add(6).Add(7).Build());
+        lockRows.ExpectResult(req4);
+
+        // Uncommitted:
+        // * lock 1
+        // * lock 2
+        // * lock 3
+        // * lock 4
+        // * multi[1, 2]
+        // * multi[multi[1, 2], 3]
+        // * multi[multi[multi[1, 2], 3], 4]
+        // * multi[2, 3] (LockedRowsCount == 0)
+        // * multi[multi[2, 3], 4]
+        // * multi[3, 4]
+        // Rows and corresponding locks:
+        // * key1: lock 1
+        // * key2: multi[1..2]
+        // * key3: multi[1..3]
+        // * key4: multi[1..4]
+        // * key5: multi[2..4]
+        // * key6: multi[3..4]
+        // * key7: lock 4
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 10u);
+
+        // Removing lock 1 will not remove any MultiTxIds, because all of them are used by at least 1 row
+        lock1.Reset();
+        lockRows.ExpectNoResult();
+
+        // Uncommitted:
+        // * lock 2
+        // * lock 3
+        // * lock 4
+        // * multi[2]
+        // * multi[multi[2], 3]
+        // * multi[multi[multi[2], 3], 4]
+        // * multi[2, 3] (LockedRowsCount == 0)
+        // * multi[multi[2, 3], 4]
+        // * multi[3, 4]
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 9u);
+
+        // Removing lock 2 will also remove MultiTxId which used to combine lock 1 and 2 and collapse multi[2, 3]
+        lock2.Reset();
+        lockRows.ExpectNoResult();
+
+        // Uncommitted:
+        // * lock 3
+        // * lock 4
+        // * multi[3]
+        // * multi[multi[3], 4]
+        // * multi[3, 4]
+        // * multi[3, 4]
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 6u);
+
+        // Removing lock 3 will also remove MultiTxIds which only had lock 3 left
+        lock3.Reset();
+        lockRows.ExpectNoResult();
+
+        // Uncommitted:
+        // * lock 4
+        // * multi[4]
+        // * multi[4]
+        // * multi[4]
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 4u);
+
+        // Removing lock 4 will cleanup all remaining locks
+        lock4.Reset();
+        lockRows.ExpectNoResult();
+
+        // Uncommitted: none left
+        UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 0u);
+    }
+
+    Y_UNIT_TEST_TWIN(UniqueIndexBasic, OnAdd) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(1)
+            .SetUseRealThreads(false);
+        serverSettings.FeatureFlags.SetEnableAddUniqueIndex(true);
+        serverSettings.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
+        auto [runtime, server, sender] = TestCreateServer(pm, serverSettings);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        if (OnAdd) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSchemeExec(runtime, R"(
+                    CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk));
+                )"),
+                "SUCCESS");
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSchemeExec(runtime, R"(
+                    ALTER TABLE `/Root/table` ADD INDEX idx GLOBAL UNIQUE ON (uniq);
+                )", "/Root"),
+                "SUCCESS");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSchemeExec(runtime, R"(
+                    CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+                )"),
+                "SUCCESS");
+        }
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Unique indexes should have UniqueIndexKeySize = number of unique key columns
+
+        // Lock (1, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Try locking (1, 2) by lock 2 - should conflict
+        auto req2 = sendRequestWithUniq(lock2, TKeysBuilder(2).Add(1).Add(2).Build());
+        lockRows.ExpectNoResult();
+
+        // Try locking (1, 2) by lock 1 - should be OK, the same lock is already taken
+        auto req3 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req3);
+
+        // Try waiting for lock 2 some more
+        lockRows.ExpectNoResult();
+
+        // Destroy lock 1 handle, it must rollback all changes
+        lock1.Reset();
+
+        // Try waiting for lock 2 result now
+        lockRows.ExpectResult(req2);
+    }
+
+    Y_UNIT_TEST(UniqueIndexNulls) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Lock (null, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).AddNull().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Try locking (null, 2) by lock 2 - should not conflict
+        auto req2 = sendRequestWithUniq(lock2, TKeysBuilder(2).AddNull().Add(2).Build());
+        lockRows.ExpectResult(req2);
+    }
+
+    Y_UNIT_TEST(UniqueIndexOverUncommittedThenCommit) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Write an uncommitted row (1, 101)
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (uniq, pk) VALUES (1, 101);
+                SELECT uniq, pk FROM `/Root/table` WHERE uniq = 1;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 101 } }");
+
+        // Lock (1, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Commit the previous transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
+
+        // Lock (2, 1) by lock 1 (lock must be broken now)
+        auto req2 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(2).Add(1).Build());
+        lockRows.ExpectResult(req2, NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+    }
+
+    Y_UNIT_TEST(UniqueIndexUncommittedOverLock) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Lock (1, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Write an uncommitted row (1, 101)
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (uniq, pk) VALUES (1, 101);
+                SELECT uniq, pk FROM `/Root/table` WHERE uniq = 1;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 101 } }");
+
+        // Lock (2, 1) by lock 1 (lock not broken yet)
+        auto req2 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(2).Add(1).Build());
+        lockRows.ExpectResult(req2);
+
+        // Commit the previous transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
+
+        // Lock (3, 1) by lock 1 (lock must be broken now)
+        auto req3 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(3).Add(1).Build());
+        lockRows.ExpectResult(req3, NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)

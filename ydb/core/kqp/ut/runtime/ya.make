@@ -2,12 +2,8 @@ UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
 
 SRCS(
     kqp_hash_shuffle_ut.cpp

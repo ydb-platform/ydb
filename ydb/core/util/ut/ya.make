@@ -1,13 +1,8 @@
 UNITTEST_FOR(ydb/core/util)
 
 FORK_SUBTESTS()
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(30)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:4)
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt

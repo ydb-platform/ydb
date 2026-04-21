@@ -535,6 +535,59 @@ class TestTypedDict:
         ):
             check_type({"x": 1, "y": 6, "z": "foo"}, DummyDict)
 
+    def test_required_pass(self, typing_provider):
+        try:
+            Required = typing_provider.Required
+        except AttributeError:
+            pytest.skip(f"'Required' not found in {typing_provider.__name__!r}")
+
+        class DummyDict(typing_provider.TypedDict, total=False):
+            x1: Required[int]
+            x2: "Required[int]"
+            y: int
+
+        check_type({"x1": 1, "x2": 2}, DummyDict)
+        check_type({"x1": 1, "x2": 2, "y": 3}, DummyDict)
+
+    def test_required_missing(self, typing_provider):
+        try:
+            Required = typing_provider.Required
+        except AttributeError:
+            pytest.skip(f"'Required' not found in {typing_provider.__name__!r}")
+
+        class DummyDict(typing_provider.TypedDict, total=False):
+            x1: Required[int]
+            x2: "Required[int]"
+            y: int
+
+        with pytest.raises(TypeCheckError, match=r'is missing required key\(s\): "x1"'):
+            check_type({"x2": 2, "y": 3}, DummyDict)
+
+        with pytest.raises(TypeCheckError, match=r'is missing required key\(s\): "x2"'):
+            check_type({"x1": 1, "y": 3}, DummyDict)
+
+    def test_required_wrong_type(self, typing_provider):
+        try:
+            Required = typing_provider.Required
+        except AttributeError:
+            pytest.skip(f"'Required' not found in {typing_provider.__name__!r}")
+
+        class DummyDict(typing_provider.TypedDict, total=False):
+            x1: Required[int]
+            x2: "Required[int]"
+            y: int
+
+        # Ensure inner type is validated correctly (regression test for #533)
+        with pytest.raises(
+            TypeCheckError, match=r"value of key 'x1' of dict is not an instance of int"
+        ):
+            check_type({"x1": "foo", "x2": 2, "y": 3}, DummyDict)
+
+        with pytest.raises(
+            TypeCheckError, match=r"value of key 'x2' of dict is not an instance of int"
+        ):
+            check_type({"x1": 1, "x2": "foo", "y": 3}, DummyDict)
+
     def test_is_typeddict(self, typing_provider):
         # Ensure both typing.TypedDict and typing_extensions.TypedDict are recognized
         class DummyDict(typing_provider.TypedDict):
@@ -542,6 +595,57 @@ class TestTypedDict:
 
         assert is_typeddict(DummyDict)
         assert not is_typeddict(dict)
+
+    def test_typed_dict_with_forward_ref_from_external_module(self):
+        """Regression test for #536: forward ref NameError in Python 3.14."""
+        import tests.dummymodule
+
+        # Only import the TypedDict, NOT ModuleLocalClass - this tests that forward
+        # references resolve using the type's module namespace, not the caller's
+        TypedDictWithForwardRef = tests.dummymodule.TypedDictWithForwardRef
+
+        # Should not raise NameError for forward ref to ModuleLocalClass
+        check_type({"x": tests.dummymodule.ModuleLocalClass()}, TypedDictWithForwardRef)
+
+        # Should still enforce types correctly
+        with pytest.raises(
+            TypeCheckError, match=r"is not an instance of .*ModuleLocalClass"
+        ):
+            check_type({"x": "not a ModuleLocalClass"}, TypedDictWithForwardRef)
+
+    def test_extra_items_positive(self, typing_provider):
+        try:
+
+            class DummyDict(typing_provider.TypedDict, extra_items=Union[str, int]):
+                x: int
+        except TypeError as exc:
+            if "unexpected keyword argument 'extra_items'" in str(exc):
+                pytest.skip(
+                    f"typing provider {typing_provider!r} does not support extra_items in TypedDict"
+                )
+            else:
+                raise
+
+        check_type({"x": 6, "y": 7, "z": "foo"}, DummyDict)
+
+    def test_extra_items_bad_type(self, typing_provider):
+        try:
+
+            class DummyDict(typing_provider.TypedDict, extra_items=Union[str, int]):
+                x: int
+        except TypeError as exc:
+            if "unexpected keyword argument 'extra_items'" in str(exc):
+                pytest.skip(
+                    f"typing provider {typing_provider!r} does not support extra_items in TypedDict"
+                )
+            else:
+                raise
+
+        with pytest.raises(
+            TypeCheckError,
+            match=r"value of key 'z' of dict did not match any element in the union",
+        ):
+            check_type({"x": 6, "y": 7, "z": None}, DummyDict)
 
 
 class TestList:
@@ -1403,6 +1507,40 @@ class TestProtocol:
         # Foo.attr is incompatible but timedelta has not inspectable signature so the
         # check is skipped
         check_type(Foo(), MyProtocol)
+
+    def test_inherited_classmethod(self) -> None:
+        class MyProtocol(Protocol):
+            @classmethod
+            def class_meth(cls) -> None:
+                pass
+
+        class Base:
+            @classmethod
+            def class_meth(cls) -> None:
+                pass
+
+        class Sub(Base):
+            pass
+
+        check_type(Sub(), MyProtocol)
+        check_type(Sub, type[MyProtocol])
+
+    def test_inherited_staticmethod(self) -> None:
+        class MyProtocol(Protocol):
+            @staticmethod
+            def static_meth() -> None:
+                pass
+
+        class Base:
+            @staticmethod
+            def static_meth() -> None:
+                pass
+
+        class Sub(Base):
+            pass
+
+        check_type(Sub(), MyProtocol)
+        check_type(Sub, type[MyProtocol])
 
 
 class TestRecursiveType:

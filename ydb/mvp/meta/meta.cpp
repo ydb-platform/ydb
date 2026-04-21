@@ -5,16 +5,21 @@
 #include "meta_cp_databases.h"
 #include "meta_cp_databases_verbose.h"
 #include "meta_cloud.h"
+#include "meta_capabilities.h"
+#include "meta_support_links.h"
 #include "meta_cache.h"
-#include <util/system/hostname.h>
+
 #include <ydb/mvp/core/http_check.h>
 #include <ydb/mvp/core/http_sensors.h>
 #include <ydb/mvp/core/mvp_swagger.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/cache_policy.h>
+
 #include <ydb/library/actors/http/http_static.h>
 #include <ydb/library/actors/http/http_cache.h>
+
+#include <util/system/hostname.h>
 
 #define MLOG_D(stream) LOG_DEBUG_S((NMVP::InstanceMVP->ActorSystem), EService::MVP, stream)
 
@@ -152,13 +157,23 @@ TString TMVP::GetMetaDatabaseAuthToken(const TRequest& request) {
 }
 
 NYdb::NTable::TClientSettings TMVP::GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
-    NYdb::NTable::TClientSettings clientSettings;
-    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
-    clientSettings.Database(location.RootDomain);
+    NYdb::NTable::TClientSettings clientSettings = GetStrictMetaDatabaseClientSettings(request, location);
     if (TString database = location.GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return clientSettings;
+}
+
+NYdb::NTable::TClientSettings TMVP::GetStrictMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
+    NYdb::NTable::TClientSettings clientSettings;
+    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
+    clientSettings.Database(location.RootDomain);
+    return clientSettings;
+}
+
+void TMVP::RegisterMetaHandler(const NActors::TActorId& proxyId, const TString& path, NActors::TActorId handlerId, ui32 version) {
+    MetaCapabilities->AddCapability(path, version);
+    ActorSystem.Send(proxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(path, handlerId));
 }
 
 void TMVP::InitMeta() {
@@ -174,76 +189,87 @@ void TMVP::InitMeta() {
         httpIncomingProxyId = ActorSystem.Register(NMeta::CreateHttpMetaCache(httpIncomingProxyId, GetIncomingMetaCachePolicy, GetCacheOwnership));
     }
 
-    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/meta/db_clusters",
-                         ActorSystem.Register(new NMVP::THandlerActorMetaDbClusters(MetaLocation))
-                         )
-                     );
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/meta/db_clusters",
+        ActorSystem.Register(new NMVP::THandlerActorMetaDbClusters(MetaLocation))
+    );
 
-    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/meta/clusters",
-                         ActorSystem.Register(new NMVP::THandlerActorMetaClusters(HttpProxyId, MetaLocation))
-                         )
-                     );
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/meta/clusters",
+        ActorSystem.Register(new NMVP::THandlerActorMetaClusters(HttpProxyId, MetaLocation))
+    );
 
-    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/meta/cluster",
-                         ActorSystem.Register(new NMVP::THandlerActorMetaCluster(HttpProxyId, MetaLocation))
-                         )
-                     );
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/meta/cluster",
+        ActorSystem.Register(new NMVP::THandlerActorMetaCluster(HttpProxyId, MetaLocation))
+    );
 
-    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/meta/cp_databases",
-                         ActorSystem.Register(new NMVP::THandlerActorMetaCpDatabases(HttpProxyId, MetaLocation))
-                         )
-                     );
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/meta/cp_databases",
+        ActorSystem.Register(new NMVP::THandlerActorMetaCpDatabases(HttpProxyId, MetaLocation))
+    );
 
-    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/meta/cp_databases_verbose",
-                         ActorSystem.Register(new NMVP::THandlerActorMetaCpDatabasesVerbose(HttpProxyId, MetaLocation))
-                         )
-                     );
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/meta/cp_databases_verbose",
+        ActorSystem.Register(new NMVP::THandlerActorMetaCpDatabasesVerbose(HttpProxyId, MetaLocation))
+    );
 
-    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/meta/cloud",
-                         ActorSystem.Register(new NMVP::THandlerActorMetaCloud(HttpProxyId, MetaLocation))
-                         )
-                     );
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/meta/cloud",
+        ActorSystem.Register(new NMVP::THandlerActorMetaCloud(HttpProxyId, MetaLocation))
+    );
 
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/ping",
-                         ActorSystem.Register(new NMVP::THandlerActorHttpCheck())
-                         )
-                     );
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/meta/support_links",
+        ActorSystem.Register(new NMVP::TMetaSupportLinksHandlerActor(HttpProxyId, MetaLocation, MetaSettings))
+    );
 
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/mem_profiler",
-                         ActorSystem.Register(CreateMemProfiler())
-                         )
-                     );
+    RegisterMetaHandler(
+        HttpProxyId,
+        "/ping",
+        ActorSystem.Register(new NMVP::THandlerActorHttpCheck())
+    );
 
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/mvp/sensors.json",
-                         ActorSystem.Register(new NMVP::THandlerActorHttpSensors())
-                         )
-                     );
+    RegisterMetaHandler(
+        HttpProxyId,
+        "/mem_profiler",
+        ActorSystem.Register(CreateMemProfiler())
+    );
 
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/api/mvp.json",
-                         ActorSystem.Register(new NMVP::THandlerActorMvpSwagger())
-                         )
-                     );
+    RegisterMetaHandler(
+        HttpProxyId,
+        "/mvp/sensors.json",
+        ActorSystem.Register(new NMVP::THandlerActorHttpSensors())
+    );
 
-    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/api/",
-                         ActorSystem.Register(NHttp::CreateHttpStaticContentHandler(
-                                                  "/api/", // url
-                                                  "./content/api/", // file path
-                                                  "/mvp/content/api/", // resource path
-                                                  "index.html" // index name
-                                                  )
-                                              )
-                         )
-                     );
+    RegisterMetaHandler(
+        HttpProxyId,
+        "/api/mvp.json",
+        ActorSystem.Register(new NMVP::THandlerActorMvpSwagger())
+    );
+
+    RegisterMetaHandler(
+        HttpProxyId,
+        "/api/",
+        ActorSystem.Register(NHttp::CreateHttpStaticContentHandler(
+            "/api/", // url
+            "./content/api/", // file path
+            "/mvp/content/api/", // resource path
+            "index.html" // index name
+        ))
+    );
+
+    RegisterMetaHandler(
+        httpIncomingProxyId,
+        "/capabilities",
+        ActorSystem.Register(new NMVP::THandlerActorMetaCapabilities(MetaCapabilities))
+    );
 
 }

@@ -57,10 +57,10 @@ private:
     void BuildNothingStates();
 
     // Partial aggregate generation
-    TExprNode::TPtr GeneratePartialAggregate(const TExprNode::TPtr keyExtractor, const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needPickle);
+    TExprNode::TPtr GeneratePartialAggregate(const TExprNode::TPtr& keyExtractor, const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needPickle);
     TExprNode::TPtr GeneratePartialAggregateForNonDistinct(const TExprNode::TPtr& keyExtractor, const TExprNode::TPtr& pickleTypeNode);
 
-    TExprNode::TPtr GenerateDistinctGrouper(const TExprNode::TPtr distinctField,
+    TExprNode::TPtr GenerateDistinctGrouper(const TExprNode::TPtr& distinctField,
         const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needDistinctPickle);
 
     TExprNode::TPtr ReturnKeyAsIsForCombineInit(const TExprNode::TPtr& pickleTypeNode);

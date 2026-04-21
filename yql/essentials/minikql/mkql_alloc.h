@@ -339,14 +339,14 @@ public:
     void Clear() noexcept;
 
 private:
-    void* AllocSlow(const size_t sz, const EMemorySubPool pagePool);
+    void* AllocSlow(size_t sz, EMemorySubPool pagePool);
 
 private:
     TAlignedPagePool* PagePool_;
     TAllocState::TCurrentPages CurrentPages_ = TAllocState::EmptyCurrentPages;
 };
 
-void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool);
+void* MKQLAllocSlow(size_t sz, TAllocState* state, EMemorySubPool mPool);
 
 inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
 #ifdef NDEBUG
@@ -433,7 +433,7 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemoryS
     return NYql::NUdf::WrapPointerWithRedZones(mem, sz);
 }
 
-void MKQLFreeSlow(TAllocPageHeader* header, TAllocState* state, const EMemorySubPool mPool) noexcept;
+void MKQLFreeSlow(TAllocPageHeader* header, TAllocState* state, EMemorySubPool mPool) noexcept;
 
 inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noexcept {
     if (!mem) {

@@ -4,120 +4,146 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-       "context"
+  - Native SDK
 
-       "github.com/ydb-platform/ydb-go-sdk/v3"
-       "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+     ```go
+     package main
 
-       ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
-       ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-       otelTrace "go.opentelemetry.io/otel/sdk/trace"
-   )
+     import (
+         "context"
 
-   func main() {
-       ...
-       tracerProvider := otelTrace.NewTracerProvider(
-           // WithBatcher registers the exporter with the TracerProvider.
-           // The exporter must implement the SpanExporter interface.
-           // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
-           otelTrace.WithBatcher(exp),
-           // WithResource attaches metadata (like service name and environment) to all spans
-           // created by this TracerProvider. Use resource.NewWithAttributes with standard
-           // semantic keys such as semconv.ServiceNameKey.
-           otelTrace.WithResource(resource.NewWithAttributes(res)),
-       )
-       defer tracerProvider.Shutdown(ctx)
+         "github.com/ydb-platform/ydb-go-sdk/v3"
+         "github.com/ydb-platform/ydb-go-sdk/v3/trace"
 
-       // Set global tracer of this application.
-       otel.SetTracerProvider(tracerProvider)
+         ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
+         ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
+         otelTrace "go.opentelemetry.io/otel/sdk/trace"
+     )
 
-       // Create a root span.
-       ctx, span := tracerProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-       defer span.End()
+     func main() {
+         ...
+         tracerProvider := otelTrace.NewTracerProvider(
+             // WithBatcher registers the exporter with the TracerProvider.
+             // The exporter must implement the SpanExporter interface.
+             // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
+             otelTrace.WithBatcher(exp),
+             // WithResource attaches metadata (like service name and environment) to all spans
+             // created by this TracerProvider. Use resource.NewWithAttributes with standard
+             // semantic keys such as semconv.ServiceNameKey.
+             otelTrace.WithResource(resource.NewWithAttributes(res)),
+         )
+         defer tracerProvider.Shutdown(ctx)
 
-       // If you want to see otel-trace-id in the logs,
-       // it’s important to connect the adapters in a specific order — first otel, then logger.
-       db, err := ydb.Open(ctx,
-           os.Getenv("YDB_CONNECTION_STRING"),
-           ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-           ydbZap.WithTraces(logger, trace.DetailsAll),
-       )
-       if err != nil {
-           panic(err)
-       }
-       defer db.Close(ctx)
-       ...
-   }
-   ```
+         // Set global tracer of this application.
+         otel.SetTracerProvider(tracerProvider)
 
-- Go (database/sql)
+         // Create a root span.
+         ctx, span := tracerProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
+         defer span.End()
 
-   ```go
-   package main
+         // If you want to see otel-trace-id in the logs,
+         // it’s important to connect the adapters in a specific order — first otel, then logger.
+         db, err := ydb.Open(ctx,
+             os.Getenv("YDB_CONNECTION_STRING"),
+             ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
+             ydbZap.WithTraces(logger, trace.DetailsAll),
+         )
+         if err != nil {
+             panic(err)
+         }
+         defer db.Close(ctx)
+         ...
+     }
+     ```
 
-   import (
-       "context"
-       "database/sql"
+  - database/sql
 
-       "github.com/ydb-platform/ydb-go-sdk/v3"
-       "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+     ```go
+     package main
 
-       ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
-       ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-       otelTrace "go.opentelemetry.io/otel/sdk/trace"
-   )
+     import (
+         "context"
+         "database/sql"
 
-   func main() {
-       ...
-       tracerProvider := otelTrace.NewTracerProvider(
-           // WithBatcher registers the exporter with the TracerProvider.
-           // The exporter must implement the SpanExporter interface.
-           // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
-           otelTrace.WithBatcher(exp),
-           // WithResource attaches metadata (like service name and environment) to all spans
-           // created by this TracerProvider. Use resource.NewWithAttributes with standard
-           // semantic keys such as semconv.ServiceNameKey.
-           otelTrace.WithResource(resource.NewWithAttributes(res)),
-       )
-       defer tracerProvider.Shutdown(ctx)
+         "github.com/ydb-platform/ydb-go-sdk/v3"
+         "github.com/ydb-platform/ydb-go-sdk/v3/trace"
 
-       // Set global tracer of this application.
-       otel.SetTracerProvider(tracerProvider)
+         ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
+         ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
+         otelTrace "go.opentelemetry.io/otel/sdk/trace"
+     )
 
-       // Create a root span.
-       ctx, span := traceProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-       defer span.End()
+     func main() {
+         ...
+         tracerProvider := otelTrace.NewTracerProvider(
+             // WithBatcher registers the exporter with the TracerProvider.
+             // The exporter must implement the SpanExporter interface.
+             // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
+             otelTrace.WithBatcher(exp),
+             // WithResource attaches metadata (like service name and environment) to all spans
+             // created by this TracerProvider. Use resource.NewWithAttributes with standard
+             // semantic keys such as semconv.ServiceNameKey.
+             otelTrace.WithResource(resource.NewWithAttributes(res)),
+         )
+         defer tracerProvider.Shutdown(ctx)
 
-       // If you want to see otel-trace-id in the logs,
-       // it’s important to connect the adapters in a specific order — first otel, then logger.
-       nativeDriver, err := ydb.Open(ctx,
-           os.Getenv("YDB_CONNECTION_STRING"),
-           ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-           ydbZap.WithTraces(logger, trace.DetailsAll),
-       )
-       if err != nil {
-           panic(err)
-       }
-       defer nativeDriver.Close(ctx)
+         // Set global tracer of this application.
+         otel.SetTracerProvider(tracerProvider)
 
-       connector, err := ydb.Connector(nativeDriver)
-       if err != nil {
-           panic(err)
-       }
-       db := sql.OpenDB(connector)
-       defer db.Close()
-       ...
-   }
-   ```
+         // Create a root span.
+         ctx, span := traceProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
+         defer span.End()
+
+         // If you want to see otel-trace-id in the logs,
+         // it’s important to connect the adapters in a specific order — first otel, then logger.
+         nativeDriver, err := ydb.Open(ctx,
+             os.Getenv("YDB_CONNECTION_STRING"),
+             ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
+             ydbZap.WithTraces(logger, trace.DetailsAll),
+         )
+         if err != nil {
+             panic(err)
+         }
+         defer nativeDriver.Close(ctx)
+
+         connector, err := ydb.Connector(nativeDriver)
+         if err != nil {
+             panic(err)
+         }
+         db := sql.OpenDB(connector)
+         defer db.Close()
+         ...
+     }
+     ```
+
+  {% endlist %}
+
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

@@ -187,9 +187,41 @@ namespace NKikimr::NStorage {
             donorDiskIds, scrubCookie, whiteboardInstanceGuid, readOnly);
 
         std::unique_ptr<IActor> actor;
+        auto *as = TActivationContext::ActorSystem();
 
         if (ddisk) {
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, AppData()->Counters));
+            NDDisk::TDDiskConfig ddiskConfig{};
+            NDDisk::TPersistentBufferFormat pbufferFormat{};
+            if (Cfg->DDiskConfig) {
+                if (Cfg->DDiskConfig->HasUseSQPoll()) {
+                    ddiskConfig.UseSQPoll = Cfg->DDiskConfig->GetUseSQPoll();
+                }
+                if (Cfg->DDiskConfig->HasUseIOPoll()) {
+                    ddiskConfig.UseIOPoll = Cfg->DDiskConfig->GetUseIOPoll();
+                }
+                if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
+                    ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
+                }
+            }
+            if (Cfg->PBufferConfig) {
+                if (Cfg->PBufferConfig->HasInitChunks()) {
+                    pbufferFormat.InitChunks = Cfg->PBufferConfig->GetInitChunks();
+                }
+                if (Cfg->PBufferConfig->HasMaxInMemoryCache()) {
+                    pbufferFormat.MaxInMemoryCache = Cfg->PBufferConfig->GetMaxInMemoryCache();
+                }
+                if (Cfg->PBufferConfig->HasMaxChunkRestoreInflight()) {
+                    pbufferFormat.MaxChunkRestoreInflight = Cfg->PBufferConfig->GetMaxChunkRestoreInflight();
+                }
+                if (Cfg->PBufferConfig->HasUpdateFreeSpaceInfoMilliseconds()) {
+                    pbufferFormat.UpdateFreeSpaceInfoMilliseconds = Cfg->PBufferConfig->GetUpdateFreeSpaceInfoMilliseconds();
+                }
+                if (Cfg->PBufferConfig->HasPerTabletStorageLimit()) {
+                    pbufferFormat.PerTabletStorageLimit = Cfg->PBufferConfig->GetPerTabletStorageLimit();
+                }
+            }
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
+                std::move(ddiskConfig), AppData()->Counters));
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -217,6 +249,8 @@ namespace NKikimr::NStorage {
             vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
             vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
             vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+            vdiskConfig->HullCompFreeSpaceThresholdPerMille = HullCompFreeSpaceThresholdPerMille;
+            vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
 
@@ -243,6 +277,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
+            vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
@@ -292,7 +327,6 @@ namespace NKikimr::NStorage {
             actor.reset(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters));
         }
 
-        auto *as = TActivationContext::ActorSystem();
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
@@ -381,6 +415,16 @@ namespace NKikimr::NStorage {
         }
 
         record.Config.CopyFrom(vdisk);
+
+        // Sticky runtime marker: if this node ever had a local dynamic VDisk for the group, keep subscribing
+        // for its updates in RegisterNode even when proxy is not currently running. We don't need it after restart
+        // so this flag is purely local.
+        if (!vdisk.GetDoDestroy() && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            const ui32 groupId = vdisk.GetVDiskID().GetGroupID();
+            if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                Groups[groupId].MustSubscribe = true;
+            }
+        }
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
             if (record.UnderlyingPDiskDestroyed) {

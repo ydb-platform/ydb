@@ -1098,6 +1098,8 @@ public:
 
     static const TStringRef& Name();
 
+    static const TStringRef& BuildPolyArgs();
+
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
         if (Name() == name) {
             auto typeId = TDataType<TYJson>::Id;
@@ -1212,6 +1214,45 @@ template <>
 const TStringRef& TParse<TJson, true>::Name() {
     static auto Name = TStringRef::Of("ParseJsonDecodeUtf8");
     return Name;
+}
+
+template <>
+const TStringRef& TParse<TYson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Yson]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Yson]]}
+         ]};{args=[[DataType;Yson]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, true>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
 }
 
 class TIterate: public TBoxedValue {
@@ -1339,7 +1380,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1393,7 +1435,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1692,6 +1735,7 @@ using TMutNodeMap = THashMap<TUnboxedValue, TMutNode, TStringHash, TStringEquals
 
 struct TMutNode {
     std::variant<TUnboxedValue, TMutNodeList, TMutNodeMap> Storage;
+    TVector<TPair, TStdAllocatorForUdf<TPair>> Attributes;
 
     bool IsInvalidOrDeleted() const {
         auto valuePtr = std::get_if<TUnboxedValue>(&Storage);
@@ -1754,7 +1798,7 @@ struct TMutNode {
 
     TUnboxedValue Freeze(const IValueBuilder* valueBuilder) const {
         // clang-format off
-        return std::visit(TOverloaded{
+        auto ret = std::visit(TOverloaded{
             [](const TUnboxedValue& value) {
                 return value;
             }, [valueBuilder](const TMutNodeList& value) {
@@ -1763,11 +1807,22 @@ struct TMutNode {
                 return FreezeDict(value, valueBuilder);
             }}, Storage);
         // clang-format on
+        if (!Attributes.empty()) {
+            return SetNodeType<ENodeType::Attr>(TUnboxedValuePod(new TAttrNode(std::move(ret), Attributes.data(), Attributes.size())));
+        } else {
+            return ret;
+        }
     }
 
     void MeltDict() {
         auto originalValue = std::get<TUnboxedValue>(Storage);
         auto nodeType = GetNodeType(originalValue);
+        if (nodeType == ENodeType::Attr) {
+            SaveAttributes(originalValue);
+            originalValue = originalValue.GetVariantItem();
+            nodeType = GetNodeType(originalValue);
+        }
+
         if (nodeType != ENodeType::Dict) {
             throw yexception() << "Expected dict node, but got :" << TDebugPrinter(originalValue);
         }
@@ -1775,7 +1830,8 @@ struct TMutNode {
         Storage = TMutNodeMap();
         auto& map = std::get<TMutNodeMap>(Storage);
         map.reserve(originalValue.GetDictLength());
-        TUnboxedValue k, v;
+        TUnboxedValue k;
+        TUnboxedValue v;
         for (auto it = originalValue.GetDictIterator(); it.NextPair(k, v);) {
             map.emplace(k, v);
         }
@@ -1784,6 +1840,12 @@ struct TMutNode {
     void MeltList() {
         auto originalValue = std::get<TUnboxedValue>(Storage);
         auto nodeType = GetNodeType(originalValue);
+        if (nodeType == ENodeType::Attr) {
+            SaveAttributes(originalValue);
+            originalValue = originalValue.GetVariantItem();
+            nodeType = GetNodeType(originalValue);
+        }
+
         if (nodeType != ENodeType::List) {
             throw yexception() << "Expected list node, but got :" << TDebugPrinter(originalValue);
         }
@@ -1801,6 +1863,14 @@ struct TMutNode {
         list.reserve(len);
         for (ui64 i = 0; i < len; ++i) {
             list.emplace_back(elements[i]);
+        }
+    }
+
+    void SaveAttributes(const TUnboxedValue& attrNode) {
+        Attributes.reserve(attrNode.GetDictLength());
+        auto it = attrNode.GetDictIterator();
+        for (TUnboxedValue x, y; it.NextPair(x, y);) {
+            Attributes.emplace_back(std::move(x), std::move(y));
         }
     }
 };

@@ -10,6 +10,7 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 enum ECheckpointType {
     CHECKPOINT_TYPE_UNSPECIFIED = 0;
@@ -97,6 +98,23 @@ message TEvComputeActorState {
 message TEvComputeStateRequest {
 }
 
+message TEvNodeState {
+    optional uint32 NodeId = 1; // by default == Sender.NodeId()
+
+    optional uint64 MemPhysicalUsage = 2;
+    optional uint64 MemSysAllocated  = 3;
+    optional uint64 MemSysFragmented = 4;
+
+    optional uint64 MemArrowDefault  = 5;
+
+    optional uint64 MemMkqlAllocated = 6;
+    optional uint64 MemMkqlFreeList  = 7;
+
+    optional uint64 InputInflightBytes  = 8;
+    optional uint64 OutputInflightBytes = 9;
+    optional uint64 LocalInflightBytes  = 10;
+}
+
 message TEvComputeChannelData {
     optional TChannelData ChannelData = 1;
     optional uint64 SendTime = 2;
@@ -122,11 +140,11 @@ message TRlPath {
     optional string CoordinationNode = 1;
     optional string ResourcePath = 2;
     optional string Database = 3;
-    optional string Token = 4;
+    optional string Token = 4 [(Ydb.sensitive) = true];
 }
 
 message TComputeRuntimeSettings {
-    optional uint32 TimeoutMs = 1;
+    optional uint64 TimeoutMs = 1;
 
     enum EExecType {
         UNSPECIFIED = 0;
@@ -224,6 +242,8 @@ message TMessageTransportMeta {
 
 message TEvChannelDiscoveryV2 {
     optional uint64 GenMajor = 1;
+    optional uint64 GenMinor = 2;
+    optional uint64 SeqNo = 3;
 }
 
 message TEvChannelDataV2 {
@@ -257,6 +277,7 @@ message TEvChannelAckV2 {
         OK     = 0;      // Confirmed
         RESEND = 1;      // Ask to resend missed msgs
         ERROR  = 2;      // Fail Channel
+        FAIL   = 3;      // Fail Session and request Reconcilitatiom
     }
 
     // Service level

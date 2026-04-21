@@ -13,6 +13,14 @@ namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
+IProtobufParser::~IProtobufParser()
+{
+}
+
+IProtobufSerialize::~IProtobufSerialize()
+{
+}
+
 TProtobufValue::TProtobufValue(TProtoInfo info)
     : Info_(std::move(info))
 {
@@ -86,7 +94,7 @@ static TUnboxedValuePod CreateEnumValue(
             return valueBuilder->NewString(desc->full_name()).Release();
     }
 
-    Y_UNREACHABLE();
+    Y_ENSURE(false, "Unreachable");
 }
 
 static TUnboxedValuePod CreateSingleField(

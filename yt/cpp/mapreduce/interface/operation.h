@@ -1641,6 +1641,12 @@ struct TOperationOptions
     /// @note Default values for this option may differ depending on the row type.
     /// For protobuf it's currently `false` by default.
     FLUENT_FIELD_OPTION(bool, InferOutputSchema);
+
+    ///
+    /// @brief If job state size is less than specified value, job state will be passed via environment variable in spec
+    ///
+    /// @note Default value is 0, so job spec is passed via file
+    FLUENT_FIELD_DEFAULT(i64, MinJobStateSizeToPassViaFile, 0);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3228,7 +3234,7 @@ struct TJobTraceEvent
 struct IOperation
     : public TThrRefBase
 {
-    virtual ~IOperation() = default;
+    ~IOperation() override = default;
 
     ///
     /// @brief Get operation id.

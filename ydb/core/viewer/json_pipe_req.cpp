@@ -374,7 +374,7 @@ bool TViewerPipeClient::IsSuccess(const TEvTxUserProxy::TEvProposeTransactionSta
 }
 
 TString TViewerPipeClient::GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev) {
-    return TStringBuilder() << ev.Record.GetStatus();
+    return TStringBuilder() << NTxProxy::TResultStatus::Str(static_cast<NTxProxy::TResultStatus::EStatus>(ev.Record.GetStatus()));
 }
 
 bool TViewerPipeClient::IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
@@ -629,6 +629,15 @@ void TViewerPipeClient::ApplyForceMode(TEvBlobStorage::TEvControllerConfigReques
     }
 }
 
+bool TViewerPipeClient::RequireAdminIfForce(bool& force, TStringBuf forceParamName) {
+    force = FromStringWithDefault<bool>(Params.Get(forceParamName), force);
+    if (force && !Viewer->CheckAccessAdministration(GetRequest())) {
+        ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Administration access required when force=true"));
+        return false;
+    }
+    return true;
+}
+
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
@@ -867,6 +876,22 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     if (tokenObj) {
         request->UserToken = new NACLib::TUserToken(tokenObj);
     }
+    auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
+    if (response.Span) {
+        response.Span.Attribute("path_id", pathId.ToString());
+    }
+    return response;
+}
+
+TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigateWithoutToken(TPathId pathId, ui64 cookie) {
+    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.TableId.PathId = pathId;
+    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+    entry.RedirectRequired = false;
+    entry.ShowPrivatePath = true;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    request->ResultSet.emplace_back(entry);
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
         response.Span.Attribute("path_id", pathId.ToString());
@@ -1188,9 +1213,9 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
         } else {
             if (CheckDatabase) {
                 if (ResourceNavigateResponse->GetError() == "AccessDenied") {
-                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), "Access denied");
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), ResourceNavigateResponse->GetError());
                 } else {
-                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - shared database not found"), "Shared database not found");
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve shared database"), ResourceNavigateResponse->GetError());
                 }
             } else {
                 AddEvent("Failed to resolve database - shared database not found");
@@ -1207,7 +1232,9 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
         if (DatabaseNavigateResponse->IsOk()) {
             TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
-                ResourceNavigateResponse = MakeRequestSchemeCacheNavigate(TPathId(entry.DomainInfo->ResourcesDomainKey));
+                // we successfully resolved serverless database using user's token, now resolve shared database without token
+                // because users of serverless databases don't have direct access to shared database
+                ResourceNavigateResponse = MakeRequestSchemeCacheNavigateWithoutToken(TPathId(entry.DomainInfo->ResourcesDomainKey));
                 --DataRequests; // don't count this request
                 Become(&TViewerPipeClient::StateResolveResource);
             } else {
@@ -1218,9 +1245,9 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
         } else {
             if (CheckDatabase) {
                 if (DatabaseNavigateResponse->GetError() == "AccessDenied") {
-                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), "Access denied");
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), DatabaseNavigateResponse->GetError());
                 } else {
-                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - not found"), "Database not found");
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database"), DatabaseNavigateResponse->GetError());
                 }
             } else {
                 AddEvent("Failed to resolve database - not found");

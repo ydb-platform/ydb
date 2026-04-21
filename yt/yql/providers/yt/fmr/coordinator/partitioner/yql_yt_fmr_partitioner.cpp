@@ -20,7 +20,28 @@ std::pair<std::vector<TTaskTableInputRef>, bool> TFmrPartitioner::PartitionFmrTa
     if (fmrTables.empty()) {
         return {{}, true};
     }
-    const ui64 maxDataWeightPerPart = Settings_.MaxDataWeightPerPart;
+    ui64 maxDataWeightPerPart = Settings_.MaxDataWeightPerPart;
+    if (Settings_.AdjustDataWeightPerPartition) {
+        ui64 totalWeight = 0;
+        for (const auto& fmrTable : fmrTables) {
+            if (PartIdsForTables_.contains(fmrTable.FmrTableId)) {
+                for (const auto& partId : PartIdsForTables_.at(fmrTable.FmrTableId)) {
+                    if (PartIdStats_.contains(partId)) {
+                        for (const auto& chunk : PartIdStats_.at(partId)) {
+                            totalWeight += chunk.DataWeight;
+                        }
+                    }
+                }
+            }
+        }
+        ui64 estimatedParts = (totalWeight + maxDataWeightPerPart - 1) / maxDataWeightPerPart;
+        if (estimatedParts > Settings_.MaxParts && Settings_.MaxParts > 0) {
+            maxDataWeightPerPart = (totalWeight + Settings_.MaxParts - 1) / Settings_.MaxParts;
+            YQL_CLOG(INFO, FastMapReduce) << "AdjustDataWeightPerPartition: adjusted MaxDataWeightPerPart from "
+                << Settings_.MaxDataWeightPerPart << " to " << maxDataWeightPerPart
+                << " (totalWeight=" << totalWeight << ", maxParts=" << Settings_.MaxParts << ")";
+        }
+    }
     std::vector<TTaskTableInputRef> currentFmrTasks;
     std::vector<TLeftoverRange> leftoverRanges;
     // First try to create tasks in which all chunks have the same partId, then handle leftovers (end of chunks for each partId)
@@ -152,9 +173,10 @@ TPartitionResult PartitionInputTablesIntoTasks(
 
     auto [gottenFmrTasks, fmrPartitionStatus] = partitioner.PartitionFmrTablesIntoTasks(fmrInputTables);
     if (!fmrPartitionStatus) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: failed to partition fmr input tables into tasks";
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition fmr input tables into tasks"
         }};
     }
@@ -168,9 +190,11 @@ TPartitionResult PartitionInputTablesIntoTasks(
     }
     auto settings = ytPartitionSettings;
     if (settings.MaxParts <= gottenFmrTasks.size()) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: max parts exceeded for yt input tables (fmrTasks="
+            << gottenFmrTasks.size() << ", maxParts=" << ytPartitionSettings.MaxParts << ")";
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition yt input tables into tasks: max parts exceeded"
         }};
     }
@@ -178,9 +202,10 @@ TPartitionResult PartitionInputTablesIntoTasks(
     Y_ENSURE(settings.PartitionMode == NYT::ETablePartitionMode::Unordered);
     auto [gottenYtTasks, ytPartitionStatus] = ytCoordinatorService->PartitionYtTables(ytInputTables, clusterConnections, settings);
     if (!ytPartitionStatus) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: failed to partition yt input tables into tasks";
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition yt input tables into tasks"
         }};
     }

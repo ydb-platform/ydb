@@ -6,7 +6,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -107,6 +106,11 @@ protected:
 
     bool IsExhausted = false;
 
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TSerializedCellVec LastAckedKey;
+    TSerializedCellVec PendingCheckpointKey;
+    ui64 NextCheckpointAtBytes = 0;
+
     std::unique_ptr<IClusters> Clusters;
     std::vector<std::pair<ui32, double>> TmpClusters;
 
@@ -137,9 +141,11 @@ public:
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetParentFrom() == 0 && request.GetParentTo() == 0 ? 0u : 1u}
+        , KeyTypes(table.KeyColumnTypes)
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
+        NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
         const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
             || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD);
@@ -189,6 +195,10 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
         record.SetIsEmpty(IsEmpty);
+
+        if (LastAckedKey.GetBuffer()) {
+            record.SetLastKeyAck(LastAckedKey.GetBuffer());
+        }
 
         Uploader.Finish(record, status);
 
@@ -315,9 +325,25 @@ protected:
             return;
         }
 
-        Uploader.Handle(ev);
+        bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
+            if (batchUploaded && PendingCheckpointKey.GetBuffer() && Uploader.AllFlushed()
+                && Uploader.GetUploadBytes() >= NextCheckpointAtBytes) {
+                NextCheckpointAtBytes = Uploader.GetUploadBytes() + ScanSettings.GetMaxCheckpointBytes();;
+                LastAckedKey = PendingCheckpointKey;
+                PendingCheckpointKey = {};
+
+                auto progress = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+                auto& rec = progress->Record;
+                rec.SetId(BuildId);
+                rec.SetTabletId(TabletId);
+                rec.SetRequestSeqNoGeneration(Response->Record.GetRequestSeqNoGeneration());
+                rec.SetRequestSeqNoRound(Response->Record.GetRequestSeqNoRound());
+                rec.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                rec.SetLastKeyAck(LastAckedKey.GetBuffer());
+                Send(ResponseActorId, progress.Release());
+            }
             Driver->Touch(EScan::Feed);
             return;
         }
@@ -350,6 +376,7 @@ protected:
     bool FinishPrefix()
     {
         if (FinishPrefixImpl()) {
+            PendingCheckpointKey = Prefix;
             StartNewPrefix();
             LOG_T("FinishPrefix finished " << Debug());
             return true;
@@ -364,6 +391,7 @@ protected:
                         Feed(key.GetCells(), row.GetCells());
                     }
                     if (FinishPrefixImpl()) {
+                        PendingCheckpointKey = Prefix;
                         StartNewPrefix();
                         LOG_T("FinishPrefix finished in " << iteration << " iterations " << Debug());
                         return true;
@@ -656,7 +684,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             {
                 badRequest("Wrong upload for zero parent");
             }
-            lead.To({}, NTable::ESeek::Lower);
+            if (request.HasKeyRange()) {
+                TSerializedTableRange resumeRange;
+                resumeRange.Load(request.GetKeyRange());
+                auto scanRange = Intersect(userTable.KeyColumnTypes, resumeRange.ToTableRange(), userTable.Range.ToTableRange());
+                lead = CreateLeadFrom(scanRange);
+            } else {
+                lead.To({}, NTable::ESeek::Lower);
+            }
         } else if (parentFrom > parentTo) {
             badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
         } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
@@ -666,16 +701,23 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         } else {
             TCell from = TCell::Make(parentFrom - 1);
             TCell to = TCell::Make(parentTo);
-            TTableRange range{{&from, 1}, false, {&to, 1}, true};
-            auto scanRange = Intersect(userTable.KeyColumnTypes, range, userTable.Range.ToTableRange());
+            TTableRange parentRange{{&from, 1}, false, {&to, 1}, true};
+            auto scanRange = Intersect(userTable.KeyColumnTypes, parentRange, userTable.Range.ToTableRange());
             if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
                 badRequest(TStringBuilder() << "Requested range doesn't intersect with table range:"
-                    << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, range, *AppData()->TypeRegistry)
+                    << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, parentRange, *AppData()->TypeRegistry)
                     << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
                     << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
             }
-            lead.To(range.From, NTable::ESeek::Upper);
-            lead.Until(range.To, true);
+            if (request.HasKeyRange()) {
+                TSerializedTableRange resumeRange;
+                resumeRange.Load(request.GetKeyRange());
+                auto resumeScanRange = Intersect(userTable.KeyColumnTypes, resumeRange.ToTableRange(), scanRange);
+                lead = CreateLeadFrom(resumeScanRange);
+            } else {
+                lead.To(parentRange.From, NTable::ESeek::Upper);
+                lead.Until(parentRange.To, true);
+            }
         }
 
         if (!request.GetLevelName()) {

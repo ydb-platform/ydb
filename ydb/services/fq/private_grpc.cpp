@@ -28,7 +28,7 @@ void TGRpcFqPrivateTaskService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
 #endif
 
 #define SETUP_FQ_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, fq_internal, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, fq_internal, auditMode, EEmptyDatabaseMode::EmptyDatabaseAllowed)
 
     SETUP_FQ_METHOD(PingTask, DoFqPrivatePingTaskRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_FQ_METHOD(GetTask, DoFqPrivateGetTaskRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());

@@ -7,8 +7,7 @@ SPLIT_FACTOR(10)
 TIMEOUT(900)
 
 SIZE(LARGE)
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

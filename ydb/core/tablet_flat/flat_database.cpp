@@ -258,6 +258,13 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
 
+TSelectRowVersionResult TDatabase::SelectRowVersionByKeyPrefix(
+        ui32 table, TArrayRef<const TCell> key,
+        const ITransactionObserverPtr& observer) const
+{
+    return Require(table)->SelectRowVersionByKeyPrefix(key, Env, observer);
+}
+
 TSizeEnv TDatabase::CreateSizeEnv()
 {
     return TSizeEnv(Env);

@@ -82,7 +82,9 @@ def post_install(self):
     # fix path for protos
     with self.yamakes["grpc++_reflection"] as m:
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1alpha")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1alpha")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1alpha")
+        m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     with self.yamakes["grpcpp_channelz"] as m:
@@ -92,6 +94,8 @@ def post_install(self):
 
     # fix induced deps
     for name, module in self.yamakes.items():
+        if "-DPROTOBUF_USE_DLLS" in module.CFLAGS:
+            module.CFLAGS.remove("-DPROTOBUF_USE_DLLS")
         addincls = getattr(module, "ADDINCL", None)
         source_addincl = ArcPath("contrib/libs/grpc", build=False)
         build_addincl = ArcPath("contrib/libs/grpc", build=True)
@@ -127,12 +131,10 @@ grpc = CMakeNinjaNixProject(
     license="Apache-2.0",
     keep_paths=[
         "src/core/lib/security/security_connector/add_arcadia_root_certs.*",
-        # Keep original ya.make for now
-        "src/proto/grpc/core/ya.make",
         "src/proto/grpc/channelz/ya.make",
         "src/proto/grpc/health/v1/ya.make",
+        "src/proto/grpc/reflection/v1/ya.make",
         "src/proto/grpc/reflection/v1alpha/ya.make",
-        "src/proto/grpc/status/ya.make",
     ],
     ignore_targets=[
         "check_epollexclusive",
@@ -154,6 +156,9 @@ grpc = CMakeNinjaNixProject(
         # third_party libraries
         "address_sorting",
         "upb",
+        "upb_json_lib",
+        "upb_textformat_lib",
+        "utf8_range_lib",
     ],
     put={
         "grpc": ".",
@@ -164,13 +169,17 @@ grpc = CMakeNinjaNixProject(
         # third_party libraries
         "address_sorting": "third_party/address_sorting",
         "upb": "third_party/upb",
+        "utf8_range_lib": "third_party/utf8_range",
     },
     put_with={
         "grpc": ["grpc++", "gpr"],
+        "upb": ["upb_json_lib", "upb_textformat_lib"],
     },
     unbundle_from={
         "xxhash": "third_party/xxhash",
         "utf8_validity": "third_party/upb/third_party/utf8_range",
+        "utf8_range": "third_party/utf8_range",
+        "utf8_range_lib": "third_party/utf8_range",
     },
     copy_sources=[
         "include/**/*.h",
@@ -184,6 +193,9 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/iomgr/resolve_address_windows.h",
         "src/core/lib/iomgr/socket_windows.h",
         "src/core/lib/iomgr/tcp_windows.h",
+        "src/core/lib/event_engine/cf_engine/*.h",
+        "src/core/lib/event_engine/nameser.h",
+        "src/core/lib/event_engine/windows/grpc_polled_fd_windows.h",
         "src/core/lib/event_engine/windows/windows_endpoint.h",
         "src/core/lib/event_engine/windows/windows_engine.h",
         "src/core/lib/event_engine/windows/windows_listener.h",
@@ -191,21 +203,18 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/event_engine/windows/iocp.h",
         "src/core/lib/event_engine/socket_notifier.h",
         "src/core/lib/event_engine/poller.h",
-        # Copy all .proto files except for grpc/testing
+        # Copy necessary .proto files only
         "src/proto/grpc/channelz/**/*.proto",
-        "src/proto/grpc/core/**/*.proto",
-        "src/proto/grpc/gcp/**/*.proto",
         "src/proto/grpc/health/**/*.proto",
-        "src/proto/grpc/lb/**/*.proto",
-        "src/proto/grpc/lookup/**/*.proto",
         "src/proto/grpc/reflection/**/*.proto",
-        "src/proto/grpc/status/**/*.proto",
     ],
     copy_sources_except=[
         # Proto library with testing services
         "src/proto/grpc/testing/",
     ],
     disable_includes=[
+        # if OPENSSL_VERSION_NUMBER >= 0x30000000L
+        "openssl/param_build.h",
         "src/core/lib/profiling/stap_probes.h",
         # ifdef GRPC_UV
         "uv.h",

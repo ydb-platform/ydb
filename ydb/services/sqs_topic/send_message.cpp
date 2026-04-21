@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
@@ -54,7 +55,7 @@ namespace NKikimr::NSqsTopic::V1 {
         TString MessageBody;
         TMaybe<TString> MessageGroupId;
         TMaybe<TString> MessageDeduplicationId;
-        TMaybe<TString> SerializedMessageAttributes;
+        std::unordered_multimap<TString, TString> Attributes;
         int DelaySeconds{};
         TString BatchId;
 
@@ -127,7 +128,7 @@ namespace NKikimr::NSqsTopic::V1 {
                         .MessageBody = std::move(item.MessageBody),
                         .MessageGroupId = toOptional(std::move(item.MessageGroupId)),
                         .MessageDeduplicationId = toOptional(std::move(item.MessageDeduplicationId)),
-                        .SerializedMessageAttributes = toOptional(std::move(item.SerializedMessageAttributes)),
+                        .Attributes = std::move(item.Attributes),
                         .Delay = TDuration::Seconds(item.DelaySeconds),
                     });
                 }
@@ -229,7 +230,11 @@ namespace NKikimr::NSqsTopic::V1 {
 
             THashSet<TString> batchIds;
             for (auto& item : Items) {
-                const size_t msgSize = item.MessageBody.size() + (item.SerializedMessageAttributes ? item.SerializedMessageAttributes->size() : 0);
+                size_t msgSize = item.MessageBody.size();
+                for (const auto& [key, value] : item.Attributes) {
+                    msgSize += key.size() + value.size();
+                }
+
                 if (msgSize > NSQS::TLimits::MaxMessageSize) {
                     item.ValidationError = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "The length the message is more than the limit.");
                 }
@@ -323,24 +328,11 @@ namespace NKikimr::NSqsTopic::V1 {
         if (request.has_message_deduplication_id()) {
             item.MessageDeduplicationId = request.message_deduplication_id();
         }
-        if (request.message_attributes_size()) {
-            NKikimr::NSQS::TMessageAttributes messageAttributes;
-            for (const auto& [attrName, attrValue] : request.message_attributes()) {
-                auto* dstAttribute = messageAttributes.add_attributes();
-                dstAttribute->SetName(attrName);
-                if (const auto& value = attrValue.string_value()) {
-                    dstAttribute->SetStringValue(value);
-                }
-                if (const auto& value = attrValue.binary_value()) {
-                    dstAttribute->SetBinaryValue(value);
-                }
-                dstAttribute->SetDataType(attrValue.data_type());
-            }
-            TString serialized;
-            bool res = messageAttributes.SerializeToString(&serialized);
-            Y_ABORT_UNLESS(res);
-            item.SerializedMessageAttributes = std::move(serialized);
-            item.MD5OfMessageAttributes = NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes());
+
+        auto [attributes, md5] = NSQS::SerializeUserAttributes(request);
+        if (!attributes.empty()) {
+            item.Attributes = std::move(attributes);
+            item.MD5OfMessageAttributes = std::move(md5);
         }
         item.DelaySeconds = request.delay_seconds();
         item.BatchIndex = 0;

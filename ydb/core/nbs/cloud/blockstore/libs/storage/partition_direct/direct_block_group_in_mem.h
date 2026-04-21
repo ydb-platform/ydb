@@ -15,6 +15,7 @@ class TInMemoryDirectBlockGroup
     , public std::enable_shared_from_this<TInMemoryDirectBlockGroup>
 {
 private:
+    ui64 TabletId;
     TIntrusivePtr<NKikimr::NPDisk::TSectorMap> SectorMap;
     ui32 BlockSize;
 
@@ -33,21 +34,45 @@ public:
 
     ~TInMemoryDirectBlockGroup() override = default;
 
-    void EstablishConnections(
-        NWilson::TTraceId traceId,
-        ui32 vChunkIndex) override;
+    TExecutorPtr GetExecutor() override;
 
-    NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
-        ui32 vChunkIndex,
-        TCallContextPtr callContext,
-        std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId) override;
+    void EstablishConnections() override;
 
-    NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
+    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId) override;
+        ui8 hostIndex,
+        ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId) override;
+
+    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId) override;
+
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId) override;
+
+    NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
+        ui32 vChunkIndex,
+        ui8 pbufferHostIndex,
+        ui8 ddiskHostIndex,
+        const TVector<TPBufferSegment>& segments,
+        const NWilson::TTraceId& traceId) override;
+
+    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        const TVector<TPBufferSegment>& segments,
+        const NWilson::TTraceId& traceId) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

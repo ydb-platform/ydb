@@ -60,9 +60,9 @@ CLUSTER_CONFIG = dict(
     },
     column_shard_config={
         'disabled_on_scheme_shard': False,
+        'max_read_staleness_ms': 200
     },
     table_service_config={
-        'enable_oltp_sink': True,
     },
 )
 
@@ -588,6 +588,24 @@ def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     assert_that(hostel_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints))
+
+
+def test_discovery_with_inner_path(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint,
+        ydb_serverless_db
+    )
+
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+
+    serverless_inner_path = os.path.join(ydb_serverless_db, "dirA0")
+    driver.scheme_client.make_directory(serverless_inner_path)
+
+    logger.debug("List endpoints of '%s' by path '%s'", ydb_serverless_db, serverless_inner_path)
+    resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, serverless_inner_path))
+    result = resolver.resolve()
+    assert_that(result.endpoints, not_none())
 
 
 def ydbcli_db_schema_exec(cluster, operation_proto):

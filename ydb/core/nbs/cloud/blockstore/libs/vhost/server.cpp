@@ -7,12 +7,15 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/thread.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
+
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <util/folder/path.h>
 #include <util/generic/map.h>
@@ -96,13 +99,15 @@ struct TRequest
     const TVhostRequestPtr VhostRequest;
     const TCallContextPtr CallContext;
     TMetricRequest MetricRequest;
+    NWilson::TSpan RootSpan;
 
     std::atomic_flag Completed = false;
 
     TRequest(
         ui64 requestId,
         TVhostRequestPtr vhostRequest,
-        const TStorageOptions& options)
+        const TStorageOptions& options,
+        NWilson::TSpan rootSpan)
         : VhostRequest(std::move(vhostRequest))
         , CallContext(MakeIntrusive<TCallContext>(requestId))
         , MetricRequest(
@@ -112,7 +117,13 @@ struct TRequest
               VhostRequest->From,
               VhostRequest->Length,
               options.BlockSize)
-    {}
+        , RootSpan(std::move(rootSpan))
+    {
+        CallContext->RootTraceId = RootSpan.GetTraceId();
+        RootSpan.Attribute("DiskId", options.DiskId);
+        RootSpan.Attribute("From", static_cast<i64>(VhostRequest->From));
+        RootSpan.Attribute("Length", static_cast<i64>(VhostRequest->Length));
+    }
 };
 
 using TRequestPtr = TIntrusivePtr<TRequest>;
@@ -139,6 +150,7 @@ class TEndpoint final: public std::enable_shared_from_this<TEndpoint>
 private:
     TAppContext& AppCtx;
     const IDeviceHandlerPtr DeviceHandler;
+    const IPartitionDirectServicePtr PartitionDirectService;
     const TString SocketPath;
     const TStorageOptions Options;
     const ui32 SocketAccessMode;
@@ -153,11 +165,13 @@ public:
     TEndpoint(
         TAppContext& appCtx,
         IDeviceHandlerPtr deviceHandler,
+        IPartitionDirectServicePtr partitionDirectService,
         TString socketPath,
         const TStorageOptions& options,
         ui32 socketAccessMode)
         : AppCtx(appCtx)
         , DeviceHandler(std::move(deviceHandler))
+        , PartitionDirectService(std::move(partitionDirectService))
         , SocketPath(std::move(socketPath))
         , Options(options)
         , SocketAccessMode(socketAccessMode)
@@ -302,10 +316,12 @@ private:
 
     TRequestPtr RegisterRequest(TVhostRequestPtr vhostRequest)
     {
+        const auto requestType = vhostRequest->Type;
         auto request = MakeIntrusive<TRequest>(
             CreateRequestId(),
             std::move(vhostRequest),
-            Options);
+            Options,
+            PartitionDirectService->CreteRootSpan(ToStringBuf(requestType)));
 
         AppCtx.VHostStats->RequestStarted(
             AppCtx.Log,
@@ -411,6 +427,7 @@ public:
     TEndpointPtr CreateEndpoint(
         const TString& socketPath,
         const TStorageOptions& options,
+        IPartitionDirectServicePtr partitionDirectService,
         IStoragePtr storage)
     {
         TDeviceHandlerParams params{
@@ -420,6 +437,7 @@ public:
             .BlockSize = options.BlockSize,
             .BlockCount = options.BlocksCount,
             .BlocksPerStripeCount = options.StripeSize / options.BlockSize,
+            .VChunkSize = options.VChunkSize,
             .MaxZeroBlocksSubRequestSize = options.MaxZeroBlocksSubRequestSize,
             .UnalignedRequestsDisabled = options.UnalignedRequestsDisabled,
             .StorageMediaKind = options.StorageMediaKind};
@@ -430,6 +448,7 @@ public:
         auto endpoint = std::make_shared<TEndpoint>(
             AppCtx,
             std::move(deviceHandler),
+            std::move(partitionDirectService),
             socketPath,
             options,
             SocketAccessMode);
@@ -568,6 +587,7 @@ public:
 
     TFuture<NProto::TError> StartEndpoint(
         TString socketPath,
+        IPartitionDirectServicePtr partitionDirectService,
         IStoragePtr storage,
         const TStorageOptions& options) override;
 
@@ -640,6 +660,7 @@ void TServer::Stop()
 
 TFuture<NProto::TError> TServer::StartEndpoint(
     TString socketPath,
+    IPartitionDirectServicePtr partitionDirectService,
     IStoragePtr storage,
     const TStorageOptions& options)
 {
@@ -667,8 +688,11 @@ TFuture<NProto::TError> TServer::StartEndpoint(
         Y_ABORT_UNLESS(executor);
     }
 
-    auto endpoint =
-        executor->CreateEndpoint(socketPath, options, std::move(storage));
+    auto endpoint = executor->CreateEndpoint(
+        socketPath,
+        options,
+        std::move(partitionDirectService),
+        std::move(storage));
 
     auto error = SafeExecute<NProto::TError>([&] { return endpoint->Start(); });
     if (HasError(error)) {

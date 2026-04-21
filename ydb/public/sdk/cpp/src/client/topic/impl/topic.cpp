@@ -55,6 +55,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
     , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
+    , ContentBasedDeduplication_(Proto_.content_based_deduplication())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -108,6 +109,8 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
         ConsumerType_ = EConsumerType::Shared;
         KeepMessagesOrder_ = consumer.shared_consumer_type().keep_messages_order();
         DefaultProcessingTimeout_ = TDuration::Seconds(consumer.shared_consumer_type().default_processing_timeout().seconds());
+        ReceiveMessageWaitTime_ = ConvertPositiveDuration(consumer.shared_consumer_type().receive_message_wait_time());
+        ReceiveMessageDelay_ = ConvertPositiveDuration(consumer.shared_consumer_type().receive_message_delay());
     } else {
         ConsumerType_ = EConsumerType::Streaming;
     }
@@ -119,6 +122,14 @@ const std::string& TConsumer::GetConsumerName() const {
 
 EConsumerType TConsumer::GetConsumerType() const {
     return ConsumerType_;
+}
+
+TDuration TConsumer::GetReceiveMessageWaitTime() const {
+    return ReceiveMessageWaitTime_;
+}
+
+TDuration TConsumer::GetReceiveMessageDelay() const {
+    return ReceiveMessageDelay_;
 }
 
 bool TConsumer::GetImportant() const {
@@ -158,6 +169,10 @@ const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const 
 
 uint32_t TTopicDescription::GetTotalPartitionsCount() const {
     return Partitions_.size();
+}
+
+bool TTopicDescription::GetContentBasedDeduplication() const {
+    return ContentBasedDeduplication_;
 }
 
 const std::vector<TPartitionInfo>& TTopicDescription::GetPartitions() const {
@@ -757,6 +772,14 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
             if (DefaultProcessingTimeout_) {
                 shared->mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
             }
+            if (ReceiveMessageDelay_) {
+                shared->mutable_receive_message_delay()->set_seconds(ReceiveMessageDelay_->Seconds());
+                shared->mutable_receive_message_delay()->set_nanos(ReceiveMessageDelay_->NanoSecondsOfSecond());
+            }
+            if (ReceiveMessageWaitTime_) {
+                shared->mutable_receive_message_wait_time()->set_seconds(ReceiveMessageWaitTime_->Seconds());
+                shared->mutable_receive_message_wait_time()->set_nanos(ReceiveMessageWaitTime_->NanoSecondsOfSecond());
+            }
             if (DeadLetterPolicy_.Enabled_) {
                 shared->mutable_dead_letter_policy()->set_enabled(DeadLetterPolicy_.Enabled_.value());
             }
@@ -826,6 +849,16 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
             ->set_set_max_processing_attempts(DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
     }
 
+    if (ReceiveMessageDelay_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay()->set_seconds(ReceiveMessageDelay_->Seconds());
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay()->set_nanos(ReceiveMessageDelay_->NanoSecondsOfSecond());
+    }
+
+    if (ReceiveMessageWaitTime_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time()->set_seconds(ReceiveMessageWaitTime_->Seconds());
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time()->set_nanos(ReceiveMessageWaitTime_->NanoSecondsOfSecond());
+    }
+
     if (DeadLetterPolicy_.Action_) {
         switch (DeadLetterPolicy_.Action_.value()) {
             case EDeadLetterAction::Move:
@@ -878,6 +911,7 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     if (MetricsLevel_) {
         request.set_metrics_level(*MetricsLevel_);
     }
+    request.set_content_based_deduplication(ContentBasedDeduplication_);
 }
 
 } // namespace NYdb::NTopic

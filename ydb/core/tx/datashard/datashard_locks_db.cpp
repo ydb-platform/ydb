@@ -2,6 +2,14 @@
 
 namespace NKikimr::NDataShard {
 
+void TDataShardLocksDb::PersistLockCounter(ui64 lockId, ui64 counter) {
+    TBase::PersistLockCounter(lockId, counter);
+    if (counter == Max<ui64>()) {
+        NIceDb::TNiceDb db(DB);
+        Self.GetMultiTxIdManager().OnLockBroken(db, lockId);
+    }
+}
+
 void TDataShardLocksDb::PersistRemoveLock(ui64 lockId) {
     // We remove lock changes unless it's managed by volatile tx manager
     bool isVolatile = Self.GetVolatileTxManager().FindByCommitTxId(lockId);
@@ -20,6 +28,8 @@ void TDataShardLocksDb::PersistRemoveLock(ui64 lockId) {
     NIceDb::TNiceDb db(DB);
     db.Table<typename Schema::Locks>().Key(lockId).Delete();
     HasChanges_ = true;
+
+    Self.GetMultiTxIdManager().OnLockRemoved(db, lockId);
 
     if (!isVolatile) {
         Self.ScheduleRemoveLockChanges(lockId);

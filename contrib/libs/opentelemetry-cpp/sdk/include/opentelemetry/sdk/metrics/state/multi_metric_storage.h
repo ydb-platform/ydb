@@ -25,7 +25,7 @@ namespace metrics
 class SyncMultiMetricStorage : public SyncWritableMetricStorage
 {
 public:
-  void AddStorage(std::shared_ptr<SyncWritableMetricStorage> storage)
+  void AddStorage(const std::shared_ptr<SyncWritableMetricStorage> &storage)
   {
     storages_.push_back(storage);
   }
@@ -73,7 +73,7 @@ private:
 class AsyncMultiMetricStorage : public AsyncWritableMetricStorage
 {
 public:
-  void AddStorage(std::shared_ptr<AsyncWritableMetricStorage> storage)
+  void AddStorage(const std::shared_ptr<AsyncWritableMetricStorage> &storage)
   {
     storages_.push_back(storage);
   }

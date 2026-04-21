@@ -59,6 +59,21 @@ struct TPDiskMockState::TImpl {
     std::shared_ptr<NPDisk::TQuotaRecord> ChunkSharedQuota;
     double Occupancy = 0;
 
+    struct TShredState {
+        enum class EPhase : ui8 {
+            None = 0,
+            PreShredCompaction,
+            ShredVDisks,
+        };
+
+        TActorId Requester = TActorId{};
+        ui64 Cookie = 0;
+        ui32 Generation = 0;
+        EPhase Phase = EPhase::None;
+        std::set<ui8> Pending;
+    };
+    TShredState Shred;
+
     TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, bool isDiskReadOnly, NPDisk::EDeviceType deviceType,
             ESpaceColorPolicy spaceColorPolicy)
         : NodeId(nodeId)
@@ -497,16 +512,12 @@ public:
                 owner->OwnerRound, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, false,
                 Impl.AppendBlockSize, TString());
             res->StartingPoints = owner->StartingPoints;
-            NPDisk::TDiskFormat format;
+            NPDisk::TDiskFormat format = {};
             format.Clear(false);
             res->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
                 delete ptr;
             });
 
-            NPDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
-            res->PersistentBufferFormat = NPDisk::TPersistentBufferFormatPtr(new NPDisk::TPersistentBufferFormat(pbFormat), +[](NPDisk::TPersistentBufferFormat* ptr) {
-                delete ptr;
-            });
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");
         }
@@ -1042,7 +1053,7 @@ public:
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK, GetStatusFlags(),
             Impl.GetNumFreeChunks(), Impl.TotalChunks, Impl.TotalChunks - Impl.GetNumFreeChunks(),
-            Impl.Owners.size(), 0u, TString());
+            Impl.Owners.size(), 0u, 0, TString());
         res->NormalizedOccupancy = GetOccupancy();
         Impl.FindOwner(msg, res); // to ensure correct owner/round
         Send(ev->Sender, res.release());
@@ -1079,6 +1090,74 @@ public:
         Send(ev->Sender, res.release());
     }
 
+    void Handle(const NPDisk::TEvShredPDisk::TPtr& ev) {
+        if (ev->Get()->ShredGeneration <= Impl.Shred.Generation) {
+            Y_FAIL("Reordering shredding generations is not yet implemented in PDisk mock");
+        } 
+
+        if (Impl.Shred.Phase != TImpl::TShredState::EPhase::None) {
+            Y_FAIL("Multiple shreddings are not yet implemented in PDisk mock");
+        }
+
+        Impl.Shred.Phase = TImpl::TShredState::EPhase::PreShredCompaction;
+        Impl.Shred.Generation = ev->Get()->ShredGeneration;
+        for (const auto& [ownerId, ownerData] : Impl.Owners) {
+            Send(ownerData.CutLogId, new NPDisk::TEvPreShredCompactVDisk(Impl.Shred.Generation));
+            Impl.Shred.Pending.insert(ownerId);
+        }
+        Impl.Shred.Requester = ev->Sender;
+        Impl.Shred.Cookie = ev->Cookie;
+
+        if (Impl.Owners.empty()) {
+            FinishShredding();
+        }
+    }
+
+    void Handle(const NPDisk::TEvPreShredCompactVDiskResult::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Y_FAIL("Shredding failures handling is not yet supported in PDisk mock");
+        }
+        Y_VERIFY(Impl.Shred.Phase == TImpl::TShredState::EPhase::PreShredCompaction);
+        Y_VERIFY(Impl.Shred.Generation == ev->Get()->ShredGeneration);
+        bool erased = Impl.Shred.Pending.erase(ev->Get()->Owner);
+        Y_VERIFY(erased);
+
+        if (Impl.Shred.Pending.empty()) {
+            Impl.Shred.Phase = TImpl::TShredState::EPhase::ShredVDisks;
+
+            if (Impl.Owners.empty()) {
+                FinishShredding();
+                return;
+            }
+        
+            for (const auto& [ownerId, ownerData] : Impl.Owners) {
+                std::vector<ui32> chunks(ownerData.ReservedChunks.begin(), ownerData.ReservedChunks.end());
+                chunks.insert(chunks.end(), ownerData.CommittedChunks.begin(), ownerData.CommittedChunks.end());
+                Send(ownerData.CutLogId, new NPDisk::TEvShredVDisk(Impl.Shred.Generation, std::move(chunks)));
+                Impl.Shred.Pending.insert(ownerId);
+            }
+        }
+    }
+
+    void Handle(NPDisk::TEvShredVDiskResult::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Y_FAIL("Shredding failures handling is not yet supported in PDisk mock");
+        }
+        Y_VERIFY(Impl.Shred.Phase == TImpl::TShredState::EPhase::ShredVDisks);
+        Y_VERIFY(Impl.Shred.Generation == ev->Get()->ShredGeneration);
+        bool erased = Impl.Shred.Pending.erase(ev->Get()->Owner);
+        Y_VERIFY(erased);
+        if (Impl.Shred.Pending.empty()) {
+            FinishShredding();
+        }
+    }
+
+    void FinishShredding() {
+        Impl.Shred.Phase = TImpl::TShredState::EPhase::None;
+        Send(new IEventHandle(Impl.Shred.Requester, SelfId(),
+                new NPDisk::TEvShredPDiskResult(NKikimrProto::OK, Impl.Shred.Generation, ""), 0, Impl.Shred.Cookie));
+    }
+
     NPDisk::TStatusFlags GetStatusFlags() {
         Impl.UpdateStatusFlags();
         return Impl.StatusFlags;
@@ -1099,7 +1178,7 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, 0, State->GetStateErrorReason()));
     }
 
     void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {
@@ -1243,6 +1322,9 @@ public:
         hFunc(NPDisk::TEvReadMetadata, Handle);
         hFunc(NPDisk::TEvWriteMetadata, Handle);
         hFunc(TEvMoveDrive, Handle);
+        hFunc(NPDisk::TEvShredPDisk, Handle);
+        hFunc(NPDisk::TEvPreShredCompactVDiskResult, Handle);
+        hFunc(NPDisk::TEvShredVDiskResult, Handle);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);
 

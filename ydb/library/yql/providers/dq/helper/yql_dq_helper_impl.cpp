@@ -70,6 +70,17 @@ public:
         return settings.BuildNode(ctx, pos).Ptr();
     }
 
+    bool IsSinglePartitionMode(const TExprNode& stage) final {
+        NDq::TDqStageSettings settings = NDq::TDqStageSettings::Parse(TDqStageBase(&stage));
+        return NDq::TDqStageSettings::EPartitionMode::Single == settings.PartitionMode;
+    }
+
+    TExprNode::TPtr SetSinglePartitionMode(const TExprNode::TPtr& stage, TExprContext& ctx) final {
+        NDq::TDqStageSettings settings = NDq::TDqStageSettings::Parse(TDqStageBase(stage));
+        settings.PartitionMode = NDq::TDqStageSettings::EPartitionMode::Single;
+        return ctx.ChangeChild(*stage, TDqStageBase::idx_Settings, settings.BuildNode(ctx, stage->Pos()).Ptr());
+    }
+
     TExprNode::TListType RemoveVariadicDqStageSettings(const TExprNode& settings) final {
         TExprNode::TListType res;
 

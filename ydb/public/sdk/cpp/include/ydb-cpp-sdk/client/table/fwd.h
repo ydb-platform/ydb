@@ -64,6 +64,7 @@ struct TPartitioningPolicy;
 struct TReplicationPolicy;
 
 class TBuildIndexOperation;
+class TCompactionOperation;
 
 class TTtlDeleteAction;
 class TTtlEvictToExternalStorageAction;

@@ -21,17 +21,18 @@ namespace {
         TPDiskCtxPtr PDiskCtx;
         TVector<TPartInfo> Parts;
         TReplQuoter::TPtr Quoter;
+        NMonitoring::TDynamicCounters::TCounterPtr QuoterThrottledCounter;
         const TBlobStorageGroupType GType;
         NMonGroup::TBalancingGroup& MonGroup;
-
         TVector<TPart> Result;
         ui32 Responses = 0;
     public:
 
-        TReader(TPDiskCtxPtr pDiskCtx, TVector<TPartInfo>&& parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
+        TReader(TPDiskCtxPtr pDiskCtx, TVector<TPartInfo>&& parts, TReplQuoter::TPtr replPDiskReadQuoter, NMonitoring::TDynamicCounters::TCounterPtr quoterThrottledCounter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
             : PDiskCtx(pDiskCtx)
             , Parts(std::move(parts))
             , Quoter(replPDiskReadQuoter)
+            , QuoterThrottledCounter(quoterThrottledCounter)
             , GType(gType)
             , MonGroup(monGroup)
             , Result(Parts.size())
@@ -70,7 +71,9 @@ namespace {
                         TReplQuoter::QuoteMessage(
                             Quoter,
                             std::make_unique<IEventHandle>(PDiskCtx->PDiskId, selfId, ev.release()),
-                            diskPart.Size
+                            diskPart.Size,
+                            0,
+                            QuoterThrottledCounter
                         );
                         MonGroup.ReadFromHandoffBytes() += diskPart.Size;
                     }
@@ -125,6 +128,7 @@ namespace {
         std::shared_ptr<TBalancingCtx> Ctx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
+        NMonGroup::TReplGroup& ReplMonGroup;
 
         ui32 RequestsSent = 0;
         ui32 Responses = 0;
@@ -133,11 +137,13 @@ namespace {
         TPartsSender(
             std::shared_ptr<TBalancingCtx> ctx,
             TIntrusivePtr<TBlobStorageGroupInfo> gInfo,
-            TQueueActorMapPtr queueActorMapPtr
+            TQueueActorMapPtr queueActorMapPtr,
+            NMonGroup::TReplGroup& replMonGroup
         )
             : Ctx(ctx)
             , GInfo(gInfo)
             , QueueActorMapPtr(queueActorMapPtr)
+            , ReplMonGroup(replMonGroup)
         {}
 
         void SendRequest(const TVDiskIdShort& vDiskId, const TActorId& selfId, IEventBase* ev, ui32 dataSize) {
@@ -145,7 +151,9 @@ namespace {
             TReplQuoter::QuoteMessage(
                 Ctx->VCtx->ReplNodeRequestQuoter,
                 std::make_unique<IEventHandle>(queue, selfId, ev),
-                dataSize
+                dataSize,
+                0,
+                ReplMonGroup.ReplNodeRequestThrottledMicrosecondsPtr()
             );
             RequestsSent++;
             Ctx->MonGroup.SentOnMainBytes() += dataSize;
@@ -183,20 +191,15 @@ namespace {
                         }
 
                         // TODO(alexvru): checksumming here
-                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, false, false, {}, NWilson::TTraceId(), false);
+                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, false, true, false, {}, NWilson::TTraceId(), false);
                     }
                 }
             }
 
             for (auto& [vDiskId, ev]: vDiskToEv) {
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Send multiput"), (VDisk, vDiskId.ToString()));
-
-                ui32 blobsSize = 0;
-                for (const auto& item: ev->Record.GetItems()) {
-                    blobsSize += item.GetBuffer().size();
-                }
-
-                SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), blobsSize);
+                const size_t bytes = ev->GetBufferBytes();
+                SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), bytes);
             }
         }
 
@@ -366,8 +369,8 @@ namespace {
             , QueueActorMapPtr(queueActorMapPtr)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , Reader(Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType, Ctx->MonGroup)
-            , Sender(ctx, GInfo, queueActorMapPtr)
+            , Reader(Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, ctx->ReplMonGroup.ReplPDiskReadThrottledMicrosecondsPtr(), GInfo->GetTopology().GType, Ctx->MonGroup)
+            , Sender(ctx, GInfo, queueActorMapPtr, Ctx->ReplMonGroup)
         {}
 
         void Bootstrap() {

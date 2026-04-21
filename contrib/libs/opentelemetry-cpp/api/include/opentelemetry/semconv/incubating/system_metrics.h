@@ -780,6 +780,51 @@ CreateAsyncDoubleMetricSystemMemoryLinuxAvailable(metrics::Meter *meter)
 }
 
 /**
+  Shared memory used (mostly by tmpfs).
+  <p>
+  Equivalent of @code shared @endcode from <a
+  href="https://man7.org/linux/man-pages/man1/free.1.html">@code free @endcode command</a> or
+  @code Shmem @endcode from <a href="https://man7.org/linux/man-pages/man5/proc.5.html">@code
+  /proc/meminfo @endcode</a>" <p> updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxShared = "system.memory.linux.shared";
+static constexpr const char *descrMetricSystemMemoryLinuxShared =
+    "Shared memory used (mostly by tmpfs).";
+static constexpr const char *unitMetricSystemMemoryLinuxShared = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxShared,
+                                         descrMetricSystemMemoryLinuxShared,
+                                         unitMetricSystemMemoryLinuxShared);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxShared,
+                                          descrMetricSystemMemoryLinuxShared,
+                                          unitMetricSystemMemoryLinuxShared);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxShared,
+                                                   descrMetricSystemMemoryLinuxShared,
+                                                   unitMetricSystemMemoryLinuxShared);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxShared,
+                                                    descrMetricSystemMemoryLinuxShared,
+                                                    unitMetricSystemMemoryLinuxShared);
+}
+
+/**
   Reports the memory used by the Linux kernel for managing caches of frequently used objects.
   <p>
   The sum over the @code reclaimable @endcode and @code unreclaimable @endcode state values in @code
@@ -828,40 +873,40 @@ CreateAsyncDoubleMetricSystemMemoryLinuxSlabUsage(metrics::Meter *meter)
 }
 
 /**
-  Shared memory used (mostly by tmpfs).
-  <p>
-  Equivalent of @code shared @endcode from <a
-  href="https://man7.org/linux/man-pages/man1/free.1.html">@code free @endcode command</a> or
-  @code Shmem @endcode from <a href="https://man7.org/linux/man-pages/man5/proc.5.html">@code
-  /proc/meminfo @endcode</a>" <p> updowncounter
- */
-static constexpr const char *kMetricSystemMemoryShared = "system.memory.shared";
-static constexpr const char *descrMetricSystemMemoryShared =
-    "Shared memory used (mostly by tmpfs).";
-static constexpr const char *unitMetricSystemMemoryShared = "By";
+  Deprecated, use @code system.memory.linux.shared @endcode instead.
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+  @deprecated
+  {"note": "Replaced by @code system.memory.linux.shared @endcode.", "reason": "renamed",
+  "renamed_to": "system.memory.linux.shared"} <p> updowncounter
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricSystemMemoryShared =
+    "system.memory.shared";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricSystemMemoryShared =
+    "Deprecated, use `system.memory.linux.shared` instead.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemMemoryShared = "By";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateInt64UpDownCounter(kMetricSystemMemoryShared, descrMetricSystemMemoryShared,
                                          unitMetricSystemMemoryShared);
 }
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryShared, descrMetricSystemMemoryShared,
                                           unitMetricSystemMemoryShared);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricSystemMemoryShared, descrMetricSystemMemoryShared, unitMetricSystemMemoryShared);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableUpDownCounter(

@@ -1,5 +1,6 @@
 #include "assign_const.h"
 #include "assign_internal.h"
+#include "aggr_keys.h"
 #include "filter.h"
 #include "graph_optimization.h"
 #include "header.h"
@@ -295,6 +296,80 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         }
         changed = true;
     }
+    return changed;
+}
+
+// Strict: only allow dictionary-only when the entire request needs exactly one data column,
+// and that column is an aggregation key used only in SOME (no filters on other columns, no other aggregates).
+TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds) {
+    if (!node->Is(EProcessorType::Aggregation)) {
+        return false;
+    }
+
+    const auto aggrProc = node->GetProcessorAs<NAggregation::TWithKeysAggregationProcessor>();
+    if (!aggrProc) {
+        return false;
+    }
+
+    if (requiredDataColumnIds.size() != 1) {
+        return false;
+    }
+
+    const ui32 columnId = *requiredDataColumnIds.begin();
+
+    // True only if *all* aggregations are exactly SOME(columnId)
+    auto isKeyColumnOnlyUsedInSome = [aggrProc](const ui32 columnId) -> bool {
+        bool usedInAggr = false;
+        for (const auto& aggr : aggrProc->GetAggregations()) {
+            // Every aggregation must be SOME with exactly one input
+            if (aggr.GetAggregationId() != NAggregation::EAggregate::Some) {
+                return false;
+            }
+            const auto& inputs = aggr.GetInputs();
+            if (inputs.size() != 1) {
+                return false;
+            }
+            if (inputs[0].GetColumnId() != columnId) {
+                return false;
+            }
+            usedInAggr = true;
+        }
+        return usedInAggr;
+    };
+
+    if (!isKeyColumnOnlyUsedInSome(columnId)) {
+        return false;
+    }
+
+    THashSet<ui32> keyIds;
+    for (const auto& k : aggrProc->GetAggregationKeys()) {
+        keyIds.insert(k.GetColumnId());
+    }
+    if (!keyIds.contains(columnId)) {
+        return false;
+    }
+
+    bool changed = false;
+    TGraphNode* producer = GetProducerVerified(columnId);
+    for (const auto& [addr, inputNode] : producer->GetInputEdges()) {
+        if (addr.GetResourceId() != columnId) {
+            continue;
+        }
+        if (!inputNode->Is(EProcessorType::FetchOriginalData)) {
+            break;
+        }
+        auto proc = inputNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+        if (proc) {
+            const auto& addrs = proc->GetDataAddresses();
+            auto it = addrs.find(columnId);
+            if (it != addrs.end() && !it->second.GetUseDictionaryOnly()) {
+                proc->SetDictionaryOnlyForColumn(columnId);
+                changed = true;
+            }
+        }
+        break;
+    }
+
     return changed;
 }
 
@@ -645,11 +720,28 @@ TConclusionStatus TGraph::Collapse() {
             }
         }
     }
+
     hasChanges = true;
     while (hasChanges) {
         hasChanges = false;
         for (auto&& [_, n] : Nodes) {
             auto conclusion = OptimizeForFetchSubColumns(n.get());
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+            if (*conclusion) {
+                hasChanges = true;
+                break;
+            }
+        }
+    }
+
+    THashSet<ui32> requiredDataColumnIds = CollectRequiredDataColumnIdsFromGraph();
+    hasChanges = true;
+    while (hasChanges) {
+        hasChanges = false;
+        for (auto&& [_, n] : Nodes) {
+            auto conclusion = OptimizeForFetchDictionaryOnly(n.get(), requiredDataColumnIds);
             if (conclusion.IsFail()) {
                 return conclusion;
             }
@@ -736,6 +828,20 @@ void TGraph::RemoveBranch(TGraphNode* from, const bool backOnly) {
     for (auto&& i : nodes) {
         RemoveNode(i.first);
     }
+}
+
+THashSet<ui32> TGraph::CollectRequiredDataColumnIdsFromGraph() const {
+    THashSet<ui32> columnIds;
+    for (auto&& [_, node] : Nodes) {
+        if (!node->Is(EProcessorType::FetchOriginalData)) {
+            continue;
+        }
+        const auto proc = node->GetProcessorAs<TOriginalColumnDataProcessor>();
+        for (const auto& [colId, _] : proc->GetDataAddresses()) {
+            columnIds.insert(colId);
+        }
+    }
+    return columnIds;
 }
 
 TString TResourceAddress::DebugString() const {

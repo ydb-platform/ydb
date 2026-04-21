@@ -58,7 +58,6 @@ class StreamingTestBase:
                     SOURCE_TYPE="Ydb",
                     LOCATION="{endpoint}",
                     DATABASE_NAME="{self.database_path}",
-                    SHARED_READING="false",
                     AUTH_METHOD="NONE");
             """
             session_pool.execute_with_retries(query)
@@ -129,12 +128,15 @@ class StreamingTestBase:
         logger.debug("write data to stream")
         write_stream(path=self.input_topic, data=input, database=self.database_path, endpoint=endpoint)
         logger.debug("read data from stream")
-        assert sorted(read_stream(
+        read_data = read_stream(
             path=self.output_topic,
             messages_count=len(expected_output),
             consumer_name=self.consumer_name,
             database=self.database_path,
-            endpoint=endpoint)) == sorted(expected_output)
+            endpoint=endpoint)
+        if (len(read_data) != len(expected_output)):
+            read_data = read_data[-len(expected_output):]        # deduplication disabled
+        assert sorted(read_data) == sorted(expected_output)
 
     def do_test_part1(self):
         input = [
@@ -199,10 +201,11 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
         self.create_external_data_source()
         self.create_simple_streaming_query()
 
-        for _ in self.roll():  # every iteration is a step in rolling upgrade process
+        for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
             #
             # 2. check written data is correct during rolling upgrade
             #
-            input = ['{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}']
-            expected_data = ['{"host":"host-2","level":"error","time":"2025-01-01T00:15:00.000000Z"}']
+            input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
+            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}']
             self.do_write_read(input, expected_data)
+            time.sleep(0.5)

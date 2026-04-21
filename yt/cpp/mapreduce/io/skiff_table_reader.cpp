@@ -1,5 +1,6 @@
 #include "skiff_table_reader.h"
 
+#include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <library/cpp/yson/node/node_io.h>
@@ -83,7 +84,7 @@ bool TSkiffTableReader::IsValid() const
 void TSkiffTableReader::Next()
 {
     EnsureValidity();
-    if (Y_UNLIKELY(Finished_ || !Parser_->HasMoreData())) {
+    if (Finished_ || !Parser_->HasMoreData()) [[unlikely]] {
         Finished_ = true;
         Valid_ = false;
         return;
@@ -153,6 +154,16 @@ TMaybe<size_t> TSkiffTableReader::GetReadByteCount() const
 bool TSkiffTableReader::IsRawReaderExhausted() const
 {
     return Finished_;
+}
+
+void TSkiffTableReader::Abort()
+{
+    Input_.Abort();
+}
+
+bool TSkiffTableReader::IsAborted() const
+{
+    return Input_.IsAborted();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -288,6 +299,9 @@ void TSkiffTableReader::ReadRow()
 
 void TSkiffTableReader::EnsureValidity() const
 {
+    if (IsAborted()) {
+        ythrow TInputStreamAbortedError() << "Stream was aborted";
+    }
     Y_ENSURE(Valid_, "Iterator is not valid");
 }
 

@@ -9,12 +9,12 @@ let
     };
   });
 in rec {
-  version = "8.16.0";
+  version = "8.17.0";
   versionWithUnderscores = "${lib.replaceStrings ["."] ["_"] version}";
 
   src = fetchurl {
     url = "https://github.com/curl/curl/releases/download/curl-${versionWithUnderscores}/curl-${version}.tar.bz2";
-    hash = "sha256-lFkYCrSTOzDQd43dcckf4pEfq3McRuWbP0yDhbFZbJE=";
+    hash = "sha256-IwAyUozl+FWU1PPqzmM2TEJEzMPIAbf42xmCci8nYfQ=";
   };
 
   patches = [];

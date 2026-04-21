@@ -32,6 +32,7 @@ namespace NYdb {
             bool Direct;
             ui32 Codec = 0;
             bool UseTransactions = false;
+            bool TrackProducerIdInTx = true;
             bool UseAutoPartitioning = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;
@@ -70,7 +71,8 @@ namespace NYdb {
             void Close();
             void CloseProducers();
 
-            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId);
+            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId,
+                                                                         NTopic::TTopicClient& topicClient);
 
             void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(std::shared_ptr<TTopicWorkloadWriterProducer> producer);
 

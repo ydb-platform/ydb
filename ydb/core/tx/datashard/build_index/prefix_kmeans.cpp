@@ -1,12 +1,12 @@
 #include "kmeans_helper.h"
 #include "../datashard_impl.h"
+#include "../range_ops.h"
 #include "../scan_common.h"
 #include "../upload_stats.h"
 #include "../buffer_data.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -106,6 +106,10 @@ protected:
 
     bool IsExhausted = false;
 
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TSerializedCellVec LastAckedKey;
+    TSerializedCellVec PendingCheckpointKey;
+    ui64 NextCheckpointAtBytes = 0;
     std::unique_ptr<IClusters> Clusters;
     std::vector<std::pair<ui32, double>> TmpClusters;
 
@@ -135,9 +139,11 @@ public:
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetPrefixColumns()}
+        , KeyTypes(table.KeyColumnTypes)
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
+        NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
         const bool toBuild = request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD;
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
@@ -152,6 +158,13 @@ public:
         // DataPos always includes the embedding column
         DataColumnCount = ScanTags.size() - request.GetSourcePrimaryKeyColumns().size() - DataPos;
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        if (request.HasKeyRange()) {
+            TSerializedTableRange resumeRange;
+            resumeRange.Load(request.GetKeyRange());
+            auto scanRange = Intersect(KeyTypes, resumeRange.ToTableRange(), table.GetTableRange());
+            Lead = CreateLeadFrom(scanRange);
+            Lead.SetTags(ScanTags);
+        }
         {
             Ydb::Type type;
             auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
@@ -216,6 +229,10 @@ public:
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
+
+        if (LastAckedKey.GetBuffer()) {
+            record.SetLastKeyAck(LastAckedKey.GetBuffer());
+        }
 
         Uploader.Finish(record, status);
 
@@ -282,13 +299,6 @@ public:
 
         if (!Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
-
-            // write {Prefix..., Parent} row to PrefixBuf:
-            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
-            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
-            pk.push_back(TCell::Make(Parent));
-
-            PrefixBuf->AddRow(pk, {});
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
@@ -346,9 +356,26 @@ protected:
             return;
         }
 
-        Uploader.Handle(ev);
+        bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
+            if (batchUploaded && PendingCheckpointKey.GetBuffer() && Uploader.AllFlushed()
+                && Uploader.GetUploadBytes() >= NextCheckpointAtBytes)
+            {
+                NextCheckpointAtBytes = Uploader.GetUploadBytes() + ScanSettings.GetMaxCheckpointBytes();;
+                LastAckedKey = PendingCheckpointKey;
+                PendingCheckpointKey = {};
+
+                auto progress = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
+                auto& rec = progress->Record;
+                rec.SetId(BuildId);
+                rec.SetTabletId(TabletId);
+                rec.SetRequestSeqNoGeneration(Response->Record.GetRequestSeqNoGeneration());
+                rec.SetRequestSeqNoRound(Response->Record.GetRequestSeqNoRound());
+                rec.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                rec.SetLastKeyAck(LastAckedKey.GetBuffer());
+                Send(ResponseActorId, progress.Release());
+            }
             Driver->Touch(EScan::Feed);
             return;
         }
@@ -390,6 +417,7 @@ protected:
     bool FinishPrefix()
     {
         if (FinishPrefixImpl()) {
+            PendingCheckpointKey = Prefix;
             StartNewPrefix();
             LOG_T("FinishPrefix finished " << Debug());
             return true;
@@ -404,6 +432,7 @@ protected:
                         Feed(key.GetCells(), row.GetCells());
                     }
                     if (FinishPrefixImpl()) {
+                        PendingCheckpointKey = Prefix;
                         StartNewPrefix();
                         LOG_T("FinishPrefix finished in " << iteration << " iterations " << Debug());
                         return true;
@@ -434,6 +463,12 @@ protected:
                 // lets make single centroid for it
                 rows.resize(1);
             }
+            // Now we know that the prefix is correct, write {Prefix..., Parent} row to PrefixBuf
+            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
+            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
+            pk.push_back(TCell::Make(Parent));
+            PrefixBuf->AddRow(pk, {});
+            // Set clusters
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
             Clusters->SetRound(1);

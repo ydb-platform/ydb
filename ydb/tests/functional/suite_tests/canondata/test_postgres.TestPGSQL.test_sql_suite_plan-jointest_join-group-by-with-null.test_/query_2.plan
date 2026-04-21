@@ -93,13 +93,12 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Stage",
+                                                                        "Node Type": "Collect",
                                                                         "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
                                                                                 "Columns": [
-                                                                                    "q1",
-                                                                                    "q2"
+                                                                                    "q1"
                                                                                 ],
                                                                                 "E-Cost": "0",
                                                                                 "E-Rows": "0",
@@ -187,8 +186,7 @@
                 },
                 {
                     "columns": [
-                        "q1",
-                        "q2"
+                        "q1"
                     ],
                     "lookup_by": [
                         "q1"

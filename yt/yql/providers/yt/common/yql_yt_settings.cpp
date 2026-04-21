@@ -1,5 +1,7 @@
 #include "yql_yt_settings.h"
 
+#include <yt/yql/providers/yt/common/yql_configuration.h>
+
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -122,6 +124,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheTtl);
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
+    REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -451,6 +454,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
     REGISTER_SETTING(*this, LLVMNodeCountLimit);
+    REGISTER_SETTING(*this, OmitInaccessibleRows);
+    REGISTER_SETTING(*this, _EnableRLSTablesSupport);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder).IgnoreInFullReplay();
     REGISTER_SETTING(*this, _BinaryCacheFolder);
@@ -507,6 +512,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
     REGISTER_SETTING(*this, UseQLFilter);
     REGISTER_SETTING(*this, PruneQLFilterLambda).Deprecated();
+    REGISTER_SETTING(*this, _EnableQLFilter);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
@@ -628,6 +634,12 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
     REGISTER_SETTING(*this, KeepWorldDepForFillOp);
     REGISTER_SETTING(*this, CostBasedOptimizerPartial);
+    REGISTER_SETTING(*this, _MinJobStateSizeToPassViaFile);
+    REGISTER_SETTING(*this, _SecureTmpRoot);
+    REGISTER_SETTING(*this, _SecureTmpWaitForAclDelay);
+    REGISTER_SETTING(*this, _SecureTmpWaitForAclMaxAttempts);
+    REGISTER_SETTING(*this, _SecureTmpAttributes).Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); });
+    REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
@@ -636,6 +648,27 @@ EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
 
 EJoinCollectColumnarStatisticsMode GetJoinCollectColumnarStatisticsMode(const TYtSettings& settings) {
     return settings.JoinCollectColumnarStatistics.Get().GetOrElse(EJoinCollectColumnarStatisticsMode::Async);
+}
+
+TString GetUserTablesTmpFolder(const TYtSettings& settings, const TString& cluster) {
+    return settings.TablesTmpFolder.Get(cluster).GetOrElse(settings.TmpFolder.Get(cluster).GetOrElse({}));
+}
+
+TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster, const TSecureTmpStatePtr& useSecureTmp, const TYqlOperationOptions& operationOptions) {
+    YQL_ENSURE(useSecureTmp);
+
+    auto tablesTmpFolder = GetUserTablesTmpFolder(settings, cluster);
+    auto secureTmpRoot = settings._SecureTmpRoot.Get(cluster);
+    if (tablesTmpFolder || !useSecureTmp->load() || !secureTmpRoot) {
+        return tablesTmpFolder;
+    }
+
+    if (operationOptions.ProjectSlug) {
+        return TStringBuilder() << *secureTmpRoot << "/project/" << *operationOptions.ProjectSlug;
+    } else {
+        YQL_ENSURE(operationOptions.AuthenticatedUser);
+        return TStringBuilder() << *secureTmpRoot << "/personal/" << *operationOptions.AuthenticatedUser;
+    }
 }
 
 TYtSettings::TConstPtr TYtConfiguration::Snapshot() const {
@@ -662,7 +695,7 @@ void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNo
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {
-    if (Y_UNLIKELY(FrozenSettings.empty())) {
+    if (FrozenSettings.empty()) [[unlikely]] {
         FrozenSettings.push_back(Snapshot());
     }
 }

@@ -14,11 +14,14 @@ using namespace NYql;
 
 enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 
+struct TPlanProps;
+
 struct TSubplanEntry {
     TIntrusivePtr<ISimpleOperator> Plan;
     TVector<TInfoUnit> Tuple;
     ESubplanType Type;
     TInfoUnit IU;
+    TVector<TInfoUnit> DependentIUs;
 };
 
 struct TSubplans {

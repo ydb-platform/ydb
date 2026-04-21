@@ -1,1463 +1,2894 @@
 {
-  "DateTime": [
-    {
-      "name": "Convert"
-    },
-    {
-      "name": "EndOf"
-    },
-    {
-      "name": "EndOfDay"
-    },
-    {
-      "name": "EndOfMonth"
-    },
-    {
-      "name": "EndOfQuarter"
-    },
-    {
-      "name": "EndOfWeek"
-    },
-    {
-      "name": "EndOfYear"
-    },
-    {
-      "name": "Format"
-    },
-    {
-      "name": "FromMicroseconds"
-    },
-    {
-      "name": "FromMicroseconds64"
-    },
-    {
-      "name": "FromMilliseconds"
-    },
-    {
-      "name": "FromMilliseconds64"
-    },
-    {
-      "name": "FromSeconds"
-    },
-    {
-      "name": "FromSeconds64"
-    },
-    {
-      "name": "GetDayOfMonth"
-    },
-    {
-      "name": "GetDayOfWeek"
-    },
-    {
-      "name": "GetDayOfWeekName"
-    },
-    {
-      "name": "GetDayOfYear"
-    },
-    {
-      "name": "GetHour"
-    },
-    {
-      "name": "GetMicrosecondOfSecond"
-    },
-    {
-      "name": "GetMillisecondOfSecond"
-    },
-    {
-      "name": "GetMinute"
-    },
-    {
-      "name": "GetMonth"
-    },
-    {
-      "name": "GetMonthName"
-    },
-    {
-      "name": "GetSecond"
-    },
-    {
-      "name": "GetTimezoneId"
-    },
-    {
-      "name": "GetTimezoneName"
-    },
-    {
-      "name": "GetWeekOfYear"
-    },
-    {
-      "name": "GetWeekOfYearIso8601"
-    },
-    {
-      "name": "GetYear"
-    },
-    {
-      "name": "Interval64FromDays"
-    },
-    {
-      "name": "Interval64FromHours"
-    },
-    {
-      "name": "Interval64FromMicroseconds"
-    },
-    {
-      "name": "Interval64FromMilliseconds"
-    },
-    {
-      "name": "Interval64FromMinutes"
-    },
-    {
-      "name": "Interval64FromSeconds"
-    },
-    {
-      "name": "IntervalFromDays"
-    },
-    {
-      "name": "IntervalFromHours"
-    },
-    {
-      "name": "IntervalFromMicroseconds"
-    },
-    {
-      "name": "IntervalFromMilliseconds"
-    },
-    {
-      "name": "IntervalFromMinutes"
-    },
-    {
-      "name": "IntervalFromSeconds"
-    },
-    {
-      "name": "MakeDate"
-    },
-    {
-      "name": "MakeDate32"
-    },
-    {
-      "name": "MakeDatetime"
-    },
-    {
-      "name": "MakeDatetime64"
-    },
-    {
-      "name": "MakeTimestamp"
-    },
-    {
-      "name": "MakeTimestamp64"
-    },
-    {
-      "name": "MakeTzDate"
-    },
-    {
-      "name": "MakeTzDate32"
-    },
-    {
-      "name": "MakeTzDatetime"
-    },
-    {
-      "name": "MakeTzDatetime64"
-    },
-    {
-      "name": "MakeTzTimestamp"
-    },
-    {
-      "name": "MakeTzTimestamp64"
-    },
-    {
-      "name": "Parse"
-    },
-    {
-      "name": "Parse64"
-    },
-    {
-      "name": "ParseHttp"
-    },
-    {
-      "name": "ParseIso8601"
-    },
-    {
-      "name": "ParseRfc822"
-    },
-    {
-      "name": "ParseX509"
-    },
-    {
-      "name": "ShiftMonths"
-    },
-    {
-      "name": "ShiftQuarters"
-    },
-    {
-      "name": "ShiftYears"
-    },
-    {
-      "name": "Split"
-    },
-    {
-      "name": "StartOf"
-    },
-    {
-      "name": "StartOfDay"
-    },
-    {
-      "name": "StartOfMonth"
-    },
-    {
-      "name": "StartOfQuarter"
-    },
-    {
-      "name": "StartOfWeek"
-    },
-    {
-      "name": "StartOfYear"
-    },
-    {
-      "name": "TimeOfDay"
-    },
-    {
-      "name": "ToDays"
-    },
-    {
-      "name": "ToHours"
-    },
-    {
-      "name": "ToMicroseconds"
-    },
-    {
-      "name": "ToMilliseconds"
-    },
-    {
-      "name": "ToMinutes"
-    },
-    {
-      "name": "ToSeconds"
-    },
-    {
-      "name": "Update"
-    }
-  ],
-  "Digest": [
-    {
-      "name": "Argon2"
-    },
-    {
-      "name": "Blake2B"
-    },
-    {
-      "name": "CityHash"
-    },
-    {
-      "name": "CityHash128"
-    },
-    {
-      "name": "Crc32c"
-    },
-    {
-      "name": "Crc64"
-    },
-    {
-      "name": "FarmHashFingerprint"
-    },
-    {
-      "name": "FarmHashFingerprint128"
-    },
-    {
-      "name": "FarmHashFingerprint2"
-    },
-    {
-      "name": "FarmHashFingerprint32"
-    },
-    {
-      "name": "FarmHashFingerprint64"
-    },
-    {
-      "name": "Fnv32"
-    },
-    {
-      "name": "Fnv64"
-    },
-    {
-      "name": "HighwayHash"
-    },
-    {
-      "name": "IntHash64"
-    },
-    {
-      "name": "Md5HalfMix"
-    },
-    {
-      "name": "Md5Hex"
-    },
-    {
-      "name": "Md5Raw"
-    },
-    {
-      "name": "MurMurHash"
-    },
-    {
-      "name": "MurMurHash2A"
-    },
-    {
-      "name": "MurMurHash2A32"
-    },
-    {
-      "name": "MurMurHash32"
-    },
-    {
-      "name": "NumericHash"
-    },
-    {
-      "name": "Sha1"
-    },
-    {
-      "name": "Sha256"
-    },
-    {
-      "name": "Sha512"
-    },
-    {
-      "name": "SipHash"
-    },
-    {
-      "name": "SuperFastHash"
-    },
-    {
-      "name": "XXH3"
-    },
-    {
-      "name": "XXH3_128"
-    }
-  ],
-  "Hyperscan": [
-    {
-      "name": "BacktrackingGrep"
-    },
-    {
-      "name": "BacktrackingMatch"
-    },
-    {
-      "name": "Capture"
-    },
-    {
-      "name": "Grep"
-    },
-    {
-      "name": "Match"
-    },
-    {
-      "name": "MultiGrep"
-    },
-    {
-      "name": "MultiMatch"
-    },
-    {
-      "name": "Replace"
-    }
-  ],
-  "Ip": [
-    {
-      "name": "ConvertToIPv6"
-    },
-    {
-      "name": "FromString"
-    },
-    {
-      "name": "GetSubnet"
-    },
-    {
-      "name": "GetSubnetByMask"
-    },
-    {
-      "name": "Ipv4FromUint32"
-    },
-    {
-      "name": "Ipv4ToUint32"
-    },
-    {
-      "name": "IsEmbeddedIPv4"
-    },
-    {
-      "name": "IsIPv4"
-    },
-    {
-      "name": "IsIPv6"
-    },
-    {
-      "name": "SubnetFromString"
-    },
-    {
-      "name": "SubnetMatch"
-    },
-    {
-      "name": "SubnetToString"
-    },
-    {
-      "name": "ToFixedIPv6String"
-    },
-    {
-      "name": "ToString"
-    }
-  ],
-  "Json": [
-    {
-      "name": "GetField"
-    }
-  ],
-  "Math": [
-    {
-      "name": "Abs"
-    },
-    {
-      "name": "Acos"
-    },
-    {
-      "name": "Asin"
-    },
-    {
-      "name": "Asinh"
-    },
-    {
-      "name": "Atan"
-    },
-    {
-      "name": "Atan2"
-    },
-    {
-      "name": "Cbrt"
-    },
-    {
-      "name": "Ceil"
-    },
-    {
-      "name": "Cos"
-    },
-    {
-      "name": "Cosh"
-    },
-    {
-      "name": "E"
-    },
-    {
-      "name": "Eps"
-    },
-    {
-      "name": "Erf"
-    },
-    {
-      "name": "ErfInv"
-    },
-    {
-      "name": "ErfcInv"
-    },
-    {
-      "name": "Exp"
-    },
-    {
-      "name": "Exp2"
-    },
-    {
-      "name": "Fabs"
-    },
-    {
-      "name": "Floor"
-    },
-    {
-      "name": "Fmod"
-    },
-    {
-      "name": "FuzzyEquals"
-    },
-    {
-      "name": "Hypot"
-    },
-    {
-      "name": "IsFinite"
-    },
-    {
-      "name": "IsInf"
-    },
-    {
-      "name": "IsNaN"
-    },
-    {
-      "name": "Ldexp"
-    },
-    {
-      "name": "Lgamma"
-    },
-    {
-      "name": "Log"
-    },
-    {
-      "name": "Log10"
-    },
-    {
-      "name": "Log2"
-    },
-    {
-      "name": "Mod"
-    },
-    {
-      "name": "NearbyInt"
-    },
-    {
-      "name": "Pi"
-    },
-    {
-      "name": "Pow"
-    },
-    {
-      "name": "Rem"
-    },
-    {
-      "name": "Remainder"
-    },
-    {
-      "name": "Rint"
-    },
-    {
-      "name": "Round"
-    },
-    {
-      "name": "RoundDownward"
-    },
-    {
-      "name": "RoundToNearest"
-    },
-    {
-      "name": "RoundTowardZero"
-    },
-    {
-      "name": "RoundUpward"
-    },
-    {
-      "name": "Sigmoid"
-    },
-    {
-      "name": "Sin"
-    },
-    {
-      "name": "Sinh"
-    },
-    {
-      "name": "Sqrt"
-    },
-    {
-      "name": "SwapBytes"
-    },
-    {
-      "name": "Tan"
-    },
-    {
-      "name": "Tanh"
-    },
-    {
-      "name": "Tgamma"
-    },
-    {
-      "name": "Trunc"
-    }
-  ],
-  "Pire": [
-    {
-      "name": "Capture"
-    },
-    {
-      "name": "Grep"
-    },
-    {
-      "name": "Match"
-    },
-    {
-      "name": "MultiGrep"
-    },
-    {
-      "name": "MultiMatch"
-    },
-    {
-      "name": "Replace"
-    }
-  ],
-  "Protobuf": [
-    {
-      "name": "Parse"
-    },
-    {
-      "name": "Serialize"
-    },
-    {
-      "name": "TryParse"
-    }
-  ],
-  "Re2": [
-    {
-      "name": "Capture"
-    },
-    {
-      "name": "Count"
-    },
-    {
-      "name": "Escape"
-    },
-    {
-      "name": "FindAndConsume"
-    },
-    {
-      "name": "Grep"
-    },
-    {
-      "name": "IsValidRegexp"
-    },
-    {
-      "name": "Match"
-    },
-    {
-      "name": "Options"
-    },
-    {
-      "name": "PatternFromLike"
-    },
-    {
-      "name": "Replace"
-    }
-  ],
-  "Re2posix": [
-    {
-      "name": "Capture"
-    },
-    {
-      "name": "Count"
-    },
-    {
-      "name": "Escape"
-    },
-    {
-      "name": "FindAndConsume"
-    },
-    {
-      "name": "Grep"
-    },
-    {
-      "name": "IsValidRegexp"
-    },
-    {
-      "name": "Match"
-    },
-    {
-      "name": "Options"
-    },
-    {
-      "name": "PatternFromLike"
-    },
-    {
-      "name": "Replace"
-    }
-  ],
-  "String": [
-    {
-      "name": "AsciiContainsIgnoreCase"
-    },
-    {
-      "name": "AsciiEndsWithIgnoreCase"
-    },
-    {
-      "name": "AsciiEqualsIgnoreCase"
-    },
-    {
-      "name": "AsciiStartsWithIgnoreCase"
-    },
-    {
-      "name": "AsciiToLower"
-    },
-    {
-      "name": "AsciiToTitle"
-    },
-    {
-      "name": "AsciiToUpper"
-    },
-    {
-      "name": "Base32Decode"
-    },
-    {
-      "name": "Base32Encode"
-    },
-    {
-      "name": "Base32StrictDecode"
-    },
-    {
-      "name": "Base64Decode"
-    },
-    {
-      "name": "Base64Encode"
-    },
-    {
-      "name": "Base64EncodeUrl"
-    },
-    {
-      "name": "Base64StrictDecode"
-    },
-    {
-      "name": "Bin"
-    },
-    {
-      "name": "BinText"
-    },
-    {
-      "name": "CgiEscape"
-    },
-    {
-      "name": "CgiUnescape"
-    },
-    {
-      "name": "Collapse"
-    },
-    {
-      "name": "CollapseText"
-    },
-    {
-      "name": "Contains"
-    },
-    {
-      "name": "DecodeHtml"
-    },
-    {
-      "name": "EncodeHtml"
-    },
-    {
-      "name": "EndsWith"
-    },
-    {
-      "name": "EndsWithIgnoreCase"
-    },
-    {
-      "name": "EscapeC"
-    },
-    {
-      "name": "FromByteList"
-    },
-    {
-      "name": "HasPrefix"
-    },
-    {
-      "name": "HasPrefixIgnoreCase"
-    },
-    {
-      "name": "HasSuffix"
-    },
-    {
-      "name": "HasSuffixIgnoreCase"
-    },
-    {
-      "name": "Hex"
-    },
-    {
-      "name": "HexDecode"
-    },
-    {
-      "name": "HexEncode"
-    },
-    {
-      "name": "HexText"
-    },
-    {
-      "name": "HumanReadableBytes"
-    },
-    {
-      "name": "HumanReadableDuration"
-    },
-    {
-      "name": "HumanReadableQuantity"
-    },
-    {
-      "name": "IsAscii"
-    },
-    {
-      "name": "IsAsciiAlnum"
-    },
-    {
-      "name": "IsAsciiAlpha"
-    },
-    {
-      "name": "IsAsciiDigit"
-    },
-    {
-      "name": "IsAsciiHex"
-    },
-    {
-      "name": "IsAsciiLower"
-    },
-    {
-      "name": "IsAsciiSpace"
-    },
-    {
-      "name": "IsAsciiUpper"
-    },
-    {
-      "name": "JoinFromList"
-    },
-    {
-      "name": "LeftPad"
-    },
-    {
-      "name": "LevensteinDistance"
-    },
-    {
-      "name": "Prec"
-    },
-    {
-      "name": "RemoveAll"
-    },
-    {
-      "name": "RemoveFirst"
-    },
-    {
-      "name": "RemoveLast"
-    },
-    {
-      "name": "ReplaceAll"
-    },
-    {
-      "name": "ReplaceFirst"
-    },
-    {
-      "name": "ReplaceLast"
-    },
-    {
-      "name": "ReverseBits"
-    },
-    {
-      "name": "ReverseBytes"
-    },
-    {
-      "name": "RightPad"
-    },
-    {
-      "name": "SBin"
-    },
-    {
-      "name": "SHex"
-    },
-    {
-      "name": "SplitToList"
-    },
-    {
-      "name": "StartsWith"
-    },
-    {
-      "name": "StartsWithIgnoreCase"
-    },
-    {
-      "name": "Strip"
-    },
-    {
-      "name": "ToByteList"
-    },
-    {
-      "name": "UnescapeC"
-    }
-  ],
-  "Unicode": [
-    {
-      "name": "Find"
-    },
-    {
-      "name": "Fold"
-    },
-    {
-      "name": "FromCodePointList"
-    },
-    {
-      "name": "GetLength"
-    },
-    {
-      "name": "IsAlnum"
-    },
-    {
-      "name": "IsAlpha"
-    },
-    {
-      "name": "IsAscii"
-    },
-    {
-      "name": "IsDigit"
-    },
-    {
-      "name": "IsHex"
-    },
-    {
-      "name": "IsLower"
-    },
-    {
-      "name": "IsSpace"
-    },
-    {
-      "name": "IsUnicodeSet"
-    },
-    {
-      "name": "IsUpper"
-    },
-    {
-      "name": "IsUtf"
-    },
-    {
-      "name": "JoinFromList"
-    },
-    {
-      "name": "LevensteinDistance"
-    },
-    {
-      "name": "Normalize"
-    },
-    {
-      "name": "NormalizeNFC"
-    },
-    {
-      "name": "NormalizeNFD"
-    },
-    {
-      "name": "NormalizeNFKC"
-    },
-    {
-      "name": "NormalizeNFKD"
-    },
-    {
-      "name": "RFind"
-    },
-    {
-      "name": "RemoveAll"
-    },
-    {
-      "name": "RemoveFirst"
-    },
-    {
-      "name": "RemoveLast"
-    },
-    {
-      "name": "ReplaceAll"
-    },
-    {
-      "name": "ReplaceFirst"
-    },
-    {
-      "name": "ReplaceLast"
-    },
-    {
-      "name": "Reverse"
-    },
-    {
-      "name": "SplitToList"
-    },
-    {
-      "name": "Strip"
-    },
-    {
-      "name": "Substring"
-    },
-    {
-      "name": "ToCodePointList"
-    },
-    {
-      "name": "ToLower"
-    },
-    {
-      "name": "ToTitle"
-    },
-    {
-      "name": "ToUint64"
-    },
-    {
-      "name": "ToUpper"
-    },
-    {
-      "name": "Translit"
-    },
-    {
-      "name": "TryToUint64"
-    }
-  ],
-  "Url": [
-    {
-      "name": "BuildQueryString"
-    },
-    {
-      "name": "CanBePunycodeHostName"
-    },
-    {
-      "name": "CutQueryStringAndFragment"
-    },
-    {
-      "name": "CutScheme"
-    },
-    {
-      "name": "CutWWW"
-    },
-    {
-      "name": "CutWWW2"
-    },
-    {
-      "name": "Decode"
-    },
-    {
-      "name": "Encode"
-    },
-    {
-      "name": "ForceHostNameToPunycode"
-    },
-    {
-      "name": "ForcePunycodeToHostName"
-    },
-    {
-      "name": "GetCGIParam"
-    },
-    {
-      "name": "GetDomain"
-    },
-    {
-      "name": "GetDomainLevel"
-    },
-    {
-      "name": "GetFragment"
-    },
-    {
-      "name": "GetHost"
-    },
-    {
-      "name": "GetHostPort"
-    },
-    {
-      "name": "GetOwner"
-    },
-    {
-      "name": "GetPath"
-    },
-    {
-      "name": "GetPort"
-    },
-    {
-      "name": "GetScheme"
-    },
-    {
-      "name": "GetSchemeHost"
-    },
-    {
-      "name": "GetSchemeHostPort"
-    },
-    {
-      "name": "GetSignificantDomain"
-    },
-    {
-      "name": "GetTLD"
-    },
-    {
-      "name": "GetTail"
-    },
-    {
-      "name": "HostNameToPunycode"
-    },
-    {
-      "name": "IsAllowedByRobotsTxt"
-    },
-    {
-      "name": "IsKnownTLD"
-    },
-    {
-      "name": "IsWellKnownTLD"
-    },
-    {
-      "name": "Normalize"
-    },
-    {
-      "name": "NormalizeWithDefaultHttpScheme"
-    },
-    {
-      "name": "Parse"
-    },
-    {
-      "name": "PunycodeToHostName"
-    },
-    {
-      "name": "QueryStringToDict"
-    },
-    {
-      "name": "QueryStringToList"
-    }
-  ],
-  "Yson": [
-    {
-      "name": "AsBool"
-    },
-    {
-      "name": "AsDict"
-    },
-    {
-      "name": "AsDouble"
-    },
-    {
-      "name": "AsInt64"
-    },
-    {
-      "name": "AsList"
-    },
-    {
-      "name": "AsString"
-    },
-    {
-      "name": "AsUint64"
-    },
-    {
-      "name": "Attributes"
-    },
-    {
-      "name": "Contains"
-    },
-    {
-      "name": "ConvertTo"
-    },
-    {
-      "name": "ConvertToBool"
-    },
-    {
-      "name": "ConvertToBoolDict"
-    },
-    {
-      "name": "ConvertToBoolList"
-    },
-    {
-      "name": "ConvertToDict"
-    },
-    {
-      "name": "ConvertToDouble"
-    },
-    {
-      "name": "ConvertToDoubleDict"
-    },
-    {
-      "name": "ConvertToDoubleList"
-    },
-    {
-      "name": "ConvertToInt64"
-    },
-    {
-      "name": "ConvertToInt64Dict"
-    },
-    {
-      "name": "ConvertToInt64List"
-    },
-    {
-      "name": "ConvertToList"
-    },
-    {
-      "name": "ConvertToString"
-    },
-    {
-      "name": "ConvertToStringDict"
-    },
-    {
-      "name": "ConvertToStringList"
-    },
-    {
-      "name": "ConvertToUint64"
-    },
-    {
-      "name": "ConvertToUint64Dict"
-    },
-    {
-      "name": "ConvertToUint64List"
-    },
-    {
-      "name": "Equals"
-    },
-    {
-      "name": "From"
-    },
-    {
-      "name": "GetHash"
-    },
-    {
-      "name": "GetLength"
-    },
-    {
-      "name": "IsBool"
-    },
-    {
-      "name": "IsDict"
-    },
-    {
-      "name": "IsDouble"
-    },
-    {
-      "name": "IsEntity"
-    },
-    {
-      "name": "IsInt64"
-    },
-    {
-      "name": "IsList"
-    },
-    {
-      "name": "IsString"
-    },
-    {
-      "name": "IsUint64"
-    },
-    {
-      "name": "Iterate"
-    },
-    {
-      "name": "Lookup"
-    },
-    {
-      "name": "LookupBool"
-    },
-    {
-      "name": "LookupDict"
-    },
-    {
-      "name": "LookupDouble"
-    },
-    {
-      "name": "LookupInt64"
-    },
-    {
-      "name": "LookupList"
-    },
-    {
-      "name": "LookupString"
-    },
-    {
-      "name": "LookupUint64"
-    },
-    {
-      "name": "MutCreate"
-    },
-    {
-      "name": "MutDown"
-    },
-    {
-      "name": "MutDownOrCreate"
-    },
-    {
-      "name": "MutExists"
-    },
-    {
-      "name": "MutFreeze"
-    },
-    {
-      "name": "MutInsert"
-    },
-    {
-      "name": "MutRemove"
-    },
-    {
-      "name": "MutRewind"
-    },
-    {
-      "name": "MutTryDown"
-    },
-    {
-      "name": "MutUp"
-    },
-    {
-      "name": "MutUpdate"
-    },
-    {
-      "name": "MutUpsert"
-    },
-    {
-      "name": "MutView"
-    },
-    {
-      "name": "Mutate"
-    },
-    {
-      "name": "Options"
-    },
-    {
-      "name": "Parse"
-    },
-    {
-      "name": "ParseJson"
-    },
-    {
-      "name": "ParseJsonDecodeUtf8"
-    },
-    {
-      "name": "Serialize"
-    },
-    {
-      "name": "SerializeJson"
-    },
-    {
-      "name": "SerializePretty"
-    },
-    {
-      "name": "SerializeText"
-    },
-    {
-      "name": "TryAsBool"
-    },
-    {
-      "name": "TryAsDict"
-    },
-    {
-      "name": "TryAsDouble"
-    },
-    {
-      "name": "TryAsInt64"
-    },
-    {
-      "name": "TryAsList"
-    },
-    {
-      "name": "TryAsString"
-    },
-    {
-      "name": "TryAsUint64"
-    },
-    {
-      "name": "WithAttributes"
-    },
-    {
-      "name": "YPath"
-    },
-    {
-      "name": "YPathBool"
-    },
-    {
-      "name": "YPathDict"
-    },
-    {
-      "name": "YPathDouble"
-    },
-    {
-      "name": "YPathInt64"
-    },
-    {
-      "name": "YPathList"
-    },
-    {
-      "name": "YPathString"
-    },
-    {
-      "name": "YPathUint64"
-    }
-  ],
   "Compress": [
     {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
       "name": "BZip2"
     },
     {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
       "name": "Brotli"
     },
     {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
       "name": "Gzip"
     },
     {
-      "name": "Lz4"
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lz4",
+      "optionalArgCount": 1
     },
     {
-      "name": "Lzf"
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lzf",
+      "optionalArgCount": 1
     },
     {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
       "name": "Lzma"
     },
     {
-      "name": "Lzo"
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lzo",
+      "optionalArgCount": 1
     },
     {
-      "name": "Lzq"
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Lzq",
+      "optionalArgCount": 1
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Snappy"
     },
     {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
       "name": "Zlib"
     },
     {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint8\"]]]]",
       "name": "Zstd"
     }
   ],
   "Decompress": [
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "BZip2"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Brotli"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Gzip"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lz4"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzf"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzma"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzo"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzq"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Snappy"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Xz"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Zlib"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Zstd"
+    }
+  ],
+  "Protobuf": [
+    {
+      "isTypeAwareness": true,
+      "name": "Parse",
+      "polyArgs": "[[[];{\"type\"=[\"CallableType\";[];[[\"UniversalStructType\"]];[[[\"DataType\";\"String\"];1u]]]}]]",
+      "resolvedCallableTypes": "[#]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "Serialize",
+      "polyArgs": "[[[];{\"type\"=[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"UniversalStructType\"];1u]]]}]]",
+      "resolvedCallableTypes": "[#]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "TryParse",
+      "polyArgs": "[[[];{\"type\"=[\"CallableType\";[];[[\"OptionalType\";[\"UniversalStructType\"]]];[[[\"DataType\";\"String\"];1u]]]}]]",
+      "resolvedCallableTypes": "[#]"
     }
   ],
   "Streaming": [
     {
-      "name": "Process"
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[3u];[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ListType\";[\"DataType\";\"String\"]]]];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Process",
+      "optionalArgCount": 3
     },
     {
-      "name": "ProcessInline"
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[3u];[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[[\"StreamType\";[\"StructType\";[[\"Data\";[\"DataType\";\"String\"]]]]]];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ListType\";[\"DataType\";\"String\"]]]];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "ProcessInline",
+      "optionalArgCount": 3
     }
   ],
   "TryDecompress": [
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "BZip2"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Brotli"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Gzip"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lz4"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzf"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzma"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzo"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Lzq"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Snappy"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Xz"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Zlib"
     },
     {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
       "name": "Zstd"
+    }
+  ],
+  "DateTime": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ResourceType\";\"DateTime2.TM64\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]]",
+      "isStrict": true,
+      "name": "Convert"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "EndOf"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "EndOfDay"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "EndOfMonth"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "EndOfQuarter"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "EndOfWeek"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "EndOfYear"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "Format"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Timestamp\"]]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "FromMicroseconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Timestamp64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "FromMicroseconds64",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Timestamp\"]]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "FromMilliseconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Timestamp64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "FromMilliseconds64",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Timestamp\"]]];[[[\"DataType\";\"Uint32\"];1u]]]",
+      "isStrict": true,
+      "name": "FromSeconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Timestamp64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "FromSeconds64",
+      "supportsBlocks": true
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetDayOfMonth"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetDayOfWeek"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetDayOfWeekName"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetDayOfYear"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetHour"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetMicrosecondOfSecond"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetMillisecondOfSecond"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetMinute"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetMonth"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetMonthName"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetSecond"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetTimezoneId"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetTimezoneName"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetWeekOfYear"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetWeekOfYearIso8601"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "GetYear"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int32\"];1u]]]",
+      "isStrict": true,
+      "name": "Interval64FromDays",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "Interval64FromHours",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "Interval64FromMicroseconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "Interval64FromMilliseconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "Interval64FromMinutes",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "Interval64FromSeconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int32\"];1u]]]",
+      "isStrict": true,
+      "name": "IntervalFromDays",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int32\"];1u]]]",
+      "isStrict": true,
+      "name": "IntervalFromHours",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "IntervalFromMicroseconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "IntervalFromMilliseconds",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int32\"];1u]]]",
+      "isStrict": true,
+      "name": "IntervalFromMinutes",
+      "supportsBlocks": true
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "IntervalFromSeconds",
+      "polyArgs": "[[{\"cmd\"=\"ver\";\"value\"=\"2025.03\"};{\"ver\"=\"2025.03\"}];[[];{}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int64\"];1u]]];[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval\"]]];[[[\"DataType\";\"Int32\"];1u]]]]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Date\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeDate",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Date32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeDate32"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Datetime\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeDatetime",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Datetime64\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeDatetime64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Timestamp\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTimestamp",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Timestamp64\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTimestamp64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"TzDate\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTzDate",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"TzDate32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTzDate32"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"TzDatetime\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTzDatetime",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"TzDatetime64\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTzDatetime64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"TzTimestamp\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTzTimestamp",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"TzTimestamp64\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]",
+      "isStrict": true,
+      "name": "MakeTzTimestamp64"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"CallableType\";[];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM\"]]];[[[\"DataType\";\"String\"];1u]]]];[[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Parse",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"CallableType\";[];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM64\"]]];[[[\"DataType\";\"String\"];1u]]]];[[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "Parse64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "ParseHttp"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "ParseIso8601"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "ParseRfc822"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "ParseX509"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ShiftMonths"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ShiftQuarters"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ShiftYears"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "Split"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "StartOf"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "StartOfDay"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "StartOfMonth"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "StartOfQuarter"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "StartOfWeek"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "StartOfYear"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "TimeOfDay"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ToDays"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ToHours"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ToMicroseconds"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ToMilliseconds"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ToMinutes"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ToSeconds"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "Update"
+    }
+  ],
+  "Digest": [
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Argon2"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "Blake2B",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "CityHash",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"TupleType\";[[\"DataType\";\"Uint64\"];[\"DataType\";\"Uint64\"]]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "CityHash128"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Crc32c"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "Crc64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "FarmHashFingerprint"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"TupleType\";[[\"DataType\";\"Uint64\"];[\"DataType\";\"Uint64\"]]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "FarmHashFingerprint128"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Uint64\"];1u];[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "FarmHashFingerprint2"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "FarmHashFingerprint32"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "FarmHashFingerprint64"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "Fnv32",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "Fnv64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Uint64\"]];[[\"DataType\";\"Uint64\"]];[[\"DataType\";\"Uint64\"]];[[\"DataType\";\"Uint64\"]];[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "HighwayHash"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "IntHash64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Md5HalfMix"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Md5Hex"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Md5Raw"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "MurMurHash",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "MurMurHash2A",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "MurMurHash2A32",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"Init\"]]]",
+      "isStrict": true,
+      "name": "MurMurHash32",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "NumericHash"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Sha1"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Sha256"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.03",
+      "name": "Sha512"
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Uint64\"]];[[\"DataType\";\"Uint64\"]];[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "SipHash"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "SuperFastHash"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "XXH3"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"TupleType\";[[\"DataType\";\"Uint64\"];[\"DataType\";\"Uint64\"]]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "XXH3_128"
+    }
+  ],
+  "Hyperscan": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "BacktrackingGrep",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "BacktrackingMatch",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Capture",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Grep",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Match",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "MultiGrep"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "MultiMatch"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "name": "Replace",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    }
+  ],
+  "Ip": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "ConvertToIPv6"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "FromString"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint8\"]]]]]",
+      "name": "GetSubnet",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"];1u]]]",
+      "name": "GetSubnetByMask"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Uint32\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.03",
+      "name": "Ipv4FromUint32"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Uint32\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "minLangVer": "2025.03",
+      "name": "Ipv4ToUint32"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsEmbeddedIPv4"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsIPv4"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsIPv6"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "SubnetFromString"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"];1u]]]",
+      "name": "SubnetMatch"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "SubnetToString"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "ToFixedIPv6String"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "ToString"
+    }
+  ],
+  "Json": [
+    {
+      "isTypeAwareness": true,
+      "name": "GetField"
+    }
+  ],
+  "Math": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Abs"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Acos"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Asin"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Asinh"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Atan"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Atan2"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Cbrt"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Ceil"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Cos"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Cosh"
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[]]",
+      "isStrict": true,
+      "name": "E"
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[]]",
+      "isStrict": true,
+      "name": "Eps"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Erf"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "ErfInv"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "ErfcInv"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Exp"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Exp2"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Fabs"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Floor"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Fmod"
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Double\"];1u];[[\"OptionalType\";[\"DataType\";\"Double\"]];\"Epsilon\"]]]",
+      "isStrict": true,
+      "name": "FuzzyEquals",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Hypot"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "IsFinite"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "IsInf"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "IsNaN"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Int32\"];1u]]]",
+      "isStrict": true,
+      "name": "Ldexp"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Lgamma"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Log"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Log10"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Log2"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Int64\"]]];[[[\"DataType\";\"Int64\"];1u];[[\"DataType\";\"Int64\"]]]]",
+      "isStrict": true,
+      "name": "Mod"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Int64\"]]];[[[\"DataType\";\"Double\"];1u];[[\"TaggedType\";\"MathRoundingMode\";[\"DataType\";\"Uint32\"]]]]]",
+      "isStrict": true,
+      "name": "NearbyInt"
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[]]",
+      "isStrict": true,
+      "name": "Pi"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Pow"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Int64\"]]];[[[\"DataType\";\"Int64\"];1u];[[\"DataType\";\"Int64\"]]]]",
+      "isStrict": true,
+      "name": "Rem"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Remainder"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Rint"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u];[[\"OptionalType\";[\"DataType\";\"Int32\"]];\"Precision\"]]]",
+      "isStrict": true,
+      "name": "Round",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"TaggedType\";\"MathRoundingMode\";[\"DataType\";\"Uint32\"]]];[]]",
+      "isStrict": true,
+      "name": "RoundDownward"
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"TaggedType\";\"MathRoundingMode\";[\"DataType\";\"Uint32\"]]];[]]",
+      "isStrict": true,
+      "name": "RoundToNearest"
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"TaggedType\";\"MathRoundingMode\";[\"DataType\";\"Uint32\"]]];[]]",
+      "isStrict": true,
+      "name": "RoundTowardZero"
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"TaggedType\";\"MathRoundingMode\";[\"DataType\";\"Uint32\"]]];[]]",
+      "isStrict": true,
+      "name": "RoundUpward"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Sigmoid"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Sin"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Sinh"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Sqrt"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "SwapBytes"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Tan"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Tanh"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Tgamma"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "name": "Trunc"
+    }
+  ],
+  "Pire": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Capture",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Grep",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Match",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "MultiGrep"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "MultiMatch"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "name": "Replace",
+      "runConfigType": "[\"DataType\";\"String\"]"
+    }
+  ],
+  "Re2": [
+    {
+      "isTypeAwareness": true,
+      "name": "Capture"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Count",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "Escape"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ListType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "FindAndConsume",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Grep",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]]",
+      "isStrict": true,
+      "name": "IsValidRegexp",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Match",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 13,
+      "callableType": "[\"CallableType\";[13u];[[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]];[[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"Utf8\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"PosixSyntax\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"LongestMatch\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"LogErrors\"];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"MaxMem\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"Literal\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"NeverNl\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"DotNl\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"NeverCapture\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"CaseSensitive\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"PerlClasses\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"WordBoundary\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"OneLine\"]]]",
+      "isStrict": true,
+      "name": "Options",
+      "optionalArgCount": 13
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "PatternFromLike",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "name": "Replace",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    }
+  ],
+  "Re2posix": [
+    {
+      "isTypeAwareness": true,
+      "name": "Capture"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Count",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "Escape"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ListType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "FindAndConsume",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Grep",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]]",
+      "isStrict": true,
+      "name": "IsValidRegexp",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Match",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    },
+    {
+      "argCount": 13,
+      "callableType": "[\"CallableType\";[13u];[[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]];[[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"Utf8\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"PosixSyntax\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"LongestMatch\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"LogErrors\"];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"MaxMem\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"Literal\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"NeverNl\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"DotNl\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"NeverCapture\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"CaseSensitive\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"PerlClasses\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"WordBoundary\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"OneLine\"]]]",
+      "isStrict": true,
+      "name": "Options",
+      "optionalArgCount": 13
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "PatternFromLike",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "name": "Replace",
+      "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
+    }
+  ],
+  "String": [
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "minLangVer": "2025.02",
+      "name": "AsciiContainsIgnoreCase",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "minLangVer": "2025.01",
+      "name": "AsciiEndsWithIgnoreCase",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "minLangVer": "2025.02",
+      "name": "AsciiEqualsIgnoreCase",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "minLangVer": "2025.01",
+      "name": "AsciiStartsWithIgnoreCase",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "AsciiToLower",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "AsciiToTitle",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "AsciiToUpper",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "Base32Decode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Base32Encode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "Base32StrictDecode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "Base64Decode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Base64Encode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Base64EncodeUrl",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "Base64StrictDecode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "Bin",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "BinText",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "CgiEscape",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "CgiUnescape",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Collapse",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint64\"]]]]",
+      "isStrict": true,
+      "name": "CollapseText",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "Contains",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "DecodeHtml",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "EncodeHtml",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "EndsWith"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "maxLangVer": "2025.01",
+      "name": "EndsWithIgnoreCase"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "EscapeC",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"ListType\";[\"DataType\";\"Uint8\"]]]]]",
+      "isStrict": true,
+      "name": "FromByteList"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "HasPrefix"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "maxLangVer": "2025.01",
+      "name": "HasPrefixIgnoreCase"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "HasSuffix"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "maxLangVer": "2025.01",
+      "name": "HasSuffixIgnoreCase"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "Hex",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "HexDecode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "HexEncode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "HexText",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "HumanReadableBytes",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "HumanReadableDuration",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Uint64\"];1u]]]",
+      "isStrict": true,
+      "name": "HumanReadableQuantity",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAscii",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAsciiAlnum",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAsciiAlpha",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAsciiDigit",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAsciiHex",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAsciiLower",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAsciiSpace",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsAsciiUpper",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"ListType\";[\"OptionalType\";[\"DataType\";\"String\"]]];1u];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "JoinFromList"
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint64\"]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "LeftPad",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "LevensteinDistance",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Double\"];1u];[[\"DataType\";\"Uint64\"]]]]",
+      "isStrict": true,
+      "name": "Prec",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "RemoveAll",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "RemoveFirst",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "RemoveLast",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "ReplaceAll",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "ReplaceFirst",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"String\"]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "ReplaceLast",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.02",
+      "name": "ReverseBits",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.02",
+      "name": "ReverseBytes",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"DataType\";\"Uint64\"]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "RightPad",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "SBin",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Int64\"];1u]]]",
+      "isStrict": true,
+      "name": "SHex",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[3u];[[\"ListType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"DelimeterString\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"SkipEmpty\"];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"Limit\"]]]",
+      "isStrict": true,
+      "name": "SplitToList",
+      "optionalArgCount": 3
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "StartsWith"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "maxLangVer": "2025.01",
+      "name": "StartsWithIgnoreCase"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "Strip",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ListType\";[\"DataType\";\"Uint8\"]]];[[[\"DataType\";\"String\"]]]]",
+      "isStrict": true,
+      "name": "ToByteList"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "UnescapeC",
+      "supportsBlocks": true
+    }
+  ],
+  "Unicode": [
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]]]]",
+      "isStrict": true,
+      "name": "Find",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 6,
+      "callableType": "[\"CallableType\";[5u];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"OptionalType\";[\"DataType\";\"String\"]];\"Language\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"DoLowerCase\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"DoRenyxa\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"DoSimpleCyr\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"FillOffset\"]]]",
+      "name": "Fold",
+      "optionalArgCount": 5
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"ListType\";[\"DataType\";\"Uint32\"]];1u]]]",
+      "name": "FromCodePointList"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "GetLength",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsAlnum",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsAlpha",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsAscii",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsDigit",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsHex",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsLower",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsSpace",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]]]]",
+      "name": "IsUnicodeSet",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "IsUpper",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Bool\"]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "isStrict": true,
+      "name": "IsUtf",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"ListType\";[\"OptionalType\";[\"DataType\";\"Utf8\"]]];1u];[[\"DataType\";\"Utf8\"]]]]",
+      "name": "JoinFromList"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "LevensteinDistance",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "Normalize",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "NormalizeNFC",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "NormalizeNFD",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "NormalizeNFKC",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "NormalizeNFKD",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]]]]",
+      "isStrict": true,
+      "name": "RFind",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]]]]",
+      "isStrict": true,
+      "name": "RemoveAll",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]]]]",
+      "isStrict": true,
+      "name": "RemoveFirst",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]]]]",
+      "isStrict": true,
+      "name": "RemoveLast",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]];[[\"DataType\";\"Utf8\"]]]]",
+      "isStrict": true,
+      "name": "ReplaceAll",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]];[[\"DataType\";\"Utf8\"]]]]",
+      "isStrict": true,
+      "name": "ReplaceFirst",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"DataType\";\"Utf8\"]];[[\"DataType\";\"Utf8\"]]]]",
+      "isStrict": true,
+      "name": "ReplaceLast",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "Reverse",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[3u];[[\"ListType\";[\"DataType\";\"Utf8\"]]];[[[\"OptionalType\";[\"DataType\";\"Utf8\"]]];[[\"DataType\";\"Utf8\"]];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"DelimeterString\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"SkipEmpty\"];[[\"OptionalType\";[\"DataType\";\"Uint64\"]];\"Limit\"]]]",
+      "name": "SplitToList",
+      "optionalArgCount": 3
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "Strip",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]]]]",
+      "isStrict": true,
+      "name": "Substring",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ListType\";[\"DataType\";\"Uint32\"]]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "name": "ToCodePointList"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "ToLower",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "ToTitle",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "name": "ToUint64",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u]]]",
+      "isStrict": true,
+      "name": "ToUpper",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"Utf8\"]];[[[\"DataType\";\"Utf8\"];1u];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Translit",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"DataType\";\"Utf8\"];1u];[[\"OptionalType\";[\"DataType\";\"Uint16\"]]]]]",
+      "isStrict": true,
+      "name": "TryToUint64",
+      "optionalArgCount": 1,
+      "supportsBlocks": true
+    }
+  ],
+  "Url": [
+    {
+      "isTypeAwareness": true,
+      "name": "BuildQueryString"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "CanBePunycodeHostName",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "CutQueryStringAndFragment",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "CutScheme",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "CutWWW",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "CutWWW2",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Decode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Encode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "ForceHostNameToPunycode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "ForcePunycodeToHostName",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
+      "name": "GetCGIParam",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"Uint8\"]]]]",
+      "name": "GetDomain",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "GetDomainLevel",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetFragment",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetHost",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetHostPort",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "GetOwner"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetPath",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetPort",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "name": "GetScheme",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetSchemeHost",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetSchemeHostPort",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"ListType\";[\"DataType\";\"String\"]]]]]]",
+      "name": "GetSignificantDomain",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "GetTLD",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "GetTail",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "HostNameToPunycode",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"Uint32\"]]]]",
+      "name": "IsAllowedByRobotsTxt"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "IsKnownTLD",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "IsWellKnownTLD",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "Normalize",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
+      "name": "NormalizeWithDefaultHttpScheme"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"StructType\";[[\"Frag\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"Host\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"ParseError\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"Pass\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"Path\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"Port\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"Query\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"Scheme\";[\"OptionalType\";[\"DataType\";\"String\"]]];[\"User\";[\"OptionalType\";[\"DataType\";\"String\"]]]]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "Parse"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"DataType\";\"String\"];1u]]]",
+      "name": "PunycodeToHostName",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[4u];[[\"DictType\";[\"DataType\";\"String\"];[\"ListType\";[\"DataType\";\"String\"]]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"KeepBlankValues\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"Strict\"];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"MaxFields\"];[[\"OptionalType\";[\"DataType\";\"String\"]];\"Separator\"]]]",
+      "name": "QueryStringToDict",
+      "optionalArgCount": 4
+    },
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[4u];[[\"ListType\";[\"TupleType\";[[\"DataType\";\"String\"];[\"DataType\";\"String\"]]]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"KeepBlankValues\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"Strict\"];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"MaxFields\"];[[\"OptionalType\";[\"DataType\";\"String\"]];\"Separator\"]]]",
+      "name": "QueryStringToList",
+      "optionalArgCount": 4
+    }
+  ],
+  "Yson": [
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2025.05",
+      "name": "AsBool"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DictType\";[\"DataType\";\"String\"];[\"ResourceType\";\"Yson2.Node\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2025.05",
+      "name": "AsDict"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2025.05",
+      "name": "AsDouble"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Int64\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2025.05",
+      "name": "AsInt64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ListType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2025.05",
+      "name": "AsList"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2025.05",
+      "name": "AsString"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2025.05",
+      "name": "AsUint64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DictType\";[\"DataType\";\"String\"];[\"ResourceType\";\"Yson2.Node\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "Attributes"
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Bool\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "Contains",
+      "optionalArgCount": 1
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ConvertTo"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Bool\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToBool",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DictType\";[\"DataType\";\"String\"];[\"DataType\";\"Bool\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToBoolDict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"ListType\";[\"DataType\";\"Bool\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToBoolList",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DictType\";[\"DataType\";\"String\"];[\"ResourceType\";\"Yson2.Node\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToDict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Double\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToDouble",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DictType\";[\"DataType\";\"String\"];[\"DataType\";\"Double\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToDoubleDict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"ListType\";[\"DataType\";\"Double\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToDoubleList",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Int64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToInt64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DictType\";[\"DataType\";\"String\"];[\"DataType\";\"Int64\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToInt64Dict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"ListType\";[\"DataType\";\"Int64\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToInt64List",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"ListType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToList",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToString",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DictType\";[\"DataType\";\"String\"];[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToStringDict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"ListType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToStringList",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToUint64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"DictType\";[\"DataType\";\"String\"];[\"DataType\";\"Uint64\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToUint64Dict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"ListType\";[\"DataType\";\"Uint64\"]]];[[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "ConvertToUint64List",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "Equals"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "From"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint64\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "GetHash"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "GetLength",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsBool"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsDict"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsDouble"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsEntity"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsInt64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsList"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsString"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "IsUint64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ListType\";[\"VariantType\";[\"StructType\";[[\"BeginAttributes\";[\"VoidType\"]];[\"BeginList\";[\"VoidType\"]];[\"BeginMap\";[\"VoidType\"]];[\"EndAttributes\";[\"VoidType\"]];[\"EndList\";[\"VoidType\"]];[\"EndMap\";[\"VoidType\"]];[\"Item\";[\"VoidType\"]];[\"Key\";[\"DataType\";\"String\"]];[\"PostValue\";[\"ResourceType\";\"Yson2.Node\"]];[\"PreValue\";[\"ResourceType\";\"Yson2.Node\"]];[\"Value\";[\"ResourceType\";\"Yson2.Node\"]]]]]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "Iterate"
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "isStrict": true,
+      "name": "Lookup",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Bool\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "LookupBool",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DictType\";[\"DataType\";\"String\"];[\"ResourceType\";\"Yson2.Node\"]]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "LookupDict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Double\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "LookupDouble",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Int64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "LookupInt64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"ListType\";[\"ResourceType\";\"Yson2.Node\"]]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "LookupList",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "LookupString",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "LookupUint64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 0,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[]]",
+      "minLangVer": "2025.05",
+      "name": "MutCreate"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[\"DataType\";\"String\"]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutDown"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[\"DataType\";\"String\"]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutDownOrCreate"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"TupleType\";[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]];[\"DataType\";\"Bool\"]]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutExists"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"ResourceType\";\"Yson2.Node\"]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutFreeze"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[\"ResourceType\";\"Yson2.Node\"]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutInsert"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutRemove"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutRewind"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"TupleType\";[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]];[\"DataType\";\"Bool\"]]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[\"DataType\";\"String\"]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutTryDown"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutUp"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[\"ResourceType\";\"Yson2.Node\"]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutUpdate"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[\"ResourceType\";\"Yson2.Node\"]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutUpsert"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"TupleType\";[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]];[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]]]];[[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]]]]",
+      "minLangVer": "2025.05",
+      "name": "MutView"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"LinearType\";[\"ResourceType\";\"Yson2.MutNode\"]]];[[[\"ResourceType\";\"Yson2.Node\"]]]]",
+      "minLangVer": "2025.05",
+      "name": "Mutate"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[2u];[[\"ResourceType\";\"Yson2.Options\"]];[[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"AutoConvert\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"Strict\"]]]",
+      "isStrict": true,
+      "name": "Options",
+      "optionalArgCount": 2
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "Parse",
+      "polyArgs": "[[{\"cmd\"=\"or\";\"value\"=[{\"arg\"=\"T0\";\"cmd\"=\"kind\";\"value\"=\"Resource\"};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"DataType\";\"Yson\"]};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"OptionalType\";[\"DataType\";\"Yson\"]]}]};{\"args\"=[[\"DataType\";\"Yson\"]]}];[[];{\"args\"=[[\"DataType\";\"String\"]]}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[1u];[[\"ResourceType\";\"Yson2.Node\"]];[[[\"DataType\";\"Yson\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]];[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ParseJson",
+      "polyArgs": "[[{\"cmd\"=\"or\";\"value\"=[{\"arg\"=\"T0\";\"cmd\"=\"kind\";\"value\"=\"Resource\"};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"DataType\";\"Json\"]};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"OptionalType\";[\"DataType\";\"Json\"]]}]};{\"args\"=[[\"DataType\";\"Json\"]]}];[[];{\"args\"=[[\"DataType\";\"String\"]]}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[1u];[[\"ResourceType\";\"Yson2.Node\"]];[[[\"DataType\";\"Json\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]];[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]]"
+    },
+    {
+      "isTypeAwareness": true,
+      "name": "ParseJsonDecodeUtf8",
+      "polyArgs": "[[{\"cmd\"=\"or\";\"value\"=[{\"arg\"=\"T0\";\"cmd\"=\"kind\";\"value\"=\"Resource\"};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"DataType\";\"Json\"]};{\"arg\"=\"T0\";\"cmd\"=\"type\";\"value\"=[\"OptionalType\";[\"DataType\";\"Json\"]]}]};{\"args\"=[[\"DataType\";\"Json\"]]}];[[];{\"args\"=[[\"DataType\";\"String\"]]}]]",
+      "resolvedCallableTypes": "[[\"CallableType\";[1u];[[\"ResourceType\";\"Yson2.Node\"]];[[[\"DataType\";\"Json\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]];[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"DataType\";\"String\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]]"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Yson\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "Serialize"
+    },
+    {
+      "argCount": 5,
+      "callableType": "[\"CallableType\";[4u];[[\"OptionalType\";[\"DataType\";\"Json\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"SkipMapEntity\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"EncodeUtf8\"];[[\"OptionalType\";[\"DataType\";\"Bool\"]];\"WriteNanAsString\"]]]",
+      "name": "SerializeJson",
+      "optionalArgCount": 4
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Yson\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "SerializePretty"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Yson\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "SerializeText"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Bool\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "TryAsBool"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DictType\";[\"DataType\";\"String\"];[\"ResourceType\";\"Yson2.Node\"]]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "TryAsDict"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Double\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "TryAsDouble"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Int64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "TryAsInt64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"ListType\";[\"ResourceType\";\"Yson2.Node\"]]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "TryAsList"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "TryAsString"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2025.05",
+      "name": "TryAsUint64"
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "name": "WithAttributes"
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Node\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPath",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Bool\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPathBool",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DictType\";[\"DataType\";\"String\"];[\"ResourceType\";\"Yson2.Node\"]]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPathDict",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Double\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPathDouble",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Int64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPathInt64",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"ListType\";[\"ResourceType\";\"Yson2.Node\"]]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPathList",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPathString",
+      "optionalArgCount": 1
+    },
+    {
+      "argCount": 3,
+      "callableType": "[\"CallableType\";[1u];[[\"OptionalType\";[\"DataType\";\"Uint64\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u];[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"ResourceType\";\"Yson2.Options\"]]]]]",
+      "name": "YPathUint64",
+      "optionalArgCount": 1
     }
   ]
 }

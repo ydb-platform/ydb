@@ -89,6 +89,19 @@ TFuture<typename TResponse::TResult> TTypedClientRequest<TRequestMessage, TRespo
 }
 
 template <class TRequestMessage, class TResponse>
+TTypedClientRequest<TRequestMessage, TResponse>::TTypedClientRequest(
+    const TTypedClientRequest& other)
+    : TClientRequest(other)
+    , TRequestMessage(other)
+{ }
+
+template <class TRequestMessage, class TResponse>
+IClientRequestPtr TTypedClientRequest<TRequestMessage, TResponse>::Clone() const
+{
+    return New<TTypedClientRequest>(*this);
+}
+
+template <class TRequestMessage, class TResponse>
 TSharedRefArray TTypedClientRequest<TRequestMessage, TResponse>::SerializeHeaderless() const
 {
     TSharedRefArrayBuilder builder(Attachments().size() + 1);

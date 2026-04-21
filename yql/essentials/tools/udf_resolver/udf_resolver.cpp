@@ -93,6 +93,11 @@
         #endif
     #endif
 
+    #if !defined(SYS_faccessat2)
+        #if defined(__NR_faccessat2)
+            #define SYS_faccessat2 __NR_faccessat2
+        #endif
+    #endif
 #endif
 
 using namespace NKikimr;
@@ -332,7 +337,7 @@ int main(int argc, char** argv) {
         NYql::SendSignalOnParentThreadExit(SIGTERM);
 
 #ifdef _linux_
-        if (rlimit limit = {0, 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
+        if (rlimit limit = {.rlim_cur = 0, .rlim_max = 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
             ythrow TSystemError() << "Failed to set RLIMIT_CORE";
         }
 #endif
@@ -379,6 +384,10 @@ int main(int argc, char** argv) {
                 Allow(eventfd2),
                 Allow(exit),
                 Allow(exit_group),
+                Allow(faccessat),
+    #if defined(SYS_faccessat2)
+                Allow(faccessat2),
+    #endif
                 Allow(fadvise64),
                 Allow(fallocate),
                 Allow(flock),
@@ -405,6 +414,7 @@ int main(int argc, char** argv) {
                 Allow(getpriority),
                 Allow(getrandom),
                 Allow(getrlimit),
+                Allow(prlimit64),
                 Allow(getrusage),
                 Allow(getsid),
                 Allow(gettid),

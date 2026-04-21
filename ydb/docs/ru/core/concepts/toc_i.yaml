@@ -20,9 +20,11 @@ items:
   href: query_execution/index.md
   include:
     path: query_execution/toc_p.yaml
-    mode: link  
+    mode: link
 - name: Транзакции
   href: transactions.md
+- name: Вторичные индексы
+  href: secondary_indexes.md  
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
@@ -36,3 +38,5 @@ items:
   href: bridge.md
 - name: Трансфер данных
   href: transfer.md
+- name: Потоковые запросы
+  href: streaming-query.md

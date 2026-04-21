@@ -33,6 +33,7 @@ struct TConnection : TSimpleRefCount<TConnection> {
     template <typename T>
     TExprNode::TPtr BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx);
     ui32 GetOutputIndex() const { return OutputIndex; }
+    virtual TString GetExplainName() const = 0;
 
     TString Type;
     NYql::EStorageType FromSourceStageStorageType;
@@ -45,6 +46,7 @@ struct TBroadcastConnection: public TConnection {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Broadcast"; }
 };
 
 struct TMapConnection: public TConnection {
@@ -53,6 +55,8 @@ struct TMapConnection: public TConnection {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Map"; }
+
 };
 
 struct TUnionAllConnection: public TConnection {
@@ -61,6 +65,7 @@ struct TUnionAllConnection: public TConnection {
         , Parallel(parallel) {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "UnionAll"; }
 
 private:
     bool Parallel{false};
@@ -74,6 +79,7 @@ struct TShuffleConnection: public TConnection {
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "HashShuffle"; }
 
     TVector<TInfoUnit> Keys;
 };
@@ -86,6 +92,7 @@ struct TMergeConnection: public TConnection {
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Merge"; }
 
     TVector<TSortElement> Order;
 };
@@ -96,7 +103,14 @@ struct TSourceConnection: public TConnection {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Source"; }
+
 };
+
+template <typename T>
+bool IsConnection(TIntrusivePtr<TConnection> connection) {
+    return dynamic_cast<T*>(connection.get());
+}
 
 /**
  * Stage graph
@@ -129,8 +143,7 @@ struct TStageGraph {
         return newStageId;
     }
 
-    ui32 AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType,
-                       bool needsMap = true) {
+    ui32 AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType, bool needsMap = true) {
         ui32 res = AddStage();
         TVector<std::pair<TString, TInfoUnit>> renamePairs;
         if (needsMap) {
@@ -169,6 +182,15 @@ struct TStageGraph {
         auto &inputs = StageInputs.at(to);
         inputs.push_back(from);
         Connections[std::make_pair(from, to)].push_back(connection);
+    }
+
+    void UpdateConnection(ui32 from, ui32 to, TIntrusivePtr<TConnection> connection) {
+        auto it = Connections.find(std::make_pair(from, to));
+        Y_ENSURE(it != Connections.end(), "Cannot find a connection to update.");
+        auto& connections = it->second;
+        Y_ENSURE(connections.size() == 1);
+        connections.clear();
+        connections.push_back(connection);
     }
 
     TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }

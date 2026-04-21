@@ -98,6 +98,7 @@ def create_queues_table(root, session):
         ('DlqName', ydb.PrimitiveType.Utf8),
         ('TablesFormat', ydb.PrimitiveType.Uint32),
         ('Tags', ydb.PrimitiveType.Utf8),
+        ('TopicCreated', ydb.PrimitiveType.Bool),
     ]
     _create_table(root, session, '.Queues', columns, keys_count=2)
 
@@ -179,6 +180,7 @@ def create_attibutes_table(root, session, queue_type, common_table=True):
         ('DlqArn', ydb.PrimitiveType.Utf8),
         ('MaxReceiveCount', ydb.PrimitiveType.Uint64),
         ('ShowDetailedCountersDeadline', ydb.PrimitiveType.Uint64),
+        ('TopicCreated', ydb.PrimitiveType.Bool),
     ]
     _create_table(root, session, 'Attributes', columns, len(queue_keys), common_table, queue_type)
 

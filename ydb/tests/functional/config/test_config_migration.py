@@ -603,3 +603,81 @@ class TestConfigMigrationWithStoragePoolTypes(BaseConfigMigrationTest):
 
         self.do_migration_to_v1(table_path, tablet_ids)
         verify_storage_pool_types_in_v1_config(self.dynconfig_client, expected_kinds, config_in_console=True)
+
+
+class TestConfigMigrationWithMixedDiskTypes(BaseConfigMigrationTest):
+    use_self_management = False
+    use_config_store = False
+
+    @pytest.fixture(autouse=True)
+    def setup_test(self):
+        nodes_count = 3
+        log_configs = self.get_log_configs()
+
+        self.configurator = KikimrConfigGenerator(
+            self.erasure,
+            nodes=nodes_count,
+            use_in_memory_pdisks=False,
+            separate_node_configs=self.separate_node_configs,
+            simple_config=True,
+            extra_grpc_services=['config'],
+            additional_log_configs=log_configs,
+            explicit_hosts_and_host_configs=True,
+            domain_name=self.domain_name,
+            use_self_management=self.use_self_management,
+            use_config_store=self.use_config_store,
+        )
+
+        host_configs = self.configurator.yaml_config["host_configs"]
+        max_id = max(hc["host_config_id"] for hc in host_configs)
+        host_configs.append({
+            "host_config_id": max_id + 1,
+            "drive": [
+                {"path": "/dev/disk/by-partlabel/fake_ssd_1", "type": "SSD"},
+                {"path": "/dev/disk/by-partlabel/fake_ssd_2", "type": "SSD"},
+                {"path": "/dev/disk/by-partlabel/fake_ssd_3", "type": "SSD"},
+            ]
+        })
+
+        domain = self.configurator.yaml_config["domains_config"]["domain"][0]
+        existing_geometry = domain["storage_pool_types"][0].get("pool_config", {}).get("geometry")
+        ssd_pool = {
+            "kind": "ssd",
+            "pool_config": {
+                "box_id": 1,
+                "erasure_species": "mirror-3-dc",
+                "vdisk_kind": "Default",
+                "kind": "ssd",
+                "pdisk_filter": [{"property": [{"type": "SSD"}]}],
+            }
+        }
+        if existing_geometry:
+            ssd_pool["pool_config"]["geometry"] = existing_geometry.copy()
+        domain["storage_pool_types"].append(ssd_pool)
+
+        self.cluster = KiKiMR(configurator=self.configurator)
+        self.cluster.start()
+
+        cms.request_increase_ratio_limit(self.cluster.client)
+        host = self.cluster.nodes[1].host
+        grpc_port = self.cluster.nodes[1].port
+        self.swagger_client = SwaggerClient(host, self.cluster.nodes[1].mon_port)
+        self.config_client = ConfigClient(host, grpc_port)
+        self.dynconfig_client = DynConfigClient(host, grpc_port)
+
+        yield
+
+        self.cluster.stop()
+
+    def test_mixed_disk_types_extracted_during_migration(self):
+        table_path = self.get_table_path("mixed_disks")
+        tablet_ids = self.create_tablets(table_path)
+
+        expected_kinds = ["hdd", "hdd1", "hdd2", "hdde", "ssd"]
+        verify_storage_pool_types_in_v1_config(self.dynconfig_client, expected_kinds, config_in_console=False)
+
+        self.do_migration_to_v2(table_path, tablet_ids, extract_storage_pool_types=True)
+        verify_storage_pool_types_in_v2_config(self.config_client, expected_kinds)
+
+        self.do_migration_to_v1(table_path, tablet_ids)
+        verify_storage_pool_types_in_v1_config(self.dynconfig_client, expected_kinds, config_in_console=True)

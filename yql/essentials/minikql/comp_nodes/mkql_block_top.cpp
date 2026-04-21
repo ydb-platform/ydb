@@ -3,7 +3,6 @@
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl_codegen.h> // Y_IGNORE
 
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 
@@ -11,7 +10,6 @@
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
@@ -400,291 +398,6 @@ public:
 };
 
 template <bool Sort, bool HasCount>
-class TTopOrSortBlocksFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TTopOrSortBlocksFlowWrapper<Sort, HasCount>> {
-    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TTopOrSortBlocksFlowWrapper<Sort, HasCount>>;
-    using TState = TTopOrSortBlocksState<Sort, HasCount>;
-
-public:
-    TTopOrSortBlocksFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TArrayRef<TType* const> wideComponents, IComputationNode* count,
-                                TComputationNodePtrVector&& directions, std::vector<ui32>&& keyIndicies)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
-        , Flow_(flow)
-        , Count_(count)
-        , Directions_(std::move(directions))
-        , KeyIndicies_(std::move(keyIndicies))
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(wideComponents.size()))
-    {
-        for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
-            Columns_.push_back(AS_TYPE(TBlockType, wideComponents[i]));
-        }
-    }
-
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
-        Y_ABORT_UNLESS(output[Columns_.size()]);
-        auto& s = GetState(state, ctx);
-
-        if (!s.Count) {
-            if (s.IsFinished_) {
-                return EFetchResult::Finish;
-            }
-
-            if (!s.WritingOutput_) {
-                for (const auto fields = ctx.WideFields.data() + WideFieldsIndex_;;) {
-                    switch (Flow_->FetchValues(ctx, fields)) {
-                        case EFetchResult::Yield:
-                            return EFetchResult::Yield;
-                        case EFetchResult::One:
-                            s.ProcessInput();
-                            continue;
-                        case EFetchResult::Finish:
-                            break;
-                    }
-                    break;
-                }
-            }
-
-            if (!s.FillOutput(ctx.HolderFactory)) {
-                return EFetchResult::Finish;
-            }
-        }
-
-        const auto sliceSize = s.Slice();
-        for (size_t i = 0; i <= Columns_.size(); ++i) {
-            if (const auto out = output[i]) {
-                *out = s.Get(sliceSize, ctx.HolderFactory, i);
-            }
-        }
-        return EFetchResult::One;
-    }
-#ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen.GetContext();
-
-        const auto width = Columns_.size() + 1U;
-
-        const auto valueType = Type::getInt128Ty(context);
-        const auto statusType = Type::getInt32Ty(context);
-        const auto indexType = Type::getInt64Ty(context);
-        const auto flagType = Type::getInt1Ty(context);
-        const auto arrayType = ArrayType::get(valueType, width);
-        const auto ptrValuesType = PointerType::getUnqual(arrayType);
-
-        TLLVMFieldsStructureState stateFields(context, width);
-        const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
-        const auto statePtrType = PointerType::getUnqual(stateType);
-
-        const auto atTop = &ctx.Func->getEntryBlock().back();
-
-        const auto heightPtr = new AllocaInst(indexType, 0U, "height_ptr", atTop);
-        const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", atTop);
-
-        new StoreInst(ConstantInt::get(indexType, 0), heightPtr, atTop);
-        new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, atTop);
-
-        const auto make = BasicBlock::Create(context, "make", ctx.Func);
-        const auto main = BasicBlock::Create(context, "main", ctx.Func);
-        const auto more = BasicBlock::Create(context, "more", ctx.Func);
-        const auto test = BasicBlock::Create(context, "test", ctx.Func);
-        const auto read = BasicBlock::Create(context, "read", ctx.Func);
-        const auto good = BasicBlock::Create(context, "good", ctx.Func);
-        const auto work = BasicBlock::Create(context, "work", ctx.Func);
-        const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
-        const auto over = BasicBlock::Create(context, "over", ctx.Func);
-
-        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
-        block = make;
-
-        llvm::Value* trunc;
-        if constexpr (HasCount) {
-            const auto count = GetNodeValue(Count_, ctx, block);
-            trunc = GetterFor<ui64>(count, context, block);
-        } else {
-            trunc = ConstantInt::get(Type::getInt64Ty(context), 0U);
-        }
-
-        const auto dirsType = ArrayType::get(flagType, Directions_.size());
-        const auto dirs = new AllocaInst(dirsType, 0U, "dirs", block);
-        for (auto i = 0U; i < Directions_.size(); ++i) {
-            const auto dir = GetNodeValue(Directions_[i], ctx, block);
-            const auto cut = GetterFor<bool>(dir, context, block);
-            const auto ptr = GetElementPtrInst::CreateInBounds(dirsType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block);
-            new StoreInst(cut, ptr, block);
-        }
-
-        const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        EmitFunctionCall<&TTopOrSortBlocksFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr, dirs, trunc}, ctx, block);
-
-        BranchInst::Create(main, block);
-
-        block = main;
-
-        const auto state = new LoadInst(valueType, statePtr, "state", block);
-        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
-        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetCount()}, "count_ptr", block);
-
-        const auto count = new LoadInst(indexType, countPtr, "count", block);
-        const auto none = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "none", block);
-
-        BranchInst::Create(more, fill, none, block);
-
-        block = more;
-
-        const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetIsFinished()}, "is_finished_ptr", block);
-        const auto finished = new LoadInst(flagType, finishedPtr, "finished", block);
-
-        const auto result = PHINode::Create(statusType, 4U, "result", over);
-        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
-
-        BranchInst::Create(over, test, finished, block);
-
-        block = test;
-
-        const auto writingOutputPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetWritingOutput()}, "writing_output_ptr", block);
-        const auto writingOutput = new LoadInst(flagType, writingOutputPtr, "writing_output", block);
-
-        BranchInst::Create(work, read, writingOutput, block);
-
-        block = read;
-
-        const auto getres = GetNodeValues(Flow_, ctx, block);
-
-        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
-
-        const auto way = SwitchInst::Create(getres.first, good, 2U, block);
-        way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Finish)), work);
-        way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Yield)), over);
-
-        block = good;
-
-        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetPointer()}, "values_ptr", block);
-        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-        Value* array = UndefValue::get(arrayType);
-        for (auto idx = 0U; idx < getres.second.size(); ++idx) {
-            const auto value = getres.second[idx](ctx, block);
-            AddRefBoxed(value, ctx, block);
-            array = InsertValueInst::Create(array, value, {idx}, (TString("value_") += ToString(idx)).c_str(), block);
-        }
-        new StoreInst(array, values, block);
-
-        EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::ProcessInput>(Type::getVoidTy(context), {stateArg}, ctx, block);
-
-        BranchInst::Create(read, block);
-
-        block = work;
-
-        const auto hasData = EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::FillOutput>(flagType, {stateArg, ctx.GetFactory()}, ctx, block);
-
-        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
-
-        BranchInst::Create(fill, over, hasData, block);
-
-        block = fill;
-
-        const auto slice = EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::Slice>(indexType, {stateArg}, ctx, block);
-        new StoreInst(slice, heightPtr, block);
-        new StoreInst(stateArg, stateOnStack, block);
-
-        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
-
-        BranchInst::Create(over, block);
-
-        block = over;
-
-        ICodegeneratorInlineWideNode::TGettersList getters(width);
-        for (size_t idx = 0U; idx < getters.size(); ++idx) {
-            getters[idx] = [idx, valueType, heightPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
-                const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
-                const auto heightArg = new LoadInst(indexType, heightPtr, "height", block);
-                return EmitFunctionCall<&TTopOrSortBlocksState<Sort, HasCount>::Get>(valueType, {stateArg, heightArg, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, ctx, block);
-            };
-        }
-        return {result, std::move(getters)};
-    }
-#endif
-private:
-    void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow_)) {
-            if constexpr (HasCount) {
-                this->DependsOn(flow, Count_);
-            }
-
-            for (auto dir : Directions_) {
-                this->DependsOn(flow, dir);
-            }
-        }
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
-    class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
-    private:
-        using TBase = TLLVMFieldsStructureBlockState;
-        llvm::IntegerType* const WritingOutputType;
-        llvm::IntegerType* const IsFinishedType;
-
-    protected:
-        using TBase::Context;
-
-    public:
-        std::vector<llvm::Type*> GetFieldsArray() {
-            std::vector<llvm::Type*> result = TBase::GetFieldsArray();
-            result.emplace_back(WritingOutputType);
-            result.emplace_back(IsFinishedType);
-            return result;
-        }
-
-        llvm::Constant* GetWritingOutput() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields);
-        }
-
-        llvm::Constant* GetIsFinished() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields + 1);
-        }
-
-        TLLVMFieldsStructureState(llvm::LLVMContext& context, size_t width)
-            : TBase(context, width)
-            , WritingOutputType(Type::getInt1Ty(Context))
-            , IsFinishedType(Type::getInt1Ty(Context))
-        {
-        }
-    };
-#endif
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions, ui64 count = 0ULL) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, KeyIndicies_, Columns_, directions, count);
-    }
-
-    TTopOrSortBlocksState<Sort, HasCount>& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid()) {
-            std::vector<bool> dirs(Directions_.size());
-            std::transform(Directions_.cbegin(), Directions_.cend(), dirs.begin(), [&ctx](IComputationNode* dir) { return dir->GetValue(ctx).Get<bool>(); });
-
-            if constexpr (HasCount) {
-                MakeState(ctx, state, dirs.data(), Count_->GetValue(ctx).Get<ui64>());
-            } else {
-                MakeState(ctx, state, dirs.data());
-            }
-
-            auto& s = *static_cast<TState*>(state.AsBoxed().Get());
-            const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
-            for (size_t i = 0; i < s.Values.size(); ++i) {
-                fields[i] = &s.Values[i];
-            }
-            return s;
-        }
-
-        return *static_cast<TState*>(state.AsBoxed().Get());
-    }
-
-    IComputationWideFlowNode* const Flow_;
-    IComputationNode* const Count_;
-    const TComputationNodePtrVector Directions_;
-    const std::vector<ui32> KeyIndicies_;
-    std::vector<TBlockType*> Columns_;
-    const size_t WideFieldsIndex_;
-};
-
-template <bool Sort, bool HasCount>
 class TTopOrSortBlocksStreamWrapper: public TMutableComputationNode<TTopOrSortBlocksStreamWrapper<Sort, HasCount>> {
     using TBaseComputation = TMutableComputationNode<TTopOrSortBlocksStreamWrapper>;
     using TState = TTopOrSortBlocksState<Sort, HasCount>;
@@ -808,7 +521,7 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(inputsWithCount > 2U && !(inputsWithCount % 2U), "Expected more arguments.");
     const TType* const inputType = callable.GetInput(0).GetStaticType();
 
-    MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(), "Expected either WideStream or WideFlow as an input");
+    MKQL_ENSURE(inputType->IsStream(), "Expected WideStream as an input");
 
     const auto wideComponents = GetWideComponents(inputType);
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
@@ -831,12 +544,7 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
         directions.push_back(LocateNode(ctx.NodeLocator, callable, i + 1 - offset));
     }
 
-    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(node);
-    if (!wideFlow) {
-        MKQL_ENSURE(inputType->IsStream(), "Expecting stream as input type.");
-        return new TTopOrSortBlocksStreamWrapper<Sort, HasCount>(ctx.Mutables, node, wideComponents, count, std::move(directions), std::move(keyIndicies));
-    }
-    return new TTopOrSortBlocksFlowWrapper<Sort, HasCount>(ctx.Mutables, wideFlow, wideComponents, count, std::move(directions), std::move(keyIndicies));
+    return new TTopOrSortBlocksStreamWrapper<Sort, HasCount>(ctx.Mutables, node, wideComponents, count, std::move(directions), std::move(keyIndicies));
 }
 
 } // namespace

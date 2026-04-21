@@ -1,4 +1,5 @@
 #include "ydb_root_common.h"
+#include "ydb_config.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
 #include "ydb_debug.h"
@@ -17,17 +18,16 @@
 #include "ydb_yql.h"
 #include "ydb_workload.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb/public/lib/ydb_cli/common/log.h>
-
-#if !defined(_win32_)
-#include <ydb/core/base/backtrace.h>
-#endif
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
+
+#include <library/cpp/getopt/small/completer.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -35,6 +35,10 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 #include <util/system/execpath.h>
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <ydb/core/base/backtrace.h>
+#endif
 
 namespace NYdb::NConsoleClient {
 
@@ -90,6 +94,127 @@ void SetupSignalActions() {
 
 } // anonymous namespace
 
+namespace {
+
+TString DefaultProfileConfigPath(TStringBuf ydbDir) {
+    return TStringBuilder() << GetHomeDir() << '/' << ydbDir << "/config/config.yaml";
+}
+
+TString GetProfileConfigPathFromArgs(int argc, const char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (TStringBuf(argv[i]) == "--profile-file" && i + 1 < argc) {
+            return TString(argv[i + 1]);
+        }
+    }
+    return DefaultProfileConfigPath("ydb");
+}
+
+TString DescribeProfileForCompletion(const std::shared_ptr<IProfile>& profile) {
+    TStringBuilder desc;
+    if (profile->Has("endpoint")) {
+        desc << "Endpoint: " << profile->GetValue("endpoint").as<TString>();
+    }
+    if (profile->Has("database")) {
+        if (desc) {
+            desc << ", ";
+        }
+        desc << "Database: " << profile->GetValue("database").as<TString>();
+    }
+    if (profile->Has("authentication")) {
+        try {
+            auto authValue = profile->GetValue("authentication");
+            TString authMethod = authValue["method"].as<TString>();
+            if (desc) {
+                desc << ", ";
+            }
+            desc << "Auth: " << authMethod;
+        } catch (...) {
+        }
+    }
+    return desc;
+}
+
+class TProfileLaunchSelfCompleter : public NLastGetopt::NComp::ICompleter {
+public:
+    TProfileLaunchSelfCompleter(NLastGetopt::NComp::TCustomCompleter* completer)
+        : Completer_(completer)
+    {
+    }
+
+    void GenerateBash(NLastGetopt::TFormattedOutput& out) const override {
+        out.Line() << "IFS=$'\\n'";
+        out.Line() << "COMPREPLY+=( $(compgen -W \"$(${words[@]} ---CUSTOM-COMPLETION--- "
+                    << Completer_->GetUniqueName()
+                    << " \"${cword}\" \"\" \"\" 2> /dev/null | cut -d: -f1)\" -- ${cur}) )";
+        out.Line() << "IFS=$' \\t\\n'";
+    }
+
+    TStringBuf GenerateZshAction(NLastGetopt::NComp::TCompleterManager& manager) const override {
+        return manager.GetCompleterID(this);
+    }
+
+    void GenerateZsh(NLastGetopt::TFormattedOutput& out, NLastGetopt::NComp::TCompleterManager&) const override {
+        out.Line() << "local -a _profiles";
+        out.Line() << "_profiles=( \"${(@f)$(${words_orig[@]} ---CUSTOM-COMPLETION--- "
+                    << Completer_->GetUniqueName()
+                    << " \"${current_orig}\" \"${prefix_orig}\" \"${suffix_orig}\" 2> /dev/null)}\" )";
+        out.Line() << "_describe 'profile name' _profiles";
+    }
+
+private:
+    NLastGetopt::NComp::TCustomCompleter* Completer_;
+};
+
+} // anonymous namespace
+
+Y_COMPLETER(ProfileCompleter) {
+    try {
+        TString configPath = GetProfileConfigPathFromArgs(argc, argv);
+        auto profileManager = CreateProfileManager(configPath);
+        TString activeProfile = profileManager->GetActiveProfileName();
+        for (const auto& name : profileManager->ListProfiles()) {
+            auto profile = profileManager->GetProfile(name);
+            TString settings = DescribeProfileForCompletion(profile);
+            TStringBuilder desc;
+            if (name == activeProfile) {
+                desc << "(active)";
+            }
+            if (settings) {
+                if (desc) {
+                    desc << " ";
+                }
+                desc << settings;
+            }
+            if (desc) {
+                AddCompletion(TStringBuilder() << name << ":" << desc);
+            } else {
+                AddCompletion(name);
+            }
+        }
+    } catch (...) {
+    }
+}
+
+void TClientCommandRootCommon::SetSchemeCompletionContext(TSchemeCompletionContext ctx) {
+    SchemeCompletionContext_ = std::move(ctx);
+}
+
+int TClientCommandRootCommon::Process(TConfig& config) {
+    if (SchemeCompletionContext_) {
+        try {
+            TClientCommand::Prepare(config);
+            ExtractParams(config);
+            config.BuildInfoCommandTag = "completion-scheme";
+            TDriver driver(config.CreateDriverConfig());
+            RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
+            driver.Stop(true);
+        } catch (...) {
+        }
+        return EXIT_SUCCESS;
+    }
+    return TClientCommand::Process(config);
+}
+
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
     , Settings(settings)
@@ -105,7 +230,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandImport>());
     AddCommand(std::make_unique<TCommandMonitoring>());
     AddCommand(std::make_unique<TCommandOperation>());
-    AddCommand(std::make_unique<TCommandConfig>());
+    AddCommand(std::make_unique<TCommandConfig>(this));
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandSql>());
     AddCommand(std::make_unique<TCommandTopic>());
@@ -114,6 +239,29 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddHiddenCommand(std::make_unique<TCommandScripting>()); // TODO: remove in next major version
     AddHiddenCommand(std::make_unique<TCommandYql>()); // TODO: remove in next major version
     PropagateFlags(TCommandFlags{.Dangerous = false, .OnlyExplicitProfile = false});
+}
+
+TString TClientCommandRootCommon::GetUsageInfo(const std::vector<TString>& commands, TConfig config) {
+    TClientCommand* command = this;
+    for (const auto& commandName : commands) {
+        command = command->FindNextCommand(commandName);
+        Y_VALIDATE(command, "Command '" << commandName << "' not found");
+    }
+
+    config.ParentCommands.clear();
+    config.HelpCommandVerbosityLevel = std::numeric_limits<size_t>::max();
+    command->Opts = TClientCommandOptions();
+    command->PrepareOptions(config, /*validate=*/ false);
+
+    TString result;
+
+    {
+        TStringOutput stream(result);
+        Y_VALIDATE(config.ArgC > 0, "config.ArgC must be greater than 0");
+        config.Opts->GetOpts().PrintUsage(config.ArgV[0], stream);
+    }
+
+    return result;
 }
 
 void TClientCommandRootCommon::ValidateSettings() {
@@ -148,20 +296,15 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     config.StorageUrl = Settings.StorageUrl;
+    config.UsageInfoGetter = [this, config](const std::vector<TString>& commands) {
+        return GetUsageInfo(commands, config);
+    };
 
     if (Settings.EnableAiInteractive) {
         config.EnableAiInteractive = *Settings.EnableAiInteractive;
     }
-    config.AiTokenGetter = [getter = Settings.AiTokenGetter]() -> TAiTokenConfig {
-        if (getter) {
-            auto req = getter();
-            return {req.Token, req.WasUpdated};
-        }
-        return {};
-    };
-    for (const auto& profile : Settings.AiPredefinedProfiles) {
-        config.AiPredefinedProfiles.push_back({profile.Name, profile.ApiType, profile.ApiEndpoint, profile.ModelName});
-    }
+
+    config.BuildInfoProvider = Settings.BuildInfoProvider;
 
     SetCredentialsGetter(config);
 }
@@ -190,12 +333,15 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Config(TConfig& config) {
-#if !defined(_win32_)
-    NKikimr::EnableYDBBacktraceFormat();
+    if (!Initialized) {
+        Initialized = true;
+#if defined(__linux__) || defined(__APPLE__)
+        NKikimr::EnableYDBBacktraceFormat();
 #endif
 #ifndef NDEBUG
-    SetupSignalActions();
+        SetupSignalActions();
 #endif
+    }
 
     FillConfig(config);
     TClientCommandOptions& opts = *config.Opts;
@@ -232,11 +378,13 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             VerbosityLevel++;
         });
     opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from")
-        .RequiredArgument("NAME").StoreResult(&ProfileName);
+        .RequiredArgument("NAME").StoreResult(&ProfileName)
+        .CompletionArgHelp("Profile name")
+        .Completer(MakeSimpleShared<TProfileLaunchSelfCompleter>(&ProfileCompleter));
     opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively")
         .Optional().StoreTrue(&config.AssumeYes);
 
-    if (config.HelpCommandVerbosiltyLevel >= 2) {
+    if (config.HelpCommandVerbosityLevel >= 2) {
         opts.AddLongOption("no-discovery", "Do not perform discovery (client balancing) for ydb cluster connection."
             " If this option is set the user provided endpoint (by -e option) will be used to setup a connections")
             .Optional().StoreTrue(&config.SkipDiscovery);
@@ -420,7 +568,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .StoreFilePath(&config.Oauth2KeyFile)
             .StoreResult(&config.Oauth2KeyParams);
 
-        if (config.HelpCommandVerbosiltyLevel >= 2) {
+        if (config.HelpCommandVerbosityLevel >= 2) {
             TStringBuilder additionalHelp;
             additionalHelp << "Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl << Endl;
 
@@ -504,7 +652,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         << "├─ Interactive:  " << programName << " [options...]" << Endl
         << "└─ Command line: " << programName << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
+    RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
     stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
 
     // detailed help
@@ -528,12 +676,22 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (ProfileFile.empty()) {
-        config.ProfileFile = TStringBuilder() << HomeDir << '/' << Settings.YdbDir << "/config/config.yaml";
+        config.ProfileFile = DefaultProfileConfigPath(Settings.YdbDir);
     } else {
         config.ProfileFile = TFsPath(ProfileFile).RealLocation().GetPath();
     }
     if (TFsPath(config.ProfileFile).Exists() && !TFsPath(config.ProfileFile).IsFile()) {
         throw TMisuseException() << "\'" << config.ProfileFile << "\' is not a file";
+    }
+
+    if (config.EnableAiInteractive) {
+        if (const auto& aiProfileFile = GetEnv("YDB_CLI_AI_PROFILE_FILE")) {
+            config.AiProfileFile = TFsPath(aiProfileFile).RealLocation().GetPath();
+        }
+
+        if (TFsPath(config.AiProfileFile).Exists() && !TFsPath(config.AiProfileFile).IsFile()) {
+            throw TMisuseException() << "\'" << config.AiProfileFile << "\' is not a file";
+        }
     }
 
     if (!config.NeedToConnect) {
@@ -547,7 +705,7 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (std::vector<TString> errors = ParseResult->Validate(); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
-    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, !config.OnlyExplicitProfile ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
+    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, (!Profile && !config.OnlyExplicitProfile) ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
     if (IsVerbose()) {
@@ -775,7 +933,7 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     TString prompt;
     if (!ProfileName.empty()) {
         prompt = ProfileName;
-    } if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
+    } else if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
         prompt = activeProfileName;
     }
 

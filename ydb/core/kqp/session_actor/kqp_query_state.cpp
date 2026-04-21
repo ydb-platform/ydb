@@ -472,6 +472,10 @@ void TKqpQueryState::FillTopicOperations() {
     }
 
     TopicOperations = NTopic::TTopicOperations();
+
+    bool trackProducerId = !operations.HasTrackProducerId() || operations.GetTrackProducerId();
+    TopicOperations.SetTrackProducerId(trackProducerId);
+
     for (auto& topic : operations.GetTopics()) {
         auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), topic.path()));
 

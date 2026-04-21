@@ -32,14 +32,15 @@ enum class EUringFavor {
 struct TUringRouterConfig {
     // Target maximum number of in-flight I/O operations (SQ ring size).
     // Typical devices have hardware queue depth around 128; using 256 entries
-    // gives additional headroom to reduce the risk of SQ exhaustion under load.
+    // gives additional headroom to reduce the risk of SQ exhaustion under load
+    // and a better device utilization: there is in-kernel queue in front of the device
     ui32 QueueDepth = 256;
 
     // Submission kernel thread idle timeout before sleeping (only when UseSQPoll)
     ui32 SqThreadIdleMs = 1000;
 
     // Kernel thread polls submissions (IORING_SETUP_SQPOLL)
-    bool UseSQPoll = true;
+    bool UseSQPoll = false;
 
     // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL).
     // It requires support from both device and driver,
@@ -136,6 +137,9 @@ public:
     bool IsFileRegistered() const;
     EUringFavor GetUringFavor() const;
 
+    // both waiting, on-device and completed events
+    ui32 GetInflight() const;
+
     // Returns true if an io_uring instance can be created on this system with either the given config or fallback config.
     // Always use in tests to skip when running in restricted environments (seccomp, containers, etc.).
     static bool Probe(TUringRouterConfig config = {});
@@ -144,16 +148,12 @@ private:
     struct io_uring_sqe* GetSqe();
     void PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op);
 
-    // Submit a NOP to wake the completion poller blocked in io_uring_wait_cqe.
-    void WakePoller();
-
 private:
     FHANDLE Fd;
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
 
-    // we intentionally use a naked pointer to simplify the code
-    struct io_uring* Ring;
+    std::unique_ptr<struct io_uring> Ring;
 
     int FixedFdIndex = -1; // -1 means fd is not registered
     bool BuffersRegistered = false;
@@ -161,7 +161,8 @@ private:
     // Dedicated completion polling thread
     class TCompletionPoller;
     std::unique_ptr<TCompletionPoller> Poller;
-    std::atomic<bool> IsStopping{false};
+
+    std::atomic<ui32> InFlightCount{0};
 };
 
 } // namespace NKikimr::NPDisk

@@ -1,12 +1,11 @@
 import os
 import sys
 import requests
-from github import Github #pip3 install PyGithub
 from urllib.parse import quote_plus
 
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import parse_body
+from github_issue_utils import parse_body, DEFAULT_BUILD_TYPE
 
 
 ORG_NAME = 'ydb-platform'
@@ -346,6 +345,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
 def generate_github_issue_title_and_body(test_data):
     owner = test_data[0]['owner']
     branch = test_data[0]['branch']
+    build_type = test_data[0].get('build_type', DEFAULT_BUILD_TYPE)
     test_full_names = [f"{d['full_name']}" for d in test_data]
     test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
@@ -354,10 +354,11 @@ def generate_github_issue_title_and_body(test_data):
     ]
 
     # Title
+    bt_suffix = f' [{build_type}]' if build_type != DEFAULT_BUILD_TYPE else ''
     if len(test_full_names) > 1:
-        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests in {branch}'
+        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests in {branch}{bt_suffix}'
     else:
-        title = f'Mute {test_data[0]["full_name"]} in {branch}'
+        title = f'Mute {test_data[0]["full_name"]} in {branch}{bt_suffix}'
 
     # Преобразование списка тестов в строку и кодирование
     test_string = "\n".join(test_full_names)
@@ -384,6 +385,9 @@ def generate_github_issue_title_and_body(test_data):
         f"Branch:<!--branch_list_start-->\n"
         f"{branch}\n"
         f"<!--branch_list_end-->\n\n"
+        f"Build type:<!--build_type_list_start-->\n"
+        f"{build_type}\n"
+        f"<!--build_type_list_end-->\n\n"
         f"**Add line to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**\n"
         "```\n"
         f"{test_mute_strings_string}\n"
@@ -410,8 +414,11 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
         content = issue['content']
         if content:
             body = content['body']
-            tests, branches = parse_body(body)
+            parsed = parse_body(body)
 
+            status = 'N/A'
+            status_updated = '1970-01-01T00:00:01Z'
+            owner = 'N/A'
             field_values = issue.get('fieldValues', {}).get('nodes', [])
             for field_value in field_values:
                 field_name = field_value.get('field', {}).get('name', '').lower()
@@ -430,7 +437,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             print(f"Status: {status}")
             print(f"Status updated: {status_updated}")
             print(f"Owner: {owner}")
-            print(f"Branch: {(',').join(branches) if branches else 'main'}")
+            print(f"Branch: {(',').join(parsed.branches) if parsed.branches else 'main'}")
             print("Tests:")
 
             all_issues_with_contet[content['id']] = {}
@@ -442,9 +449,10 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['status'] = status
             all_issues_with_contet[content['id']]['owner'] = owner
             all_issues_with_contet[content['id']]['tests'] = []
-            all_issues_with_contet[content['id']]['branches'] = branches
+            all_issues_with_contet[content['id']]['branches'] = parsed.branches
+            all_issues_with_contet[content['id']]['build_type'] = parsed.build_type
 
-            for test in tests:
+            for test in parsed.tests:
                 all_issues_with_contet[content['id']]['tests'].append(test)
                 print(f"- {test}")
             print('\n')
@@ -456,13 +464,15 @@ def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
     
-    # First, collect all issues for each test
+    # First, collect all issues for each (test, build_type) key
     for issue in issues:
         if issues[issue]["state"] != 'CLOSED':
+            bt = issues[issue].get('build_type') or DEFAULT_BUILD_TYPE
             for test in issues[issue]['tests']:
-                if test not in muted_tests:
-                    muted_tests[test] = []
-                muted_tests[test].append(
+                key = (test, bt)
+                if key not in muted_tests:
+                    muted_tests[key] = []
+                muted_tests[key].append(
                     {
                         'url': issues[issue]['url'],
                         'createdAt': issues[issue]['createdAt'],
@@ -470,6 +480,7 @@ def get_muted_tests_from_issues():
                         'status': issues[issue]['status'],
                         'state': issues[issue]['state'],
                         'branches': issues[issue]['branches'],
+                        'build_type': bt,
                         'id': issue,
                     }
                 )
@@ -748,7 +759,8 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     
     # First, group tests by issue ID
     tests_by_issue = {}
-    for test_name, issue_data_list in issues.items():
+    for key, issue_data_list in issues.items():
+        test_name = key[0] if isinstance(key, tuple) else key
         for issue_data in issue_data_list:
             issue_id = issue_data['id']
             if issue_id not in tests_by_issue:

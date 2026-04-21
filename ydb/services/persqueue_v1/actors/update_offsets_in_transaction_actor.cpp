@@ -18,13 +18,6 @@ void TUpdateOffsetsInTransactionActor::Bootstrap(const NActors::TActorContext& c
 
 void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx)
 {
-    if (!AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
-        return Reply(Ydb::StatusIds::UNSUPPORTED,
-                     "Disabled transaction support for TopicService.",
-                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                     ctx);
-    }
-
     const auto req = GetProtoRequest();
 
     if (!req->has_tx()) {

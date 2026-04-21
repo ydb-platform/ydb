@@ -22,7 +22,6 @@ SRCS(
     plain_auth_actor.cpp
     plain_ldap_auth_proxy_actor.cpp
     scram_auth_actor.cpp
-    static_credentials_provider.cpp
 )
 
 END()

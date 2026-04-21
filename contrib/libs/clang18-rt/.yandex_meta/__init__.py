@@ -2,7 +2,6 @@ from devtools.yamaker.modules import Linkable, Switch, Recursable
 from devtools.yamaker.platform_macros import LLVM_VERSION
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 CLANG_RT_LIBS = {
     "asan",
     "asan-preinit",

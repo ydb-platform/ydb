@@ -1,6 +1,6 @@
 # Работа с узлами координации
 
-Данная статья описывает как использовать {{ ydb-short-name }} SDK для координации работы нескольких экземпляров клиентского приложения посредством использования [узлов координации](../../concepts/datamodel/coordination-node.md) и находящихся в них семафоры.
+Данная статья описывает как использовать {{ ydb-short-name }} SDK для координации работы нескольких экземпляров клиентского приложения посредством использования [узлов координации](../../concepts/datamodel/coordination-node.md) и находящихся в них семафоров.
 
 ## Создание узла координации
 
@@ -41,10 +41,42 @@
      - Чем меньше значение, тем выше вероятность ложных срабатываний, когда живой лидер может завершить работу для перестраховки, так как не будет уверен, что этот период не закончился у нового лидера.
      - Должен быть строго больше, чем `SelfCheckPeriod`.
 
+- Java
+
+  ```java
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  ```
+
+  Узел создаётся вызовом `createNode` с полным путём к узлу в базе. Префикс пути к базе можно взять из `client.getDatabase()`.
+
+  При необходимости задайте конфигурацию узла через [NodeConfig](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java), используя цепочку `NodeConfig.create().with…`. Доступные параметры: периоды `SelfCheckPeriod` и `SessionGracePeriod`, режимы согласованности чтения и подключения сессии (`readConsistencyMode`, `attachConsistencyMode`), режим счётчиков ограничителя скорости (`rateLimiterCountersMode`). Значения по умолчанию совпадают с описанием для C++ (см. выше). Готовый `NodeConfig` передаётся в `CoordinationNodeSettings`.
+
+  ```java
+  import java.time.Duration;
+
+  import tech.ydb.coordination.CoordinationClient;
+  import tech.ydb.coordination.description.NodeConfig;
+  import tech.ydb.coordination.settings.CoordinationNodeSettings;
+
+  String nodePath = client.getDatabase() + "/path/to/mynode";
+
+  NodeConfig config = NodeConfig.create()
+      .withDurationsConfig(Duration.ofSeconds(1), Duration.ofSeconds(10))
+      .withReadConsistencyMode(NodeConfig.ConsistencyMode.RELAXED)
+      .withAttachConsistencyMode(NodeConfig.ConsistencyMode.STRICT);
+
+  CoordinationNodeSettings settings = CoordinationNodeSettings.newBuilder()
+      .withNodeConfig(config)
+      .build();
+
+  client.createNode(nodePath, settings).join().expectSuccess("create node failed");
+  ```
+
+  Дополнительно доступны `alterNode` (изменение конфигурации), `dropNode` (удаление узла) и `describeNode` (чтение текущей конфигурации).
+
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -64,6 +96,40 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
+
+- Rust
+
+  Клиент координации возвращается из [`Client::coordination_client`](https://docs.rs/ydb/latest/ydb/struct.Client.html#method.coordination_client). Узел создаётся через [`CoordinationClient::create_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_node) с путём и [`NodeConfig`](https://docs.rs/ydb/latest/ydb/struct.NodeConfig.html) (через [`NodeConfigBuilder`](https://docs.rs/ydb/latest/ydb/struct.NodeConfigBuilder.html)). Также доступны [`alter_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.alter_node), [`drop_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.drop_node), [`describe_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.describe_node). Полный пример — [`mutex.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/mutex.rs).
+
+  ```rust
+  use ydb::NodeConfigBuilder;
+
+  let mut coordination_client = client.coordination_client();
+
+  coordination_client
+      .create_node(
+          "/path/to/mynode".into(),
+          NodeConfigBuilder::default().build()?,
+      )
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -105,10 +171,27 @@
    - `OnStopped` - вызывается, когда сессия прекращает попытки восстановить связь с сервисом, что может быть полезно для установления нового соединения.
    - `Timeout` - максимальный таймаут, в течение которого сессия может быть восстановлена после потери связи с сервисом.
 
+- Java
+
+  Сессия (см. [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) создаётся через `createSession`; для установления двунаправленного gRPC-потока с узлом нужно вызвать `connect()` (асинхронно, возвращает `CompletableFuture<Status>`). Параметры повторных попыток и таймаут подключения задаются в [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
+
+  ```java
+  import tech.ydb.coordination.CoordinationSession;
+  import tech.ydb.coordination.settings.CoordinationSessionSettings;
+
+  CoordinationSession session = client.createSession(
+      "/path/to/mynode",
+      CoordinationSessionSettings.newBuilder().build()
+  );
+
+  session.connect().join().expectSuccess("connect failed");
+  ```
+
+  Обычный сценарий: после успешного `connect()` выполняете операции с семафорами под свою задачу (блокировка, лидерство и т.д.), затем закрываете сессию. Удобно использовать try-with-resources, чтобы по завершении работы вызвать `close()` и корректно остановить поток с узлом.
+
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -133,6 +216,38 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
+
+- Rust
+
+  Сессию создаёт [`CoordinationClient::create_session`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_session) с путём к узлу и [`SessionOptions`](https://docs.rs/ydb/latest/ydb/struct.SessionOptions.html) ([`SessionOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.SessionOptionsBuilder.html): таймаут, описание и т.д.). Поток с узлом поднимается внутри конструктора сессии; отдельного вызова `connect`, как в Java, нет.
+
+  ```rust
+  use ydb::SessionOptionsBuilder;
+
+  let session = coordination_client
+      .create_session(
+          "/path/to/mynode".into(),
+          SessionOptionsBuilder::default().build()?,
+      )
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Контроль завершения сессии {#session-control}
@@ -152,6 +267,28 @@
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  В JS SDK для отслеживания таких ситуаций используется сигнал `session.signal`, который прерывается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить за сигналом сессии, чтобы не совершать действий когда сессия была закрыта или просрочена.
+
+  Также в JavaScript SDK есть метод для получения новой сессии при утрате старой, и этот способ является рекомендованным для длительного использования `for await (session of client.openSession()) { session.signal }`.
+
+- Java
+
+  Завершите сессию (`close()`), когда ваш сценарий отработал: так вы явно освободите соединение с узлом. Пока сессия не закрыта, SDK при сбоях сети сам повторяет подключение согласно `CoordinationSessionSettings`. Семафор держите только на время решения пользовательской задачи и отпускайте через `SemaphoreLease.release()`, когда ресурс больше не нужен.
+
+- Rust
+
+  У [`CoordinationSession`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html) вызовите [`alive`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.alive): вернётся [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html) — при завершении сессии он отменяется (аналог отслеживания контекста в Go). При отпускании [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html) или при `Drop` сессии освобождение семафора уходит на сервер в фоне.
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -202,7 +339,6 @@
   В Python SDK семафор создаётся неявно при первом вызове `acquire()` в методе `session.semaphore(name, limit)`. Лимит указывается при создании объекта семафора.
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -226,6 +362,47 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.create({
+    limit: 10,
+    data: new Uint8Array(),
+  });
+  ```
+
+- Java
+
+  Семафор создаётся явно методом `createSemaphore` у подключённой сессии. Можно передать пользовательские двоичные данные, хранящиеся вместе с семафором (`byte[] data`); вариант метода без параметра `data` эквивалентен передаче `null`. Если семафор с таким именем уже есть, операция завершится статусом «уже существует».
+
+  ```java
+  session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
+      .join()
+      .expectSuccess("create semaphore failed");
+  ```
+
+- Rust
+
+  [`CoordinationSession::create_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.create_semaphore) принимает имя, лимит и произвольные байты `data`, хранимые у семафора.
+
+  ```rust
+  session.create_semaphore("my-semaphore", 10, vec![]).await?;
+
+  // или с пользовательскими данными, хранимыми у семафора:
+  session
+      .create_semaphore("other-semaphore", 10, b"my-data".to_vec())
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -279,7 +456,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -318,6 +494,63 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
+- Java
+
+  Захват выполняется через `acquireSemaphore` с именем семафора, числом токенов `count`, опциональными данными операции и таймаутом ожидания в очереди [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). Метод возвращает `CompletableFuture<Result<SemaphoreLease>>` (см. [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) и [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). Если семафор с указанным именем не существует, операция завершится исключением (см. javadoc метода).
+
+  ```java
+  import java.time.Duration;
+
+  import tech.ydb.coordination.SemaphoreLease;
+  import tech.ydb.core.Result;
+
+  Result<SemaphoreLease> result = session
+      .acquireSemaphore("my-semaphore", 5, Duration.ofSeconds(30))
+      .join();
+
+  result.getStatus().expectSuccess("cannot acquire semaphore");
+  SemaphoreLease lease = result.getValue();
+  ```
+
+  Для **эфемерных** семафоров используйте `acquireEphemeralSemaphore` (флаг `exclusive` задаёт режим захвата); такие семафоры создаются при первом захвате и удаляются после последнего освобождения.
+
+  В документации API указано: в один момент времени сессия может удерживать **только один** семафор; повторные вызовы для того же имени **заменяют** предыдущую операцию (например, чтобы уменьшить `count` или сменить таймаут).
+
+- Rust
+
+  [`acquire_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.acquire_semaphore) возвращает [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html). Таймаут ожидания в очереди, эфемерность и данные операции задаются через [`AcquireOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.AcquireOptionsBuilder.html) и [`acquire_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.acquire_semaphore_with_params).
+
+  ```rust
+  use std::time::Duration;
+  use ydb::AcquireOptionsBuilder;
+
+  let _lease = session.acquire_semaphore("my-semaphore", 5).await?;
+
+  let opts = AcquireOptionsBuilder::default()
+      .timeout(Duration::from_secs(30))
+      .build()?;
+  let _lease = session
+      .acquire_semaphore_with_params("my-semaphore", 5, opts)
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -352,7 +585,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -376,6 +608,40 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.update({
+    limit: 5,
+    data: new Uint8Array(),
+  });
+  ```
+
+- Java
+
+  ```java
+  session.updateSemaphore("my-semaphore", "updated-data".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+      .join()
+      .expectSuccess("update semaphore failed");
+  ```
+
+- Rust
+
+  ```rust
+  session
+      .update_semaphore("my-semaphore", b"updated-data".to_vec())
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -435,7 +701,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -461,6 +726,50 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.describe({
+    owners: true,
+    waiters: true,
+  });
+  ```
+
+- Java
+
+  Метод `describeSemaphore` принимает имя семафора и режим [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): только данные, со списком владельцев, со списком ожидающих или оба списка.
+
+  ```java
+  import tech.ydb.coordination.description.SemaphoreDescription;
+  import tech.ydb.coordination.settings.DescribeSemaphoreMode;
+
+  SemaphoreDescription description = session
+      .describeSemaphore("my-semaphore", DescribeSemaphoreMode.WITH_OWNERS_AND_WAITERS)
+      .join()
+      .getValue();
+  ```
+
+  У элементов списков владельцев и ожидающих (`getOwnersList`, `getWaitersList`) доступны идентификатор сессии, таймаут, запрошенный `count`, данные операции и `orderId` (см. вложенный тип `SemaphoreDescription.Session` в исходниках).
+
+  Для подписки на изменения используйте `watchSemaphore` с тем же режимом описания и [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (данные, владельцы или оба). Объект [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) содержит снимок `SemaphoreDescription` и `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (см. [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), поля `isDataChanged`, `isOwnersChanged`). Future завершится при следующем событии; после уведомления для продолжения наблюдения вызовите `watchSemaphore` снова (см. [тесты](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
+
+- Rust
+
+  [`describe_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore) по умолчанию запрашивает владельцев и ожидающих. Набор флагов можно задать через [`DescribeOptions`](https://docs.rs/ydb/latest/ydb/struct.DescribeOptions.html) и [`describe_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore_with_params). Для подписки на изменения смотрите [`WatchOptions`](https://docs.rs/ydb/latest/ydb/struct.WatchOptions.html) в документации крейта.
+
+  ```rust
+  let description = session.describe_semaphore("my-semaphore").await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -492,7 +801,6 @@
   В Python SDK семафор освобождается методом `release()` у объекта семафора. При использовании контекстного менеджера (`with` или `async with`) освобождение происходит автоматически при выходе из блока.
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -520,6 +828,40 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`. Если взятие семафора было с использованием конструкции using, то при выходе из скоупа, семафор будет освобожден автоматически.
+
+  ```javascript
+  await lease.release();
+  ```
+
+- Java
+
+  Освобождение — через [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (асинхронно, `CompletableFuture<Status>`).
+
+  ```java
+  lease.release().join().expectSuccess("release failed");
+  ```
+
+- Rust
+
+  Вызовите [`Lease::release`](https://docs.rs/ydb/latest/ydb/struct.Lease.html#method.release) или просто завершите владение `Lease` — при уничтожении значения также отправляется освобождение на сервер.
+
+  ```rust
+  let lease = session.acquire_semaphore("my-semaphore", 1).await?;
+  // …
+  lease.release();
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 

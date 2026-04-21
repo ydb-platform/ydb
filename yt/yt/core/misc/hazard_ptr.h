@@ -12,8 +12,11 @@ namespace NYT {
 
 void ReclaimHazardPointers(bool flush = true);
 
-using THazardPtrReclaimer = void(*)(TPackedPtr packedPtr);
-void RetireHazardPointer(TPackedPtr packedPtr, THazardPtrReclaimer reclaimer);
+using THazardPtrReclaimer = void(*)(void* reclaimPtr);
+void RetireHazardPointer(
+    void* protectedPtr,
+    void* reclaimPtr,
+    THazardPtrReclaimer reclaimer);
 
 //! NB: #reclaimer must be stateless.
 template <class T, class TReclaimer>
@@ -52,14 +55,14 @@ public:
     THazardPtr(THazardPtr&& other) noexcept;
 
     THazardPtr& operator=(const THazardPtr&) = delete;
-    THazardPtr& operator=(THazardPtr&& other);
+    THazardPtr& operator=(THazardPtr&& other) noexcept;
 
     template <class TPtrLoader>
     static THazardPtr Acquire(TPtrLoader&& ptrLoader, T* ptr);
     template <class TPtrLoader>
     static THazardPtr Acquire(TPtrLoader&& ptrLoader);
 
-    void Reset();
+    void Reset() noexcept;
 
     ~THazardPtr();
 

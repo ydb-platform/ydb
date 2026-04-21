@@ -96,33 +96,46 @@ ydb hard nofile 10000
 
 ## Установите программное обеспечение {{ ydb-short-name }} на каждом сервере {#install-binaries}
 
-1. Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками:
+### Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками
+
+{% list tabs %}
+
+  - OSS
 
     ```bash
     mkdir ydbd-stable-linux-amd64
     curl -L <binaries_url> | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
     ```
-
-    где `binaries_url` ссылка на архив нужной вам версии со страницы [загрузок](../../../../downloads/index.md)
-
-1. Создайте на сервере директорию:
+  
+  - Enterprise
 
     ```bash
-    sudo mkdir -p  /opt/ydb
+    mkdir ydbd-stable-linux-amd64
+    curl -L <binaries_url> | tar -xJ --strip-component=1 -C ydbd-stable-linux-amd64
     ```
+  
+{% endlist %}
 
-1. Скопируйте исполняемый файл и библиотеки в соответствующие директории:
+  где `binaries_url` — ссылка на архив нужной вам версии со страницы [загрузок](../../../../downloads/index.md).
 
-    ```bash
-    sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
-    sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
-    ```
+### Создайте на сервере директорию
 
-1. Установите владельца файлов и каталогов:
+  ```bash
+  sudo mkdir -p  /opt/ydb
+  ```
 
-    ```bash
-    sudo chown -R root:bin /opt/ydb
-    ```
+### Скопируйте исполняемый файл и библиотеки в соответствующие директории
+
+  ```bash
+  sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
+  sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
+  ```
+
+### Установите владельца файлов и каталогов
+
+  ```bash
+  sudo chown -R root:bin /opt/ydb
+  ```
 
 ## Подготовьте и очистите диски на каждом сервере {#prepare-disks}
 

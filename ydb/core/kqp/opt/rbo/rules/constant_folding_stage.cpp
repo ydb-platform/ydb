@@ -1,9 +1,10 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
 #include <typeinfo>
 
 using namespace NYql;
@@ -40,11 +41,11 @@ namespace {
             return ExtractConstantExprs(lambda.Body().Ptr(), exprs, ctx);
         }
 
-        if (IsDataOrOptionalOfData(input->GetTypeAnn()) && !NeedCalc(TExprBase(input))) {
+        if (IsDataOrOptionalOfData(input->GetTypeAnn()) && !NKikimr::NKqp::NeedCalc(TExprBase(input))) {
             return;
         }
 
-        if (IsConstantExpr(input, foldUdfs) && !input->IsCallable("PgConst")) {
+        if (NKikimr::NKqp::IsConstantExpr(input, foldUdfs) && !input->IsCallable("PgConst")) {
             TNodeOnNodeOwnedMap deepClones;
             auto inputClone = ctx.DeepCopy(*input, ctx, deepClones, false, true, true);
             exprs.push_back(std::make_pair(input, inputClone));

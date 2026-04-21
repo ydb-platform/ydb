@@ -4,10 +4,10 @@
 #include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
@@ -26,94 +26,15 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NKikimr;
 using namespace NActors;
 
-namespace {
-
-TString GetDDiskConnectionsFilePath(ui64 tabletId)
-{
-    TString res = "/tmp/partition_actor_ddisk_connections";
-    res += "_" + ToString(tabletId);
-    res += "_" + ToString(getpid());
-    res += ".tmp";
-    return res;
-}
-
-TString SerializeTabletInfo(
-    const TPartitionIds& ids,
-    const NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
-    const NKikimrBlockStore::TVolumeConfig& volumeConfig)
-{
-    ::NYdb::NBS::PartitionDirect::NProto::TTabletInfo tabletInfo;
-    tabletInfo.MutableStorageConfig()->CopyFrom(storageConfig);
-    tabletInfo.MutableVolumeConfig()->CopyFrom(volumeConfig);
-
-    Y_ASSERT(ids.size() == TPartitionActor::NumDirectBlockGroups);
-    auto* dbgConnectionsIds = tabletInfo.MutableDBGConnectionsIds();
-
-    for (const auto& id: ids) {
-        auto* dbgConnectionIds = dbgConnectionsIds->Add();
-        Y_ASSERT(id.DdiskIds.size() == id.PersistentBufferDDiskIds.size());
-
-        auto* connections = dbgConnectionIds->MutableDDiskConnectionIds();
-        for (size_t j = 0; j < id.DdiskIds.size(); ++j) {
-            auto* connection = connections->Add();
-
-            auto* ddiskId = connection->MutableDDiskId();
-            id.DdiskIds[j].Serialize(ddiskId);
-
-            auto* pbDDiskId = connection->MutablePersistentBufferDDiskId();
-            id.PersistentBufferDDiskIds[j].Serialize(pbDDiskId);
-        }
-    }
-    Y_ASSERT(
-        tabletInfo.GetDBGConnectionsIds().size() ==
-        TPartitionActor::NumDirectBlockGroups);
-
-    TString serialized;
-    if (!tabletInfo.SerializeToString(&serialized)) {
-        Y_ABORT_S("Failed to serialize protobuf ddisk connections");
-    }
-
-    return serialized;
-}
-
-void DeserializeTabletInfo(
-    const TString& serialized,
-    TPartitionIds& ids,
-    NYdb::NBS::NProto::TStorageServiceConfig& storageConfig,
-    NKikimrBlockStore::TVolumeConfig& volumeConfig)
-{
-    ids.clear();
-    ::NYdb::NBS::PartitionDirect::NProto::TTabletInfo tabletInfo;
-    if (!tabletInfo.ParseFromString(serialized)) {
-        Y_ABORT_S("Failed to deserialize protobuf ddisk connections");
-    }
-
-    storageConfig.CopyFrom(tabletInfo.GetStorageConfig());
-    volumeConfig.CopyFrom(tabletInfo.GetVolumeConfig());
-
-    Y_ASSERT(
-        tabletInfo.GetDBGConnectionsIds().size() ==
-        TPartitionActor::NumDirectBlockGroups);
-
-    for (const auto& dbgConnectionIds: tabletInfo.GetDBGConnectionsIds()) {
-        ids.push_back({});
-        auto& ddiskIds = ids.back().DdiskIds;
-        auto& persistentBufferDDiskIds = ids.back().PersistentBufferDDiskIds;
-        for (const auto& connection: dbgConnectionIds.GetDDiskConnectionIds()) {
-            ddiskIds.emplace_back(connection.GetDDiskId());
-            persistentBufferDDiskIds.emplace_back(
-                connection.GetPersistentBufferDDiskId());
-        }
-    }
-}
-
-}   // namespace
-
 TPartitionActor::TPartitionActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
-    , TTabletExecutedFlat(info, tablet, new NKikimr::NMiniKQL::TMiniKQLFactory)
+    , TTabletBase<TPartitionActor>(
+          tablet,
+          NKikimr::TTabletStorageInfoPtr(info),
+          nullptr)
+    , StorageConfig(GetNbsService()->StorageConfig)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
@@ -144,28 +65,12 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         "Started NBS partition: actor id %s",
         SelfId().ToString().data());
 
-    // Initialize StorageConfig from NBS service
-    if (auto nbsService = GetNbsService()) {
-        const auto& nbsConfig = nbsService->GetConfig();
-        if (nbsConfig.has_nbsstorageconfig()) {
-            StorageConfig.CopyFrom(nbsConfig.nbsstorageconfig());
-            LOG_INFO(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "Initialized StorageConfig from NBS service config");
-        }
-    }
-
-    if (HaveStoredTabletInfo()) {
-        DdiskBlockGroupAllocated = true;
+    if (!Executor()->GetStats().IsFollower()) {
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "DDisks connection info has been found");
-
-        TPartitionIds ids;
-        LoadTabletInfo(ctx, ids);
-        Start(ctx, std::move(ids));
+            "Executing InitSchema transaction");
+        ExecuteTx(ctx, CreateTx<TInitSchema>());
     }
 
     // allow pipes to connect
@@ -233,120 +138,49 @@ void TPartitionActor::HandleServerDestroyed(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
 void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 {
     StateInitImpl(ev, SelfId());
 }
 
-bool TPartitionActor::HaveStoredTabletInfo()
-{
-    return NFs::Exists(GetDDiskConnectionsFilePath(TabletID()));
-}
-
 TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
-    TPartitionIds ids)
+    TDirectBlockGroupsConnections directBlockGroupsConnections)
 {
-    Y_ASSERT(ids.size() == NumDirectBlockGroups);
     TVector<IDirectBlockGroupPtr> directBlockGroups;
+    auto executors =
+        GetNbsService()->ExecutorPool.GetExecutors(NumDirectBlockGroups);
 
     for (size_t i = 0; i < NumDirectBlockGroups; i++) {
-        auto ddiskIds = std::move(ids[i].DdiskIds);
-        auto persistentBufferDDiskIds =
-            std::move(ids[i].PersistentBufferDDiskIds);
+        const auto& conn =
+            directBlockGroupsConnections.GetDirectBlockGroupConnections(i);
+        TVector<NBsController::TDDiskId> ddiskIds;
+        for (const auto& connection: conn.GetConnections()) {
+            ddiskIds.push_back(
+                NBsController::TDDiskId(connection.GetDDiskId()));
+        }
+        TVector<NBsController::TDDiskId> persistentBufferDDiskIds;
+        for (const auto& connection: conn.GetConnections()) {
+            persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
+                connection.GetPersistentBufferDDiskId()));
+        }
 
-        directBlockGroups.emplace_back(std::make_shared<TDirectBlockGroup>(
+        auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
+            GetNbsService()->Scheduler,
+            GetNbsService()->Timer,
+            executors[i],
             TabletID(),
             1,   // generation
-            i,   // directBlockGroupIndex
             std::move(ddiskIds),
-            std::move(persistentBufferDDiskIds),
-            VolumeConfig.GetBlockSize(),
-            VolumeConfig.GetPartitions(0).GetBlockCount(),
-            StorageConfig.GetSyncRequestsBatchSize()));
+            std::move(persistentBufferDDiskIds));
+
+        directBlockGroup->EstablishConnections();
+
+        directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
 
     return directBlockGroups;
-}
-
-void TPartitionActor::LoadTabletInfo(
-    const NActors::TActorContext& ctx,
-    TPartitionIds& ids)
-{
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "Trying to restore DDisks Ids");
-
-    TFileInput input(GetDDiskConnectionsFilePath(TabletID()));
-    TString serialized = input.ReadAll();
-
-    LOG_DEBUG_S(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "TabletInfo serialized size on load: " << serialized.size());
-
-    DeserializeTabletInfo(serialized, ids, StorageConfig, VolumeConfig);
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "Restored %d DDisks Ids",
-        ids[0].DdiskIds.size());
-}
-
-// TODO заменить на работу с локальной базой таблетки
-void TPartitionActor::StoreTabletInfo(
-    const NActors::TActorContext& ctx,
-    const TPartitionIds& ids)
-{
-    Y_UNUSED(ctx);
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "Trying to Store %d DDisks Ids",
-        ids[0].DdiskIds.size());
-
-    TString serialized = SerializeTabletInfo(ids, StorageConfig, VolumeConfig);
-    LOG_DEBUG_S(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "TabletInfo serialized size on store: " << serialized.size());
-
-    TFileOutput output(GetDDiskConnectionsFilePath(TabletID()));
-    output.Write(serialized);
-
-    // TODO вынести в юнит тест
-    {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "Trying to test store/load code");
-        TPartitionIds helpIds;
-        DeserializeTabletInfo(serialized, helpIds, StorageConfig, VolumeConfig);
-
-        Y_ASSERT(helpIds.size() == ids.size());
-        for (size_t i = 0; i < helpIds.size(); ++i) {
-            const auto& d1 = helpIds[i].DdiskIds;
-            const auto& d2 = ids[i].DdiskIds;
-            Y_ASSERT(d1.size() == d2.size());
-            for (size_t j = 0; j < d1.size(); ++j) {
-                Y_ASSERT((d1[j] <=> d2[j]) == 0);
-            }
-
-            const auto& pb1 = helpIds[i].PersistentBufferDDiskIds;
-            const auto& pb2 = ids[i].PersistentBufferDDiskIds;
-            Y_ASSERT(pb1.size() == pb2.size());
-            for (size_t j = 0; j < pb1.size(); ++j) {
-                Y_ASSERT((pb1[j] <=> pb2[j]) == 0);
-            }
-        }
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "test store/load code was successful");
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -364,20 +198,22 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
     auto request = std::make_unique<
         TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig.GetDDiskPoolName());
+    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
     request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig.GetPersistentBufferDDiskPoolName());
+        StorageConfig->GetPersistentBufferDDiskPoolName());
 
     // TODO: fill with tablet id
     request->Record.SetTabletId(TabletID());
 
-    for (size_t i = 0; i < 32; i++) {
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    const ui64 regionsCount =
+        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
+        RegionSize;
+
+    for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         auto* query = request->Record.AddQueries();
         query->SetDirectBlockGroupId(i);
-
-        // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1
-        // vchunk since disk size will be 128MB.
-        query->SetTargetNumVChunks(1);
+        query->SetTargetNumVChunks(regionsCount);
     }
 
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
@@ -385,19 +221,29 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
-    TPartitionIds ids)
+    TDirectBlockGroupsConnections directBlockGroupsConnections)
 {
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION, "starting partition_direct");
 
-    TVector<IDirectBlockGroupPtr> directBlockGroups =
-        CreateDirectBlockGroups(std::move(ids));
-    auto region = std::make_shared<TRegion>(std::move(directBlockGroups));
+    auto directBlockGroups =
+        CreateDirectBlockGroups(std::move(directBlockGroupsConnections));
+
+    auto nbsService = GetNbsService();
+    Y_ABORT_UNLESS(nbsService);
+    Y_ABORT_UNLESS(nbsService->Scheduler);
+    Y_ABORT_UNLESS(nbsService->Timer);
+
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         TabletID(),
-        1,   // generation
-        std::move(region),
+        VolumeConfig.GetDiskId(),
+        blockCount,
+        VolumeConfig.GetBlockSize(),
+        std::move(directBlockGroups),
         StorageConfig,
+        nbsService->Scheduler,
+        nbsService->Timer,
         AppData()->Counters);
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
@@ -405,25 +251,18 @@ void TPartitionActor::Start(
     {
         auto service = GetNbsService();
 
-        TString diskId = VolumeConfig.GetDiskId();
-        ui32 blockSize = VolumeConfig.GetBlockSize();
-        ui64 blockCount = 0;
-        for (const auto& p: VolumeConfig.GetPartitions()) {
-            blockCount += p.GetBlockCount();
-        }
-
-        TString socketPath = "/tmp/" + diskId + ".sock";
+        TString socketPath = "/tmp/" + VolumeConfig.GetDiskId() + ".sock";
         NVhost::TStorageOptions options{
-            .DiskId = diskId,
+            .DiskId = VolumeConfig.GetDiskId(),
             .ClientId = "client-1",
-            .BlockSize = blockSize,
-            .StripeSize = StorageConfig.GetStripeSize()
-                              ? StorageConfig.GetStripeSize()
-                              : DefaultStripeSize,
+            .BlockSize = VolumeConfig.GetBlockSize(),
+            .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
+            .VChunkSize = StorageConfig->GetVChunkSize(),
             .VhostQueuesCount = 1};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
+            fastPathService,
             fastPathService,
             options);
     }
@@ -451,26 +290,22 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         Y_ABORT_UNLESS(
             msg->Record.GetResponses().size() == NumDirectBlockGroups);
 
-        TPartitionIds ids;
-        ids.resize(NumDirectBlockGroups);
+        TDirectBlockGroupsConnections ids;
         for (size_t i = 0; i < NumDirectBlockGroups; i++) {
+            auto* directBlockGroupConnections =
+                ids.AddDirectBlockGroupConnections();
             const auto& response = msg->Record.GetResponses()[i];
-            Y_ABORT_UNLESS(response.GetDirectBlockGroupId() == i);
-            Y_ABORT_UNLESS(response.GetActualNumVChunks() == 1);
-
-            TVector<NBsController::TDDiskId>& ddiskIds = ids[i].DdiskIds;
-            TVector<NBsController::TDDiskId>& persistentBufferDDiskIds =
-                ids[i].PersistentBufferDDiskIds;
             for (const auto& node: response.GetNodes()) {
-                ddiskIds.emplace_back(node.GetDDiskId());
-                persistentBufferDDiskIds.emplace_back(
+                auto* connection =
+                    directBlockGroupConnections->AddConnections();
+                connection->MutableDDiskId()->CopyFrom(node.GetDDiskId());
+                connection->MutablePersistentBufferDDiskId()->CopyFrom(
                     node.GetPersistentBufferDDiskId());
             }
         }
 
         DdiskBlockGroupAllocated = true;
-        StoreTabletInfo(ctx, ids);
-        Start(ctx, std::move(ids));
+        ExecuteTx(ctx, CreateTx<TStorePartitionIds>(std::move(ids)));
     } else {
         LOG_ERROR(
             ctx,
@@ -490,7 +325,7 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 {
     auto response =
         std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdResponse>();
-    response->ActorId = LoadActorAdapter.ToString();
+    response->Record.SetActorId(LoadActorAdapter.ToString());
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
@@ -523,23 +358,16 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         return;
     }
 
-    // Store DDiskPoolName from StoragePoolName
-    if (msg->Record.GetVolumeConfig().HasStoragePoolName()) {
-        const TString& storagePoolName =
-            msg->Record.GetVolumeConfig().GetStoragePoolName();
-        StorageConfig.SetDDiskPoolName(storagePoolName);
-        StorageConfig.SetPersistentBufferDDiskPoolName(storagePoolName);
+    const auto& volumeConfig = msg->Record.GetVolumeConfig();
+    Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
 
-        LOG_INFO_S(
-            TActivationContext::AsActorContext(),
-            NKikimrServices::NBS_PARTITION,
-            "Updated DDiskPoolName from StoragePoolName"
-                << ", tabletId: " << TabletID()
-                << ", storagePoolName: " << storagePoolName);
-    }
+    LOG_INFO(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "Handle UpdateVolumeConfig request VolumeConfig: %s",
+        volumeConfig.DebugString().data());
 
-    // Store volume config
-    VolumeConfig.CopyFrom(msg->Record.GetVolumeConfig());
+    ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
     // Send response back to volume
     auto response = std::make_unique<
@@ -556,9 +384,6 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             << ", txId: " << response->Record.GetTxId() << ", status: OK");
 
     ctx.Send(ev->Sender, response.release());
-
-    // TODO: make separate state
-    AllocateDDiskBlockGroup(ctx);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

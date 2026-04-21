@@ -1,4 +1,5 @@
 #include <yql/essentials/sql/v1/node.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <library/cpp/json/writer/json.h>
 #include <util/generic/yexception.h>
@@ -11,12 +12,20 @@ int Main(int argc, const char** argv)
     Y_UNUSED(argv);
     NJsonWriter::TBuf json;
     json.BeginList();
-    NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind) {
+    NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer) {
         json.BeginObject();
         json.WriteKey("name");
         json.WriteString(name);
         json.WriteKey("kind");
         json.WriteString(kind);
+        if (minLangVer != NYql::UnknownLangVersion) {
+            json.WriteKey("minLangVer");
+            json.WriteString(NYql::FormatLangVersion(minLangVer).GetRef());
+        }
+        if (maxLangVer != NYql::UnknownLangVersion) {
+            json.WriteKey("maxLangVer");
+            json.WriteString(NYql::FormatLangVersion(maxLangVer).GetRef());
+        }
         json.EndObject();
     });
 

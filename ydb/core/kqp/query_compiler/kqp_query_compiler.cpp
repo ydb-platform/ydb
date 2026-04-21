@@ -744,6 +744,7 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
+        AFL_ENSURE(Config->GetEnableOltpSink());
         queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
@@ -1386,14 +1387,19 @@ private:
 
             auto [indexMeta, index] = tableMeta->GetIndex(indexName);
 
-            auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
-            YQL_ENSURE(desc, "unexpected index description type");
-            fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
             YQL_ENSURE(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                || index->Type == TIndexDescription::EType::GlobalFulltextPlain);
-            fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
-                : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
+                || index->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || index->Type == TIndexDescription::EType::GlobalJson);
+            if (index->Type == TIndexDescription::EType::GlobalJson) {
+                fullTextProto.SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson);
+            } else {
+                auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
+                YQL_ENSURE(desc, "unexpected index description type");
+                fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
+                fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
+                    : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
+            }
 
             auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
                 columnProto->SetName(columnMeta->Name);
@@ -1513,6 +1519,13 @@ private:
                 fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
             }
 
+            if (settingsObj.Tokens) {
+                for (const auto& tokenNode : TExprBase(settingsObj.Tokens).Cast<TExprList>()) {
+                    fullTextProto.MutableQuerySettings()->AddTokens(
+                        TString(tokenNode.Cast<TCoString>().Literal().Value()));
+                }
+            }
+
         } else if (auto settings = source.Settings().Maybe<TKqpReadSysViewSourceSettings>()) {
             NKqpProto::TKqpSysViewSource& sysViewProto = *protoSource->MutableSysViewSource();
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
@@ -1576,10 +1589,8 @@ private:
         // Partitioning
         TVector<TString> partitionParams;
         TString clusterName;
-        // In runtime, number of tasks with Sources is limited by 2x of node count
-        // We prepare a lot of partitions and distribute them between these tasks
-        // Constraint of 1 task per partition is NOT valid anymore
-        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(0);    // 0 - unlimited
+
         IDqIntegration::TPartitionSettings pSettings;
         pSettings.MaxPartitions = maxTasksPerStage;
         pSettings.CanFallback = false;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -38,5 +39,7 @@ struct TTestLogSettings {
 };
 bool SetupLogLevelFromTestParam(NActors::TTestActorRuntimeBase& runtime, NKikimrServices::EServiceKikimr service, const TString& prefix = "TEST");
 void SetupLogLevel(NActors::TTestActorRuntimeBase& runtime, const std::optional<TTestLogSettings>& logSettings = std::nullopt, const TString& paramPrefix = "TEST");
+
+void RestartTablet(const NActors::TActorSystem& runtime, ui64 tabletId);
 
 }  // namespace NTestUtils

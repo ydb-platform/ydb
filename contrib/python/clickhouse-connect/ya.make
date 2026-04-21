@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.11.0)
+VERSION(0.15.1)
 
 LICENSE(Apache-2.0)
 
@@ -66,6 +66,7 @@ PY_SRCS(
     clickhouse_connect/driver/asyncclient.py
     clickhouse_connect/driver/binding.py
     clickhouse_connect/driver/buffer.py
+    clickhouse_connect/driver/bytesource.py
     clickhouse_connect/driver/client.py
     clickhouse_connect/driver/common.py
     clickhouse_connect/driver/compression.py
@@ -108,7 +109,6 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
-    clickhouse_connect/py.typed
 )
 
 END()

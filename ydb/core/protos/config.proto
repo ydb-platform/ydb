@@ -1,7 +1,7 @@
 import "google/protobuf/descriptor.proto";
 import "ydb/core/config/protos/marker.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
-import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
+import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
@@ -25,6 +25,7 @@ import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
+import "ydb/core/protos/long_tx_service_config.proto";
 import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
@@ -290,7 +291,7 @@ message TDomainsConfig {
 
         message TUser {
             optional string Name = 1;
-            optional string Password = 2;
+            optional string Password = 2 [(Ydb.sensitive) = true];
         }
 
         message TGroup {
@@ -305,6 +306,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinSecurity = 19;
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
+        optional bool HideAuthenticationFailureReasons = 22 [default = true];
     }
 
     repeated TDomain Domain = 1;
@@ -521,6 +523,8 @@ message TInterconnectConfig {
     optional bool RdmaChecksum = 54 [default = true];
     optional ERdmaCqMode RdmaCqMode = 55;
     optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
+    optional bool UseKernelKeepAlive = 58 [default = false];
+    optional bool CollectSubscriptionStackTrace = 59 [default = false];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1697,6 +1701,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 300,
             DefaultValue: 0 }];
+        optional uint64 HullCompFreeSpaceThresholdPerMille = 41 [(ControlOptions) = {
+            Description: "Garbage threshold for FreeSpace compaction strategy. This value is divided by 1000 and converted to double. Zero value entirely disables the FreeSpace compaction strategy.",
+            MinValue: 0,
+            MaxValue: 100000,
+            DefaultValue: 2000 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -1823,6 +1832,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 100000000000, // 100 GB
             DefaultValue: 10000000, // 10 MB
+        }];
+
+        optional uint64 EnableChunkKeeper = 40 [(ControlOptions) = {
+            Description: "Enable internal VDisk subsystem ChunkKeeper",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
         }];
     }
 
@@ -1953,6 +1969,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 70 }];
+        optional uint64 MaxActiveCompactionsPerPDisk = 7 [(ControlOptions) = {
+            Description: "Max active compactions per disk",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {
@@ -1974,6 +1995,15 @@ message TImmediateControlsConfig {
     message TTestShardControls {
         optional uint64 DisableWrites = 1 [(ControlOptions) = {
             Description: "Disable write load in all node TestShard tablets",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
+    }
+
+    message TBootstrapperControls {
+        optional uint64 DisableLocalBootstrappers = 1 [(ControlOptions) = {
+            Description: "Disable tablet bootstrappers on this node (stops tablets bootstrapped on this node)",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0
@@ -2200,6 +2230,16 @@ message TImmediateControlsConfig {
     optional TColumnShardControls ColumnShardControls = 17;
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
+    optional TBootstrapperControls BootstrapperControls = 20;
+
+    message TQuoterControls {
+        optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {
+            Description: "Quoter proxy protocol version (0 = legacy, 1 = dual channel)",
+            MinValue: 0,
+            MaxValue: 10,
+            DefaultValue: 1 }];
+    }
+    optional TQuoterControls QuoterControls = 21;
 };
 
 message TMeteringConfig {
@@ -2682,14 +2722,14 @@ message TDataErasureConfig {
     message TTenantDataErasureConfig {
         optional double MaxRate = 1 [default = 1]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10];
-        // After this interval started data erasure in shard is considered as finished
-        optional uint64 TimeoutSeconds = 3 [default = 15];
+
+        optional uint64 TimeoutSeconds = 3 [default = 15, deprecated = true]; // ignored
     }
 
     optional double MaxRate = 1 [default = 0]; // unlimited
     optional uint64 InflightLimit = 2 [default = 10];
-    // After this interval started data erasure in tenant is considered as finished
-    optional uint64 TimeoutSeconds = 3 [default = 600];
+
+    optional uint64 TimeoutSeconds = 3 [default = 600, deprecated = true]; // ignored
     // Run data erasure every week
     optional uint64 DataErasureIntervalSeconds = 4 [default = 604800];
     // Every 10 m do request to BSC
@@ -2863,6 +2903,9 @@ message TKafkaProxyConfig {
     optional string SslCertificate = 3 [(Ydb.sensitive) = true];
     optional string Cert = 8 [(Ydb.sensitive) = true];
     optional string Key = 9 [(Ydb.sensitive) = true];
+    optional string CA = 17 [(Ydb.sensitive) = true];
+    optional bool EnableSelfSignedCerts = 19 [default = false];
+    optional bool MtlsEnable = 18 [default = false];
 
     optional uint64 MaxMessageSize = 4 [default = 16777216];
     optional uint64 MaxInflightSize = 5 [default = 16777216];
@@ -2962,6 +3005,9 @@ message TStatisticsConfig {
     optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
 
     optional bool EnableBackgroundColumnStatsCollection = 5 [default = false];
+
+    optional uint32 AnalyzeMaxTotalScanActorsInFlight = 6 [default = 100];
+    optional uint32 AnalyzeMaxPerNodeScanActorsInFlight = 7 [default = 1];
 };
 
 message TSystemTabletBackupConfig {
@@ -2974,6 +3020,15 @@ message TSystemTabletBackupConfig {
     }
     repeated fixed64 ExcludeTabletIds = 2;
     optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
+    optional uint64 MaxBackupsLimit = 4 [default = 3];
+    optional uint64 ChangelogInFlightBytesLimit = 5 [default = 536870912]; // 512 MB
+
+    enum EFailBehaviour {
+        RETRY_BACKUP = 0;
+        TABLET_RESTART = 1;
+    }
+    optional EFailBehaviour FailBehaviour = 6 [default = RETRY_BACKUP];
+    optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
 }
 
 message TClusterDiagnosticsConfig {
@@ -3108,6 +3163,8 @@ message TAppConfig {
     optional TNbsConfig NbsConfig = 119;
 
     optional TTliConfig TliConfig = 120;
+
+    optional TLongTxServiceConfig LongTxServiceConfig = 121;
 }
 
 message TYdbVersion {

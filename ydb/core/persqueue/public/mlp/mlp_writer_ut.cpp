@@ -55,7 +55,6 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                     .MessageBody = "message_body",
                     .MessageGroupId = "message_group_id",
                     .MessageDeduplicationId = "message_deduplication_id",
-                    .SerializedMessageAttributes = "message_attributes",
                 }
             }
         });

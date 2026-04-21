@@ -63,7 +63,7 @@ public:
 
   static std::unique_ptr<Aggregation> CreateAggregation(
       AggregationType aggregation_type,
-      InstrumentDescriptor instrument_descriptor,
+      const InstrumentDescriptor &instrument_descriptor,
       const AggregationConfig *aggregation_config = nullptr)
   {
     switch (aggregation_type)

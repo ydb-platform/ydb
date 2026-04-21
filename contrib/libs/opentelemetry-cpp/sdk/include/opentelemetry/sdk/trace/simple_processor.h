@@ -43,6 +43,11 @@ public:
       : exporter_(std::move(exporter))
   {}
 
+  SimpleSpanProcessor(const SimpleSpanProcessor &)            = delete;
+  SimpleSpanProcessor(SimpleSpanProcessor &&)                 = delete;
+  SimpleSpanProcessor &operator=(const SimpleSpanProcessor &) = delete;
+  SimpleSpanProcessor &operator=(SimpleSpanProcessor &&)      = delete;
+
   std::unique_ptr<Recordable> MakeRecordable() noexcept override
   {
     return exporter_->MakeRecordable();

@@ -1,6 +1,8 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/path.h>
+
+#include <util/generic/algorithm.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -324,6 +326,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     IsBackup = descr.GetIsBackup();
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    UniqueIndexKeySize = descr.GetUniqueIndexKeySize();
 
     CheckSpecialColumns();
 
@@ -480,8 +483,26 @@ void TUserTable::DoApplyCreate(
         alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy());
     }
 
-    if (partConfig.HasEnableFilterByKey()) {
-        alter.SetByKeyFilter(tid, partConfig.GetEnableFilterByKey());
+    {
+        using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
+        // Unify EnableFilterByKey and ByKeyFilterPrefixes into a single prefix list
+        TMap<ui32, double> prefixMap;
+        for (const auto& p : partConfig.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                prefixMap[p.GetPrefixLength()] = fpp;
+            }
+        }
+        if (partConfig.HasEnableFilterByKey() && partConfig.GetEnableFilterByKey()) {
+            prefixMap.emplace(KeyColumnIds.size(), NTable::DefaultBloomFilterFpp);
+        }
+        if (!prefixMap.empty()) {
+            TVector<TPrefix> prefixes;
+            for (const auto& [len, fpp] : prefixMap) {
+                prefixes.push_back(TPrefix{len, fpp});
+            }
+            alter.SetByKeyFilterPrefixes(tid, prefixes);
+        }
     }
 
     // N.B. some settings only apply to the main table
@@ -613,10 +634,54 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    if (configDelta.HasEnableFilterByKey()) {
-        config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
+    if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0) {
+        using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
+        // Rebuild unified prefix list from current config + delta
+        // Use a map to track FPP per prefix length
+        TMap<ui32, double> prefixMap;
+        // Start with existing prefixes from current config
+        for (const auto& p : config.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                prefixMap[p.GetPrefixLength()] = fpp;
+            }
+        }
+        ui32 keyCount = KeyColumnIds.size();
+
+        if (configDelta.HasEnableFilterByKey()) {
+            config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
+            if (configDelta.GetEnableFilterByKey()) {
+                prefixMap.emplace(keyCount, NTable::DefaultBloomFilterFpp);
+            } else {
+                prefixMap.erase(keyCount);
+            }
+        }
+
+        if (configDelta.ByKeyFilterPrefixesSize() > 0) {
+            // Delta replaces the explicit prefix list
+            prefixMap.clear();
+            for (const auto& p : configDelta.GetByKeyFilterPrefixes()) {
+                if (p.GetPrefixLength() > 0) {
+                    double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                    prefixMap[p.GetPrefixLength()] = fpp;
+                }
+            }
+            // Re-add full-key entry if EnableFilterByKey is enabled
+            if (config.GetEnableFilterByKey()) {
+                prefixMap.emplace(keyCount, NTable::DefaultBloomFilterFpp);
+            }
+        }
+
+        config.ClearByKeyFilterPrefixes();
+        TVector<TPrefix> prefixes;
+        for (const auto& [len, fpp] : prefixMap) {
+            auto* entry = config.AddByKeyFilterPrefixes();
+            entry->SetPrefixLength(len);
+            entry->SetFalsePositiveProbability(fpp);
+            prefixes.push_back(TPrefix{len, fpp});
+        }
         for (ui32 tid : tids) {
-            alter.SetByKeyFilter(tid, configDelta.GetEnableFilterByKey());
+            alter.SetByKeyFilterPrefixes(tid, prefixes);
         }
     }
 

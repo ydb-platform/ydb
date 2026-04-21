@@ -33,7 +33,7 @@ bool IsSystemError(const TError& error);
 class TFileDescriptorGuard
 {
 public:
-    TFileDescriptorGuard(TFileDescriptor fd = -1) noexcept;
+    explicit TFileDescriptorGuard(TFileDescriptor fd = -1) noexcept;
 
     ~TFileDescriptorGuard();
 
@@ -123,6 +123,9 @@ size_t GetCurrentProcessId();
 size_t GetCurrentThreadId();
 std::vector<size_t> GetCurrentProcessThreadIds();
 bool IsUserspaceThread(size_t tid);
+
+std::string GetCurrentProcessName();
+std::string GetCurrentProcessCommandLine();
 
 void ChownChmodDirectory(
     const std::string& path,

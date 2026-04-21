@@ -42,6 +42,7 @@ struct TUtf8Ranges {
 };
 
 // see https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8
+// NOLINTBEGIN(modernize-use-designated-initializers)
 // clang-format off
 inline static const std::vector<TUtf8Ranges> Utf8Ranges = {
     { 1, { {0x00, 0x7f}, {0x00, 0x00}, {0x00, 0x00}, {0x00, 0x00}, } },
@@ -55,6 +56,7 @@ inline static const std::vector<TUtf8Ranges> Utf8Ranges = {
     { 4, { {0xf4, 0xf4}, {0x80, 0x8f}, {0x80, 0xbf}, {0x80, 0xbf}, } },
 };
 // clang-format on
+// NOLINTEND(modernize-use-designated-initializers)
 
 std::optional<std::string> RoundBadUtf8(size_t range, std::string_view inputString, size_t pos,
                                         bool roundDown)

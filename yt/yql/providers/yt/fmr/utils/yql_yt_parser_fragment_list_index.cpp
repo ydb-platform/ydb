@@ -48,9 +48,17 @@ TParserFragmentListIndex::TParserFragmentListIndex(TStringBuf data, const std::v
 {
 }
 
+TParserFragmentListIndex::TParserFragmentListIndex(TStringBuf data)
+    : Pos_(data.begin())
+    , DataStart_(data.begin())
+    , DataEnd_(data.end())
+    , Mode_(EParserMode::AllColumnsEntries)
+{
+}
+
 
 void TParserFragmentListIndex::Parse() {
-    Y_ENSURE(!KeyColumnsMap_.empty(), "Vector of key columns is empty");
+    Y_ENSURE(Mode_ == EParserMode::AllColumnsEntries || !KeyColumnsMap_.empty(), "Vector of key columns is empty");
     DoParse();
 }
 
@@ -102,6 +110,11 @@ void TParserFragmentListIndex::ParseValue() {
 
 void TParserFragmentListIndex::ParseMapFragment(bool isTrackingMap, char endSymbol) {
     const ui64 rowStartOffset = GetOffset();
+    bool isAllColumnsMode = Mode_ == EParserMode::AllColumnsEntries;
+
+    if (isTrackingMap && isAllColumnsMode && LastColumnCount_ > 0) {
+        CurrentRowAllColumns_.reserve(LastColumnCount_);
+    }
     Advance(1);
     while (true) {
         char ch = PeekChar();
@@ -115,6 +128,8 @@ void TParserFragmentListIndex::ParseMapFragment(bool isTrackingMap, char endSymb
         Y_ENSURE(ch == MARKER_STRING,
                  TStringBuilder() << "Expected string marker byte for map key, but got: 0x"
                  << IntToString<16>(static_cast<unsigned char>(ch)));
+
+        const ui64 keyStartOffset = GetOffset(); // before the string marker byte
         Advance(1);
 
         TStringBuf key;
@@ -126,14 +141,26 @@ void TParserFragmentListIndex::ParseMapFragment(bool isTrackingMap, char endSymb
                  << "' (key-value separator) after map key, but got: 0x"
                  << IntToString<16>(static_cast<unsigned char>(ch)));
 
-        const bool shouldTrack = isTrackingMap && KeyColumnsMap_.contains(key);
+        const bool shouldTrackKey = isTrackingMap && KeyColumnsMap_.contains(key);
+        const bool shouldTrackAll = isTrackingMap && isAllColumnsMode;
+        const bool shouldTrack = shouldTrackKey || shouldTrackAll;
         const ui64 valueStartOffset = shouldTrack ? GetOffset() : 0;
 
         ParseValue();
 
         if (shouldTrack) {
             const ui64 valueEndOffset = GetOffset();
-            CurrentRow_[TString(key)] = TColumnOffsetRange{valueStartOffset, valueEndOffset};
+
+            if (Mode_ == EParserMode::AllColumnsEntries) {
+                CurrentRowAllColumns_.push_back(TColumnEntry{
+                    key,
+                    TColumnOffsetRange{keyStartOffset, valueEndOffset},
+                    TColumnOffsetRange{valueStartOffset, valueEndOffset}
+                });
+            }
+            else if (Mode_ == EParserMode::SelectedColumnsIdexes && shouldTrackKey) {
+                CurrentRow_[TString(key)] = TColumnOffsetRange{valueStartOffset, valueEndOffset};
+            }
         }
 
         if (Pos_ < DataEnd_) {
@@ -145,15 +172,25 @@ void TParserFragmentListIndex::ParseMapFragment(bool isTrackingMap, char endSymb
     }
     const ui64 rowEndOffset = GetOffset();
     // When exiting top-level map, save the row
-    if (isTrackingMap && !CurrentRow_.empty()) {
-        TRowIndexMarkup row(KeyColumnsMap_.size());
-        row.reserve(KeyColumnsMap_.size());
-        for (const auto& [key, value] : CurrentRow_) {
-            row[KeyColumnsMap_[key]] = value;
+    if (isTrackingMap) {
+        if (Mode_ == EParserMode::AllColumnsEntries) {
+            LastColumnCount_ = std::max(LastColumnCount_, CurrentRowAllColumns_.size());
+            AllColumnsRowOffsets_.push_back(TRowFullMarkup{
+                TColumnOffsetRange{rowStartOffset, rowEndOffset},
+                std::move(CurrentRowAllColumns_)
+            });
+            CurrentRowAllColumns_.clear();
         }
-        row.push_back(TColumnOffsetRange{rowStartOffset, rowEndOffset});
-        RowOffsets_.push_back(std::move(row));
-        CurrentRow_.clear();
+        else if (Mode_ == EParserMode::SelectedColumnsIdexes && !CurrentRow_.empty()) {
+            TRowIndexMarkup row(KeyColumnsMap_.size());
+            row.reserve(KeyColumnsMap_.size());
+            for (const auto& [key, value] : CurrentRow_) {
+                row[KeyColumnsMap_[key]] = value;
+            }
+            row.push_back(TColumnOffsetRange{rowStartOffset, rowEndOffset});
+            RowOffsets_.push_back(std::move(row));
+            CurrentRow_.clear();
+        }
     }
 }
 
@@ -215,21 +252,6 @@ void TParserFragmentListIndex::SkipScalar() {
     }
 }
 
-
-char TParserFragmentListIndex::PeekChar() {
-    EnsureAvailable(1);
-    return *Pos_;
-}
-
-char TParserFragmentListIndex::ReadChar() {
-    EnsureAvailable(1);
-    return *Pos_++;
-}
-
-void TParserFragmentListIndex::Advance(ui64 bytes) {
-    EnsureAvailable(bytes);
-    Pos_ += bytes;
-}
 
 ui32 TParserFragmentListIndex::ReadVarUint32() {
     ui32 result = 0;
@@ -308,14 +330,9 @@ i64 TParserFragmentListIndex::ZigZagDecode64(ui64 value) {
 }
 
 
-ui64 TParserFragmentListIndex::GetOffset() const {
-    return static_cast<ui64>(Pos_ - DataStart_);
-}
-
-void TParserFragmentListIndex::EnsureAvailable(size_t bytes) const {
-    Y_ENSURE(Pos_ + bytes <= DataEnd_,
-             TStringBuilder() << "Unexpected end of data: need " << bytes
-                              << " bytes, but only " << (DataEnd_ - Pos_) << " available");
+void TParserFragmentListIndex::ThrowUnexpectedEnd(size_t bytes) const {
+    ythrow yexception() << "Unexpected end of data: need " << bytes
+                        << " bytes, but only " << (DataEnd_ - Pos_) << " available";
 }
 
 } // namespace NYql::NFmr

@@ -13,6 +13,7 @@ empty_uuid_b = bytes(b'\x00' * 16)
 
 
 class UUID(ClickHouseType):
+    python_type = PYUUID
     valid_formats = 'string', 'native'
     np_type = 'U36'
     byte_size = 16

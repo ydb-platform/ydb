@@ -119,7 +119,7 @@ public:
         Dumper_->BeginIndentedBlock();
     }
 
-    TSerializeDumpIndentGuard(TSerializeDumpIndentGuard&& other)
+    TSerializeDumpIndentGuard(TSerializeDumpIndentGuard&& other) noexcept
         : Dumper_(other.Dumper_)
     {
         other.Dumper_ = nullptr;
@@ -154,7 +154,7 @@ public:
         Dumper_->BeginSuspendedBlock();
     }
 
-    TSerializeDumpSuspendGuard(TSerializeDumpSuspendGuard&& other)
+    TSerializeDumpSuspendGuard(TSerializeDumpSuspendGuard&& other) noexcept
         : Dumper_(other.Dumper_)
     {
         other.Dumper_ = nullptr;
@@ -180,7 +180,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 #define SERIALIZATION_DUMP_WRITE(context, ...) \
-    if (Y_LIKELY(!(context).Dumper().IsContentDumpActive())) { \
+    if (!(context).Dumper().IsContentDumpActive()) [[likely]] { \
     } else \
         (context).Dumper().WriteContent(__VA_ARGS__)
 

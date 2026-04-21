@@ -1,5 +1,8 @@
 #pragma once
 
+#include <functional>
+#include <tuple>
+#include <utility>
 
 #define Y_UNIT_TEST_COMBINATOR_1(BaseName, Flag1)                                                                                  \
     template<bool> void BaseName(NUnitTest::TTestContext&);                                                                        \

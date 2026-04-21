@@ -39,6 +39,7 @@
 #include <__type_traits/is_function.h>
 #include <__type_traits/is_pointer.h>
 #include <__type_traits/is_reference.h>
+#include <__type_traits/is_replaceable.h>
 #include <__type_traits/is_same.h>
 #include <__type_traits/is_swappable.h>
 #include <__type_traits/is_trivially_relocatable.h>
@@ -145,6 +146,8 @@ public:
       __libcpp_is_trivially_relocatable<pointer>::value && __libcpp_is_trivially_relocatable<deleter_type>::value,
       unique_ptr,
       void>;
+  using __replaceable _LIBCPP_NODEBUG =
+      __conditional_t<__is_replaceable_v<pointer> && __is_replaceable_v<deleter_type>, unique_ptr, void>;
 
 private:
   _LIBCPP_COMPRESSED_PAIR(pointer, __ptr_, deleter_type, __deleter_);
@@ -411,6 +414,8 @@ public:
       __libcpp_is_trivially_relocatable<pointer>::value && __libcpp_is_trivially_relocatable<deleter_type>::value,
       unique_ptr,
       void>;
+  using __replaceable _LIBCPP_NODEBUG =
+      __conditional_t<__is_replaceable_v<pointer> && __is_replaceable_v<deleter_type>, unique_ptr, void>;
 
 private:
   template <class _Up, class _OtherDeleter>
@@ -574,7 +579,7 @@ public:
   }
 
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23 __add_lvalue_reference_t<_Tp> operator[](size_t __i) const {
-    _LIBCPP_ASSERT_VALID_ELEMENT_ACCESS(_LIBCPP_HAS_ASAN || __checker_.__in_bounds<deleter_type>(std::__to_address(__ptr_), __i),
+    _LIBCPP_ASSERT_VALID_ELEMENT_ACCESS(__has_feature(address_sanitizer) || __checker_.__in_bounds<deleter_type>(std::__to_address(__ptr_), __i),
                                         "unique_ptr<T[]>::operator[](index): index out of range");
     return __ptr_[__i];
   }

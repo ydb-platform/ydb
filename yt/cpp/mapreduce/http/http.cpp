@@ -4,6 +4,7 @@
 #include "core.h"
 #include "helpers.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
@@ -803,13 +804,18 @@ THttpResponse::THttpResponse(
                 HttpCode_,
                 httpHeaders.Str().data());
 
-            YT_LOG_ERROR("%v",
-                errorString.data());
-
             if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
             } else {
                 ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
+            }
+
+            if (ErrorResponse_ && TExpectedErrorGuard::IsErrorExpected(*ErrorResponse_)) {
+                YT_LOG_INFO("%v",
+                    errorString.data());
+            } else {
+                YT_LOG_ERROR("%v",
+                    errorString.data());
             }
             break;
         }

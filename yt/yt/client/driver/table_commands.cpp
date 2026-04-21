@@ -316,7 +316,9 @@ void TLocateSkynetShareCommand::DoExecute(ICommandContextPtr context)
         syncOutputStream.get());
 
     Serialize(*skynetPartsLocations.ValueOrThrow(), consumer.get());
+
     consumer->Flush();
+    syncOutputStream->Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -498,7 +500,7 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
                             })
                             .OptionalItem("chunk_row_count", statistics.ChunkRowCount)
                             .OptionalItem("legacy_chunk_row_count", statistics.LegacyChunkRowCount)
-                            .OptionalItem("read_size_estimation", statistics.ReadDataSizeEstimate)
+                            .OptionalItem("read_size_estimate", statistics.ReadDataSizeEstimate)
                         .EndMap();
                 }
             });
@@ -513,7 +515,11 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
     registrar.Parameter("partition_mode", &TThis::PartitionMode)
         .Default(ETablePartitionMode::Unordered);
     registrar.Parameter("data_weight_per_partition", &TThis::DataWeightPerPartition)
-        .GreaterThan(0);
+        .GreaterThan(0)
+        .Default();
+    registrar.Parameter("compressed_data_size_per_partition", &TThis::CompressedDataSizePerPartition)
+        .GreaterThan(0)
+        .Default();
     registrar.Parameter("max_partition_count", &TThis::MaxPartitionCount)
         .GreaterThan(0)
         .Default();
@@ -525,6 +531,11 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("omit_inaccessible_rows", &TThis::OmitInaccessibleRows)
         .Default(false);
+    registrar.Postprocessor([] (TThis* command) {
+        if (!command->DataWeightPerPartition && !command->CompressedDataSizePerPartition) {
+            THROW_ERROR_EXCEPTION("Must specify either \"data_weight_per_partition\" or \"compressed_data_size_per_partition\"");
+        }
+    });
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -535,6 +546,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
 
     Options.PartitionMode = PartitionMode;
     Options.DataWeightPerPartition = DataWeightPerPartition;
+    Options.CompressedDataSizePerPartition = CompressedDataSizePerPartition;
     Options.MaxPartitionCount = MaxPartitionCount;
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;

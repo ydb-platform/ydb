@@ -8,12 +8,12 @@ items:
   include:
     mode: link
     path: concepts/toc_p.yaml
-- name: Для DevOps
+- name: Для администраторов БД
   href: devops/index.md
   include:
     mode: link
     path: devops/toc_p.yaml
-- name: Для разработчиков
+- name: Для разработчиков приложений
   href: dev/index.md
   include:
     mode: link

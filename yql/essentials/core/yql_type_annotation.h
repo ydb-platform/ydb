@@ -189,6 +189,7 @@ struct TYqlOperationOptions {
     TMaybe<TString> Url;
     TMaybe<TString> AttrsYson;
     TMaybe<NYT::TNode> ParametersYson;
+    TMaybe<TString> ProjectSlug;
 };
 
 class TColumnOrder {
@@ -361,6 +362,18 @@ struct TLineageStats {
     TMaybe<bool> Correct;
     TMaybe<bool> CorrectStandalone;
     ui64 Size = 0;
+    ui64 Memory = 0;
+    ui64 Duration = 0;
+    ui32 Version = 0;
+};
+
+struct TLineageSettings {
+    bool EnableLineage = false;
+    bool EnableStandaloneLineage = false;
+    ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
+    ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
+    ui32 LineageVersion = 1;
+    ui32 LineageStandaloneVersion = 1;
 };
 
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
@@ -489,11 +502,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 AndOverOrExpansionLimit = 100;
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
-    bool EnableLineage = false;
-    bool EnableStandaloneLineage = false;
     TLineageStats LineageStats;
-    ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
-    ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
+    TLineageSettings LineageSettings;
+    bool FuzzUntypedLambda = false;
+    bool FuzzUniversal = false;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;
@@ -539,7 +551,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui64 GetCachedNow() {
         if (!CachedNow) {
             if (QContext.CanRead()) {
-                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, NowKey}).GetValueSync();
+                auto item = QContext.GetReader()->Get({.Component=TypeAnnotationContextComponent, .Label=NowKey}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
                 }
@@ -548,7 +560,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
             } else {
                 CachedNow = TimeProvider->Now().GetValue();
                 if (QContext.CanWrite()) {
-                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
+                    QContext.GetWriter()->Put({.Component=TypeAnnotationContextComponent, .Label=NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
                 }
             }
         }

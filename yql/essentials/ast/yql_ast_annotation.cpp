@@ -105,7 +105,8 @@ TAstNode* ApplyNodePositionAnnotations(TAstNode& node, ui32 annotationIndex, TMe
     GetNext(str, ':', colPart);
     filePart = str;
 
-    ui32 row = 0, col = 0;
+    ui32 row = 0;
+    ui32 col = 0;
     if (!TryFromString(rowPart, row) || !TryFromString(colPart, col)) {
         return nullptr;
     }
@@ -149,7 +150,8 @@ bool ApplyNodePositionAnnotationsInplace(TAstNode& node, ui32 annotationIndex) {
     GetNext(str, ':', rowPart);
     GetNext(str, ':', colPart);
     filePart = str;
-    ui32 row = 0, col = 0;
+    ui32 row = 0;
+    ui32 col = 0;
     if (!TryFromString(rowPart, row) || !TryFromString(colPart, col)) {
         return false;
     }

@@ -200,13 +200,6 @@ public:
     //! Checks if the value is set.
     bool IsSet() const;
 
-    //! The same as #BlockingGet.
-    /*!
-     *  \deprecated Use #BlockingGet instead.
-     */
-    [[deprecated("Use BlockingGet() instead")]]
-    const TErrorOr<T>& Get() const;
-
     //! Gets the value, blocking until it's set.
     /*!
      *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
@@ -230,18 +223,6 @@ public:
      *  This call blocks until either the value is set or #deadline is reached.
      */
     bool BlockingWait(TInstant deadline) const;
-
-    //! The same as #BlockingWait.
-    /*!
-     *  \deprecated Use #BlockingWait instead.
-     */
-    bool Wait(TDuration timeout = TDuration::Max()) const;
-
-    //! The same as #BlockingWait.
-    /*!
-     *  \deprecated Use #BlockingWait instead.
-     */
-    bool Wait(TInstant deadline) const;
 
     //! Gets the value; returns null if the value is not set yet.
     /*!
@@ -432,13 +413,6 @@ class TUniqueFutureBase
 public:
     using TFutureBase<T>::TFutureBase;
 
-    //! The same as #BlockingGet.
-    /*!
-     *  \deprecated Use #BlockingGet instead.
-     */
-    [[deprecated("Use BlockingGet() instead")]]
-    TErrorOr<T> Get() const;
-
     //! Gets the value by moving it out of the future state, blocking until it's set.
     /*!
      *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
@@ -563,13 +537,6 @@ public:
     //! Similar to #SetFrom but calls #TrySet instead of #Set.
     template <class U>
     void TrySetFrom(const TFuture<U>& another) const;
-
-    //! The same as #BlockingGet.
-    /*!
-     *  \deprecated Use #BlockingGet instead.
-     */
-    [[deprecated("Use BlockingGet() instead")]]
-    const TErrorOr<T>& Get() const;
 
     //! Gets the value, blocking until it's set.
     /*!
@@ -712,10 +679,10 @@ public:
     ~TFutureHolder();
 
     TFutureHolder(const TFutureHolder<T>& other) = delete;
-    TFutureHolder(TFutureHolder<T>&& other) = default;
+    TFutureHolder(TFutureHolder<T>&& other) noexcept = default;
 
     TFutureHolder& operator=(const TFutureHolder<T>& other) = delete;
-    TFutureHolder& operator=(TFutureHolder<T>&& other) = default;
+    TFutureHolder& operator=(TFutureHolder<T>&& other) noexcept = default;
 
     //! Returns |true| if the holder has an underlying future.
     explicit operator bool() const;

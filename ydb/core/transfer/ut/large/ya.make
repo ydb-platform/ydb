@@ -18,8 +18,7 @@ SRCS(
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 SIZE(LARGE)
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 IF (SANITIZER_TYPE)
     TAG(ya:not_autocheck)
 ELSE()

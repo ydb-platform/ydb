@@ -34,12 +34,14 @@ TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSet
 TActorId CreateUnlockerActor(NActors::TTestActorRuntime& runtime, TUnlockerSettings&& settings);
 TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, TMessageDeadlineChangerSettings&& settings);
 TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&& settings);
+TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, TDescribeSettings&& settings);
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath);
 THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime);
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
+THolder<TEvDescribeResponse> GetDescribeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 
 void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5));

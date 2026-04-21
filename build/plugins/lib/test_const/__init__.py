@@ -182,6 +182,7 @@ FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
+DETEKT_RESOURCE = 'DETEKT_RESOURCE_GLOBAL'
 YAMLFMT_FORMAT_RESOURCE = 'YAMLFMT_RESOURCE_GLOBAL'
 YQLLINT_RESOURCE = 'YQL_LINT_RESOURCE_GLOBAL'
 BLACK_RESOURCE = 'BLACK_RESOURCE_GLOBAL'
@@ -443,10 +444,7 @@ class ServiceTags(Enum):
 
 
 # NOTE: Linter constants are used in ya style, ya ide, config validator check
-# (devtools/ya/handlers/style/config_validator, devtools/pr_checks/checker).
-# ya and pr_checks have different release cycles, make sure you preserve compatibility:
-# - don't delete anything from here until you get rid of all usages and roll out the changes;
-# - keep in mind that changes of constants used in multiple tools may get to production at different times;
+# (devtools/ya/handlers/style/config_validator).
 
 
 # Linter names must match `NAME` set in `_ADD_*_LINTER_CHECK`
@@ -469,6 +467,7 @@ class CustomExplicitLinterName(Enum):
     ClangFormatJson = "clang_format_json"
     Yamlfmt = "yamlfmt"
     Yqlfmt = "yqlfmt"
+    Detekt = "detekt"
 
 
 class DefaultLinterConfig(Enum):
@@ -492,6 +491,7 @@ LINTER_TO_GLOBAL_RESOURCES = {
     CustomExplicitLinterName.ClangFormatJson: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.Yamlfmt: (('build/external_resources/yamlfmt', YAMLFMT_FORMAT_RESOURCE),),
     CustomExplicitLinterName.Yqlfmt: (('build/external_resources/yql-lint', YQLLINT_RESOURCE),),
+    CustomExplicitLinterName.Detekt: (('build/platform/java/detekt', DETEKT_RESOURCE),),
 }
 
 # XXX: if a new linter is added to this mapping respective path to default config file must be available in the json
@@ -503,24 +503,16 @@ LINTER_TO_DEFAULT_CONFIGS = {
     CustomExplicitLinterName.Yamlfmt: DefaultLinterConfig.Yaml,
 }
 
-# Fill up like
-"""
-{
-    PythonLinterName.Ruff: LinterConfigsValidationRules.Python,
-}
-"""
-# XXX: if a new linter is added to this mapping respective path to rules file must be available in the json
-LINTER_TO_VALIDATION_CONFIGS = {}
-
 LINTER_CONFIG_TYPES = {
-    CppLinterName.ClangFormat: (".clang-format",),
-    CppLinterName.ClangFormat15: (".clang-format",),
-    CppLinterName.ClangFormat18Vanilla: (".clang-format",),
-    CppLinterName.ClangFormatYT: (".clang-format",),
-    PythonLinterName.Black: ("pyproject.toml",),
-    PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
-    CustomExplicitLinterName.ClangFormatJson: (".clang-format",),
-    CustomExplicitLinterName.Yamlfmt: (".yamlfmt.yml",),
+    CppLinterName.ClangFormat: ((".clang-format",),),
+    CppLinterName.ClangFormat15: ((".clang-format",),),
+    CppLinterName.ClangFormat18Vanilla: ((".clang-format",),),
+    CppLinterName.ClangFormatYT: ((".clang-format",),),
+    PythonLinterName.Black: (("pyproject.toml",),),
+    PythonLinterName.Ruff: (("pyproject.toml",), ("ruff.toml",)),
+    CustomExplicitLinterName.ClangFormatJson: ((".clang-format",),),
+    CustomExplicitLinterName.Yamlfmt: ((".yamlfmt.yml",),),
+    CustomExplicitLinterName.Detekt: (("detekt-config.yml", "detekt-baseline.xml"),),
 }
 
 AUTOINCLUDE_PATHS = (

@@ -30,7 +30,15 @@ void TCommandSql::Config(TConfig& config) {
             "Important note: The query is actually executed, so any changes will be applied to the database.")
         .StoreTrue(&ExecSettings.ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
-        .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+        .RequiredArgument("[String]")
+        .CompletionArgHelp("Execution statistics collection mode")
+        .ChoicesWithCompletion({
+            { "none", "None" },
+            { "basic", "Basic" },
+            { "full", "Full" },
+            { "profile", "Profile" },
+        })
+        .StoreResult(&CollectStatsMode);
 
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream description;

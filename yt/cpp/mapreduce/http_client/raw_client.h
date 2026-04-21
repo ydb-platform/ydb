@@ -6,6 +6,10 @@
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
+#include <yt/yt/core/http/public.h>
+
+#include <mutex>
+
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -206,7 +210,7 @@ public:
 
     // Files
 
-    std::unique_ptr<IInputStream> ReadFile(
+    std::unique_ptr<IAbortableInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) override;
@@ -286,18 +290,18 @@ public:
         const TMaybe<TFormat>& format,
         const TTableWriterOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadTable(
+    std::unique_ptr<IAbortableInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFormat& format,
         const TTableReaderOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadTablePartition(
+    std::unique_ptr<IAbortableInputStream> ReadTablePartition(
         const TString& cookie,
         const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadBlobTable(
+    std::unique_ptr<IAbortableInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TKey& key,
@@ -404,7 +408,12 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
+    void InitPingClient();
+
+private:
     const TClientContext Context_;
+    NHttp::IClientPtr PingHttpClient_;
+    std::once_flag PingClientInitOnceFlag_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

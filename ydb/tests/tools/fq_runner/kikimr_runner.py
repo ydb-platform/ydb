@@ -22,7 +22,7 @@ from yql.essentials.providers.common.proto import gateways_config_pb2
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
 
 from ydb.tests.tools.fq_runner.mvp_mock import MvpMockServer
-from yatest.common.network import PortManager
+import library.python.port_manager
 from multiprocessing import Process
 from concurrent.futures import TimeoutError
 
@@ -181,7 +181,9 @@ class BaseTenant(abc.ABC):
             deadline = time.time() + max_waiting_time_sec
             bill_fname = self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill"
             while time.time() < deadline:
-                meterings_loaded = sum(1 for _ in open(bill_fname))
+                with open(bill_fname) as bill_file:
+                    meterings_loaded = sum(1 for _ in bill_file)
+
                 if meterings_loaded >= meterings_expected:
                     break
 
@@ -605,7 +607,7 @@ class StreamingOverKikimr(object):
         if configuration is None:
             configuration = StreamingOverKikimrConfig()
         self.uuid = str(uuid.uuid4())
-        self.mvp_mock_port = PortManager().get_port()
+        self.mvp_mock_port = library.python.port_manager.PortManager().get_port()
         self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port,  configuration.mvp_external_ydb_endpoint).serve_forever)
         self.tenants = {}
         _tenant_mapping = configuration.tenant_mapping.copy()

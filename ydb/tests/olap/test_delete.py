@@ -33,6 +33,11 @@ class TestDelete(object):
         cls.ydb_client.wait_connection()
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def create_table(self):
         # avoid using same table in parallel tests
         self.table_path = f"{self.test_dir}/table{random.randrange(99999)}"

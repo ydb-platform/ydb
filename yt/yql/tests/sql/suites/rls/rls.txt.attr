@@ -1,0 +1,24 @@
+{
+    "inherit_acl"=%false;
+    "acl"=[
+        {
+            "action"="allow";
+            "subjects"=["everyone"];
+            "permissions"= ["read"];
+            "inheritance_mode"="object_and_descendants";
+            "row_access_predicate"="col1 in (2, 3, 5, 7)";
+        };
+    ];
+    "schema"=[
+        {
+            "name" = "key";
+            "type" = "int64";
+            "required" = %true;
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "value";
+            "type" = "string";
+        };
+    ]
+}

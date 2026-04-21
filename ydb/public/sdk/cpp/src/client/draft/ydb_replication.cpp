@@ -309,6 +309,10 @@ const TPausedState& TTransferDescription::GetPausedState() const {
     return std::get<TPausedState>(State_);
 }
 
+const Ydb::Replication::DescribeTransferResult_Stats& TDescribeTransferResult::GetStats() const {
+    return Proto_->stats();
+}
+
 TDescribeTransferResult::TDescribeTransferResult(TStatus&& status, Ydb::Replication::DescribeTransferResult&& desc)
     : NScheme::TDescribePathResult(std::move(status), desc.self())
     , TransferDescription_(desc)
@@ -356,12 +360,12 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path) {
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, const TDescribeTransferSettings& settings) {
         using namespace Ydb::Replication;
 
-        const TDescribeReplicationSettings settings;
         auto request = MakeOperationRequest<DescribeTransferRequest>(settings);
         request.set_path(TStringType{path});
+        request.set_include_stats(settings.IncludeStats_);
 
         auto promise = NThreading::NewPromise<TDescribeTransferResult>();
 
@@ -398,8 +402,8 @@ TAsyncDescribeReplicationResult TReplicationClient::DescribeReplication(const st
     return Impl_->DescribeReplication(path, settings);
 }
 
-TAsyncDescribeTransferResult TReplicationClient::DescribeTransfer(const std::string& path) {
-    return Impl_->DescribeTransfer(path);
+TAsyncDescribeTransferResult TReplicationClient::DescribeTransfer(const std::string& path, const TDescribeTransferSettings& settings) {
+    return Impl_->DescribeTransfer(path, settings);
 }
 
 } // NReplication

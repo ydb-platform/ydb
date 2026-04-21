@@ -142,7 +142,7 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
 }
 
 THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
-                                                    bool withSpiller) {
+                                                    bool withSpiller, TBlockHashJoinSettings joinSettings) {
 
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
@@ -276,7 +276,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                     return pb.NewTuple(valueTupleElements);
                 });
 
-            TRuntimeNode source = pb.ExpandMap(pb.ToFlow(args.Left), [&pb](TRuntimeNode item) -> TRuntimeNode::TList {
+            TRuntimeNode source = pb.ExpandMap(pb.ToFlow(args.Left, {}), [&pb](TRuntimeNode item) -> TRuntimeNode::TList {
                 TRuntimeNode::TList values;
                 for (ui32 idx = 0; idx < AS_TYPE(TTupleType, item.GetStaticType())->GetElementsCount(); ++idx) {
                     values.push_back(pb.Nth(item, idx));
@@ -311,7 +311,8 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             return dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right), joinKind,
                                         descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
                                         renames.Left, renames.Right,
-                                        pb.NewStreamType(pb.NewMultiType(blockResultTypes)));
+                                        pb.NewStreamType(pb.NewMultiType(blockResultTypes)),
+                                        joinSettings);
         }
         case ETestedJoinAlgo::kScalarHash: {
             return pb.FromFlow(dqPb.DqScalarHashJoin(

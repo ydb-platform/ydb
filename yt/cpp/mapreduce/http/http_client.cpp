@@ -5,6 +5,10 @@
 #include "helpers.h"
 #include "http.h"
 
+#include <yt/cpp/mapreduce/common/abortable_stream.h>
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
+#include <yt/cpp/mapreduce/common/halting_stream.h>
+
 #include <yt/cpp/mapreduce/interface/config.h>
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
@@ -74,21 +78,27 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
                 static_cast<int>(httpCode),
                 httpHeaders.Str().data());
 
-            YT_LOG_ERROR("%v",
-                errorString.data());
-
+            TMaybe<TErrorResponse> errorResponse;
             if (auto errorHeader = response->GetHeaders()->Find("X-YT-Error")) {
                 TYtError error;
                 error.ParseFrom(*errorHeader);
 
-                TErrorResponse errorResponse(std::move(error), requestId);
-                if (errorResponse.IsOk()) {
-                    return Nothing();
+                if (error.GetCode() != 0) {
+                    errorResponse.Emplace(std::move(error), requestId);
                 }
-                return errorResponse;
+            } else {
+                errorResponse = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), requestId);
             }
 
-            return TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), requestId);
+            if (errorResponse && TExpectedErrorGuard::IsErrorExpected(*errorResponse)) {
+                YT_LOG_INFO("%v",
+                    errorString.data());
+            } else {
+                YT_LOG_ERROR("%v",
+                    errorString.data());
+            }
+
+            return errorResponse;
         }
     }
 }
@@ -118,9 +128,12 @@ public:
         return Request_->GetHttpCode();
     }
 
-    IInputStream* GetResponseStream() override
+    IAbortableInputStream* GetResponseStream() override
     {
-        return Request_->GetResponseStream();
+        if (!Stream_) {
+            Stream_ = NDetail::CreateAbortableInputStreamAdapterFallback(Request_->GetResponseStream());
+        }
+        return Stream_.get();
     }
 
     TString GetResponse() override
@@ -135,6 +148,7 @@ public:
 
 private:
     std::unique_ptr<THttpRequest> Request_;
+    std::unique_ptr<IAbortableInputStream> Stream_;
 };
 
 class TDefaultHttpRequest
@@ -217,11 +231,15 @@ public:
         return static_cast<int>(Response_->GetStatusCode());
     }
 
-    IInputStream* GetResponseStream() override
+    IAbortableInputStream* GetResponseStream() override
     {
         if (!Stream_) {
+            NConcurrency::IAsyncInputStreamPtr asyncStream = NConcurrency::CreateCopyingAdapter(Response_);
+            if (TConfig::Get()->UseHaltingResponse) {
+                asyncStream = NDetail::CreateHaltingAsyncStream(std::move(asyncStream), TConfig::Get()->HaltingResponseBytesLimit);
+            }
             auto stream = std::make_unique<TWrappedStream>(
-                NConcurrency::CreateSyncAdapter(NConcurrency::CreateCopyingAdapter(Response_), NConcurrency::EWaitForStrategy::WaitFor),
+                NDetail::CreateAbortableInputStreamAdapter(std::move(asyncStream)),
                 Response_,
                 Context_.RequestId);
             CheckErrorResponse(Context_.HostName, Context_.RequestId, Response_);
@@ -269,14 +287,24 @@ public:
 
 private:
     class TWrappedStream
-        : public IInputStream
+        : public IAbortableInputStream
     {
     public:
-        TWrappedStream(std::unique_ptr<IInputStream> underlying, NHttp::IResponsePtr response, TString requestId)
+        TWrappedStream(std::unique_ptr<IAbortableInputStream> underlying, NHttp::IResponsePtr response, TString requestId)
             : Underlying_(std::move(underlying))
             , Response_(std::move(response))
             , RequestId_(std::move(requestId))
         { }
+
+        void Abort() override
+        {
+            Underlying_->Abort();
+        }
+
+        bool IsAborted() const override
+        {
+            return Underlying_->IsAborted();
+        }
 
     protected:
         size_t DoRead(void* buf, size_t len) override
@@ -325,7 +353,7 @@ private:
         }
 
     private:
-        std::unique_ptr<IInputStream> Underlying_;
+        std::unique_ptr<IAbortableInputStream> Underlying_;
         NHttp::IResponsePtr Response_;
         TString RequestId_;
     };
@@ -333,7 +361,7 @@ private:
 private:
     TCoreRequestContext Context_;
     NHttp::IResponsePtr Response_;
-    std::unique_ptr<IInputStream> Stream_;
+    std::unique_ptr<IAbortableInputStream> Stream_;
 };
 
 class TCoreHttpRequest

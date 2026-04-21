@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
+const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -32,44 +32,76 @@ std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode*
     return {std::move(tableName), tableDesc};
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext & ctx) {
-    auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+bool IsNeededToUpdateOlapReadType(TExprNode::TPtr lambda) {
+    if (!lambda) {
+        return false;
+    }
+    // Only olap projection can change the return type.
+    return !!FindNode(lambda, [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapProjections>(node); });
+}
+
+TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
+    const auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
-        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve table";
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve tablei.";
         return TStatus::Error;
     }
 
-    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata");
-
-    auto meta = table.second->Metadata;
+    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata.");
+    const auto meta = table.second->Metadata;
 
     TVector<TCoAtom> columns;
-    for (auto c : read->Columns) {
-        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, read->Pos).Value(c).Done());
+    for (const auto& column : read->Columns) {
+        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, read->Pos).Value(column).Done());
     }
-
-    auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, read->Pos).Add(columns).Done();
+    const auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, read->Pos).Add(columns).Done();
 
     const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx.ExprCtx, *ctx.KqpCtx.Tables, ctx.KqpCtx.Cluster, 
         table.first, columnsList, ctx.KqpCtx.Config->SystemColumnsEnabled());
     if (!rowType) {
-        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not get row type";
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not get row type.";
         return TStatus::Error;
     }
 
-    TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
+    const auto structType = rowType->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes = structType->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (const auto* t : structItemTypes) {
-        TString columnName = TString(t->GetName());
-        auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
-        auto columnIndex = std::distance(read->Columns.begin(), it);
-        auto fullName = read->OutputIUs[columnIndex].GetFullName();
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
+    for (const auto itemType : structItemTypes) {
+        const TString columnName = TString(itemType->GetName());
+        const auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
+        const auto columnIndex = std::distance(read->Columns.begin(), it);
+        const auto fullName = read->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+    }
+    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
+
+    if (IsNeededToUpdateOlapReadType(read->OlapFilterLambda)) {
+        auto& lambda = read->OlapFilterLambda;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {ctx.ExprCtx.MakeType<TFlowExprType>(structType)}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update olap filter lambda arg types.";
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok, "Cannot type annotate olap lambda.");
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        } while (status == IGraphTransformer::TStatus::Repeat);
+        Y_ENSURE(status == IGraphTransformer::TStatus::Ok && lambda->GetTypeAnn());
+
+        // Clear old items list, we will update it based on olap filter/projections types.
+        newItemTypes.clear();
+        newStructType = lambda->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
+        const auto alias = read->Alias;
+        for (const auto itemType : newStructType->GetItems()) {
+            const auto colName = TInfoUnit(alias, TString(itemType->GetName()));
+            const auto fullName = colName.GetFullName();
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+        }
+        newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
     }
 
-    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
     read->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
-
     return TStatus::Ok;
 }
 
@@ -143,7 +175,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
 
     } while (status == IGraphTransformer::TStatus::Repeat);
 
-    auto lambdaType = lambda->GetTypeAnn();
+    const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
     if (!lambdaType) {
         YQL_CLOG(TRACE, CoreDq) << "Could not infer lambda types, status = " << status;
         return IGraphTransformer::TStatus::Error;
@@ -206,7 +238,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
             return status;
         }
 
-        auto lambdaType = lambda->GetTypeAnn();
+        const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
         Y_ENSURE(lambdaType);
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);
@@ -245,11 +277,11 @@ TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
 
 TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
-    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
-    for (const auto* itemType : structType->GetItems()) {
+    for (const auto itemType : structType->GetItems()) {
         const auto itemName = itemType->GetName();
         aggTraitsMap.emplace(itemName, itemType->GetItemType());
     }
@@ -286,7 +318,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
+TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& types, TRBOContext& rboCtx) {
+    auto& ctx = rboCtx.ExprCtx;
+    TVector<const TItemExprType*> optionalTypes;
+    for (ui32 i = 0, e = types.size(); i < e; ++i) {
+        const auto itemType = types[i]->GetItemType();
+        if (!itemType->IsOptionalOrNull()) {
+            optionalTypes.push_back(ctx.MakeType<TItemExprType>(types[i]->GetName(), ctx.MakeType<TOptionalExprType>(itemType)));
+        } else {
+            optionalTypes.push_back(types[i]);
+        }
+    }
+    return optionalTypes;
+}
+
+TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {    
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
 
@@ -294,14 +340,39 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
     auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
 
     TVector<const TItemExprType*> structItemTypes;
+    TVector<const TItemExprType*> crossProductTypes;
     TVector<const TItemExprType*> leftItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> rightItemTypes = rightItemType->Cast<TStructExprType>()->GetItems();
 
+    // Build a cross-product type to annotate join filters
+    crossProductTypes.insert(crossProductTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
+    crossProductTypes.insert(crossProductTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
+    auto crossProductType = ctx.ExprCtx.MakeType<TStructExprType>(crossProductTypes);
+
+    for (auto& filterExpr : join->JoinFilters) {
+        auto& lambda = filterExpr.Node;
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {crossProductType}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+
+        } while (status == IGraphTransformer::TStatus::Repeat);
+    }
+
     if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
         rightItemTypes = {};
-    }
-    if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
+    } else if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
         leftItemTypes = {};
+    } else if (join->JoinKind == "Left") {
+        rightItemTypes = AddOptional(rightItemTypes, ctx);
+    } else if (join->JoinKind == "Right") {
+        leftItemTypes = AddOptional(leftItemTypes, ctx);
     }
 
     structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());

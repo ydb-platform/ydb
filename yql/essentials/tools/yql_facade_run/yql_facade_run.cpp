@@ -191,7 +191,7 @@ void TFacadeRunOptions::ParseProtoConfig(const TString& cfgFile, google::protobu
 }
 
 void TFacadeRunOptions::Parse(int argc, const char** argv) {
-    User = GetUsername();
+    User = GetEnv("YQL_DETERMINISTIC_MODE") ? "test-user" : GetUsername();
 
     if (EnableCredentials) {
         Token = GetEnv("YQL_TOKEN");
@@ -422,7 +422,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
         });
         opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
-            GatewaysPatch = TFileInput(file).ReadAll();
+            GatewaysPatch = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
         });
     }
 
@@ -434,6 +434,8 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         opts.AddLongOption("test-syntax-ambiguity", "Check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
         opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&TestPartialTypecheck);
+        opts.AddLongOption("fuzz-untyped-lambda", "Enable fuzzing by substituting untyped lambdas for callable children").NoArgument().SetFlag(&FuzzUntypedLambda);
+        opts.AddLongOption("fuzz-universal", "Enable fuzzing by substituting universal for callable children").NoArgument().SetFlag(&FuzzUniversal);
     }
 
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([this](const TString& str) {
@@ -497,17 +499,24 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         throw yexception() << "Simultaneous usage of run and replay options requires replay data to contain full capture";
     }
 
-    if (!GatewaysConfig) {
+    if (QPlayerContext.CanRead()) {
+        GatewaysConfig = GatewaysConfigFromQContext(QPlayerContext);
+        if (GatewaysPatch) {
+            GatewaysConfig->MergeFrom(*GatewaysPatch);
+        }
+    } else if (!GatewaysConfig) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    {
-        TGatewaySQLFlags flags;
-        if (GatewaysConfig) {
-            flags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
+    if (QPlayerContext.CanRead()) {
+        auto sqlFlags = SQLFlagsFromQContext(QPlayerContext);
+        if (GatewaysPatch) {
+            // Gateways Patch is used for experimental features
+            sqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysPatch));
         }
-        flags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
-        flags.CollectAllTo(SqlFlags);
+        sqlFlags.CollectAllTo(SqlFlags);
+    } else if (GatewaysConfig) {
+        TGatewaySQLFlags::FromTesting(*GatewaysConfig).CollectAllTo(SqlFlags);
     }
 
     if (!FsConfig) {
@@ -662,8 +671,8 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
                     return false;
                 }
 
-                constexpr bool isIdempotencyChecked = true;
-                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, isIdempotencyChecked)) {
+                constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
@@ -691,8 +700,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
                                                            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_,
-                                         RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker)) {
+        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -791,7 +799,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
 }
 
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
-    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
+    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext);
     program->SetLanguageVersion(RunOptions_.LangVer);
     program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
     if (RunOptions_.Params) {
@@ -815,6 +823,15 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         program->SetEnableLineage();
     }
 
+    if (RunOptions_.FuzzUntypedLambda) {
+        program->SetFuzzUntypedLambda();
+    }
+
+    if (RunOptions_.FuzzUniversal) {
+        program->SetFuzzUniversal();
+    }
+
+    program->SetAuthenticatedUser(RunOptions_.User);
     program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;
@@ -841,8 +858,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            constexpr bool isIdempotencyChecked = true;
-            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, isIdempotencyChecked)) {
+            constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, convergence)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;

@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -84,6 +84,12 @@ TString FillAuthProperties(THashMap<TString, TString>& properties, const TExtern
             properties["authMethod"] = "TOKEN";
             properties["token"] = externalSource.Token;
             properties["tokenReference"] = externalSource.DataSourceAuth.GetToken().GetTokenSecretName();
+            return {};
+
+        case NKikimrSchemeOp::TAuth::kIam:
+            properties["authMethod"] = "IAM";
+            properties["iamServiceAccountId"] = externalSource.DataSourceAuth.GetIam().GetServiceAccountId();
+            properties["iamResourceId"] = externalSource.DataSourceAuth.GetIam().GetResourceId();
             return {};
 
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
@@ -477,7 +483,12 @@ protected:
     {
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
-        if (!GetDispatcher()->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+        auto normalizedValue = value;
+        if (name == "DisableBlockExecution" && !normalizedValue) {
+            normalizedValue = "true";
+        }
+
+        if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
             return false;
         }
 

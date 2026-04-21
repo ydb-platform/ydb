@@ -26,8 +26,7 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
         auto& read = *meta.AddReads();
         read.SetShardId(TABLET_ID);
         read.AddKeyRanges();
-        NKikimrConfig::TTableServiceConfig::TShardsScanningPolicy protoPolicy;
-        NKikimr::NKqp::TShardsScanningPolicy shardsScanningPolicy(protoPolicy);
+        NKikimr::NKqp::TShardsScanningPolicy shardsScanningPolicy;
         NWilson::TTraceId traceId(0);
         NKikimr::NKqp::TCPULimits cpuLimits;
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();

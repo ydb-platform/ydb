@@ -1360,6 +1360,44 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
+    Y_UNIT_TEST(SpaceColorDcbOverride) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx{{ .EnablePDiskSpaceColorOverride = true }};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        auto& appData = testCtx.GetRuntime()->GetAppData();
+        const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
+        const TString controlName = Sprintf("PDisk_%u_ForcedPDiskSpaceColor", pdiskId);
+
+        auto setColor = [&](i64 color) {
+            TAtomic prev = 0;
+            appData.Dcb->SetValue(controlName, color, prev);
+        };
+
+        auto checkColor = [&](TColor::E expected) {
+            auto space = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(space->StatusFlags), expected);
+        };
+
+        checkColor(TColor::GREEN);
+
+        setColor(TColor::YELLOW);
+        checkColor(TColor::YELLOW);
+
+        setColor(TColor::RED);
+        checkColor(TColor::RED);
+
+        setColor(TColor::GREEN);
+        checkColor(TColor::GREEN);
+
+        setColor(0);
+        checkColor(TColor::GREEN);
+    }
+
     Y_UNIT_TEST(DeviceHaltTooLong) {
         TActorTestContext testCtx{{}};
         testCtx.TestCtx.SectorMap->ImitateRandomWait = {TDuration::Seconds(1), TDuration::Seconds(2)};
@@ -2009,6 +2047,58 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
     }
 
+    Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({
+            .IsBad = false,
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        // Fill the CommonLog by writing large log entries
+        TRcBuf buf(TString(64_MB, 'a'));
+        auto writeLog = [&]() {
+            testCtx.Send(new NPDisk::TEvLog(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0,
+                        buf, vdisk.GetLsnSeg(), nullptr));
+            const auto logRes = testCtx.Recv<NPDisk::TEvLogResult>();
+            return logRes->Status;
+        };
+
+        while (writeLog() == NKikimrProto::OK) {}
+
+        // State 1: VDisk is empty while CommonLog is full
+        auto evCheckSpaceResult = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        Cerr << (TStringBuilder() << "Got " << evCheckSpaceResult->ToString() << Endl);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->UsedChunks, 0);
+        UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->StatusFlags), TColor::GREEN);
+        UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->LogStatusFlags), TColor::ORANGE);
+
+        bool foundPDiskCapacityAlert = false;
+        for (int num_inspect = 10; num_inspect > 0; --num_inspect) {
+            const auto evPDiskStateUpdate = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+            NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = evPDiskStateUpdate.Get()->Record;
+            Cerr << (TStringBuilder() << "Got EvPDiskStateUpdate {" << pdiskInfo.ShortDebugString() << "}" << Endl);
+            if (!pdiskInfo.HasPDiskCapacityAlert()) {
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), TColor::ORANGE);
+            foundPDiskCapacityAlert = true;
+            break;
+        }
+        UNIT_ASSERT_C(foundPDiskCapacityAlert, "No TEvPDiskStateUpdate with PDiskCapacityAlert received");
+    }
+
     Y_UNIT_TEST(TestChunkWriteCrossOwner) {
         TActorTestContext testCtx{{}};
 
@@ -2428,6 +2518,28 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
         Cout << Endl;
         return shares;
+    }
+
+    Y_UNIT_TEST(ConfigureSchedulerAppliesWeights) {
+        TActorTestContext testCtx{{}};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        const ui32 owner = vdisk.PDiskParams->Owner;
+        const ui32 ownerRound = vdisk.PDiskParams->OwnerRound;
+
+        TPDiskSchedulerConfig cfg;
+        cfg.LowReadWeight = 42;
+
+        auto *ev = new NPDisk::TEvConfigureScheduler(owner, ownerRound);
+        ev->SchedulerCfg = cfg;
+        testCtx.TestResponse<NPDisk::TEvConfigureSchedulerResult>(ev, NKikimrProto::OK);
+
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            auto* low = pdisk->ForsetiScheduler.GetCbs(owner, NPDisk::GateLow);
+            UNIT_ASSERT(low);
+            UNIT_ASSERT_EQUAL(low->Weight, cfg.LowReadWeight);
+        });
     }
 
     Y_UNIT_TEST(CheckChunkReadOperationPriorities) {

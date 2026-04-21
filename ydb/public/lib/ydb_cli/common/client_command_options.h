@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/getopt/small/completer.h>
 
 namespace YAML {
 class Node;
@@ -64,8 +65,8 @@ public:
         return Opts;
     }
 
-    void SetHelpCommandVerbosiltyLevel(size_t level) {
-        HelpCommandVerbosiltyLevel = level;
+    void SetHelpCommandVerbosityLevel(size_t level) {
+        HelpCommandVerbosityLevel = level;
     }
 
     // Priority of parsing auth methods from env, from first to last.
@@ -94,7 +95,7 @@ private:
     NLastGetopt::TOpts Opts;
     std::vector<TIntrusivePtr<TClientCommandOption>> ClientOpts;
     std::vector<TIntrusivePtr<TAuthMethodOption>> EnvAuthPriority;
-    size_t HelpCommandVerbosiltyLevel = 1;
+    size_t HelpCommandVerbosityLevel = 1;
 };
 
 // YDB client command option
@@ -129,7 +130,33 @@ public:
 
     TClientCommandOption& AddLongName(const TString& name);
 
+    // When this option is present, disable completion for other options and free args.
+    // Only works in zsh.
     TClientCommandOption& IfPresentDisableCompletion();
+
+    // Set help string that appears when completer suggests values for this option.
+    // This is the group header shown in shell completion (e.g. "-- <database path> --").
+    TClientCommandOption& CompletionArgHelp(const TString& help);
+
+    // Set completer for this option's argument values.
+    TClientCommandOption& Completer(NLastGetopt::NComp::ICompleterPtr completer);
+
+    // Set fixed choices with completion for this option.
+    TClientCommandOption& ChoicesWithCompletion(TVector<NLastGetopt::NComp::TChoice> choices);
+
+    // Set up shell completion that lists tables and column tables from the YDB database.
+    // Connects to the database using connection settings already specified on the command line.
+    TClientCommandOption& SchemePathCompletionForTables();
+
+    // Same as SchemePathCompletionForTables, but lists topics.
+    TClientCommandOption& SchemePathCompletionForTopics();
+
+    // Same as SchemePathCompletionForTables, but lists only directories.
+    TClientCommandOption& SchemePathCompletionForDir();
+
+    // Same as SchemePathCompletionForTables, but lists all scheme objects
+    // (tables, topics, views, etc.).
+    TClientCommandOption& SchemePathCompletionForAll();
 
     const NLastGetopt::EHasArg& GetHasArg() const;
 
@@ -340,7 +367,7 @@ public:
         : Opt(std::move(opt))
         , ValueSource(valueSource)
     {
-        OptValues.emplace_back(std::move(value));
+        OptValues.emplace_back(value);
     }
 
     EOptionValueSource GetValueSource() const {

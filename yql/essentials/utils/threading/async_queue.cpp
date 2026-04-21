@@ -12,7 +12,14 @@ TAsyncQueue::TAsyncQueue(size_t numThreads, const TString& poolName) {
 }
 
 TAsyncQueue::TPtr TAsyncQueue::Make(size_t numThreads, const TString& poolName) {
-    return new TAsyncQueue(numThreads, poolName);
+    class TAsyncQueueImpl: public TAsyncQueue {
+    public:
+        TAsyncQueueImpl(size_t numThreads, const TString& poolName)
+            : TAsyncQueue(numThreads, poolName)
+        {
+        }
+    };
+    return std::make_shared<TAsyncQueueImpl>(numThreads, poolName);
 }
 
 } // namespace NYql

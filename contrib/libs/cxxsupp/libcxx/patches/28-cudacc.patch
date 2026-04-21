@@ -25,10 +25,10 @@ index 8935e5a..70cf1e9 100644
      requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
    {
 diff --git a/include/__iterator/segmented_iterator.h b/include/__iterator/segmented_iterator.h
-index 7a8e1ad..19f6537 100644
+index af27a7b..03d6b9a 100644
 --- a/include/__iterator/segmented_iterator.h
 +++ b/include/__iterator/segmented_iterator.h
-@@ -68,8 +68,10 @@ struct __segmented_iterator_traits;
+@@ -69,8 +69,10 @@ struct __segmented_iterator_traits;
  template <class _Tp, size_t = 0>
  struct __has_specialization : false_type {};
  
@@ -40,7 +40,7 @@ index 7a8e1ad..19f6537 100644
  template <class _Iterator>
  using __is_segmented_iterator _LIBCPP_NODEBUG = __has_specialization<__segmented_iterator_traits<_Iterator> >;
 diff --git a/include/__math/traits.h b/include/__math/traits.h
-index 550eb39..5d96407 100644
+index 4a6e58c..21d8772 100644
 --- a/include/__math/traits.h
 +++ b/include/__math/traits.h
 @@ -86,7 +86,7 @@ template <class _A1, __enable_if_t<is_integral<_A1>::value, int> = 0>
@@ -81,10 +81,10 @@ index 550eb39..5d96407 100644
  // isnormal
  
 diff --git a/include/complex b/include/complex
-index fda7579..ac4ad2d 100644
+index e9baec0..4825fba 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1457,6 +1457,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
+@@ -1456,6 +1456,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
    return {0.0, static_cast<double>(__im)};
  }
  
@@ -92,7 +92,7 @@ index fda7579..ac4ad2d 100644
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im) {
    return {0.0f, static_cast<float>(__im)};
  }
-@@ -1464,6 +1465,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
+@@ -1463,6 +1464,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(unsigned long long __im) {
    return {0.0f, static_cast<float>(__im)};
  }
@@ -100,20 +100,28 @@ index fda7579..ac4ad2d 100644
  } // namespace complex_literals
  } // namespace literals
  #  endif
+diff --git a/include/stdlib.h b/include/stdlib.h
+index 8dfdfa4..2b9a877 100644
+--- a/include/stdlib.h
++++ b/include/stdlib.h
+@@ -106,8 +106,12 @@ extern "C++" {
+ #        undef llabs
+ #      endif
+ 
++#ifndef __CUDACC__
+ #      include <__math/abs.h>
+ using std::__math::abs;
++#else
++#      include <__math/abs_cuda.h>
++#endif
+ 
+ // div
+ 
 diff --git a/include/tuple b/include/tuple
-index f606289..868bbc1 100644
+index 6e7a430..9f8e5de 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -309,7 +309,7 @@ class __tuple_leaf {
- 
-   template <class _Tp>
-   static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
--#    if __has_keyword(__reference_binds_to_temporary)
-+#    if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
-     return !__reference_binds_to_temporary(_Hp, _Tp);
- #    else
-     return true;
-@@ -617,8 +617,16 @@ public:
+@@ -611,8 +611,16 @@ public:
                is_constructible<_Tp, _Up>... > {};
  
    template <class... _Up,

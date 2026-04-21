@@ -12,7 +12,7 @@ struct TProducerSettings : public TWriteSessionSettings {
 
     enum class EPartitionChooserStrategy {
         Bound,
-        Hash,
+        KafkaHash,
     };
 
     TProducerSettings() = default;
@@ -39,14 +39,9 @@ struct TProducerSettings : public TWriteSessionSettings {
     //! ProducerId is generated as ProducerIdPrefix + partition id.
     FLUENT_SETTING(std::string, ProducerIdPrefix);
 
-    //! SessionID to use.
-    FLUENT_SETTING_DEFAULT(std::string, SessionId, "");
-
-    //! Maximum block time for write. If set, write will block for up to MaxBlockMs when the buffer is overloaded.
-    FLUENT_SETTING_DEFAULT(TDuration, MaxBlock, TDuration::Zero());
-
-    //! Key producer function.
-    FLUENT_SETTING_OPTIONAL(std::function<std::string(const TWriteMessage& message)>, KeyProducer);
+    //! Maximum block timeout for write. If set, write will block for up to MaxBlockTimeout when the buffer is overloaded.
+    //! If not set, Write will block until the message is written to the buffer.
+    FLUENT_SETTING_DEFAULT(TDuration, MaxBlockTimeout, TDuration::Max());
 
 private:
     using TWriteSessionSettings::ProducerId;
@@ -88,7 +83,7 @@ struct TWriteResult {
     //! Value is std::nullopt if the session is not closed.
     std::optional<TCloseDescription> ClosedDescription;
 
-    bool IsSuccess() const {
+    bool IsQueued() const {
         return Status == EWriteStatus::Queued;
     }
 

@@ -5,12 +5,17 @@ PEERDIR(
     contrib/python/typing-extensions
 )
 
+PY_SRCS(
+    NAMESPACE tests
+    dummymodule.py
+)
+
 TEST_SRCS(
     conftest.py
     __init__.py
     mypy/test_type_annotations.py
-    pep695.py
     test_checkers.py
+    test_functions.py
     test_importhook.py
     test_instrumentation.py
     test_plugins.py

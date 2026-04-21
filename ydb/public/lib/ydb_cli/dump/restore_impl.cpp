@@ -809,7 +809,9 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, {});
+        TRestoreSettings restoreSettings;
+        restoreSettings.ReplaceSysACL(true);
+        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }
@@ -2181,20 +2183,71 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
         return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
     }
 
-    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
+    const auto topicPath = Join("/", dbPath, fsPath.GetName());
+    return RestoreConsumers(topicPath, topicDesc.GetConsumers());
 }
 
 TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<TConsumer>& consumers) {
     for (const auto& consumer : consumers) {
-        auto result = TopicClient.AlterTopic(topicPath,
-            TAlterTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(consumer.GetConsumerName())
-                    .Important(consumer.GetImportant())
-                    .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
-                    .Attributes(consumer.GetAttributes())
-                .EndAddConsumer()
-        ).GetValueSync();
+        const auto& dlp = consumer.GetDeadLetterPolicy();
+        TAlterTopicSettings settings;
+        auto& addConsumer = settings.BeginAddConsumer(consumer.GetConsumerType());
+        addConsumer.ConsumerName(consumer.GetConsumerName())
+            .Important(consumer.GetImportant())
+            .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
+            .Attributes(consumer.GetAttributes())
+            .KeepMessagesOrder(consumer.GetKeepMessagesOrder())
+            .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
+            .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
+            .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime())
+            .ReadFrom(consumer.GetReadFrom());
+
+        for (const auto& codec : consumer.GetSupportedCodecs()) {
+            addConsumer.AppendSupportedCodecs(codec);
+        }
+
+        auto result = [&]() {
+            if (!dlp.GetEnabled()) {
+                return TopicClient.AlterTopic(
+                    topicPath,
+                    addConsumer.EndAddConsumer()
+                ).ExtractValueSync();
+            }
+
+            auto deadLetterPolicy = addConsumer
+                .BeginDeadLetterPolicy()
+                    .Enabled(dlp.GetEnabled());
+
+            switch (dlp.GetAction()) {
+                case EDeadLetterAction::Move:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .MoveAction(dlp.GetDeadLetterQueue());
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Delete:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .DeleteAction();
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Unspecified:
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        addConsumer.EndAddConsumer()
+                    ).ExtractValueSync();
+            }
+        }();
         if (result.IsSuccess()) {
             LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
         } else {

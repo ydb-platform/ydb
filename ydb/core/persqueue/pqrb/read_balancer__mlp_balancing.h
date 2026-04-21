@@ -8,6 +8,13 @@ class TMLPBalancer;
 
 class TMLPConsumer {
 public:
+    struct TMetrics {
+        ui64 Messages = 0;
+        ui64 DelayedMessages = 0;
+        ui64 LockedMessages = 0;
+    };
+
+public:
     explicit TMLPConsumer(TMLPBalancer& balancer);
 
     const TPartitionGraph::Node* NextPartition();
@@ -15,9 +22,17 @@ public:
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
 
-    bool SetUseForReading(ui32 partitionId, ui64 messages, std::optional<bool> readingIsFinished,
-        std::optional<bool> useForReading, ui32 generation, ui64 cookie);
+    bool SetUseForReading(
+        ui32 partitionId,
+        std::optional<bool> readingIsFinished,
+        std::optional<bool> useForReading,
+        const std::optional<TMetrics>& metrics,
+        ui32 generation,
+        ui64 cookie
+    );
     void Rebuild();
+
+    const TMetrics& GetMetrics() const;
 
 private:
     const TMLPBalancer& Balancer;
@@ -26,15 +41,16 @@ private:
     std::vector<ui32> PartitionsForBalancing;
 
     struct TPartitionStatus {
-        ui64 Messages = 0;
         ui64 Cookie = 0;
         ui32 Generation = 0;
         // True if the reading of the partition is inactive and last messages ware committed.
         bool ReadingIsFinished = true;
         // True if the partition is may used for reading.
         bool UseForReading = false;
+        TMetrics Metrics;
     };
     absl::flat_hash_map<ui32, TPartitionStatus> Partitions;
+    TMetrics Metrics;
 };
 
 class TMLPBalancer {
@@ -42,6 +58,7 @@ public:
     explicit TMLPBalancer(TPersQueueReadBalancer& topicActor);
 
     void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr&);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr&, const TActorContext&);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
@@ -51,9 +68,9 @@ public:
 
     void SetUseForReading(const TString& consumerName,
                           ui32 partitionId,
-                          ui64 messages,
                           std::optional<bool> readingIsFinished,
                           std::optional<bool> useForReading,
+                          const std::optional<TMLPConsumer::TMetrics>& metrics,
                           ui32 generation,
                           ui64 cookie);
 

@@ -4,6 +4,7 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/public/api/protos/ydb_bridge_common.pb.h>
 
@@ -18,7 +19,6 @@ class TJsonCluster : public TViewerPipeClient {
     using TPDiskId = std::pair<TNodeId, ui32>;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
-    bool NodeWardenStorageConfigResponseProcessed = false;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
@@ -98,6 +98,7 @@ class TJsonCluster : public TViewerPipeClient {
     size_t OffloadMergeAttempts = 2;
     bool UseHealthCheck = true;
     bool UseHealthCheckCache = false; // doesn't work for domain ?
+    bool HealthCheckRequested = false;
     TString DomainName;
     TTabletId RootHiveId = 0;
     bool Tablets = false;
@@ -155,6 +156,7 @@ public:
             FilterTablets.insert(MakeConsoleID());
 
             if (UseHealthCheck) {
+                HealthCheckRequested = true;
                 if (UseHealthCheckCache && AppData()->FeatureFlags.GetEnableDbMetadataCache()) {
                     MetadataCacheEndpointsLookup = MakeRequestStateStorageMetadataCacheEndpointsLookup(DomainName);
                 } else {
@@ -373,40 +375,6 @@ private:
                 AddProblem("no-tenants-info");
             }
             ListTenantsResponse.reset();
-        }
-
-        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone() && !NodeWardenStorageConfigResponseProcessed) {
-            if (NodeWardenStorageConfigResponse->IsOk()) {
-                if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
-                    const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
-                    auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
-                    std::unordered_map<ui32, ui32> pileNodes;
-                    for (const auto& pile : srcBridgeInfo.Piles) {
-                        auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
-                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
-                        pbBridgePileInfo.SetName(pile.Name);
-                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
-                    }
-                    for (const auto& node : NodeData) {
-                        if (node.PileNum) {
-                            pileNodes[*node.PileNum]++;
-                        }
-                    }
-                    ui32 pileNum = 0;
-                    for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        auto it = pileNodes.find(pileNum);
-                        if (it != pileNodes.end()) {
-                            pile.SetNodes(it->second);
-                        }
-                        ++pileNum;
-                    }
-                } else {
-                    AddProblem("empty-node-warden-bridge-info");
-                }
-            } else {
-                AddProblem("no-node-warden-storage-config");
-            }
-            NodeWardenStorageConfigResponseProcessed = true;
         }
 
         if (TimeToAskWhiteboard()) {
@@ -657,6 +625,11 @@ private:
     std::unique_ptr<NHealthCheck::TEvSelfCheckRequest> MakeSelfCheckRequest() {
         auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
         request->Database = DomainName;
+        i64 timeoutMs = Timeout.MilliSeconds() * 80 / 100;
+        if (timeoutMs <= 0) {
+            timeoutMs = 1;
+        }
+        SetDuration(TDuration::MilliSeconds(timeoutMs), *request->Request.mutable_operation_params()->mutable_operation_timeout());
         return request;
     }
 
@@ -683,6 +656,8 @@ private:
                 if (activeNode != 0) {
                     TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
                     auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequestProto>();
+                    // Note: the database metadata cache service does not forward operation_timeout
+                    // to the underlying health check, so we rely on our own Timeout wakeup.
                     SelfCheckResultProto = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(cache, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
                 }
             }
@@ -1024,18 +999,68 @@ private:
         }
 
         std::unordered_map<ui32, TString> groupToErasure;
+        std::unordered_set<ui32> proxyGroups;
+        std::unordered_map<ui32, std::unordered_map<TString, ui32>> pileToGroupStatus;
 
         if (GroupsResponse && GroupsResponse->IsOk()) {
             for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
+                const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
+                if (info.HasProxyGroupId()) {
+                    proxyGroups.insert(info.GetProxyGroupId());
+                }
+            }
+            for (const NKikimrSysView::TGroupEntry& entry : GroupsResponse->Get()->Record.GetEntries()) {
                 const NKikimrSysView::TGroupKey& key = entry.GetKey();
                 const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
-                if (key.GetGroupId() < 0x80000000) { // ignore static groups
-                    continue;
+                if (TGroupID(key.GetGroupId()).ConfigurationType() == EGroupConfigurationType::Static) {
+                    continue; // ignore static groups
+                }
+                if (proxyGroups.count(key.GetGroupId())) {
+                    continue; // ignore proxy groups
+                }
+                if (info.HasBridgePileId()) {
+                    pileToGroupStatus[info.GetBridgePileId()][info.GetOperatingStatus()]++;
                 }
                 groupToErasure.emplace(key.GetGroupId(), info.GetErasureSpeciesV2());
             }
         } else {
             AddProblem("no-group-info");
+        }
+
+        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone()) {
+            if (NodeWardenStorageConfigResponse->IsOk()) {
+                if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
+                    const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
+                    auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
+                    std::unordered_map<ui32, ui32> pileNodes;
+                    for (const auto& pile : srcBridgeInfo.Piles) {
+                        auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
+                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
+                        pbBridgePileInfo.SetName(pile.Name);
+                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
+                        for (const auto& [status, count] : pileToGroupStatus[pbBridgePileInfo.GetPileId()]) {
+                            (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
+                        }
+                    }
+                    for (const auto& node : NodeData) {
+                        if (node.PileNum) {
+                            pileNodes[*node.PileNum]++;
+                        }
+                    }
+                    ui32 pileNum = 0;
+                    for (auto& pile : *pbBridgeInfo.MutablePiles()) {
+                        auto it = pileNodes.find(pileNum);
+                        if (it != pileNodes.end()) {
+                            pile.SetNodes(it->second);
+                        }
+                        ++pileNum;
+                    }
+                } else {
+                    AddProblem("empty-node-warden-bridge-info");
+                }
+            } else {
+                AddProblem("no-node-warden-storage-config");
+            }
         }
 
         if (VSlotsResponse && VSlotsResponse->IsOk()) {
@@ -1096,6 +1121,8 @@ private:
             clusterState = GetClusterStateFromSelfCheck(SelfCheckResult->Get()->Result);
         } else if (SelfCheckResultProto && SelfCheckResultProto->IsOk()) {
             clusterState = GetClusterStateFromSelfCheck(SelfCheckResultProto->Get()->Record);
+        } else if (HealthCheckRequested) {
+            AddProblem("no-health-check");
         } else {
             ui64 worstNodes = 0;
             for (NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::EFlag::Grey; flag <= NKikimrWhiteboard::EFlag::Red; flag = NKikimrWhiteboard::EFlag(flag + 1)) {

@@ -102,6 +102,14 @@ namespace {
         });
     }
 
+    template <>
+    TString PrintProgress<NImport::EImportProgress>(const NImport::TImportFromFsResponse::TMetadata& metadata) {
+        return PrintProgress<NImport::EImportProgress>(metadata, [](const NImport::TImportFromFsResponse::TMetadata& metadata) {
+            return metadata.Progress == NImport::EImportProgress::TransferData ||
+                   metadata.Progress == NImport::EImportProgress::BuildIndexes;
+        });
+    }
+
     /// YT
     TPrettyTable MakeTable(const NExport::TExportToYtResponse&) {
         return TPrettyTable({"id", "ready", "status", "progress", "yt proxy"});
@@ -144,37 +152,40 @@ namespace {
         row.FreeText(freeText);
     }
 
-    /// S3
-    TPrettyTable MakeTableS3() {
-        return TPrettyTable({"id", "ready", "status", "progress", "endpoint", "bucket"});
-    }
+    /// S3 & NFS
 
     template <typename T>
-    void PrettyPrintS3(const T& operation, TPrettyTable& table) {
+    constexpr bool IsExportResponse = std::is_same_v<NExport::TExportToS3Response, T>
+                                   || std::is_same_v<NExport::TExportToFsResponse, T>;
+
+    template <typename T>
+    constexpr bool IsImportResponse = std::is_same_v<NImport::TImportFromS3Response, T>
+                                   || std::is_same_v<NImport::TImportFromFsResponse, T>;
+
+    template <typename T>
+    constexpr bool IsS3Response = std::is_same_v<NExport::TExportToS3Response, T>
+                               || std::is_same_v<NImport::TImportFromS3Response, T>;
+
+    template <typename T>
+    constexpr bool IsFsResponse = std::is_same_v<NExport::TExportToFsResponse, T>
+                               || std::is_same_v<NImport::TImportFromFsResponse, T>;
+
+    template <typename T>
+    void AppendExportImportFreeText(const T& operation, TStringBuilder& freeText) {
         const auto& status = operation.Status();
-        const auto& metadata = operation.Metadata();
-        const auto& settings = metadata.Settings;
+        const auto& settings = operation.Metadata().Settings;
 
-        auto& row = table.AddRow();
-        row
-            .Column(0, operation.Id().ToString())
-            .Column(1, operation.Ready() ? "true" : "false")
-            .Column(2, status.GetStatus())
-            .Column(3, PrintProgress<decltype(metadata.Progress)>(metadata))
-            .Column(4, settings.Endpoint_)
-            .Column(5, settings.Bucket_);
-
-        TStringBuilder freeText;
-
-        if constexpr (std::is_same_v<NExport::TExportToS3Response, T>) {
+        if constexpr (IsExportResponse<T>) {
             freeText << "Include index data: " << (settings.IncludeIndexData_ ? "true" : "false") << Endl;
-            freeText << "StorageClass: " << settings.StorageClass_ << Endl;
+            if constexpr (std::is_same_v<NExport::TExportToS3Response, T>) {
+                freeText << "StorageClass: " << settings.StorageClass_ << Endl;
+            }
             if (settings.Compression_) {
                 freeText << "Compression: " << *settings.Compression_ << Endl;
             }
         }
 
-        if constexpr (std::is_same_v<NImport::TImportFromS3Response, T>) {
+        if constexpr (IsImportResponse<T>) {
             freeText << "Index population mode: " << settings.IndexPopulationMode_ << Endl;
 
             if (settings.NoACL_) {
@@ -204,7 +215,36 @@ namespace {
         }
 
         AppendOperationInfo(operation, freeText);
+    }
+
+    template <typename T>
+    void PrettyPrintExportImport(const T& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+        const auto& settings = metadata.Settings;
+
+        auto& row = table.AddRow();
+        row
+            .Column(0, operation.Id().ToString())
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus())
+            .Column(3, PrintProgress<decltype(metadata.Progress)>(metadata));
+
+        if constexpr (IsS3Response<T>) {
+            row.Column(4, settings.Endpoint_)
+               .Column(5, settings.Bucket_);
+        } else {
+            row.Column(4, settings.BasePath_);
+        }
+
+        TStringBuilder freeText;
+        AppendExportImportFreeText(operation, freeText);
         row.FreeText(freeText);
+    }
+
+    /// S3
+    TPrettyTable MakeTableS3() {
+        return TPrettyTable({"id", "ready", "status", "progress", "endpoint", "bucket"});
     }
 
     // export
@@ -213,7 +253,7 @@ namespace {
     }
 
     void PrettyPrint(const NExport::TExportToS3Response& operation, TPrettyTable& table) {
-        PrettyPrintS3(operation, table);
+        PrettyPrintExportImport(operation, table);
     }
 
     // import
@@ -222,7 +262,30 @@ namespace {
     }
 
     void PrettyPrint(const NImport::TImportFromS3Response& operation, TPrettyTable& table) {
-        PrettyPrintS3(operation, table);
+        PrettyPrintExportImport(operation, table);
+    }
+
+    /// NFS
+    TPrettyTable MakeTableNfs() {
+        return TPrettyTable({"id", "ready", "status", "progress", "fs_path"});
+    }
+
+    // export
+    TPrettyTable MakeTable(const NExport::TExportToFsResponse&) {
+        return MakeTableNfs();
+    }
+
+    void PrettyPrint(const NExport::TExportToFsResponse& operation, TPrettyTable& table) {
+        PrettyPrintExportImport(operation, table);
+    }
+
+    // import
+    TPrettyTable MakeTable(const NImport::TImportFromFsResponse&) {
+        return MakeTableNfs();
+    }
+
+    void PrettyPrint(const NImport::TImportFromFsResponse& operation, TPrettyTable& table) {
+        PrettyPrintExportImport(operation, table);
     }
 
     /// Index build
@@ -243,6 +306,33 @@ namespace {
             .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%")
             .Column(5, metadata.Path)
             .Column(6, metadata.Desctiption ? metadata.Desctiption->GetIndexName() : "");
+
+        TStringBuilder freeText;
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
+        row.FreeText(freeText);
+    }
+
+    TPrettyTable MakeTable(const NYdb::NTable::TCompactionOperation&) {
+        return TPrettyTable({"id", "ready", "status", "state", "progress", "table", "cascade", "max inflight", "total", "done"});
+    }
+
+    void PrettyPrint(const NYdb::NTable::TCompactionOperation& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+
+        auto& row = table.AddRow();
+        row
+            .Column(0, operation.Id().ToString())
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
+            .Column(3, metadata.State)
+            .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%")
+            .Column(5, metadata.Path)
+            .Column(6, metadata.Cascade ? "true" : "false")
+            .Column(7, metadata.MaxInFlight)
+            .Column(8, metadata.Total)
+            .Column(9, metadata.Done);
 
         TStringBuilder freeText;
         AppendIssues(status, freeText);
@@ -433,12 +523,39 @@ void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS
     PrintOperationsListImpl(operations, format);
 }
 
+/// NFS
+// export
+void PrintOperation(const NExport::TExportToFsResponse& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToFsResponse>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
+// import
+void PrintOperation(const NImport::TImportFromFsResponse& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromFsResponse>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
 /// Index build
 void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
+void PrintOperation(const NYdb::NTable::TCompactionOperation& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TCompactionOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 

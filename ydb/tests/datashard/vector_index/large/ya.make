@@ -2,8 +2,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 SIZE(LARGE)
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(2)
 

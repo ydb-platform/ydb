@@ -1,6 +1,4 @@
 #include "proc.h"
-#include "common.h"
-#include "string.h"
 
 #include <yt/yt/core/logging/log.h>
 
@@ -22,9 +20,12 @@
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
+#include <util/system/getpid.h>
 #include <util/system/info.h>
 #include <util/system/fs.h>
 #include <util/system/fstat.h>
+#include <util/system/thread.h>
+
 #include <util/folder/iterator.h>
 #include <util/folder/filelist.h>
 
@@ -108,7 +109,7 @@ bool IsSystemError(const TError& error)
 
 TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
     : FD_(fd)
-{}
+{ }
 
 TFileDescriptorGuard::~TFileDescriptorGuard()
 {
@@ -146,7 +147,7 @@ TFileDescriptor TFileDescriptorGuard::Release() noexcept
 void TFileDescriptorGuard::Reset() noexcept
 {
     if (FD_ != -1) {
-        YT_VERIFY(TryClose(FD_, false));
+        YT_VERIFY(TryClose(FD_, /*ignoreBadFD*/ false));
         FD_ = -1;
     }
 }
@@ -327,24 +328,12 @@ std::vector<int> GetPidsUnderParent(int targetPid)
 
 size_t GetCurrentProcessId()
 {
-#if defined(_linux_)
-    return getpid();
-#else
-    YT_ABORT();
-#endif
+    return GetPID();
 }
 
 size_t GetCurrentThreadId()
 {
-#if defined(_linux_)
-    return static_cast<size_t>(::syscall(SYS_gettid));
-#elif defined(_darwin_)
-    uint64_t tid;
-    YT_VERIFY(pthread_threadid_np(nullptr, &tid) == 0);
-    return static_cast<size_t>(tid);
-#else
-    return ::GetCurrentThreadId();
-#endif
+    return TThread::CurrentThreadNumericId();
 }
 
 std::vector<size_t> GetCurrentProcessThreadIds()
@@ -371,7 +360,7 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 
 bool IsUserspaceThread(size_t tid)
 {
-#ifdef __linux__
+#if defined(__linux__)
     TFileInput file(Format("/proc/%v/stat", tid));
     auto statFields = SplitString(file.ReadLine(), " ");
     constexpr int StartStackIndex = 27;
@@ -383,7 +372,36 @@ bool IsUserspaceThread(size_t tid)
     return startStack != 0;
 #else
     Y_UNUSED(tid);
-    return false;
+    return true;
+#endif
+}
+
+std::string GetCurrentProcessName()
+{
+#if defined(__linux__)
+    return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
+#elif defined(_win_)
+    char path[MAX_PATH];
+    DWORD length = ::GetModuleFileNameA(nullptr, path, MAX_PATH);
+    if (length == 0) {
+        return "(unknown)";
+    }
+    std::string fullPath(path, length);
+    auto pos = fullPath.find_last_of("\\/");
+    return pos == std::string::npos ? fullPath : fullPath.substr(pos + 1);
+#else
+    return "(unknown)";
+#endif
+}
+
+std::string GetCurrentProcessCommandLine()
+{
+#if defined(__linux__)
+    return std::string(Trim(TUnbufferedFileInput("/proc/self/cmdline").ReadAll(), "\n"));
+#elif defined(_win_)
+    return ::GetCommandLineA();
+#else
+    return "(unknown)";
 #endif
 }
 

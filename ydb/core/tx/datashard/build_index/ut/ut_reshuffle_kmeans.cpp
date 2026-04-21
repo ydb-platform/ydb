@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -75,7 +76,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
     static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
         const std::vector<TString>& level, NKikimrTxDataShard::EKMeansState upload,
-        VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric, ui32 overlapClusters = 0)
+        VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric, ui32 overlapClusters = 0,
+        ui32 maxBatchRows = 50000, std::optional<TSerializedTableRange> keyRange = {})
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -125,6 +127,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                     upload == NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD);
 
                 rec.SetOutputName(kPostingTable);
+
+                rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
+
+                if (keyRange) {
+                    keyRange->Serialize(*rec.MutableKeyRange());
+                }
             };
             fill(ev1);
             fill(ev2);
@@ -145,6 +153,73 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         Cerr << "Posting:" << Endl;
         Cerr << posting << Endl;
         return std::move(posting);
+    }
+
+    // Returns the LastKeyAck from the DONE response (collected after all IN_PROGRESS messages are drained).
+    static TString DoReshuffleKMeansCollectProgress(Tests::TServer::TPtr server, TActorId sender,
+        NTableIndex::NKMeans::TClusterId parent, const std::vector<TString>& level,
+        NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
+        VectorIndexSettings::Metric metric, ui32 maxBatchRows,
+        TVector<TString>& outInProgressKeys, ui64 maxCheckpointBytes = 0)
+    {
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
+        auto& runtime = *server->GetRuntime();
+        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
+        auto datashards = GetTableShards(server, sender, kMainTable);
+        TTableId tableId = ResolveTableId(server, sender, kMainTable);
+
+        UNIT_ASSERT_EQUAL(datashards.size(), 1u);
+        auto tid = datashards[0];
+
+        auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(tid);
+        tableId.PathId.ToProto(rec.MutablePathId());
+        rec.SetSnapshotTxId(snapshot.TxId);
+        rec.SetSnapshotStep(snapshot.Step);
+
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(type);
+        settings.set_metric(metric);
+        *rec.MutableSettings() = settings;
+
+        rec.SetUpload(upload);
+        *rec.MutableClusters() = {level.begin(), level.end()};
+        rec.SetParent(parent);
+        rec.SetChild(parent + 1);
+        rec.SetEmbeddingColumn("embedding");
+        rec.AddDataColumns("data");
+        rec.SetDatabaseName(kDatabaseName);
+        rec.SetOutputName(kPostingTable);
+        rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
+        if (maxCheckpointBytes > 0) {
+            rec.MutableScanSettings()->SetMaxCheckpointBytes(maxCheckpointBytes);
+        }
+
+        runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+        TString lastKeyAck;
+        while (true) {
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEvents<TEvDataShard::TEvReshuffleKMeansResponse>(handle);
+            auto* reply = handle->Get<TEvDataShard::TEvReshuffleKMeansResponse>();
+            if (reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
+                outInProgressKeys.push_back(reply->Record.GetLastKeyAck());
+            } else {
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+                UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE,
+                                    issues.ToOneLineString());
+                lastKeyAck = reply->Record.GetLastKeyAck();
+                break;
+            }
+        }
+
+        return lastKeyAck;
     }
 
     static void DropTable(Tests::TServer::TPtr server, TActorId sender, const char* name)
@@ -719,6 +794,191 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
             VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 2);
         UNIT_ASSERT_VALUES_EQUAL(posting, BuildToBuildWithOverlapOut);
+    }
+
+    Y_UNIT_TEST(MainToPostingWithKeyRange) {
+        // Verify that specifying a KeyRange in the request causes only the rows
+        // after the given key to be scanned and uploaded.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"mm\2\", \"one\"),"
+            "(2, \"mm\2\", \"two\"),"
+            "(3, \"mm\2\", \"three\"),"
+            "(4, \"11\2\", \"four\"),"
+            "(5, \"11\2\", \"five\");");
+
+        auto create = [&] { CreatePostingTable(server, sender, options); };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        std::vector<TString> level = {"mm\2", "11\2"};
+
+        // Full scan: all 5 rows
+        auto fullPosting = DoReshuffleKMeans(server, sender, 0, level,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
+        recreate();
+
+        // Resume scan starting strictly after key=2 (exclusive lower bound).
+        // Only rows 3,4,5 should be processed.
+        TCell fromCell = TCell::Make(ui32(2));
+        TSerializedTableRange resumeRange{TArrayRef<const TCell>{&fromCell, 1}, false, {}, false};
+        auto resumedPosting = DoReshuffleKMeans(server, sender, 0, level,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE,
+            0 /*overlapClusters*/, 50000, resumeRange);
+
+        // Full scan contains rows 1..5; resumed scan skips rows 1 and 2.
+        UNIT_ASSERT(resumedPosting.size() < fullPosting.size());
+        UNIT_ASSERT(!resumedPosting.Contains("key = 1,"));
+        UNIT_ASSERT(!resumedPosting.Contains("key = 2,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 3,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 4,"));
+        UNIT_ASSERT(resumedPosting.Contains("key = 5,"));
+    }
+
+    Y_UNIT_TEST(MainToPostingLastKeyAckInProgress) {
+        // Verify that IN_PROGRESS messages with LastKeyAck are sent when batches
+        // are uploaded, and that LastKeyAck in the final DONE response is set.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"mm\2\", \"one\"),"
+            "(2, \"mm\2\", \"two\"),"
+            "(3, \"mm\2\", \"three\"),"
+            "(4, \"11\2\", \"four\"),"
+            "(5, \"11\2\", \"five\");");
+
+        CreatePostingTable(server, sender, options);
+
+        std::vector<TString> level = {"mm\2", "11\2"};
+
+        // Use MaxBatchRows=1 and MaxCheckpointBytes=1. With one row per batch, the second
+        // row arrives while the first upload is still in-flight, so ShouldWaitUpload blocks
+        // the scan. When the first upload completes, Handle() starts the next upload
+        // immediately (row 2 is already buffered), so AllFlushed() is false and no
+        // IN_PROGRESS checkpoint is emitted mid-scan. Checkpoints require AllFlushed()=true,
+        // which only happens reliably at scan end — but by then IsExhausted=true blocks it.
+        // Verify only the DONE response and that all rows were uploaded.
+        TVector<TString> inProgressKeys;
+        TString lastKeyAck = DoReshuffleKMeansCollectProgress(server, sender, 0, level,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE,
+            1 /*maxBatchRows*/, inProgressKeys, 1 /*maxCheckpointBytes*/);
+
+        // All 5 rows must have been uploaded regardless of checkpointing.
+        auto posting = ReadShardedTable(server, kPostingTable);
+        UNIT_ASSERT(posting.Contains("key = 1,"));
+        UNIT_ASSERT(posting.Contains("key = 2,"));
+        UNIT_ASSERT(posting.Contains("key = 3,"));
+        UNIT_ASSERT(posting.Contains("key = 4,"));
+        UNIT_ASSERT(posting.Contains("key = 5,"));
+    }
+
+    Y_UNIT_TEST(MainToPostingResumeFromLastKeyAck) {
+        // Run a scan, capture its LastKeyAck, then run another scan starting
+        // from that key and verify the two partial scans together equal a full scan.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"mm\2\", \"one\"),"
+            "(2, \"mm\2\", \"two\"),"
+            "(3, \"mm\2\", \"three\"),"
+            "(4, \"11\2\", \"four\"),"
+            "(5, \"11\2\", \"five\");");
+
+        auto create = [&] { CreatePostingTable(server, sender, options); };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        std::vector<TString> level = {"mm\2", "11\2"};
+
+        // First pass: scan rows 1..3 only (stop after key=3 by using KeyRange to+inclusive).
+        TCell toCell = TCell::Make(ui32(3));
+        TSerializedTableRange firstRange{{}, true, TArrayRef<const TCell>{&toCell, 1}, true};
+        auto firstPosting = DoReshuffleKMeans(server, sender, 0, level,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE,
+            0, 50000, firstRange);
+        recreate();
+
+        // Second pass: resume from key=3 (exclusive lower bound) to scan rows 4..5.
+        TCell fromCell = TCell::Make(ui32(3));
+        TSerializedTableRange secondRange{TArrayRef<const TCell>{&fromCell, 1}, false, {}, false};
+        auto secondPosting = DoReshuffleKMeans(server, sender, 0, level,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE,
+            0, 50000, secondRange);
+
+        UNIT_ASSERT(firstPosting.Contains("key = 1,"));
+        UNIT_ASSERT(firstPosting.Contains("key = 2,"));
+        UNIT_ASSERT(firstPosting.Contains("key = 3,"));
+        UNIT_ASSERT(!firstPosting.Contains("key = 4,"));
+        UNIT_ASSERT(!firstPosting.Contains("key = 5,"));
+
+        UNIT_ASSERT(!secondPosting.Contains("key = 1,"));
+        UNIT_ASSERT(!secondPosting.Contains("key = 2,"));
+        UNIT_ASSERT(!secondPosting.Contains("key = 3,"));
+        UNIT_ASSERT(secondPosting.Contains("key = 4,"));
+        UNIT_ASSERT(secondPosting.Contains("key = 5,"));
     }
 }
 

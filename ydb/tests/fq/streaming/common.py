@@ -62,12 +62,13 @@ class StreamingTestBase(TestYdsBase):
         return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
 
     def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False):
+        shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
         kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{os.getenv("YDB_ENDPOINT")}",
                 DATABASE_NAME = "{os.getenv("YDB_DATABASE")}",
-                SHARED_READING = "{shared}",
+                {shared_opt}
                 AUTH_METHOD = "NONE"
             );
         """)
@@ -108,7 +109,7 @@ class StreamingTestBase(TestYdsBase):
             completed = self.get_completed_checkpoints(kikimr, path)
             if completed >= checkpoints_count:
                 break
-            assert time.time() < deadline, "Wait checkpoint failed, actual completed: " + str(completed)
+            assert time.time() < deadline, f"Wait checkpoint failed, actual completed: {completed}, expected {checkpoints_count}"
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:

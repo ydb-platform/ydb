@@ -90,7 +90,3 @@ message TSubColumnsAccessor {
     optional uint32 OtherRecordsCount = 5;
 }
 
-message TDictionaryAccessor {
-    optional uint32 VariantsBlobSize = 1;
-    optional uint32 RecordsBlobSize = 2;
-}

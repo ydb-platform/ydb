@@ -1,5 +1,6 @@
 import pytest
 from library.recipes import common as recipes_common
+import library.python.port_manager
 import yatest.common
 import moto
 import requests
@@ -20,7 +21,7 @@ class S3Base(object):
         s3_pid_file = "s3.pid"
         moto_server_path = os.environ["MOTO_SERVER_PATH"]
 
-        port_manager = yatest.common.network.PortManager()
+        port_manager = library.python.port_manager.PortManager()
         s3_port = port_manager.get_port()
         s3_endpoint = "http://localhost:{port}".format(port=s3_port)
         self.s3base_setup_classmethod(s3_endpoint)

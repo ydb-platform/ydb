@@ -390,6 +390,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsRestore",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "DetailedMetricsSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -409,7 +414,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -808,6 +814,11 @@
                 "ColumnId": 11,
                 "ColumnName": "AdjacentParent",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "CreationTimestampSeconds",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -824,7 +835,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1190,6 +1202,11 @@
                 "ColumnId": 13,
                 "ColumnName": "ChangefeedUnderlyingTopics",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "FSSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -1208,7 +1225,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3973,6 +3991,11 @@
                 "ColumnId": 15,
                 "ColumnName": "IsRestore",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "DetailedMetricsSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3993,7 +4016,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4732,6 +4756,11 @@
                 "ColumnId": 14,
                 "ColumnName": "ChangefeedUnderlyingTopics",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "FSSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4751,7 +4780,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7150,6 +7180,11 @@
                 "ColumnId": 11,
                 "ColumnName": "UserSIDs",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "TraceIds",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7166,7 +7201,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7249,6 +7285,11 @@
                 "ColumnId": 11,
                 "ColumnName": "UserSIDs",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "TraceIds",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7265,7 +7306,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,

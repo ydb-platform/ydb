@@ -1,8 +1,7 @@
 {
     "test.TestViewer.test_async_replication_describe": {
         "create_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "describe_result": {
             "connection_params": {
@@ -93,7 +92,7 @@
                     }
                 ],
                 "name": "TestAsyncReplication",
-                "owner": "root@builtin",
+                "owner": "root",
                 "type": "REPLICATION"
             }
         }
@@ -116,8 +115,7 @@
     },
     "test.TestViewer.test_pqrb_tablet": {
         "response_create_topic": {
-            "status": "SUCCESS",
-            "version": "not-zero-number"
+            "status": "SUCCESS"
         },
         "response_tablet_info": {
             "ResponseTime": "not-zero-number-text",
@@ -184,7 +182,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "table1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TABLE"
                 },
                 {
@@ -193,7 +191,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "topic1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TOPIC"
                 }
             ],
@@ -323,7 +321,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "table1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TABLE"
                 },
                 {
@@ -332,7 +330,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "test_dir",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "DIRECTORY"
                 },
                 {
@@ -341,7 +339,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "topic1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TOPIC"
                 }
             ],
@@ -471,7 +469,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "table1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TABLE"
                 },
                 {
@@ -480,7 +478,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "topic1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TOPIC"
                 }
             ],
@@ -697,6 +695,22 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
+        "restart_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "restart_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "restart_pdisk_missing_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "evict_vdisk_monitoring_force": {
+            "status_code": 403,
+            "text": "Administration access required when force=true"
+        },
         "restart_pdisk_database": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
@@ -711,9 +725,8 @@
             "result": false
         },
         "restart_pdisk_monitoring_force": {
-            "debugMessage": "text",
-            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
-            "result": false
+            "status_code": 403,
+            "text": "Administration access required when force=true"
         },
         "restart_pdisk_root": {
             "debugMessage": "text",
@@ -733,18 +746,25 @@
             "status_code": 403,
             "text": "Access denied"
         },
+        "status_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "status_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "status_pdisk_monitoring_force": {
+            "status_code": 403,
+            "text": "Administration access required when force=true"
+        },
         "storage_nodes_database": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
             "FieldsRequired": "0000000000000000000000000000000000011",
-            "FoundNodes": "1",
+            "FoundNodes": "0",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-                {
-                    "NodeId": 1
-                }
-            ],
-            "TotalNodes": "1"
+            "TotalNodes": "0"
         },
         "storage_nodes_monitoring": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
@@ -1617,12 +1637,10 @@
             "Truncated": false
         },
         "insert": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "update": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_transfer_describe": {
@@ -1712,23 +1730,20 @@
                     }
                 ],
                 "name": "TestTransfer",
-                "owner": "root@builtin",
+                "owner": "root",
                 "type": "TRANSFER"
             },
             "source_path": "TestTransferSourceTopic",
             "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n"
         },
         "table_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "topic_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "transfer_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_acl": {
@@ -3085,6 +3100,10 @@
             }
         }
     ],
+    "test.TestViewer.test_viewer_acl_write_invalid": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Token is not in correct format\n</p></body></html>"
+    },
     "test.TestViewer.test_viewer_autocomplete": {
         "dedicated_db": {
             "/Root": {
@@ -3113,8 +3132,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3134,8 +3152,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3151,8 +3168,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3172,8 +3188,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3193,8 +3208,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "empty": {
@@ -3224,8 +3238,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3245,8 +3258,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3262,8 +3274,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3283,8 +3294,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3304,8 +3314,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "root": {
@@ -3335,8 +3344,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3356,8 +3364,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3373,8 +3380,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3394,8 +3400,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3415,34 +3420,29 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "root_dedicated_db": {
             "/Root": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "/Root/dedicated_db": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "/Root/serverless_db": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "/Root/shared_db": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "no-database": {
                 "Result": {
@@ -3462,8 +3462,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "tab": {
@@ -3493,8 +3492,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3514,8 +3512,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3531,8 +3528,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3552,8 +3548,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3573,8 +3568,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "table1": {
@@ -3604,8 +3598,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3625,8 +3618,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3642,8 +3634,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3663,8 +3654,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3684,8 +3674,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         }
     },
@@ -3796,13 +3785,13 @@
             "read": false
         },
         "/Root/dedicated_db": {
-            "read": true
+            "read": false
         },
         "/Root/serverless_db": {
-            "read": true
+            "read": false
         },
         "/Root/shared_db": {
-            "read": true
+            "read": false
         },
         "no-database": {
             "read": false
@@ -3893,6 +3882,20 @@
         "StorageUsed": "not-zero-number-text",
         "Tenants": "3",
         "Versions": "not-empty-array"
+    },
+    "test.TestViewer.test_viewer_content_and_tabletcounters_missing_params": {
+        "content_no_path": {
+            "status_code": 400,
+            "text": "Parameter 'path' is required"
+        },
+        "content_whitespace_path": {
+            "status_code": 400,
+            "text": "Parameter 'path' is required"
+        },
+        "tabletcounters_no_path_no_tablet": {
+            "status_code": 400,
+            "text": "Parameter 'path' or 'tablet_id' is required"
+        }
     },
     "test.TestViewer.test_viewer_describe": {
         "/Root": {
@@ -4179,7 +4182,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "table1",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
@@ -4301,7 +4304,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "table1",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
@@ -4435,7 +4438,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "table1",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
@@ -4531,6 +4534,18 @@
             "Source": 1,
             "Status": "StatusSuccess"
         }
+    },
+    "test.TestViewer.test_viewer_domain_peers": {
+        "FieldsAvailable": "0000011110111010000000000110101000011",
+        "FieldsRequired": "0000000000010000000000000000001000001",
+        "FoundNodes": "1",
+        "Nodes": [
+            {
+                "ConnectStatus": "Grey",
+                "NodeId": 1
+            }
+        ],
+        "TotalNodes": "1"
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
@@ -7838,8 +7853,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/dedicated_db": {
             "result": [
@@ -7857,8 +7871,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -7876,8 +7889,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -7895,8 +7907,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "no-database": {
             "result": [
@@ -7914,8 +7925,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_event_stream": {
@@ -7927,8 +7937,7 @@
                         "node_id": "not-zero-number",
                         "query_id": "text",
                         "session_id": "text"
-                    },
-                    "version": 10
+                    }
                 },
                 "event": "SessionCreated"
             },
@@ -8006,8 +8015,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -8038,8 +8046,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -8070,8 +8077,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_from_table_different_schemas": {
@@ -8114,8 +8120,7 @@
                     "three"
                 ]
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "multi": {
             "result": [
@@ -8146,8 +8151,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "ydb": {
             "result": [
@@ -8164,8 +8168,7 @@
                     "name": "three"
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "ydb2": {
             "result": [
@@ -8196,8 +8199,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_issue_13757": {
@@ -8220,8 +8222,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/dedicated_db": {
             "result": [
@@ -8242,8 +8243,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -8264,8 +8264,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -8286,8 +8285,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "no-database": {
             "result": [
@@ -8308,8 +8306,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_issue_13945": {
@@ -8329,8 +8326,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/dedicated_db": {
             "result": [
@@ -8348,8 +8344,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -8367,8 +8362,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -8386,8 +8380,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "no-database": {
             "result": [
@@ -8405,8 +8398,604 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
+        }
+    },
+    "test.TestViewer.test_viewer_query_issues_printing": {
+        "/Root": {
+            "error": {
+                "end_position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                "position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "severity": 1
+            },
+            "issues": [
+                {
+                    "issue_code": 1030,
+                    "issues": [
+                        {
+                            "end_position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "issues": [
+                                {
+                                    "end_position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "issue_code": 1107,
+                                                    "message": "Integral type implicit bitcast: Optional<Uint32> and Int32",
+                                                    "position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 2
+                                                }
+                                            ],
+                                            "message": "At function: +",
+                                            "position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "severity": 2
+                                        }
+                                    ],
+                                    "message": "At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "severity": 2
+                                },
+                                {
+                                    "end_position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                                                    "position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 1
+                                                }
+                                            ],
+                                            "message": "At function: SafeCast",
+                                            "position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "severity": 1
+                                        }
+                                    ],
+                                    "message": "At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "severity": 1
+                                }
+                            ],
+                            "message": "At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject",
+                            "position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "severity": 1
+                        }
+                    ],
+                    "message": "Type annotation",
+                    "severity": 1
+                }
+            ],
+            "status": "GENERIC_ERROR"
+        },
+        "/Root/dedicated_db": {
+            "error": {
+                "end_position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                "position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "severity": 1
+            },
+            "issues": [
+                {
+                    "issue_code": 1030,
+                    "issues": [
+                        {
+                            "end_position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "issues": [
+                                {
+                                    "end_position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "issue_code": 1107,
+                                                    "message": "Integral type implicit bitcast: Optional<Uint32> and Int32",
+                                                    "position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 2
+                                                }
+                                            ],
+                                            "message": "At function: +",
+                                            "position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "severity": 2
+                                        }
+                                    ],
+                                    "message": "At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "severity": 2
+                                },
+                                {
+                                    "end_position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                                                    "position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 1
+                                                }
+                                            ],
+                                            "message": "At function: SafeCast",
+                                            "position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "severity": 1
+                                        }
+                                    ],
+                                    "message": "At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "severity": 1
+                                }
+                            ],
+                            "message": "At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject",
+                            "position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "severity": 1
+                        }
+                    ],
+                    "message": "Type annotation",
+                    "severity": 1
+                }
+            ],
+            "status": "GENERIC_ERROR"
+        },
+        "/Root/serverless_db": {
+            "error": {
+                "end_position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                "position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "severity": 1
+            },
+            "issues": [
+                {
+                    "issue_code": 1030,
+                    "issues": [
+                        {
+                            "end_position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "issues": [
+                                {
+                                    "end_position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "issue_code": 1107,
+                                                    "message": "Integral type implicit bitcast: Optional<Uint32> and Int32",
+                                                    "position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 2
+                                                }
+                                            ],
+                                            "message": "At function: +",
+                                            "position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "severity": 2
+                                        }
+                                    ],
+                                    "message": "At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "severity": 2
+                                },
+                                {
+                                    "end_position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                                                    "position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 1
+                                                }
+                                            ],
+                                            "message": "At function: SafeCast",
+                                            "position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "severity": 1
+                                        }
+                                    ],
+                                    "message": "At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "severity": 1
+                                }
+                            ],
+                            "message": "At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject",
+                            "position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "severity": 1
+                        }
+                    ],
+                    "message": "Type annotation",
+                    "severity": 1
+                }
+            ],
+            "status": "GENERIC_ERROR"
+        },
+        "/Root/shared_db": {
+            "error": {
+                "end_position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                "position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "severity": 1
+            },
+            "issues": [
+                {
+                    "issue_code": 1030,
+                    "issues": [
+                        {
+                            "end_position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "issues": [
+                                {
+                                    "end_position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "issue_code": 1107,
+                                                    "message": "Integral type implicit bitcast: Optional<Uint32> and Int32",
+                                                    "position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 2
+                                                }
+                                            ],
+                                            "message": "At function: +",
+                                            "position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "severity": 2
+                                        }
+                                    ],
+                                    "message": "At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "severity": 2
+                                },
+                                {
+                                    "end_position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                                                    "position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 1
+                                                }
+                                            ],
+                                            "message": "At function: SafeCast",
+                                            "position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "severity": 1
+                                        }
+                                    ],
+                                    "message": "At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "severity": 1
+                                }
+                            ],
+                            "message": "At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject",
+                            "position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "severity": 1
+                        }
+                    ],
+                    "message": "Type annotation",
+                    "severity": 1
+                }
+            ],
+            "status": "GENERIC_ERROR"
+        },
+        "no-database": {
+            "error": {
+                "end_position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                "position": {
+                    "column": 51,
+                    "row": 1
+                },
+                "severity": 1
+            },
+            "issues": [
+                {
+                    "issue_code": 1030,
+                    "issues": [
+                        {
+                            "end_position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "issues": [
+                                {
+                                    "end_position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "issue_code": 1107,
+                                                    "message": "Integral type implicit bitcast: Optional<Uint32> and Int32",
+                                                    "position": {
+                                                        "column": 31,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 2
+                                                }
+                                            ],
+                                            "message": "At function: +",
+                                            "position": {
+                                                "column": 31,
+                                                "row": 1
+                                            },
+                                            "severity": 2
+                                        }
+                                    ],
+                                    "message": "At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 6,
+                                        "row": 1
+                                    },
+                                    "severity": 2
+                                },
+                                {
+                                    "end_position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "issues": [
+                                        {
+                                            "end_position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "issues": [
+                                                {
+                                                    "end_position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "message": "Cannot cast type Optional<Int32> into List<List<Int32>>",
+                                                    "position": {
+                                                        "column": 51,
+                                                        "row": 1
+                                                    },
+                                                    "severity": 1
+                                                }
+                                            ],
+                                            "message": "At function: SafeCast",
+                                            "position": {
+                                                "column": 51,
+                                                "row": 1
+                                            },
+                                            "severity": 1
+                                        }
+                                    ],
+                                    "message": "At tuple, At function: SqlProjectItem, At lambda",
+                                    "position": {
+                                        "column": 44,
+                                        "row": 1
+                                    },
+                                    "severity": 1
+                                }
+                            ],
+                            "message": "At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject",
+                            "position": {
+                                "column": 44,
+                                "row": 1
+                            },
+                            "severity": 1
+                        }
+                    ],
+                    "message": "Type annotation",
+                    "severity": 1
+                }
+            ],
+            "status": "GENERIC_ERROR"
         }
     },
     "test.TestViewer.test_viewer_query_long": {
@@ -8440,8 +9029,7 @@
                         ]
                     ]
                 }
-            ],
-            "version": 10
+            ]
         },
         "fetch_by_execution_id": {
             "execution_id": "text",
@@ -8472,8 +9060,7 @@
                         ]
                     ]
                 }
-            ],
-            "version": 10
+            ]
         },
         "fetch_by_operation_id": {
             "execution_id": "text",
@@ -8505,8 +9092,7 @@
                         ]
                     ]
                 }
-            ],
-            "version": 10
+            ]
         },
         "fetch_error_no_id": {
             "status_code": 400,
@@ -12802,206 +13388,6 @@
         }
     },
     "test.TestViewer.test_viewer_tenantinfo": {
-        "TenantInfo": [
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "CreateTime": "not-zero-number-text",
-                "Id": "1",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": {},
-                "Name": "/Root",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    1
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "State": "RUNNING",
-                "Type": "Domain"
-            },
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "38",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": "not-empty-object",
-                "Name": "/Root/dedicated_db",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    50000
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "Resources": {
-                    "Allocated": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ],
-                    "Required": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ]
-                },
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 10,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Dedicated"
-            },
-            {
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "40",
-                "Metrics": "not-empty-object",
-                "Name": "/Root/serverless_db",
-                "Overall": "Green",
-                "Owner": "root",
-                "ResourceId": "39",
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 7,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Serverless"
-            },
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "39",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": "not-empty-object",
-                "Name": "/Root/shared_db",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    50001
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "Resources": {
-                    "Allocated": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ]
-                },
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 10,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Shared"
-            }
-        ]
-    },
-    "test.TestViewer.test_viewer_tenantinfo_db": {
         "/Root": {
             "TenantInfo": [
                 {
@@ -13595,6 +13981,7 @@
             }
         ]
     },
+    "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1></body></html>"

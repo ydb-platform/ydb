@@ -24,6 +24,7 @@ namespace NKikimr::NDataStreams::V1 {
         TString Key;
         TString ExplicitHash;
         TString Ip;
+        TString ChoosePartitionKey;
     };
 
     TString GetSerializedData(const TPutRecordsItem& item) {
@@ -108,6 +109,7 @@ namespace NKikimr::NDataStreams::V1 {
                 w->SetData(GetSerializedData(item));
                 w->SetPartitionKey(item.Key);
                 w->SetExplicitHash(item.ExplicitHash);
+                w->SetChoosePartitionKey(item.ChoosePartitionKey);
                 w->SetDisableDeduplication(true);
                 w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
                 w->SetUncompressedSize(item.Data.size());
@@ -450,7 +452,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString hashKey = NPQ::AsKeyBound(GetHashKey(record));
         auto* partition = chooser->GetPartition(hashKey);
-        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
+        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip, hashKey});
         PartitionToActor[partition->PartitionId].RecordIndexes.push_back(index);
     }
 

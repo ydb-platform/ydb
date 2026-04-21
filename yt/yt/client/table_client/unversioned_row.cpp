@@ -437,7 +437,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         }
     }
 
-    if (Y_UNLIKELY(lhs.Type != rhs.Type)) {
+    if (lhs.Type != rhs.Type) [[unlikely]] {
         return TernaryCompare(lhs.Type, rhs.Type);
     }
 
@@ -598,7 +598,7 @@ size_t GetUnversionedRowByteSize(ui32 valueCount)
     return sizeof(TUnversionedRowHeader) + sizeof(TUnversionedValue) * valueCount;
 }
 
-size_t GetDataWeight(TUnversionedRow row)
+i64 GetDataWeight(TUnversionedRow row)
 {
     if (!row) {
         return 0;
@@ -611,7 +611,7 @@ size_t GetDataWeight(TUnversionedRow row)
     return result;
 }
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows)
+i64 GetDataWeight(TRange<TUnversionedRow> rows)
 {
     size_t result = 0;
     for (auto row : rows) {
@@ -1340,9 +1340,10 @@ void ValidateClientKey(
     TLegacyKey key,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr& nameTable)
+    const TNameTablePtr& nameTable,
+    bool allowMissingKeyColumns)
 {
-    ValidateClientRow(key, schema, idMapping, nameTable, true);
+    ValidateClientRow(key, schema, idMapping, nameTable, true, allowMissingKeyColumns);
 }
 
 void ValidateReadTimestamp(TTimestamp timestamp)

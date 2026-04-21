@@ -87,6 +87,10 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Optional()
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
+    config.Opts->AddLongOption("no-producer-id-track", "Disable ProducerId tracking in tx (only applies with --use-tx).")
+        .Optional()
+        .Hidden()
+        .StoreTrue(&Scenario.NoTrackProducerIdInTx);
     config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. Waiting time between commit in seconds. Default - 1 second")
         .Optional()
         .Hidden()
@@ -118,22 +122,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Hidden()
         .StoreResult(&Scenario.ProducerKeysCount);
 
-    config.Opts->AddLongOption("configure-consumers", "The number of consumers to change the topic configuration. "
-                                                      "If the value is greater than 0, the program will continuously "
-                                                      "change the topic configuration.")
-        .Optional()
-        .Hidden()
-        .DefaultValue(0)
-        .StoreResult(&Scenario.ConfigConsumerCount);
-    config.Opts->AddLongOption("describe-topic", "The program constantly calls the DescribeTopic method")
-        .Optional()
-        .Hidden()
-        .DefaultValue(false)
-        .StoreTrue(&Scenario.NeedDescribeTopic);
-    config.Opts->AddLongOption("describe-consumer", "The program constantly calls the DescribeConsumer method")
-        .Optional()
-        .Hidden()
-        .StoreResult(&Scenario.DescribeConsumerName);
+    Scenario.ConfigMetadataMonitoringOptions(config);
 
     config.IsNetworkIntensive = true;
 }

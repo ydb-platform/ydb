@@ -1,0 +1,79 @@
+dstool -e <endpoint> --mon-port <mon_port> pool list -H --format=json --show-vdisk-estimated-usage
+Exit Status: 0
+===== stdout =====
+[
+  {
+    "BoxId:PoolId": "[1:1]",
+    "PoolName": "test-pool",
+    "ErasureSpecies": "none",
+    "Kind": "hdd",
+    "TotalSizeInUnits": 1,
+    "Groups_TOTAL": 1,
+    "GroupsForEstimatedUsage@85": 1,
+    "VDisks_TOTAL": 1,
+    "EstimatedUsage": "10.0%",
+    "MaxVDiskEstimatedUsage": "10.0%",
+    "MeanVDiskEstimatedUsage": "10.0%",
+    "StdDevVDiskEstimatedUsage": "0.0%"
+  }
+]
+===== mock_base_config =====
+
+TBaseConfig {
+PDisk {
+  NodeId: 1
+  PDiskId: 1001
+  PDiskConfig {
+    ExpectedSlotCount: 16
+    SlotSizeInUnits: 2
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 16
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 400000000000
+    SlotCount: 16
+    SlotSizeInUnits: 2
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  VDiskMetrics {
+    AvailableSize: 360000000000
+    AllocatedSize: 40000000000
+  }
+  Status: "READY"
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+}
+
+DefineStoragePool {
+BoxId: 1
+StoragePoolId: 1
+Name: "test-pool"
+ErasureSpecies: "none"
+Kind: "hdd"
+}

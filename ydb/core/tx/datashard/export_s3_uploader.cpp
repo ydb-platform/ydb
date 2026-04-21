@@ -542,6 +542,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             auto request = Aws::S3::Model::CreateMultipartUploadRequest()
                 .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
             this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
+        } else if (ForceNewUpload) {
+            ForceNewUpload = false;
+            UploadId = upload->Id;
+            Parts.clear();
+            this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(
+                this->SelfId(), TxId,
+                TS3Upload::EStatus::UploadParts, TVector<TString>{}));
         } else {
             UploadId = upload->Id;
 
@@ -645,10 +652,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         if (CanRetry(error)) {
+            if (error.GetExceptionName() == "FsUploadSessionLost") {
+                ForceNewUpload = true;
+            }
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = error.GetMessage().c_str();
+            Error = TStringBuilder() << "S3 error: " << error;
             this->PassAway();
         }
     }
@@ -671,7 +681,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         } else {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
-                << error.GetMessage();
+                << error;
             this->PassAway();
         }
     }
@@ -704,7 +714,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            Finish(false, TStringBuilder() << "S3 error: " << error);
         }
     }
 
@@ -947,6 +957,7 @@ private:
     TString Buffer;
 
     TMaybe<TString> UploadId;
+    bool ForceNewUpload = false;
     TVector<TString> Parts;
     TMaybe<TString> Error;
 
@@ -1042,10 +1053,14 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     if (scheme) {
         int idx = changefeeds.size() + 1;
         for (const auto& index : scheme->indexes()) {
-            const auto indexType = NTableIndex::ConvertIndexType(index.type_case());
+            const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
+            if (!indexType) {
+                continue;
+            }
+
             const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
 
-            for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
                 const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
                 TString exportPrefix;
                 if (encrypted) {

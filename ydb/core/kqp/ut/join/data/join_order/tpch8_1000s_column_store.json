@@ -7,13 +7,9 @@
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"InnerJoin (BlockHash)",
               "args":
                 [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"supplier"
-                  },
                   {
                     "op_name":"HashShuffle",
                     "args":
@@ -23,7 +19,7 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"InnerJoin (BlockHash)",
                                 "args":
                                   [
                                     {
@@ -35,7 +31,7 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (Grace)",
+                                            "op_name":"InnerJoin (BlockHash)",
                                             "args":
                                               [
                                                 {
@@ -47,13 +43,9 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (Grace)",
+                                                        "op_name":"InnerJoin (BlockHash)",
                                                         "args":
                                                           [
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"part"
-                                                            },
                                                             {
                                                               "op_name":"HashShuffle",
                                                               "args":
@@ -63,6 +55,10 @@
                                                                     "table":"lineitem"
                                                                   }
                                                                 ]
+                                                            },
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"part"
                                                             }
                                                           ]
                                                       }
@@ -91,6 +87,10 @@
                             ]
                         }
                       ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
                   }
                 ]
             },

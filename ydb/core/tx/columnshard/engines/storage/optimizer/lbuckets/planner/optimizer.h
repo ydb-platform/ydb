@@ -213,30 +213,6 @@ public:
         }
     }
 
-    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        for (auto&& f : Futures) {
-            for (auto&& p : f.second) {
-                if (auto lockInfo = dataLocksManager->IsLocked(*p.second, NDataLocks::ELockCategory::Compaction)) {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
-                    return true;
-                }
-            }
-        }
-        for (auto&& i : PreActuals) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*i.second, NDataLocks::ELockCategory::Compaction)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
-                return true;
-            }
-        }
-        for (auto&& i : Actuals) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*i.second, NDataLocks::ELockCategory::Compaction)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool Validate(const std::shared_ptr<TPortionInfo>& portion) const {
         if (portion) {
             AFL_VERIFY(!PreActuals.contains(portion->GetPortionId()));
@@ -750,16 +726,6 @@ public:
         }
     };
 
-    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        if (MainPortion) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion, NDataLocks::ELockCategory::Compaction)) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
-                return true;
-            }
-        }
-        return Others.IsLocked(dataLocksManager);
-    }
-
     bool IsEmpty() const {
         return !MainPortion && Others.IsEmpty();
     }
@@ -1089,15 +1055,6 @@ public:
         AddBucketToRating(LeftBucket);
     }
 
-    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-        if (BucketsByWeight.empty()) {
-            return false;
-        }
-        AFL_VERIFY(BucketsByWeight.begin()->second.size());
-        const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
-        return bucketForOptimization->IsLocked(dataLocksManager);
-    }
-
     bool IsEmpty() const {
         return Buckets.empty() && LeftBucket->IsEmpty();
     }
@@ -1227,10 +1184,6 @@ private:
     }
 
 protected:
-    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
-        return Buckets.IsLocked(dataLocksManager);
-    }
-
     virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         const TInstant now = TInstant::Now();
         for (auto&& i : remove) {

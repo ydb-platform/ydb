@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
         });
 
         AssertPurgeError(runtime, Ydb::StatusIds::SCHEME_ERROR,
-            "You do not have access or the '/Root/topic_not_exists' does not exist");
+            "You do not have access permissions or the '/Root/topic_not_exists' does not exist");
     }
 
     Y_UNIT_TEST(TopicWithoutConsumer) {

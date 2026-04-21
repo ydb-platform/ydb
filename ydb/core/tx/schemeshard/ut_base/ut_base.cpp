@@ -10,10 +10,6 @@
 
 #include <locale>
 
-namespace NKikimr::NSchemeShard {
-// defined in ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
-}  // namespace NKikimr::NSchemeShard
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -3408,6 +3404,182 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
     }
 
+    // TDropForceUnsafe on a table with an in-progress split must abort the split
+    // via AbortUnsafe() and delete all shards. Three variants cover the three
+    // distinct dst-tablet states at the time of the drop:
+    //   1. TEvCreateTablet not yet sent (Hive unaware, TabletID == InvalidTabletId)
+    //   2. TEvCreateTablet sent, reply pending (Hive has pending creation, TabletID == InvalidTabletId)
+    //   3. Dst tablet created (TabletID valid, split in ConfigureParts)
+
+    // Variant 1: ForceDropUnsafe while split is in CreateParts and TEvCreateTablet
+    // has not yet been sent to Hive (TabletID == InvalidTabletId, Hive unaware).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafeBeforeCreateTabletRequest) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvCreateTablet: dst shards are in ShardInfos but Hive has
+        // never seen them (TabletID == InvalidTabletId).
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // Variant 2: ForceDropUnsafe while split is in CreateParts and TEvCreateTablet
+    // was sent but TEvCreateTabletReply is pending (TabletID == InvalidTabletId,
+    // Hive has a pending creation to cancel).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafeDuringCreateParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvCreateTabletReply: TEvCreateTablet was sent, Hive has a
+        // pending creation, but TabletID has not been assigned yet.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::EvCreateTabletReply);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // Variant 3: ForceDropUnsafe while split is in ConfigureParts (dst tablets
+    // created, TEvInitSplitMergeDestination sent but not yet acked).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafe) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvInitSplitMergeDestination: dst tablets exist (TabletID
+        // valid) but ConfigureParts has not completed yet.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::EvInitSplitMergeDestination);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
     Y_UNIT_TEST(CopyTableWithAlterConfig) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -6584,6 +6756,138 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(true, GetFastLogPolicy(runtime, TTestTxConfig::FakeHiveTablets));
         UNIT_ASSERT_VALUES_EQUAL(false, GetByKeyFilterEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
         UNIT_ASSERT_VALUES_EQUAL(false, GetEraseCacheEnabled(runtime, TTestTxConfig::FakeHiveTablets, 1001));
+    }
+
+    Y_UNIT_TEST(AlterTableBloomFilterPrefixes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto getPartitionConfig = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        // Create table with 2 PK columns
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Initially no bloom filter prefixes
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+        }
+
+        // Add prefix bloom filter on first PK column
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        }
+
+        // Add another prefix with custom FPP — should accumulate [1, 2]
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 2 FalsePositiveProbability: 0.05 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.05, 1e-9);
+        }
+
+        // Disable KEY_BLOOM_FILTER — should clear all prefixes
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+
+    }
+
+    Y_UNIT_TEST(CreateTableWithBloomFilterPrefixes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto getPartitionConfig = [&]() {
+            return DescribePath(runtime, "/MyRoot/Table", true)
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        // Create table with bloom filter prefix and custom FPP from the start
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key1" Type: "Uint64"}
+            Columns { Name: "Key2" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key1", "Key2"]
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.02 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.02, 1e-9);
+        }
+
+        // Alter to add second prefix — should accumulate [1, 2]
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 2 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        }
+
+        // Disable — should clear all
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
     }
 
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
@@ -10484,351 +10788,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             AlterUserAttrs({{"__document_api_version", "1"}}));
     }
 
-    class TSchemaHelper {
-    private:
-        NScheme::TTypeRegistry TypeRegistry;
-        const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
-
-    public:
-        explicit TSchemaHelper(const TArrayRef<NKikimr::NScheme::TTypeInfo>& keyColumnTypes)
-            : KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
-        {}
-
-        TString FindSplitKey(const TVector<TVector<TString>>& histogramKeys, TVector<ui64> histogramValues = {}, ui64 total = 0) const {
-            if (histogramValues.empty() && !histogramKeys.empty()) {
-                for (size_t i = 0; i < histogramKeys.size(); i++) {
-                    histogramValues.push_back(i + 1);
-                }
-                total = histogramKeys.size() + 1;
-            }
-
-            NKikimrTableStats::THistogram histogram = FillHistogram(histogramKeys, histogramValues);
-            TSerializedCellVec splitKey = ChooseSplitKeyByHistogram(histogram, total, KeyColumnTypes);
-            return PrintKey(splitKey);
-        }
-
-    private:
-        NKikimr::TSerializedCellVec MakeCells(const TVector<TString>& tuple) const {
-            UNIT_ASSERT(tuple.size() <= KeyColumnTypes.size());
-            TSmallVec<NKikimr::TCell> cells;
-
-            for (size_t i = 0; i < tuple.size(); ++i) {
-                if (tuple[i] == "NULL") {
-                    cells.push_back(NKikimr::TCell());
-                } else {
-                    switch (KeyColumnTypes[i].GetTypeId()) {
-#define ADD_CELL_FROM_STRING(ydbType, cppType) \
-                    case NKikimr::NScheme::NTypeIds::ydbType: { \
-                        cppType val = FromString<cppType>(tuple[i]); \
-                        cells.push_back(NKikimr::TCell((const char*)&val, sizeof(val))); \
-                        break; \
-                    }
-
-                    ADD_CELL_FROM_STRING(Bool, bool);
-
-                    ADD_CELL_FROM_STRING(Uint8, ui8);
-                    ADD_CELL_FROM_STRING(Int8, i8);
-                    ADD_CELL_FROM_STRING(Uint16, ui16);
-                    ADD_CELL_FROM_STRING(Int16, i16);
-                    ADD_CELL_FROM_STRING(Uint32, ui32);
-                    ADD_CELL_FROM_STRING(Int32, i32);
-                    ADD_CELL_FROM_STRING(Uint64, ui64);
-                    ADD_CELL_FROM_STRING(Int64, i64);
-
-                    ADD_CELL_FROM_STRING(Double, double);
-                    ADD_CELL_FROM_STRING(Float, float);
-
-                    case NKikimr::NScheme::NTypeIds::String:
-                    case NKikimr::NScheme::NTypeIds::Utf8: {
-                        cells.push_back(NKikimr::TCell(tuple[i].data(), tuple[i].size()));
-                        break;
-                    }
-#undef ADD_CELL_FROM_STRING
-                    default:
-                        UNIT_ASSERT_C(false, "Unexpected type");
-                    }
-                }
-            }
-
-            return NKikimr::TSerializedCellVec(cells);
-        }
-
-        NKikimrTableStats::THistogram FillHistogram(const TVector<TVector<TString>>& keys, const TVector<ui64>& values) const {
-            NKikimrTableStats::THistogram histogram;
-            for (auto i : xrange(keys.size())) {
-                TSerializedCellVec sk(MakeCells(keys[i]));
-                auto bucket = histogram.AddBuckets();
-                bucket->SetKey(sk.GetBuffer());
-                bucket->SetValue(values[i]);
-            }
-            return histogram;
-        }
-
-        TString PrintKey(const TSerializedCellVec& key) const {
-            return PrintKey(key.GetCells());
-        }
-
-        TString PrintKey(const TConstArrayRef<TCell>& cells) const {
-            return DbgPrintTuple(TDbTupleRef(KeyColumnTypes.data(), cells.data(), cells.size()), TypeRegistry);
-        }
-    };
-
-    Y_UNIT_TEST(SplitKey) {
-        TSmallVec<NScheme::TTypeInfo> keyColumnTypes = {
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32)
-        };
-
-        TSchemaHelper schemaHelper(keyColumnTypes);
-
-        {
-            TString splitKey = schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "3", "bbbbbbbb", "42" },
-                                                  { "5", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 3, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bbbbbbbb", "42" },
-                                                  { "1", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 1, Utf8 : bbbbbbbb, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "2", "cd", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "2", "g", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "1", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "2", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "1", "d", "42" },
-                                                  { "3", "e", "42" },
-                                                  { "3", "f", "42" },
-                                                  { "3", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "3", "e", "42" },
-                                                  { "3", "f", "42" },
-                                                  { "3", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "2", "a", "42" },
-                                                  { "2", "b", "42" },
-                                                  { "2", "c", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "3", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : c, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "2", "aaa", "1" },
-                                                  { "2", "aaa", "2" },
-                                                  { "2", "aaa", "3" },
-                                                  { "2", "aaa", "4" },
-                                                  { "2", "aaa", "5" },
-                                                  { "2", "bbb", "1" },
-                                                  { "2", "bbb", "2" },
-                                                  { "3", "ccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : bbb, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({});
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  53,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  25,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  75,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  24,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  76,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  1,
-                                                  2,
-                                                  3,
-                                                  4,
-                                                  5,
-                                                  6,
-                                                  7,
-                                                  8,
-                                                  9
-                                              }, 10);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 4, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  1,
-                                                  2,
-                                                  3,
-                                                  4,
-                                                  5,
-                                                  6,
-                                                  30,
-                                                  40,
-                                                  70
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 7, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  30,
-                                                  40,
-                                                  70,
-                                                  90,
-                                                  91,
-                                                  92,
-                                                  93,
-                                                  94,
-                                                  95
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 1, Utf8 : NULL, Uint32 : NULL)");
-        }
-    }
-
     Y_UNIT_TEST(ListNotCreatedDirCase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -11707,7 +11666,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(TopicWithAutopartitioningReserveSize) {
         TTestEnvOptions opts;
-        opts.EnableTopicSplitMerge(true);
 
         TTestBasicRuntime runtime;
 

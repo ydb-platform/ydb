@@ -83,6 +83,7 @@
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
@@ -106,6 +107,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
@@ -1403,7 +1405,7 @@ namespace Tests {
 
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
                 FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
-                auto pqGateway = NKqp::MakePqGateway(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
+                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
                     .ActorSystem = Runtime->GetActorSystem(nodeIdx),
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
@@ -1418,12 +1420,11 @@ namespace Tests {
                     queryServiceConfig.GetYt(),
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
                     queryServiceConfig.GetSolomon(),
-                    Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory,
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? Settings->PqGateway : pqGateway,
+                    Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
                     actorSystemPtr,
                     FederatedQuerySetupDriver_);
             }
@@ -1469,6 +1470,7 @@ namespace Tests {
         }
 
         {
+            Runtime->GetAppData(nodeIdx).SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
             IActor* longTxService = NLongTxService::CreateLongTxService();
             TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx, userPoolId);
             Runtime->RegisterService(NLongTxService::MakeLongTxServiceID(Runtime->GetNodeId(nodeIdx)), longTxServiceId, nodeIdx);
@@ -1493,7 +1495,10 @@ namespace Tests {
             Runtime->RegisterService(NIcNodeCache::CreateICNodesInfoCacheServiceId(), icCacheId, nodeIdx);
         }
         {
-            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
+            TString endpoint = "localhost:" + ToString(Settings->GrpcPort);
+            auto driverConfig = NYdb::TDriverConfig()
+                .SetEndpoint(endpoint);
+
             if (!Driver) {
                 Driver.Reset(new NYdb::TDriver(driverConfig));
             }
@@ -1827,11 +1832,6 @@ namespace Tests {
 
     const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() {
         return Runtime->GetAppData().FunctionRegistry;
-    }
-
-    const NYdb::TDriver& TServer::GetDriver() const {
-        Y_ABORT_UNLESS(Driver);
-        return *Driver;
     }
 
     const NYdbGrpc::TGRpcServer& TServer::GetGRpcServer() const {

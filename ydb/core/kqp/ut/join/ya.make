@@ -3,9 +3,10 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(200)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -32,7 +33,6 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/digest
 )
-
 
 DATA (
     arcadia/ydb/core/kqp/ut/join

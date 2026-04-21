@@ -14,7 +14,8 @@ static const TVector<TColumn> AttributesColumns = {
     TColumn("DlqName",                   NScheme::NTypeIds::Utf8),
     TColumn("DlqArn",                    NScheme::NTypeIds::Utf8),
     TColumn("MaxReceiveCount",           NScheme::NTypeIds::Uint64),
-    TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64)};
+    TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64),
+    TColumn("TopicCreated",              NScheme::NTypeIds::Bool)};
 
 static const TVector<TColumn> StateColumns = {
     TColumn("State",                     NScheme::NTypeIds::Uint64, true),

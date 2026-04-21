@@ -3,6 +3,7 @@
 #include "raw_requests.h"
 #include "rpc_parameters_serialization.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
@@ -13,16 +14,58 @@
 
 #include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
+
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+
+#include <yt/yt/core/http/client.h>
+#include <yt/yt/core/http/config.h>
+#include <yt/yt/core/http/http.h>
+#include <yt/yt/core/https/client.h>
+#include <yt/yt/core/https/config.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/yt/yson_string/string.h>
 
 namespace NYT::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+void CheckError(const TString& requestId, NHttp::IResponsePtr response)
+{
+    if (const auto* ytError = response->GetHeaders()->Find("X-YT-Error")) {
+        TYtError error;
+        error.ParseFrom(*ytError);
+
+        TErrorResponse errorResponse(std::move(error), requestId);
+        if (errorResponse.IsOk()) {
+            return;
+        }
+
+        if (TExpectedErrorGuard::IsErrorExpected(errorResponse)) {
+            YT_LOG_INFO("Received expected error, RSP %v - HTTP %v - %v",
+                requestId,
+                response->GetStatusCode(),
+                errorResponse.AsStrBuf());
+        } else {
+            YT_LOG_ERROR("RSP %v - HTTP %v - %v",
+                requestId,
+                response->GetStatusCode(),
+                errorResponse.AsStrBuf());
+        }
+
+        ythrow errorResponse;
+    }
+}
+
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -265,14 +308,48 @@ TTransactionId THttpRawClient::StartTransaction(
 
 void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
 {
-    TMutationId mutationId;
-    THttpHeader header("POST", "ping_tx");
-    header.MergeParameters(NRawClient::SerializeParamsForPingTx(transactionId));
-    TRequestConfig requestConfig;
-    requestConfig.HttpConfig = NHttpClient::THttpConfig{
-        .SocketTimeout = Context_.Config->PingTimeout
-    };
-    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+    std::call_once(PingClientInitOnceFlag_, [this] () {
+        InitPingClient();
+    });
+
+    auto url = TString::Join(Context_.UseTLS ? "https://" : "http://", Context_.ServerName, "/api/", Context_.Config->ApiVersion, "/ping_tx");
+    auto headers = New<NHttp::THeaders>();
+    auto requestId = CreateGuidAsString();
+
+    headers->Add("Host", url);
+    headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
+
+    if (const auto& serviceTicketAuth = Context_.ServiceTicketAuth) {
+        const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
+        headers->Add("X-Ya-Service-Ticket", serviceTicket);
+    } else if (const auto& token = Context_.Token; !token.empty()) {
+        headers->Add("Authorization", "OAuth " + token);
+    }
+
+    headers->Add("Transfer-Encoding", "chunked");
+    headers->Add("X-YT-Correlation-Id", requestId);
+    headers->Add("X-YT-Header-Format", "<format=text>yson");
+    headers->Add("Content-Encoding", "identity");
+    headers->Add("Accept-Encoding", "identity");
+
+    TNode node;
+    node["transaction_id"] = GetGuidAsString(transactionId);
+    auto strParams = NodeToYsonString(node);
+
+    YT_LOG_DEBUG("REQ %v - sending request (HostName: %v; Method POST %v; X-YT-Parameters (sent in body): %v)",
+        requestId,
+        Context_.ServerName,
+        url,
+        strParams);
+
+    auto response = NConcurrency::WaitFor(PingHttpClient_->Post(url, TSharedRef::FromString(strParams), headers))
+        .ValueOrThrow();
+    CheckError(requestId, response);
+
+    YT_LOG_DEBUG("RSP %v - received response %v bytes. (%v)",
+        requestId,
+        response->ReadAll().size(),
+        strParams);
 }
 
 void THttpRawClient::AbortTransaction(
@@ -555,7 +632,7 @@ IFileReaderPtr THttpRawClient::GetJobTrace(
     return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFile(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TFileReaderOptions& options)
@@ -750,7 +827,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteTable(
     return NRawClient::WriteTable(Context_, transactionId, path, format, options);
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TFormat& format,
@@ -777,7 +854,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
     return NRawClient::WriteFile(Context_, transactionId, path, options);
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadTablePartition(
     const TString& cookie,
     const TFormat& format,
     const TTablePartitionReaderOptions& options)
@@ -795,7 +872,7 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadBlobTable(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TKey& key,
@@ -1168,6 +1245,22 @@ IRawClientPtr THttpRawClient::Clone()
 IRawClientPtr THttpRawClient::Clone(const TClientContext& context)
 {
     return ::MakeIntrusive<THttpRawClient>(context);
+}
+
+void THttpRawClient::InitPingClient() {
+    auto httpPoller = NConcurrency::CreateThreadPoolPoller(
+        Context_.Config->AsyncHttpClientThreads,
+        "tx_http_client_poller");
+
+    if (Context_.UseTLS) {
+        auto httpsClientConfig = NYT::New<NHttps::TClientConfig>();
+        httpsClientConfig->MaxIdleConnections = 16;
+        PingHttpClient_ = NHttps::CreateClient(std::move(httpsClientConfig), std::move(httpPoller));
+    } else {
+        auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
+        httpClientConfig->MaxIdleConnections = 16;
+        PingHttpClient_ = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

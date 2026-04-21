@@ -13,8 +13,7 @@ message TServiceDiscoveryEndpointsConfig
 }
 
 // This is union of master connection config and master roles for compatibility with old masters.
-// TODO(cherepashka): rename into TMasterCellConnectionConfig.
-message TCellDirectoryItem
+message TMasterCellConnectionConfig
 {
     repeated uint32 roles = 2; // EMasterCellRole(s)
 
@@ -63,7 +62,7 @@ message TCellDirectoryItem
 
 message TCellDirectory
 {
-    repeated TCellDirectoryItem items = 1;
+    repeated TMasterCellConnectionConfig items = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

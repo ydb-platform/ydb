@@ -75,6 +75,7 @@ static void MultiTenantSDK(bool asyncDiscovery) {
         TDriverConfig()
             .SetAuthToken("badguy@builtin")
             .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
+            .SetDatabase("/Root")
             .SetEndpoint(location)
             .SetDiscoveryMode(asyncDiscovery ? EDiscoveryMode::Async : EDiscoveryMode::Sync));
 
@@ -92,7 +93,7 @@ static void MultiTenantSDK(bool asyncDiscovery) {
     NYdb::NTable::TTableClient clientbad2(driver, settings2);
 */
     const TString sql = R"__(
-        CREATE TABLE `Root/Test` (
+        CREATE TABLE `/Root/Test` (
             Key Uint32,
             Value String,
             PRIMARY KEY (Key)
@@ -692,13 +693,14 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             TDriverConfig()
                 .SetAuthToken("root@builtin")
                 .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
+                .SetDatabase("/Root")
                 .SetEndpoint(location));
 
         {
             auto session = CreateSession(connection, "root@builtin");
             {
                 auto status = session.ExecuteSchemeQuery(R"__(
-                CREATE TABLE `Root/Test` (
+                CREATE TABLE `/Root/Test` (
                     Key Uint32,
                     Value String,
                     PRIMARY KEY (Key)
@@ -709,7 +711,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             }
             {
                 auto scheme = NYdb::NScheme::TSchemeClient(connection);
-                auto status = scheme.ModifyPermissions("Root/Test",
+                auto status = scheme.ModifyPermissions("/Root/Test",
                     NYdb::NScheme::TModifyPermissionsSettings()
                         .AddGrantPermissions(
                             NYdb::NScheme::TPermissions("pupkin@builtin", {"ydb.tables.modify"})
@@ -726,7 +728,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             }
             {
                 auto scheme = NYdb::NScheme::TSchemeClient(connection);
-                auto status = scheme.DescribePath("Root/Test").ExtractValueSync();
+                auto status = scheme.DescribePath("/Root/Test").ExtractValueSync();
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
                 UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
                 auto entry = status.GetEntry();
@@ -745,7 +747,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
             {
                 auto status = session.ExecuteDataQuery(R"__(
-                    SELECT * FROM `Root/Test`;
+                    SELECT * FROM `/Root/Test`;
                 )__",TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
@@ -766,27 +768,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = server.GetPort();
-
-        { // no db
-            TString location = TStringBuilder() << "localhost:" << grpc;
-            auto driver = NYdb::TDriver(
-                TDriverConfig()
-                    .SetEndpoint(location));
-
-            NYdb::NTable::TClientSettings settings;
-            settings.AuthToken(clusterAdminToken);
-
-            NYdb::NTable::TTableClient client(driver, settings);
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
-                Cerr << "Call\n";
-                return client.CreateSession().ExtractValueSync();
-            };
-            auto status = client.RetryOperationSync(call);
-
-            // KIKIMR-14509 - reslore old behaviour allow requests without database for storage nodes
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-
-        }
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = NYdb::TDriver(
             TDriverConfig()
@@ -2842,184 +2823,375 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_VALUES_EQUAL(str, "[[[111u];[1u];[\"One\"]]]");
     }
 
+    Y_UNIT_TEST(AlterTableCompact) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableForcedCompactions(true);
+
+        NYdb::TDriver driver(
+            TDriverConfig()
+                .SetEndpoint(
+                    TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
+        );
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TCompactionOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0); // No operations in progress
+        }
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"___(
+                CREATE TABLE `/Root/Test` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    PARTITION_AT_KEYS = (250, 500, 750)
+                );
+            )___").ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result = session.ExecuteDataQuery(R"___(
+                UPSERT INTO `/Root/Test` (Key, Value)
+                    VALUES
+                        (100, "value_1"),
+                        (400, "value_2"),
+                        (700, "value_3"),
+                        (1000, "value_4");
+            )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 0));
+
+            auto result = session.AlterTable("/Root/Test", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 2));
+
+            auto result = session.AlterTable("", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+
+            NYdb::NTable::TClientSettings clientSettings;
+            clientSettings.AuthToken("badguy@builtin");
+            NYdb::NTable::TTableClient clientbad(driver, clientSettings);
+            auto getSessionResult = clientbad.CreateSession().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+            auto session = getSessionResult.GetSession();
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 2));
+
+            auto result = session.AlterTable("/Root/Test", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Access denied for# badguy@builtin, path# /Root/Test, access# DescribeSchema|AlterSchema");
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 1));
+
+            auto result = session.AlterTable("/Root/Test", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 3));
+
+            auto result = session.AlterTable("/Root/WrongPath", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TCompactionOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            auto op = result.GetList()[0];
+            UNIT_ASSERT_VALUES_EQUAL(op.Ready(), true);
+            UNIT_ASSERT_VALUES_EQUAL(op.Status().GetStatus(), EStatus::SUCCESS);
+            auto meta = op.Metadata();
+            UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::ECompactState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100, 0.001);
+
+            UNIT_ASSERT_VALUES_EQUAL(meta.Path, "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(meta.Cascade, false);
+            UNIT_ASSERT_VALUES_EQUAL(meta.MaxInFlight, 1);
+            UNIT_ASSERT_VALUES_EQUAL(meta.Total, 4);
+            UNIT_ASSERT_VALUES_EQUAL(meta.Done, 4);
 
 
-    Y_UNIT_TEST(QueryStats) {
-        for (bool useSink : {false, true}) {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-            TKikimrWithGrpcAndRootSchema server(appConfig);
+            auto result2 = operationClient.Get<NYdb::NTable::TCompactionOperation>(result.GetList()[0].Id()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.Status().GetStatus(), EStatus::SUCCESS, result2.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().State, NYdb::NTable::ECompactState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(result2.Metadata().Progress, 100, 0.001);
 
-            NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-            NYdb::NTable::TTableClient client(driver);
-
-            auto sessionResult = client.CreateSession().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
-            auto session = sessionResult.GetSession();
-
-            const ui32 SHARD_COUNT = 4;
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Path, "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Cascade, false);
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().MaxInFlight, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Total, 4);
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Done, 4);
 
             {
-                auto tableBuilder = client.GetTableBuilder();
-                tableBuilder
-                    .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                    .AddNullableColumn("Value", EPrimitiveType::Utf8);
-                tableBuilder.SetPrimaryKeyColumn("Key");
-
-                auto tableSettings = NYdb::NTable::TCreateTableSettings().PartitioningPolicy(
-                    NYdb::NTable::TPartitioningPolicy().UniformPartitions(SHARD_COUNT));
-
-                auto result = session.CreateTable("/Root/Foo", tableBuilder.Build(), tableSettings).ExtractValueSync();
-                UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                // Cancel already finished operation do nothing
+                auto resultOp = operationClient.Cancel(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::PRECONDITION_FAILED, resultOp.GetIssues().ToString());
             }
 
-            for (bool returnStats : {false, true}) {
-                NYdb::NTable::TExecDataQuerySettings execSettings;
-                if (returnStats) {
-                    execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
-                }
-                {
-                    auto query = "UPSERT INTO `/Root/Foo` (Key, Value) VALUES (0, 'aa');";
-                    auto result = session.ExecuteDataQuery(
-                                query,
-                                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-
-                    if (!returnStats) {
-                        UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
-                    } else {
-                        // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
-                        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                        if (stats.query_phases().size() == 1) {
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
-                            UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 1);
-                            UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
-                            UNIT_ASSERT(stats.total_duration_us() > 0);
-                        } else {
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Foo");
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
-                            UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 1);
-                            UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
-                            UNIT_ASSERT(stats.total_duration_us() > 0);
-                        }
-                    }
-                }
-
-                {
-                    auto query = "UPSERT INTO `/Root/Foo` (Key, Value) VALUES (1, Utf8('bb')), (0xffffffff, Utf8('cc'));";
-                    auto result = session.ExecuteDataQuery(
-                                query,
-                                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-
-                    if (!returnStats) {
-                        UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
-                    } else {
-                        // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
-                        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), useSink ? 1 : 2);
-                        const auto idx = stats.query_phases().size() - 1;
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/Foo");
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 2);
-                        UNIT_ASSERT(stats.query_phases(idx).table_access(0).updates().bytes() > 1);
-                        UNIT_ASSERT(stats.query_phases(idx).cpu_time_us() > 0);
-                        UNIT_ASSERT(stats.total_duration_us() > 0);
-                    }
-                }
-
-                {
-                    auto query = "SELECT * FROM `/Root/Foo`;";
-                    auto result = session.ExecuteDataQuery(
-                                query,
-                                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-
-                    if (!returnStats) {
-                        UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
-                    } else {
-                        // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
-                        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
-                        UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 3);
-                        UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
-                        UNIT_ASSERT(stats.total_duration_us() > 0);
-                    }
-                }
-
-                {
-                    auto query = "SELECT * FROM `/Root/Foo` WHERE Key == 1;";
-                    auto result = session.ExecuteDataQuery(
-                                query,
-                                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-
-                    if (!returnStats) {
-                        UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
-                    } else {
-                        // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
-                        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                        UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 1);
-                        UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
-                        UNIT_ASSERT(stats.total_duration_us() > 0);
-                    }
-                }
-
-                {
-                    auto query = "DELETE FROM `/Root/Foo` WHERE Key > 0;";
-                    auto result = session.ExecuteDataQuery(
-                                query,
-                                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-
-                    if (!returnStats) {
-                        UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
-                    } else {
-                        // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
-                        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-                        int idx = 0;
-                        if (useSink) {
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-                            idx = 0;
-                        } else if (stats.query_phases().size() == 2) {
-                            idx = 0;
-                        } else {
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                            UNIT_ASSERT(stats.query_phases(0).table_access().empty());
-                            idx = 1;
-                        }
-
-                        // 1st phase: find matching rows
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/Foo");
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 2);
-                        if (useSink) {
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).deletes().rows(), 2);
-                        }
-                        UNIT_ASSERT(stats.query_phases(idx).cpu_time_us() > 0);
-                        // 2nd phase: delete found rows
-                        if (!useSink) {
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access().size(), 1);
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access(0).name(), "/Root/Foo");
-                            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access(0).deletes().rows(), 2);
-                            UNIT_ASSERT(stats.query_phases(idx + 1).cpu_time_us() > 0);
-                        }
-                        UNIT_ASSERT(stats.total_duration_us() > 0);
-                    }
-                }
+            {
+                auto resultOp = operationClient.Forget(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::SUCCESS, resultOp.GetIssues().ToString());
             }
 
-            sessionResult = client.CreateSession().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
+            {
+                auto resultOp = operationClient.Get<NYdb::NTable::TCompactionOperation>(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.Status().GetStatus(), EStatus::NOT_FOUND, resultOp.Status().GetIssues().ToString());
+            }
         }
+    }
+
+    Y_UNIT_TEST(AlterTableCompactAsyncOp) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableForcedCompactions(true);
+
+        NYdb::TDriver driver(
+            TDriverConfig()
+                .SetEndpoint(
+                    TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
+        );
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TCompactionOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0); // No operations in progress
+        }
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"___(
+                CREATE TABLE `/Root/Test` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    PARTITION_AT_KEYS = (250, 500, 750)
+                );
+            )___").ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result = session.ExecuteDataQuery(R"___(
+                UPSERT INTO `/Root/Test` (Key, Value)
+                    VALUES
+                        (100, "value_1"),
+                        (400, "value_2"),
+                        (700, "value_3"),
+                        (1000, "value_4");
+            )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 3));
+
+            auto result = session.AlterTableLong("/Root/Test", settings).ExtractValueSync();
+
+            // Compact is async operation
+            UNIT_ASSERT_C(!result.Ready(), result.Status().GetIssues().ToString());
+
+            NYdb::NOperation::TOperationClient operationClient(driver);
+
+            for (;;) {
+                auto getResult = operationClient.Get<NYdb::NTable::TCompactionOperation>(result.Id()).GetValueSync();
+                if (getResult.Ready()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(getResult.Status().GetStatus(), EStatus::SUCCESS, getResult.Status().GetIssues().ToString());
+                    break;
+                } else {
+                    Sleep(TDuration::MilliSeconds(100));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(QueryStats) {
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+
+        auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
+        auto session = sessionResult.GetSession();
+
+        const ui32 SHARD_COUNT = 4;
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint32)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+
+            auto tableSettings = NYdb::NTable::TCreateTableSettings().PartitioningPolicy(
+                NYdb::NTable::TPartitioningPolicy().UniformPartitions(SHARD_COUNT));
+
+            auto result = session.CreateTable("/Root/Foo", tableBuilder.Build(), tableSettings).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        for (bool returnStats : {false, true}) {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            if (returnStats) {
+                execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+            }
+            {
+                auto query = "UPSERT INTO `/Root/Foo` (Key, Value) VALUES (0, 'aa');";
+                auto result = session.ExecuteDataQuery(
+                            query,
+                            TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+
+                if (!returnStats) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
+                } else {
+                    // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                    if (stats.query_phases().size() == 1) {
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+                        UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 1);
+                        UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
+                        UNIT_ASSERT(stats.total_duration_us() > 0);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Foo");
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+                        UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 1);
+                        UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
+                        UNIT_ASSERT(stats.total_duration_us() > 0);
+                    }
+                }
+            }
+
+            {
+                auto query = "UPSERT INTO `/Root/Foo` (Key, Value) VALUES (1, Utf8('bb')), (0xffffffff, Utf8('cc'));";
+                auto result = session.ExecuteDataQuery(
+                            query,
+                            TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+
+                if (!returnStats) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
+                } else {
+                    // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                    const auto idx = stats.query_phases().size() - 1;
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 2);
+                    UNIT_ASSERT(stats.query_phases(idx).table_access(0).updates().bytes() > 1);
+                    UNIT_ASSERT(stats.query_phases(idx).cpu_time_us() > 0);
+                    UNIT_ASSERT(stats.total_duration_us() > 0);
+                }
+            }
+
+            {
+                auto query = "SELECT * FROM `/Root/Foo`;";
+                auto result = session.ExecuteDataQuery(
+                            query,
+                            TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+
+                if (!returnStats) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
+                } else {
+                    // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+                    UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 3);
+                    UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
+                    UNIT_ASSERT(stats.total_duration_us() > 0);
+                }
+            }
+
+            {
+                auto query = "SELECT * FROM `/Root/Foo` WHERE Key == 1;";
+                auto result = session.ExecuteDataQuery(
+                            query,
+                            TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+
+                if (!returnStats) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
+                } else {
+                    // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+                    UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 1);
+                    UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
+                    UNIT_ASSERT(stats.total_duration_us() > 0);
+                }
+            }
+
+            {
+                auto query = "DELETE FROM `/Root/Foo` WHERE Key > 0;";
+                auto result = session.ExecuteDataQuery(
+                            query,
+                            TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+
+                if (!returnStats) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStats().has_value(), false);
+                } else {
+                    // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
+                    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+                    int idx = 0;
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+
+                    // 1st phase: find matching rows
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).deletes().rows(), 2);
+
+                    UNIT_ASSERT(stats.query_phases(idx).cpu_time_us() > 0);
+                    // 2nd phase: delete found rows
+                    UNIT_ASSERT(stats.total_duration_us() > 0);
+                }
+            }
+        }
+
+        sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
     }
 
     Y_UNIT_TEST(CopyTables) {

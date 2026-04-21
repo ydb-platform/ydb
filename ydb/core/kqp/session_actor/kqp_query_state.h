@@ -70,6 +70,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
@@ -169,6 +170,7 @@ public:
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    NWilson::TTraceId UserTraceId;
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
     bool CompilationRunning = false;
@@ -415,6 +417,17 @@ public:
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
+    TVector<NKikimr::TTableId> GetTableIdsForSnapshot() const {
+        if (!Commit) {
+            return {};
+        }
+        TVector<NKikimr::TTableId> tableIds;
+        for (const auto& [tableId, _] : TableVersions) {
+            tableIds.push_back(tableId);
+        }
+        return tableIds;
+    }
+
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         if (!Commit) {
@@ -462,11 +475,12 @@ public:
             return false;
         }
 
-        if (TxCtx->Locks.GetLockTxId() && !TxCtx->Locks.Broken()) {
+        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }
 
-        if (TxCtx->Locks.Broken()) {
+        if (TxCtx->TxManager->GetLockIssue()) {
             YQL_ENSURE(TxCtx->GetSnapshot().IsValid() && !TxCtx->TxHasEffects());
             return false;  // Do not acquire locks after first lock issue
         }

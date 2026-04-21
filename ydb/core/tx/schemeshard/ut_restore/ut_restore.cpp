@@ -29,10 +29,15 @@
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/hook/hook.h>
 
+#include <util/folder/path.h>
+#include <util/folder/tempdir.h>
+#include <util/stream/file.h>
+
 #include <contrib/libs/double-conversion/double-conversion/ieee.h>
 #include <contrib/libs/zstd/include/zstd.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
@@ -345,7 +350,12 @@ namespace {
     THashMap<TString, TString> ConvertTestData(const THashMap<TString, TTestDataWithScheme>& data) {
         THashMap<TString, TString> result;
 
-        for (const auto& [prefix, item] : data) {
+        for (const auto& [rawPrefix, item] : data) {
+            TString prefix = rawPrefix;
+            if (!prefix.empty() && !prefix.StartsWith('/')) {
+                prefix = "/" + prefix;
+            }
+
             bool withChecksum = item.Metadata.Data != R"({"version": 0})";
 
             auto metadataKey = prefix + "/metadata.json";
@@ -3521,6 +3531,104 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ShouldSucceedOnIndexedTable(1, "");
     }
 
+    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalBloomIndexes) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapBloomTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_bloom"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        FalsePositiveProbability: 0.01
+                        ColumnIds: 2
+                    }
+                }
+                Indexes {
+                    Id: 2
+                    Name: "idx_ngram"
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        NGrammSize: 3
+                        FalsePositiveProbability: 0.01
+                        CaseSensitive: true
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto assertBloomIndexes = [&](const TString& path) {
+            const auto d = DescribePrivatePath(runtime, path, true, true);
+            UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
+            const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+            THashSet<TString> found;
+            for (const auto& ix : schema.GetIndexes()) {
+                found.insert(ix.GetName());
+            }
+
+            UNIT_ASSERT_C(found.contains("idx_bloom"), "missing idx_bloom on " << path);
+            UNIT_ASSERT_C(found.contains("idx_ngram"), "missing idx_ngram on " << path);
+        };
+
+        assertBloomIndexes("/MyRoot/OlapBloomTable");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OlapBloomTable"
+                destination_prefix: "OlapBloomImportPrefix"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, exportTxId);
+        TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "OlapBloomImportPrefix"
+                destination_path: "/MyRoot/OlapBloomImported"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        assertBloomIndexes("/MyRoot/OlapBloomImported");
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnManyTables) {
         TTestBasicRuntime runtime;
 
@@ -6343,7 +6451,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions{}.EnableTopicMessageLevelParallelism(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -6397,6 +6505,24 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 Consumers {
                     Name: "consumer_2"
                     Important: false
+                    Codec {
+                        Ids: 0
+                        Ids: 1
+                        Ids: 2
+                    }
+                }
+                Consumers {
+                    Name: "consumer_3"
+                    Important: false
+                    Type: CONSUMER_TYPE_MLP
+                    KeepMessageOrder: true
+                    DefaultProcessingTimeoutSeconds: 30
+                    DefaultDelayMessageTimeMs: 5000
+                    DefaultReceiveMessageWaitTimeMs: 3000
+                    DeadLetterPolicyEnabled: true
+                    DeadLetterPolicy: DEAD_LETTER_POLICY_MOVE
+                    MaxProcessingAttempts: 42
+                    DeadLetterQueue: "/MyRoot/dlq_for_topic_full_test"
                     Codec {
                         Ids: 0
                         Ids: 1
@@ -6496,7 +6622,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleDownPartitionWriteSpeedThresholdPercent(), 31);
 
         // Check consumers
-        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 3);
 
         const auto& consumer1 = config.GetConsumers(0);
         UNIT_ASSERT_VALUES_EQUAL(consumer1.GetName(), "consumer_1");
@@ -6515,6 +6641,28 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(0), 0);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(1), 1);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(2), 2);
+
+        const auto& consumer3 = config.GetConsumers(2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetName(), "consumer_3");
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetImportant(), false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(consumer3.GetType()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetKeepMessageOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDefaultProcessingTimeoutSeconds(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDefaultDelayMessageTimeMs(), 5000);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDefaultReceiveMessageWaitTimeMs(), 3000);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDeadLetterPolicyEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(consumer3.GetDeadLetterPolicy()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetMaxProcessingAttempts(), 42u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDeadLetterQueue(), "/MyRoot/dlq_for_topic_full_test");
+        UNIT_ASSERT(consumer3.HasCodec());
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().IdsSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().GetIds(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().GetIds(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().GetIds(2), 2);
 
         // Check partition count
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 3);
@@ -7552,27 +7700,102 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
-    constexpr TStringBuf DefaultImportSettings = R"(
-        ImportFromS3Settings {
-            endpoint: "localhost:%d"
-            scheme: HTTP
-            items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
+    struct TImportItem {
+        TString SourcePrefix;
+        TString DestinationPath;
+    };
+
+    static const TVector<TImportItem>& DefaultImportItems() {
+        static const TVector<TImportItem> items = {{"", "/MyRoot/Table"}};
+        return items;
+    }
+
+    TString MakeS3ImportRequestTpl(const TVector<TImportItem>& items, const TString& extraSettings = "") {
+        TStringBuilder sb;
+        sb << "ImportFromS3Settings { endpoint: \"localhost:%d\" scheme: HTTP ";
+        if (extraSettings) sb << extraSettings << " ";
+        for (const auto& item : items) {
+            sb << "items { source_prefix: \"" << item.SourcePrefix
+               << "\" destination_path: \"" << item.DestinationPath << "\" } ";
+        }
+        sb << "}";
+        return sb;
+    }
+
+    TString MakeFsImportRequest(
+        const TString& basePath,
+        const TVector<TImportItem>& items,
+        const TString& extraSettings = "")
+    {
+        TStringBuilder sb;
+        sb << "ImportFromFsSettings { base_path: \"" << basePath << "\" ";
+        if (extraSettings) sb << extraSettings << " ";
+        for (const auto& item : items) {
+            sb << "items { source_path: \"" << item.SourcePrefix
+               << "\" destination_path: \"" << item.DestinationPath << "\" } ";
+        }
+        sb << "}";
+        return sb;
+    }
+
+    void WriteFilesToFs(const TString& basePath, const THashMap<TString, TString>& data) {
+        for (const auto& [key, value] : data) {
+            TStringBuf relKey(key);
+            while (relKey.StartsWith('/')) {
+                relKey.Skip(1);
+            }
+            TFsPath filePath = TFsPath(basePath) / TString(relKey);
+            filePath.Parent().MkDirs();
+            TFileOutput out(filePath.GetPath());
+            out.Write(value);
+            out.Finish();
+        }
+    }
+
+    template <bool IsFs>
+    struct TImportEnv {
+        TMaybe<TPortManager> PortManager;
+        TMaybe<TS3Mock> S3MockInstance;
+        TMaybe<TTempDir> TempDir;
+        TString Request;
+
+        TImportEnv(
+            const THashMap<TString, TString>& data,
+            const TVector<TImportItem>& items,
+            const TString& extraSettings = "")
+        {
+            if constexpr (IsFs) {
+                TempDir.ConstructInPlace();
+                WriteFilesToFs(TempDir->Path(), data);
+                Request = MakeFsImportRequest(TempDir->Path(), items, extraSettings);
+            } else {
+                PortManager.ConstructInPlace();
+                ui16 port = PortManager->GetPort();
+                S3MockInstance.ConstructInPlace(data, TS3Mock::TSettings(port));
+                UNIT_ASSERT(S3MockInstance->Start());
+                Request = Sprintf(MakeS3ImportRequestTpl(items, extraSettings).c_str(), port);
             }
         }
-    )";
 
-    void ShouldSucceed(TTestWithReboots& t, const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
+        void SetupRuntime(TTestActorRuntime& runtime) {
+            if constexpr (IsFs) {
+                runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            }
+        }
+    };
 
+    template <bool IsFs>
+    void ShouldSucceed(
+        TTestWithReboots& t,
+        const THashMap<TString, TTypedScheme>& schemes,
+        const TVector<TImportItem>& items = DefaultImportItems(),
+        const TString& extraSettings = "")
+    {
         THashMap<TString, TTestDataWithScheme> bucketContent(schemes.size());
         for (const auto& [prefix, typedScheme] : schemes) {
             bucketContent.emplace(prefix, GenerateTestData(typedScheme));
         }
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), items, extraSettings);
 
         const bool createdByQuery = AnyOf(schemes, [](const auto& scheme) {
             return scheme.second.Scheme.Contains("CREATE"); // Hack
@@ -7586,6 +7809,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
+                env.SetupRuntime(runtime);
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
@@ -7598,7 +7822,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
 
             const ui64 importId = ++t.TxId;
-            AsyncImport(runtime, importId, "/MyRoot", Sprintf(importSettings.data(), port));
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
             t.TestEnv->TestWaitNotification(runtime, importId);
 
             {
@@ -7611,22 +7835,13 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    void ShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
-        TTestWithReboots t;
-        ShouldSucceed(t, schemes, importSettings);
-    }
-
+    template <bool IsFs>
     void ShouldSucceed(TTestWithReboots& t, const TTypedScheme& scheme) {
-        ShouldSucceed(t, {{"", scheme}});
+        ShouldSucceed<IsFs>(t, {{"", scheme}});
     }
 
-    void ShouldSucceed(const TTypedScheme& scheme) {
-        TTestWithReboots t;
-        ShouldSucceed(t, {{"", scheme}});
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSimpleTable, 2, 1, false) {
-        ShouldSucceed(t, R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSimpleTable, 2, 1, false, IsFs) {
+        ShouldSucceed<IsFs>(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -7639,10 +7854,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnTableWithChecksum, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnTableWithChecksum, 2, 1, false, IsFs) {
         auto data = GenerateTestData(R"(
             columns {
               name: "key"
@@ -7655,19 +7867,19 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             primary_key: "key"
         )" , {{"a", 1}}, "", R"({"version": 1})");
 
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+        TImportEnv<IsFs> env(ConvertTestData(data), DefaultImportItems());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
 
+                env.SetupRuntime(runtime);
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
             }
 
             const ui64 importId = ++t.TxId;
-            AsyncImport(runtime, importId, "/MyRoot", Sprintf(DefaultImportSettings.data(), port));
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
             t.TestEnv->TestWaitNotification(runtime, importId);
 
             {
@@ -7680,10 +7892,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnBigCompressedTable, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnBigCompressedTable, 2, 1, false, IsFs) {
         auto data = GenerateTestData(R"(
             columns {
               name: "key"
@@ -7696,19 +7905,19 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             primary_key: "key"
         )" , {{TString(1'000'000, 'a'), 10}}, "", R"({"version": 1})", ECompressionCodec::Zstd);
 
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+        TImportEnv<IsFs> env(ConvertTestData(data), DefaultImportItems());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
 
+                env.SetupRuntime(runtime);
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
             }
 
             const ui64 importId = ++t.TxId;
-            AsyncImport(runtime, importId, "/MyRoot", Sprintf(DefaultImportSettings.data(), port));
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
             t.TestEnv->TestWaitNotification(runtime, importId);
 
             {
@@ -7721,8 +7930,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnIndexedTable, 2, 1, false) {
-        ShouldSucceed(t, R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnIndexedTable, 2, 1, false, IsFs) {
+        ShouldSucceed<IsFs>(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -7740,8 +7949,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleView, 2, 1, false) {
-        ShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleView, 2, 1, false, IsFs) {
+        ShouldSucceed<IsFs>(t,
             {
                 EPathTypeView,
                 R"(
@@ -7752,118 +7961,83 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTables, 2, 1, false) {
-        ShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnViewsAndTables, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
+                "/view",
                 {
-                    "/view",
-                    {
-                        EPathTypeView,
-                        R"(
-                            -- backup root: "/MyRoot"
-                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
-                        )"
-                    }
-                }, {
-                    "/table",
-                    {
-                        EPathTypeTable,
-                        R"(
-                            columns {
-                                name: "key"
-                                type { optional_type { item { type_id: UTF8 } } }
-                            }
-                            columns {
-                                name: "value"
-                                type { optional_type { item { type_id: UTF8 } } }
-                            }
-                            primary_key: "key"
-                        )"
-                    }
+                    EPathTypeView,
+                    R"(
+                        -- backup root: "/MyRoot"
+                        CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                    )"
                 }
-            }, R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: "view"
-                        destination_path: "/MyRoot/View"
-                    }
-                    items {
-                        source_prefix: "table"
-                        destination_path: "/MyRoot/Table"
-                    }
+            }, {
+                "/table",
+                {
+                    EPathTypeTable,
+                    R"(
+                        columns {
+                            name: "key"
+                            type { optional_type { item { type_id: UTF8 } } }
+                        }
+                        columns {
+                            name: "value"
+                            type { optional_type { item { type_id: UTF8 } } }
+                        }
+                        primary_key: "key"
+                    )"
                 }
-            )"
-        );
+            }
+        };
+        ShouldSucceed<IsFs>(t, schemes, {{"view", "/MyRoot/View"}, {"table", "/MyRoot/Table"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnDependentView, 2, 1, false) {
-        ShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnDependentView, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
+                "/DependentView",
                 {
-                    "/DependentView",
-                    {
-                        EPathTypeView,
-                        R"(
-                            -- backup root: "/MyRoot"
-                            CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
-                        )"
-                    }
-                }, {
-                    "/BaseView",
-                    {
-                        EPathTypeView,
-                        R"(
-                            -- backup root: "/MyRoot"
-                            CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
-                        )"
-                    }
+                    EPathTypeView,
+                    R"(
+                        -- backup root: "/MyRoot"
+                        CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
+                    )"
                 }
-            }, R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: "DependentView"
-                        destination_path: "/MyRoot/DependentView"
-                    }
-                    items {
-                        source_prefix: "BaseView"
-                        destination_path: "/MyRoot/BaseView"
-                    }
+            }, {
+                "/BaseView",
+                {
+                    EPathTypeView,
+                    R"(
+                        -- backup root: "/MyRoot"
+                        CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
+                    )"
                 }
-            )"
-        );
+            }
+        };
+        ShouldSucceed<IsFs>(t, schemes, {
+            {"DependentView", "/MyRoot/DependentView"},
+            {"BaseView", "/MyRoot/BaseView"}
+        });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemView, 2, 1, false) {
-        ShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemView, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
+                "/partition_stats",
                 {
-                    "/partition_stats",
-                    {
-                        EPathTypeSysView,
-                        R"(
-                            sys_view_id: 1
-                            sys_view_name: "partition_stats"
-                        )"
-                    }
+                    EPathTypeSysView,
+                    R"(
+                        sys_view_id: 1
+                        sys_view_name: "partition_stats"
+                    )"
                 }
-            }, R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: "partition_stats"
-                        destination_path: "/MyRoot/.sys/partition_stats"
-                    }
-                }
-            )"
-        );
+            }
+        };
+        ShouldSucceed<IsFs>(t, schemes, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemViewWithPermissions, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemViewWithPermissions, 2, 1, false, IsFs) {
         const TString permissions = R"(
             actions {
                 change_owner: "user1@builtin"
@@ -7900,31 +8074,19 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             bucketContent.emplace(prefix, GenerateTestData(typedScheme, {}, permissions));
         }
 
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {
+            {"partition_stats", "/MyRoot/.sys/partition_stats"},
+        });
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                env.SetupRuntime(runtime);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
             }
 
-            const TString importRequest = Sprintf(R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: "partition_stats"
-                        destination_path: "/MyRoot/.sys/partition_stats"
-                    }
-                }
-            )", port);
-
-            AsyncImport(runtime, ++t.TxId, "/MyRoot", importRequest);
+            AsyncImport(runtime, ++t.TxId, "/MyRoot", env.Request);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -7937,16 +8099,18 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    void CancelShouldSucceed(TTestWithReboots& t, const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
+    template <bool IsFs>
+    void CancelShouldSucceed(
+        TTestWithReboots& t,
+        const THashMap<TString, TTypedScheme>& schemes,
+        const TVector<TImportItem>& items = DefaultImportItems(),
+        const TString& extraSettings = "")
+    {
         THashMap<TString, TTestDataWithScheme> bucketContent(schemes.size());
         for (const auto& [prefix, typedScheme] : schemes) {
             bucketContent.emplace(prefix, GenerateTestData(typedScheme));
         }
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), items, extraSettings);
 
         const bool createsViews = AnyOf(schemes, [](const auto& scheme) {
             return scheme.second.Type == EPathTypeView;
@@ -7959,6 +8123,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
+                env.SetupRuntime(runtime);
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -7968,7 +8133,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
 
             const ui64 importId = ++t.TxId;
-            AsyncImport(runtime, importId, "/MyRoot", Sprintf(importSettings.data(), port));
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
 
             t.TestEnv->ReliablePropose(runtime, CancelImportRequest(++t.TxId, "/MyRoot", importId), {
                 Ydb::StatusIds::SUCCESS,
@@ -7991,22 +8156,13 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    void CancelShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
-        TTestWithReboots t;
-        CancelShouldSucceed(t, schemes, importSettings);
-    }
-
+    template <bool IsFs>
     void CancelShouldSucceed(TTestWithReboots& t, const TTypedScheme& scheme) {
-        CancelShouldSucceed(t, {{"", scheme}});
+        CancelShouldSucceed<IsFs>(t, {{"", scheme}});
     }
 
-    void CancelShouldSucceed(const TTypedScheme& scheme) {
-        TTestWithReboots t;
-        CancelShouldSucceed(t, scheme);
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSimpleTable, 2, 1, false) {
-        CancelShouldSucceed(t, R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSimpleTable, 2, 1, false, IsFs) {
+        CancelShouldSucceed<IsFs>(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -8019,8 +8175,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnIndexedTable, 2, 1, false) {
-        CancelShouldSucceed(t, R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnIndexedTable, 2, 1, false, IsFs) {
+        CancelShouldSucceed<IsFs>(t, R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -8038,8 +8194,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleView, 2, 1, false) {
-        CancelShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleView, 2, 1, false, IsFs) {
+        CancelShouldSucceed<IsFs>(t,
             {
                 EPathTypeView,
                 R"(
@@ -8050,50 +8206,36 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnViewsAndTables, 2, 1, false) {
-        CancelShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnViewsAndTables, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
+                "/view",
                 {
-                    "/view",
-                    {
-                        EPathTypeView,
-                        R"(
-                            -- backup root: "/MyRoot"
-                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
-                        )"
-                    }
-                }, {
-                    "/table",
-                    {
-                        EPathTypeTable,
-                        R"(
-                            columns {
-                                name: "key"
-                                type { optional_type { item { type_id: UTF8 } } }
-                            }
-                            columns {
-                                name: "value"
-                                type { optional_type { item { type_id: UTF8 } } }
-                            }
-                            primary_key: "key"
-                        )"
-                    }
+                    EPathTypeView,
+                    R"(
+                        -- backup root: "/MyRoot"
+                        CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+                    )"
                 }
-            }, R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: "view"
-                        destination_path: "/MyRoot/View"
-                    }
-                    items {
-                        source_prefix: "table"
-                        destination_path: "/MyRoot/Table"
-                    }
+            }, {
+                "/table",
+                {
+                    EPathTypeTable,
+                    R"(
+                        columns {
+                            name: "key"
+                            type { optional_type { item { type_id: UTF8 } } }
+                        }
+                        columns {
+                            name: "value"
+                            type { optional_type { item { type_id: UTF8 } } }
+                        }
+                        primary_key: "key"
+                    )"
                 }
-            )"
-        );
+            }
+        };
+        CancelShouldSucceed<IsFs>(t, schemes, {{"view", "/MyRoot/View"}, {"table", "/MyRoot/Table"}});
     }
 
     THashMap<TString, TTypedScheme> GetSchemeWithChangefeed() {
@@ -8183,12 +8325,12 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         return schemes;
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleChangefeed, 2, 1, false) {
-        ShouldSucceed(t, GetSchemeWithChangefeed());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleChangefeed, 2, 1, false, IsFs) {
+        ShouldSucceed<IsFs>(t, GetSchemeWithChangefeed());
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleChangefeed, 2, 1, false) {
-        CancelShouldSucceed(t, GetSchemeWithChangefeed());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleChangefeed, 2, 1, false, IsFs) {
+        CancelShouldSucceed<IsFs>(t, GetSchemeWithChangefeed());
     }
 
     THashMap<TString, TTypedScheme> GetSchemeWithUniqueIndex() {
@@ -8212,80 +8354,59 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         return schemes;
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTableWithUniqueIndex, 2, 1, false) {
-        ShouldSucceed(t, GetSchemeWithUniqueIndex());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleTableWithUniqueIndex, 2, 1, false, IsFs) {
+        ShouldSucceed<IsFs>(t, GetSchemeWithUniqueIndex());
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleTableWithUniqueIndex, 2, 1, false) {
-        CancelShouldSucceed(t, GetSchemeWithUniqueIndex());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleTableWithUniqueIndex, 2, 1, false, IsFs) {
+        CancelShouldSucceed<IsFs>(t, GetSchemeWithUniqueIndex());
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnDependentView, 2, 1, false) {
-        CancelShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnDependentView, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
+                "/DependentView",
                 {
-                    "/DependentView",
-                    {
-                        EPathTypeView,
-                        R"(
-                            -- backup root: "/MyRoot"
-                            CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
-                        )"
-                    }
-                }, {
-                    "/BaseView",
-                    {
-                        EPathTypeView,
-                        R"(
-                            -- backup root: "/MyRoot"
-                            CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
-                        )"
-                    }
+                    EPathTypeView,
+                    R"(
+                        -- backup root: "/MyRoot"
+                        CREATE VIEW IF NOT EXISTS `DependentView` WITH security_invoker = TRUE AS SELECT * FROM `BaseView`;
+                    )"
                 }
-            }, R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: "DependentView"
-                        destination_path: "/MyRoot/DependentView"
-                    }
-                    items {
-                        source_prefix: "BaseView"
-                        destination_path: "/MyRoot/BaseView"
-                    }
+            }, {
+                "/BaseView",
+                {
+                    EPathTypeView,
+                    R"(
+                        -- backup root: "/MyRoot"
+                        CREATE VIEW IF NOT EXISTS `BaseView` WITH security_invoker = TRUE AS SELECT 1;
+                    )"
                 }
-            )"
-        );
+            }
+        };
+        CancelShouldSucceed<IsFs>(t, schemes, {
+            {"DependentView", "/MyRoot/DependentView"},
+            {"BaseView", "/MyRoot/BaseView"}
+        });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemView, 2, 1, false) {
-        CancelShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSystemView, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
+                "/partition_stats",
                 {
-                    "/partition_stats",
-                    {
-                        EPathTypeSysView,
-                        R"(
-                            sys_view_id: 1
-                            sys_view_name: "partition_stats"
-                        )"
-                    }
+                    EPathTypeSysView,
+                    R"(
+                        sys_view_id: 1
+                        sys_view_name: "partition_stats"
+                    )"
                 }
-            }, R"(
-                ImportFromS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_prefix: "partition_stats"
-                        destination_path: "/MyRoot/.sys/partition_stats"
-                    }
-                }
-            )"
-        );
+            }
+        };
+        CancelShouldSucceed<IsFs>(t, schemes, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemViewWithPermissions, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSystemViewWithPermissions, 2, 1, false, IsFs) {
         const TString permissions = R"(
             actions {
                 change_owner: "user1@builtin"
@@ -8317,37 +8438,25 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         };
 
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
         THashMap<TString, TTestDataWithScheme> bucketContent;
         for (const auto& [prefix, typedScheme] : schemes) {
             bucketContent.emplace(prefix, GenerateTestData(typedScheme, {}, permissions));
         }
 
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {
+            {"partition_stats", "/MyRoot/.sys/partition_stats"},
+        });
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                env.SetupRuntime(runtime);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
             }
 
             const ui64 importId = ++t.TxId;
-            AsyncImport(runtime, importId, "/MyRoot",
-                Sprintf(R"(
-                    ImportFromS3Settings {
-                        endpoint: "localhost:%d"
-                        scheme: HTTP
-                        items {
-                            source_prefix: "partition_stats"
-                            destination_path: "/MyRoot/.sys/partition_stats"
-                        }
-                    }
-                )", port)
-            );
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
 
             t.TestEnv->ReliablePropose(runtime, CancelImportRequest(++t.TxId, "/MyRoot", importId), {
                 Ydb::StatusIds::SUCCESS,
@@ -8371,9 +8480,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTopic, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleTopic, 2, 1, false, IsFs) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
-        ShouldSucceed(t, {
+        ShouldSucceed<IsFs>(t, {
             {
                 topic.GetDir(),
                 {
@@ -8381,13 +8490,10 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     topic.GetPublicProto().DebugString()
                 }
             }
-        }, topic.GetImportRequest());
+        }, {{topic.GetDir(), TStringBuilder() << "/MyRoot/Restored/" << topic.GetDir()}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnMaterializedIndex, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnMaterializedIndex, 2, 1, false, IsFs) {
         const auto a = GenerateTestData(R"(
             columns {
               name: "key"
@@ -8418,30 +8524,23 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             primary_key: "key"
         )", {{"b", 1}});
 
-        TS3Mock s3Mock(ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+        TImportEnv<IsFs> env(
+            ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}),
+            {{"a", "/MyRoot/Table"}},
+            "index_population_mode: INDEX_POPULATION_MODE_IMPORT");
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
 
+                env.SetupRuntime(runtime);
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
             }
 
             const ui64 importId = ++t.TxId;
-            AsyncImport(runtime, importId, "/MyRoot", Sprintf(R"(
-                ImportFromS3Settings {
-                  endpoint: "localhost:%d"
-                  scheme: HTTP
-                  index_population_mode: INDEX_POPULATION_MODE_IMPORT
-                  items {
-                    source_prefix: "a"
-                    destination_path: "/MyRoot/Table"
-                  }
-                }
-            )", port));
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
             t.TestEnv->TestWaitNotification(runtime, importId);
 
             {
@@ -8454,8 +8553,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleReplication, 2, 1, false) {
-        ShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleReplication, 2, 1, false, IsFs) {
+        ShouldSucceed<IsFs>(t,
             {
                 EPathTypeReplication,
                 R"(
@@ -8475,23 +8574,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTransfer, 2, 1, false) {
-        const auto settings = R"(
-            ImportFromS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                    source_prefix: "Table"
-                    destination_path: "/MyRoot/Table"
-                }
-                items {
-                    source_prefix: "Transfer"
-                    destination_path: "/MyRoot/Transfer"
-                }
-            }
-        )";
-
-        ShouldSucceed(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleTransfer, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/Table",
                 {
@@ -8529,11 +8613,12 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     )"
                 }
             },
-        }, settings);
+        };
+        ShouldSucceed<IsFs>(t, schemes, {{"Table", "/MyRoot/Table"}, {"Transfer", "/MyRoot/Transfer"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleExternalDataSource, 2, 1, false) {
-        ShouldSucceed(t,
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleExternalDataSource, 2, 1, false, IsFs) {
+        ShouldSucceed<IsFs>(t,
             {
                 EPathTypeExternalDataSource,
                 R"(
@@ -8554,23 +8639,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleExternalTable, 2, 1, false) {
-        const auto settings = R"(
-            ImportFromS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                    source_prefix: "ExternalTable"
-                    destination_path: "/MyRoot/ExternalTable"
-                }
-                items {
-                    source_prefix: "DataSource"
-                    destination_path: "/MyRoot/DataSource"
-                }
-            }
-        )";
-
-        ShouldSucceed(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleExternalTable, 2, 1, false, IsFs) {
+        const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/ExternalTable",
                 {
@@ -8607,6 +8677,10 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     )"
                 }
             },
-        }, settings);
+        };
+        ShouldSucceed<IsFs>(t, schemes, {
+            {"ExternalTable", "/MyRoot/ExternalTable"},
+            {"DataSource", "/MyRoot/DataSource"}
+        });
     }
 }

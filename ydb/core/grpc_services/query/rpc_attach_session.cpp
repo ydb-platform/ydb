@@ -93,12 +93,38 @@ private:
         ReplyFinishStream(Ydb::StatusIds::SUCCESS);
     }
 
+    void SendSessionHint(const NKikimrKqp::TCloseSessionResponse& response) {
+        Ydb::Query::SessionState resp;
+        resp.set_status(Ydb::StatusIds::SUCCESS);
+
+        switch (response.StateHint_case()) {
+            case NKikimrKqp::TCloseSessionResponse::kSessionShutdown:
+                *resp.mutable_session_shutdown() = {};
+                break;
+            case NKikimrKqp::TCloseSessionResponse::kNodeShutdown:
+                *resp.mutable_node_shutdown() = {};
+                break;
+            case NKikimrKqp::TCloseSessionResponse::STATEHINT_NOT_SET:
+                return;
+            default:
+                Y_DEBUG_ABORT("SendSessionHint called with unexpected hint value: %d",
+                    static_cast<int>(response.StateHint_case()));
+                return;
+        }
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD resp.SerializeToString(&out);
+
+        Request->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
+    }
+
     void HandleReady(NKqp::TEvKqp::TEvCloseSessionResponse::TPtr& ev) {
         const auto &event = ev->Get()->Record;
         if (event.GetResponse().GetSessionId() == SessionId &&
             event.GetResponse().GetClosed() &&
             event.GetStatus() == Ydb::StatusIds::SUCCESS)
         {
+            SendSessionHint(event.GetResponse());
             ReplyFinishStream(Ydb::StatusIds::SUCCESS);
         } else {
             InternalError("unexpected TEvCloseSessionResponse response");

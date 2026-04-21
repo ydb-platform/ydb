@@ -48,11 +48,24 @@ message TIndexPortionMeta {
 
 }
 
+message TDictionaryAccessor {
+    optional uint32 DictionaryBlobSize = 1;
+    optional uint32 PositionsBlobSize = 2;
+}
+
+// Accessor-specific metadata stored in portion index. Passed through to the accessor at read/assembly.
+message TAdditionalAccessorData {
+    oneof Accessor {
+        TDictionaryAccessor DictionaryAccessorData = 1;
+    }
+}
+
 message TIndexColumnMeta {
     optional uint32 NumRows = 1;
     optional uint32 RawBytes = 2;
     reserved 3, 4; // deprecated
     optional TIndexPortionMeta PortionMeta = 5[deprecated = true]; // First PK column could contain portion info
+    optional TAdditionalAccessorData AdditionalAccessorData = 6;
 }
 
 message TColumnChunkInfo {

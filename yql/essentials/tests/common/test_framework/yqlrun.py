@@ -46,7 +46,7 @@ def safe_symlink(src, dst):
 class YQLRun(object):
 
     def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None,
-                 fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None):
+                 fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None, fuzz_universal=False):
         if binary is None:
             self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'yql/tools/yqlrun/yqlrun')
         else:
@@ -102,6 +102,7 @@ class YQLRun(object):
             self.gateway_config.SqlCore.TranslationFlags.extend(flags)
 
         self.langver = langver
+        self.fuzz_universal = fuzz_universal
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
@@ -216,6 +217,9 @@ class YQLRun(object):
 
         cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
         cmd += '--validate-result-format '
+        cmd += '--fuzz-untyped-lambda '
+        if self.fuzz_universal:
+            cmd += '--fuzz-universal '
 
         if files:
             for f in files:
@@ -345,6 +349,15 @@ class YQLRun(object):
 
             with open(stderr_file, 'r') as f:
                 stderr_file_text = f.read()
+
+            def truncated(s, limit=8):
+                lines = s.split('\n')
+                if limit < len(lines):
+                    lines = ['..[snippet truncated]..'] + lines[-limit:]
+                return '\n'.join(lines)
+
+            err_file_text = truncated(err_file_text)
+            stderr_file_text = truncated(stderr_file_text)
 
             assert False, (
                 'binary %(binary)s exited with code %(code)d\n'

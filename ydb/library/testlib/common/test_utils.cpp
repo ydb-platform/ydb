@@ -1,6 +1,7 @@
 #include "test_utils.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/testing/common/env.h>
@@ -155,6 +156,16 @@ void SetupLogLevel(NActors::TTestActorRuntimeBase& runtime, const std::optional<
             }
         }
     }
+}
+
+void RestartTablet(const NActors::TActorSystem& runtime, ui64 tabletId) {
+    runtime.Send(NKikimr::MakeTabletResolverID(), new NKikimr::TEvTabletResolver::TEvForward(
+        tabletId,
+        new NActors::IEventHandle(NActors::TActorId(), NActors::TActorId(), new NActors::TEvents::TEvPoisonPill()),
+        {},
+        NKikimr::TEvTabletResolver::TEvForward::EActor::Tablet
+    ));
+    runtime.Send(NKikimr::MakeTabletResolverID(), new NKikimr::TEvTabletResolver::TEvTabletProblem(tabletId, NActors::TActorId()));
 }
 
 }  // namespace NTestUtils

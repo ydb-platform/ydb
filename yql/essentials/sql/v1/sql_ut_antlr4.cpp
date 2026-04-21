@@ -37,6 +37,27 @@ TParsedTokenList Tokenize(const TString& query) {
 #include "sql_ut_common.h"
 
 Y_UNIT_TEST_SUITE(QuerySplit) {
+
+TVector<TString> Statements(const TString& query) {
+    google::protobuf::Arena Arena;
+
+    NSQLTranslation::TTranslationSettings settings;
+    settings.AnsiLexer = false;
+    settings.Arena = &Arena;
+
+    TVector<TString> statements;
+    NYql::TIssues issues;
+
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+
+    UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
+
+    return statements;
+}
+
 Y_UNIT_TEST(Simple) {
     TString query = R"(
         ;
@@ -64,21 +85,7 @@ Y_UNIT_TEST(Simple) {
 
         )";
 
-    google::protobuf::Arena Arena;
-
-    NSQLTranslation::TTranslationSettings settings;
-    settings.AnsiLexer = false;
-    settings.Arena = &Arena;
-
-    TVector<TString> statements;
-    NYql::TIssues issues;
-
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-
-    UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
+    auto statements = Statements(query);
 
     UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
 
@@ -95,6 +102,14 @@ Y_UNIT_TEST(Simple) {
         -- Comment 6
         };)");
 }
+
+Y_UNIT_TEST(Bad1Bad2) {
+    TString query = " select1; select2;";
+
+    auto statements = Statements(query);
+    UNIT_ASSERT_VALUES_EQUAL(statements.size(), 0);
+}
+
 } // Y_UNIT_TEST_SUITE(QuerySplit)
 
 Y_UNIT_TEST_SUITE(ColumnCompression) {
@@ -119,7 +134,7 @@ Y_UNIT_TEST(CreateCompressedColumn) {
         }
     };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TWordCountHive elementStat = {"Write"};
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
@@ -140,7 +155,7 @@ Y_UNIT_TEST(NoColumnCompressionAtCreationIfNotSpecified) {
         }
     };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TWordCountHive elementStat = {"Write"};
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
@@ -163,7 +178,7 @@ Y_UNIT_TEST(CreateCompressedColumnEmptyAttributes) {
         }
     };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TWordCountHive elementStat = {"Write"};
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
@@ -182,6 +197,27 @@ Y_UNIT_TEST(CreateColumnDoubleCompression) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:36: Error: 'COMPRESSION' option can be specified only once\n");
 }
 
+Y_UNIT_TEST(AddCompressedColumn) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ADD COLUMN val Uint64 COMPRESSION(algorithm=zstd, level=7);
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "columnCompression");
+            UNIT_ASSERT_STRING_CONTAINS(line, "algorithm (String '\"zstd");
+            UNIT_ASSERT_STRING_CONTAINS(line, "level (Uint64 '\"7");
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
 Y_UNIT_TEST(AlterColumnCompression) {
     auto res = SqlToYql(R"sql(
         USE ydb;
@@ -198,7 +234,7 @@ Y_UNIT_TEST(AlterColumnCompression) {
         }
     };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TWordCountHive elementStat = {"Write"};
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
@@ -217,7 +253,7 @@ Y_UNIT_TEST(NoColumnCompressionAtAlterIfNotSpecified) {
         }
     };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TWordCountHive elementStat = {"Write"};
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
@@ -236,7 +272,7 @@ Y_UNIT_TEST(AlterColumnCompressionEmptyAttributes) {
         }
     };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
+    TWordCountHive elementStat = {"Write"};
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }

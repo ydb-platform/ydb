@@ -1629,7 +1629,8 @@ private:
             return TStatus::Repeat;
         }
 
-        if (input->Child(TYtWriteTable::idx_Content)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
+        if (input->Child(TYtWriteTable::idx_Content)->GetTypeAnn() &&
+            input->Child(TYtWriteTable::idx_Content)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
             output = ctx.ChangeChild(*input, TYtWriteTable::idx_Content,
                 Build<TCoList>(ctx, input->Pos())
                    .ListType<TCoListType>()
@@ -2326,8 +2327,13 @@ private:
                 }
 
                 if (auto& lambda = input->ChildRef(i + 7U); lambda->IsLambda()) {
-                    if (!UpdateLambdaAllArgumentsTypes(lambda, {GetSequenceItemType(section, false, ctx)}, ctx))
+                    if (auto status = ConvertToLambda(lambda, ctx, 1); status != IGraphTransformer::TStatus::Ok) {
+                        return status;
+                    }
+
+                    if (!UpdateLambdaAllArgumentsTypes(lambda, {GetSequenceItemType(section, false, ctx)}, ctx)) {
                         return TStatus::Error;
+                    }
 
                     if (!lambda->GetTypeAnn()) {
                         return TStatus::Repeat;

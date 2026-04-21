@@ -3,15 +3,19 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 SRCS(
+    common.cpp
     datastreams_ut.cpp
+    streaming_ddl_ut.cpp
+    streaming_sys_view_ut.cpp
 )
 
 PEERDIR(
@@ -21,6 +25,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
+    ydb/core/sys_view/common
     ydb/core/testlib
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers

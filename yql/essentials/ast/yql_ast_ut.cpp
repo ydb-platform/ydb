@@ -137,42 +137,42 @@ Y_UNIT_TEST(GoodArbitraryAtom) {
     TestGoodArbitraryAtom("(\" 1 a 3 b \")", TStringBuf(" 1 a 3 b "));
 
     auto expectedHex = std::to_array<ui8>({0xab, 'c', 'd', 0x00});
-    TestGoodArbitraryAtom("(\"\\xabcd\")", TBasicStringBuf<ui8>(expectedHex.data()));
-    TestGoodArbitraryAtom("(\" \\x3d \")", TStringBuf(" \x3d "));
+    TestGoodArbitraryAtom(R"(("\xabcd"))", TBasicStringBuf<ui8>(expectedHex.data()));
+    TestGoodArbitraryAtom(R"((" \x3d "))", TStringBuf(R"( = )"));
 
     auto expectedOctal = std::to_array<ui8>({056, '7', '8', 0x00});
-    TestGoodArbitraryAtom("(\"\\05678\")", TBasicStringBuf<ui8>(expectedOctal.data()));
-    TestGoodArbitraryAtom("(\" \\056 \")", TStringBuf(" \056 "));
-    TestGoodArbitraryAtom("(\" \\177 \")", TStringBuf(" \177 "));
-    TestGoodArbitraryAtom("(\" \\377 \")", TStringBuf(" \377 "));
-    TestGoodArbitraryAtom("(\" \\477 \")", TStringBuf(" 477 "));
+    TestGoodArbitraryAtom(R"(("\05678"))", TBasicStringBuf<ui8>(expectedOctal.data()));
+    TestGoodArbitraryAtom(R"((" \056 "))", TStringBuf(R"( . )"));
+    TestGoodArbitraryAtom(R"((" \177 "))", TStringBuf(" \177 "));
+    TestGoodArbitraryAtom(R"((" \377 "))", TStringBuf(" \377 "));
+    TestGoodArbitraryAtom(R"((" \477 "))", TStringBuf(" 477 "));
 
     {
         auto expected1 = std::to_array<ui8>({0x01, 0x00});
-        TestGoodArbitraryAtom("(\"\\u0001\")", TBasicStringBuf<ui8>(expected1.data()));
+        TestGoodArbitraryAtom(R"(("\u0001"))", TBasicStringBuf<ui8>(expected1.data()));
 
         auto expected2 = std::to_array<ui8>({0xE1, 0x88, 0xB4, 0x00});
-        TestGoodArbitraryAtom("(\"\\u1234\")", TBasicStringBuf<ui8>(expected2.data()));
+        TestGoodArbitraryAtom(R"(("\u1234"))", TBasicStringBuf<ui8>(expected2.data()));
 
         auto expected3 = std::to_array<ui8>({0xef, 0xbf, 0xbf, 0x00});
-        TestGoodArbitraryAtom("(\"\\uffff\")", TBasicStringBuf<ui8>(expected3.data()));
+        TestGoodArbitraryAtom(R"(("\uffff"))", TBasicStringBuf<ui8>(expected3.data()));
     }
 
     {
         auto expected1 = std::to_array<ui8>({0x01, 0x00});
-        TestGoodArbitraryAtom("(\"\\U00000001\")", TBasicStringBuf<ui8>(expected1.data()));
+        TestGoodArbitraryAtom(R"(("\U00000001"))", TBasicStringBuf<ui8>(expected1.data()));
 
         auto expected2 = std::to_array<ui8>({0xf4, 0x8f, 0xbf, 0xbf, 0x00});
-        TestGoodArbitraryAtom("(\"\\U0010ffff\")", TBasicStringBuf<ui8>(expected2.data()));
+        TestGoodArbitraryAtom(R"(("\U0010ffff"))", TBasicStringBuf<ui8>(expected2.data()));
     }
 
-    TestGoodArbitraryAtom("(\"\\t\")", TStringBuf("\t"));
-    TestGoodArbitraryAtom("(\"\\n\")", TStringBuf("\n"));
-    TestGoodArbitraryAtom("(\"\\r\")", TStringBuf("\r"));
-    TestGoodArbitraryAtom("(\"\\b\")", TStringBuf("\b"));
-    TestGoodArbitraryAtom("(\"\\f\")", TStringBuf("\f"));
-    TestGoodArbitraryAtom("(\"\\a\")", TStringBuf("\a"));
-    TestGoodArbitraryAtom("(\"\\v\")", TStringBuf("\v"));
+    TestGoodArbitraryAtom(R"(("\t"))", TStringBuf("\t"));
+    TestGoodArbitraryAtom(R"(("\n"))", TStringBuf("\n"));
+    TestGoodArbitraryAtom(R"(("\r"))", TStringBuf("\r"));
+    TestGoodArbitraryAtom(R"(("\b"))", TStringBuf("\b"));
+    TestGoodArbitraryAtom(R"(("\f"))", TStringBuf("\f"));
+    TestGoodArbitraryAtom(R"(("\a"))", TStringBuf("\a"));
+    TestGoodArbitraryAtom(R"(("\v"))", TStringBuf("\v"));
 }
 
 void TestBadArbitraryAtom(
@@ -190,37 +190,37 @@ Y_UNIT_TEST(BadArbitraryAtom) {
     TestBadArbitraryAtom("(a\")", "Unexpected \"");
     TestBadArbitraryAtom("(\"++++\"11111)", "Unexpected end of \"");
     TestBadArbitraryAtom("(\"\\", "Expected escape sequence");
-    TestBadArbitraryAtom("(\"\\\")", "Unexpected end of atom");
+    TestBadArbitraryAtom(R"(("\"))", "Unexpected end of atom");
     TestBadArbitraryAtom("(\"abc)", "Unexpected end of atom");
 
-    TestBadArbitraryAtom("(\"\\018\")", "Invalid octal value");
-    TestBadArbitraryAtom("(\"\\01\")", "Invalid octal value");
-    TestBadArbitraryAtom("(\"\\378\")", "Invalid octal value");
+    TestBadArbitraryAtom(R"(("\018"))", "Invalid octal value");
+    TestBadArbitraryAtom(R"(("\01"))", "Invalid octal value");
+    TestBadArbitraryAtom(R"(("\378"))", "Invalid octal value");
 
-    TestBadArbitraryAtom("(\"\\x1g\")", "Invalid hexadecimal value");
-    TestBadArbitraryAtom("(\"\\xf\")", "Invalid hexadecimal value");
+    TestBadArbitraryAtom(R"(("\x1g"))", "Invalid hexadecimal value");
+    TestBadArbitraryAtom(R"(("\xf"))", "Invalid hexadecimal value");
 
-    TestBadArbitraryAtom("(\"\\u\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\u1\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\u12\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\u123\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\ughij\")", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\u"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\u1"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\u12"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\u123"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\ughij"))", "Invalid unicode value");
 
-    TestBadArbitraryAtom("(\"\\U\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U11\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U1122\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U112233\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\Ughijklmn\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U00110000\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U00123456\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U00200000\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\Uffffffff\")", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U11"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U1122"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U112233"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\Ughijklmn"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U00110000"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U00123456"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U00200000"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\Uffffffff"))", "Invalid unicode value");
 
     // surrogate range
-    TestBadArbitraryAtom("(\"\\ud800\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\udfff\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U0000d800\")", "Invalid unicode value");
-    TestBadArbitraryAtom("(\"\\U0000dfff\")", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\ud800"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\udfff"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U0000d800"))", "Invalid unicode value");
+    TestBadArbitraryAtom(R"(("\U0000dfff"))", "Invalid unicode value");
 
     TestBadArbitraryAtom("(x\"ag\")", "Invalid binary value");
     TestBadArbitraryAtom("(x\"abc\")", "Invalid binary value");
@@ -238,13 +238,13 @@ void ParseAndPrint(const TString& program, const TString& expected) {
 
 Y_UNIT_TEST(ArbitraryAtomEscaping) {
     ParseAndPrint(
-        "(\"\\t\\n\\r\\b\\a\\f\\v\")",
-        "(\"\\t\\n\\r\\b\\a\\f\\v\")");
+        R"(("\t\n\r\b\a\f\v"))",
+        R"(("\t\n\r\b\a\f\v"))");
 
-    ParseAndPrint("(\"\\u1234\")", "(\"\\u1234\")");
-    ParseAndPrint("(\"\\u1234abcd\")", "(\"\\u1234abcd\")");
-    ParseAndPrint("(\"\\177\")", "(\"\\x7F\")");
-    ParseAndPrint("(\"\\377\")", "(\"\\xFF\")");
+    ParseAndPrint(R"(("\u1234"))", R"(("\u1234"))");
+    ParseAndPrint(R"(("\u1234abcd"))", R"(("\u1234abcd"))");
+    ParseAndPrint(R"(("\177"))", R"(("\x7F"))");
+    ParseAndPrint(R"(("\377"))", R"(("\xFF"))");
 
     ParseAndPrint(
         "(\"тестовая строка\")",
@@ -279,8 +279,8 @@ Y_UNIT_TEST(AdaptArbitraryAtom) {
     ParseAndAdaptPrint("(\"test\")", "(test)");
     ParseAndAdaptPrint("(\"another test\")", "(\"another test\")");
     ParseAndAdaptPrint("(\"braces(in)test\")", "(\"braces(in)test\")");
-    ParseAndAdaptPrint("(\"escaped\\u1234sequence\")", "(\"escaped\\u1234sequence\")");
-    ParseAndAdaptPrint("(\"escaped\\x41sequence\")", "(escapedAsequence)");
+    ParseAndAdaptPrint(R"(("escaped\u1234sequence"))", R"(("escaped\u1234sequence"))");
+    ParseAndAdaptPrint(R"(("escaped\x41sequence"))", "(escapedAsequence)");
     ParseAndAdaptPrint("(\"\")", "(\"\")");
 }
 
@@ -375,7 +375,7 @@ Y_UNIT_TEST(MultilineAtom) {
 }
 
 Y_UNIT_TEST(UnicodePrettyPrint) {
-    ParseAndAdaptPrint("(\"абв αβγ ﬡ\")", "(\"\\u0430\\u0431\\u0432 \\u03B1\\u03B2\\u03B3 \\uFB21\")");
+    ParseAndAdaptPrint("(\"абв αβγ ﬡ\")", R"(("\u0430\u0431\u0432 \u03B1\u03B2\u03B3 \uFB21"))");
 }
 
 Y_UNIT_TEST(SerializeQuotedEmptyAtom) {

@@ -351,3 +351,15 @@ void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {
         Send(sender, response.release(), 0, cookie);
     });
 }
+
+void TNodeWarden::Handle(TEvNodeWardenListLocalDDisks::TPtr ev) {
+    auto res = std::make_unique<TEvNodeWardenListLocalDDisksResult>();
+    for (auto& [k, v] : LocalVDisks) {
+        if (v.RuntimeData && v.RuntimeData->DDisk) {
+            auto vdId = v.GetVSlotId().GetVDiskServiceId();
+            auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdId);
+            res->Infos.emplace_back(MakeBlobStorageDDiskId(nodeId, pdiskId, vslotId), MakeBlobStoragePersistentBufferId(nodeId, pdiskId, vslotId));
+        }
+    }
+    Send(ev->Sender, res.release(), 0, ev->Cookie);
+}

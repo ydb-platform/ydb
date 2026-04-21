@@ -10,6 +10,11 @@ namespace {
 
 class TDownloadStageOperationManager: public TFmrStageOperationManagerBase {
 public:
+    TDownloadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider)
+        : TFmrStageOperationManagerBase(randomProvider)
+    {
+    }
+
     TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
         const auto& operationParams = std::get<TDownloadOperationParams>(context.OperationParams);
         const auto& fmrOperationSpec = context.FmrOperationSpec;
@@ -31,6 +36,8 @@ public:
     TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {
         const auto& downloadOperationParams = std::get<TDownloadOperationParams>(context.OperationParams);
 
+        YQL_CLOG(INFO, FastMapReduce) << "Starting Download operation";
+
         std::vector<TGeneratedTaskInfo> generatedTasks;
         for (auto& task: context.PartitionResult.TaskInputs) {
             TDownloadTaskParams downloadTaskParams;
@@ -49,12 +56,38 @@ public:
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
 
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) override {
+        TGetNewPartIdsForTaskResult result;
+        TDownloadTaskParams& downloadTaskParams = std::get<TDownloadTaskParams>(context.Task->TaskParams);
+        TString tableId = downloadTaskParams.Output.TableId;
+        TString newPartId = GenerateId();
+
+        downloadTaskParams.Output.PartId = newPartId;
+        result.NewPartIdsForTables[tableId].emplace_back(newPartId);
+        return result;
+    }
+
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
+        const auto& downloadParams = std::get<TDownloadOperationParams>(params);
+        return {downloadParams.Output.FmrTableId.Id};
+    }
+
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
+        std::vector<TPartIdInfo> groupsToClear;
+        TDownloadTaskParams& downloadTaskParams = std::get<TDownloadTaskParams>(context.Task->TaskParams);
+        TString tableId = downloadTaskParams.Output.TableId;
+        if (!downloadTaskParams.Output.PartId.empty() && context.PartIdStats.contains(downloadTaskParams.Output.PartId)) {
+            auto prevPartId = downloadTaskParams.Output.PartId;
+            groupsToClear.emplace_back(tableId, prevPartId);
+        }
+        return groupsToClear;
+    }
 };
 
 } // namespace
 
-IFmrStageOperationManager::TPtr MakeDownloadStageOperationManager() {
-    return MakeIntrusive<TDownloadStageOperationManager>();
+IFmrStageOperationManager::TPtr MakeDownloadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider) {
+    return MakeIntrusive<TDownloadStageOperationManager>(randomProvider);
 }
 
 } // namespace NYql::NFmr

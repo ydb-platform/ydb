@@ -1,6 +1,6 @@
 #include "fiber.h"
 
-#include "execution_stack.h"
+#include "pooled_execution_stack.h"
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -10,6 +10,7 @@
 
 #include <yt/yt/library/profiling/producer.h>
 
+#include <library/cpp/yt/threading/execution_stack.h>
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
@@ -434,7 +435,7 @@ void TFiber::ReadFibers(TFunctionView<void(TFiberList&)> callback)
 }
 
 TFiber::TFiber(EExecutionStackKind stackKind)
-    : Stack_(CreateExecutionStack(stackKind))
+    : Stack_(GetPooledExecutionStack(stackKind))
     , MachineContext_({
         .TrampoLine = this,
         .Stack = TArrayRef(static_cast<char*>(Stack_->GetStack()), Stack_->GetSize()),

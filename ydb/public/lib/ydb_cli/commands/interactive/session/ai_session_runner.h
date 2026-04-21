@@ -11,6 +11,7 @@ struct TAiSessionSettings {
     TString Database;
     TDriver Driver;
     TString ConnectionString;
+    TClientCommand::TConfig::TUsageInfoGetter UsageInfoGetter;
 };
 
 ISessionRunner::TPtr CreateAiSessionRunner(const TAiSessionSettings& settings);

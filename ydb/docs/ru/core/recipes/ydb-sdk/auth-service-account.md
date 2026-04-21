@@ -6,112 +6,123 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
-  )
+    ```go
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithServiceAccountKeyFileCredentials(
-        os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
-      ),
-      yc.WithInternalCA(), // append Yandex Cloud certificates
+    import (
+      "context"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      yc "github.com/ydb-platform/ydb-go-yc"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        yc.WithServiceAccountKeyFileCredentials(
+          os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
+        ),
+        yc.WithInternalCA(), // append Yandex Cloud certificates
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithServiceAccountKeyFileCredentials(
-        os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
-      ),
-      yc.WithInternalCA(), // append Yandex Cloud certificates
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      yc "github.com/ydb-platform/ydb-go-yc"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        yc.WithServiceAccountKeyFileCredentials(
+          os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
+        ),
+        yc.WithInternalCA(), // append Yandex Cloud certificates
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString, String saKeyPath) {
-      AuthProvider authProvider = CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyPath);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString, String saKeyPath) {
+        AuthProvider authProvider = CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyPath);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      Properties props = new Properties();
-      props.setProperty("saKeyFile", "~/keys/sa_key.json");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("saKeyFile", "~/keys/sa_key.json");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Опцию saKeyFile также можно указать прямо в JDBC URL
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Опцию saKeyFile также можно указать прямо в JDBC URL
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметр `saKeyFile` (в URL или в свойствах `DataSource`), что и в примере выше.
+
+  {% endlist %}
+
+- JavaScript
 
   Загрузка данных сервисного аккаунта из файла:
 
@@ -154,27 +165,26 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;ServiceAccountKeyFilePath=path/to/sa_file.json");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  var saProvider = new ServiceAccountProvider(
-      saFilePath: "path/to/sa_file.json" // Path to file with service account JSON info);
-  );
-  await saProvider.Initialize();
+  Для Entity Framework и linq2db используйте тот же connectionString.
 
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: saProvider
-  );
+- Rust
 
-  await using var driver = await Driver.CreateInitialized(config);
+  ```rust
+  use ydb::{ClientBuilder, ServiceAccountCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string(std::env::var("YDB_CONNECTION_STRING")?)?
+      .with_credentials(ServiceAccountCredentials::from_env()?)
+      .client()?;
   ```
 
 - PHP

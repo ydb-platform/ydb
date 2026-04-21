@@ -70,6 +70,7 @@ struct TRunConfig {
     bool HighResHistogram = false;
     bool ExtendedStats = false;
     bool NoTui = false;
+    bool Compact = false;
     EDisplayMode DisplayMode = EDisplayMode::None;
 
     // instead of actual transaction just async sleep and return SUCCESS

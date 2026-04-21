@@ -198,7 +198,6 @@ protected:
         , Task(task, std::move(arena))
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
-        , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
@@ -348,7 +347,6 @@ protected:
             TxId,
             Task.GetId(),
             RuntimeSettings.CollectFull(),
-            CanAllocateExtraMemory,
             NActors::TActivationContext::ActorSystem());
     }
 
@@ -391,8 +389,7 @@ protected:
         TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
         TStringBuilder failureReason = TStringBuilder()
             << "Mkql memory limit exceeded, allocated by task " << Task.GetId() << ": " << GetMkqlMemoryLimit()
-            << ", host: " << HostName()
-            << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
+            << ", host: " << HostName();
 
         if (!memoryConsumptionDetails.empty()) {
             failureReason << ", memory manager details for current node: " << memoryConsumptionDetails;
@@ -823,6 +820,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
             sourceInfo.ResumeByWatermark(watermark);
         }
+        // sources or input channels was unpaused, trigger new poll
+        ResumeExecution(EResumeSource::CAResumeByWatermark);
     }
 
     void ResumeInputsByCheckpoint() override final {
@@ -831,6 +830,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 channelInfo.ResumeByCheckpoint();
             }
         }
+        // sources or input channels was unpaused, trigger new poll
+        ResumeExecution(EResumeSource::CAResumeByCheckpoint);
     }
 
 protected:
@@ -1397,9 +1398,11 @@ protected:
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
 
-            if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+            if (Channels) {
+                if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+                }
             }
 
             auto channel = info.Channel;
@@ -1605,11 +1608,11 @@ protected:
         HTML(str) {
             PRE() {
                 str << "TDqComputeActorBase, SelfId=" << this->SelfId() << ' ';
-                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"view", "dump"}})) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "dump"}})) {
                     str << "Dump";
                 }
                 str << ' ';
-                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"view", "run"}})) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "run"}})) {
                     str << "Run";
                 }
                 str << Endl;
@@ -2382,6 +2385,7 @@ public:
 
         ui64 computeActorElapsedUs = NHPTimer::GetSeconds(ComputeActorElapsedTicks) * 1'000'000ull;
         dst->SetCpuTimeUs(computeActorElapsedUs + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
+        dst->SetMemoryUsage(MemoryLimits.MemoryQuotaManager->GetCurrentQuota());
         dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
         if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
@@ -2674,7 +2678,6 @@ protected:
     TString LogPrefix;
     const TComputeRuntimeSettings RuntimeSettings;
     TComputeMemoryLimits MemoryLimits;
-    const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;

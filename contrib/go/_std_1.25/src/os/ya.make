@@ -38,6 +38,8 @@ IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM6
         stat.go
         stat_darwin.go
         stat_unix.go
+        statat.go
+        statat_unix.go
         sticky_bsd.go
         sys.go
         sys_bsd.go
@@ -84,6 +86,8 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_
         stat.go
         stat_linux.go
         stat_unix.go
+        statat.go
+        statat_unix.go
         sticky_notbsd.go
         sys.go
         sys_linux.go
@@ -168,6 +172,8 @@ ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN 
         stat.go
         stat_unix.go
         stat_wasip1.go
+        statat.go
+        statat_unix.go
         sticky_bsd.go
         sys.go
         sys_bsd.go

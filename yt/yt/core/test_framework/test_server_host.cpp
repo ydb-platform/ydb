@@ -1,5 +1,7 @@
 #include "test_server_host.h"
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,7 +30,7 @@ void TTestServerHost::InitializeServer()
 
 void TTestServerHost::TearDown()
 {
-    Server_->Stop().BlockingGet().ThrowOnError();
+    NConcurrency::WaitFor(Server_->Stop()).ThrowOnError();
     Server_.Reset();
     Port_.Reset();
 }

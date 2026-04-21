@@ -22,11 +22,11 @@ def test_arguments_only() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types
+            from typeguard._functions import check_argument_types_internal
 
             def foo(x: int) -> None:
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, int)}, memo)
+                check_argument_types_internal('foo', {'x': (x, int)}, memo)
         """
         ).strip()
     )
@@ -47,11 +47,11 @@ def test_return_only() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_return_type
+            from typeguard._functions import check_return_type_internal
 
             def foo(x) -> int:
                 memo = TypeCheckMemo(globals(), locals())
-                return check_return_type('foo', 6, int, memo)
+                return check_return_type_internal('foo', 6, int, memo)
         """
         ).strip()
     )
@@ -78,7 +78,7 @@ class TestGenerator:
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_return_type, check_yield_type
+                from typeguard._functions import check_return_type_internal, check_yield_type
                 from collections.abc import Generator
                 from typing import Any
 
@@ -86,7 +86,7 @@ class TestGenerator:
                     memo = TypeCheckMemo(globals(), locals())
                     yield check_yield_type('foo', 2, int, memo)
                     yield check_yield_type('foo', 6, int, memo)
-                    return check_return_type('foo', 'test', str, memo)
+                    return check_return_type_internal('foo', 'test', str, memo)
             """
             ).strip()
         )
@@ -411,12 +411,12 @@ def test_any_in_nested_dict() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types
+            from typeguard._functions import check_argument_types_internal
             from typing import Any
 
             def foo(x: dict[str, dict[str, Any]]) -> None:
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, dict[str, dict[str, Any]])}, memo)
+                check_argument_types_internal('foo', {'x': (x, dict[str, dict[str, Any]])}, memo)
             """
         ).strip()
     )
@@ -426,7 +426,7 @@ def test_avoid_global_names() -> None:
     node = parse(
         dedent(
             """
-            memo = TypeCheckMemo = check_argument_types = check_return_type = None
+            memo = TypeCheckMemo = check_argument_types_internal = check_return_type_internal = None
 
             def func1(x: int) -> int:
                 dummy = (memo,)
@@ -444,19 +444,19 @@ def test_avoid_global_names() -> None:
             """
             from typeguard import TypeCheckMemo as TypeCheckMemo_
             from typeguard._functions import \
-check_argument_types as check_argument_types_, check_return_type as check_return_type_
-            memo = TypeCheckMemo = check_argument_types = check_return_type = None
+check_argument_types_internal as check_argument_types_internal_, check_return_type_internal as check_return_type_internal_
+            memo = TypeCheckMemo = check_argument_types_internal = check_return_type_internal = None
 
             def func1(x: int) -> int:
                 memo_ = TypeCheckMemo_(globals(), locals())
-                check_argument_types_('func1', {'x': (x, int)}, memo_)
+                check_argument_types_internal_('func1', {'x': (x, int)}, memo_)
                 dummy = (memo,)
-                return check_return_type_('func1', x, int, memo_)
+                return check_return_type_internal_('func1', x, int, memo_)
 
             def func2(x: int) -> int:
                 memo_ = TypeCheckMemo_(globals(), locals())
-                check_argument_types_('func2', {'x': (x, int)}, memo_)
-                return check_return_type_('func2', x, int, memo_)
+                check_argument_types_internal_('func2', {'x': (x, int)}, memo_)
+                return check_return_type_internal_('func2', x, int, memo_)
         """
         ).strip()
     )
@@ -467,7 +467,7 @@ def test_avoid_local_names() -> None:
         dedent(
             """
             def foo(x: int) -> int:
-                memo = TypeCheckMemo = check_argument_types = check_return_type = None
+                memo = TypeCheckMemo = check_argument_types_internal = check_return_type_internal = None
                 return x
             """
         )
@@ -480,11 +480,11 @@ def test_avoid_local_names() -> None:
             def foo(x: int) -> int:
                 from typeguard import TypeCheckMemo as TypeCheckMemo_
                 from typeguard._functions import \
-check_argument_types as check_argument_types_, check_return_type as check_return_type_
+check_argument_types_internal as check_argument_types_internal_, check_return_type_internal as check_return_type_internal_
                 memo_ = TypeCheckMemo_(globals(), locals())
-                check_argument_types_('foo', {'x': (x, int)}, memo_)
-                memo = TypeCheckMemo = check_argument_types = check_return_type = None
-                return check_return_type_('foo', x, int, memo_)
+                check_argument_types_internal_('foo', {'x': (x, int)}, memo_)
+                memo = TypeCheckMemo = check_argument_types_internal = check_return_type_internal = None
+                return check_return_type_internal_('foo', x, int, memo_)
             """
         ).strip()
     )
@@ -495,7 +495,7 @@ def test_avoid_nonlocal_names() -> None:
         dedent(
             """
             def outer():
-                memo = TypeCheckMemo = check_argument_types = check_return_type = None
+                memo = TypeCheckMemo = check_argument_types_internal = check_return_type_internal = None
 
                 def foo(x: int) -> int:
                     return x
@@ -510,15 +510,15 @@ def test_avoid_nonlocal_names() -> None:
         == dedent(
             """
             def outer():
-                memo = TypeCheckMemo = check_argument_types = check_return_type = None
+                memo = TypeCheckMemo = check_argument_types_internal = check_return_type_internal = None
 
                 def foo(x: int) -> int:
                     from typeguard import TypeCheckMemo as TypeCheckMemo_
                     from typeguard._functions import \
-check_argument_types as check_argument_types_, check_return_type as check_return_type_
+check_argument_types_internal as check_argument_types_internal_, check_return_type_internal as check_return_type_internal_
                     memo_ = TypeCheckMemo_(globals(), locals())
-                    check_argument_types_('outer.<locals>.foo', {'x': (x, int)}, memo_)
-                    return check_return_type_('outer.<locals>.foo', x, int, memo_)
+                    check_argument_types_internal_('outer.<locals>.foo', {'x': (x, int)}, memo_)
+                    return check_return_type_internal_('outer.<locals>.foo', x, int, memo_)
                 return foo
             """
         ).strip()
@@ -544,11 +544,11 @@ def test_method() -> None:
 
                 def foo(self, x: int) -> int:
                     from typeguard import TypeCheckMemo
-                    from typeguard._functions import check_argument_types, \
-check_return_type
+                    from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
                     memo = TypeCheckMemo(globals(), locals(), self_type=self.__class__)
-                    check_argument_types('Foo.foo', {'x': (x, int)}, memo)
-                    return check_return_type('Foo.foo', x, int, memo)
+                    check_argument_types_internal('Foo.foo', {'x': (x, int)}, memo)
+                    return check_return_type_internal('Foo.foo', x, int, memo)
             """
         ).strip()
     )
@@ -573,11 +573,11 @@ def test_method_posonlyargs() -> None:
 
                 def foo(self, x: int, /, y: str) -> int:
                     from typeguard import TypeCheckMemo
-                    from typeguard._functions import check_argument_types, \
-check_return_type
+                    from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
                     memo = TypeCheckMemo(globals(), locals(), self_type=self.__class__)
-                    check_argument_types('Foo.foo', {'x': (x, int), 'y': (y, str)}, memo)
-                    return check_return_type('Foo.foo', x, int, memo)
+                    check_argument_types_internal('Foo.foo', {'x': (x, int), 'y': (y, str)}, memo)
+                    return check_return_type_internal('Foo.foo', x, int, memo)
             """
         ).strip()
     )
@@ -604,11 +604,11 @@ def test_classmethod() -> None:
                 @classmethod
                 def foo(cls, x: int) -> int:
                     from typeguard import TypeCheckMemo
-                    from typeguard._functions import check_argument_types, \
-check_return_type
+                    from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
                     memo = TypeCheckMemo(globals(), locals(), self_type=cls)
-                    check_argument_types('Foo.foo', {'x': (x, int)}, memo)
-                    return check_return_type('Foo.foo', x, int, memo)
+                    check_argument_types_internal('Foo.foo', {'x': (x, int)}, memo)
+                    return check_return_type_internal('Foo.foo', x, int, memo)
             """
         ).strip()
     )
@@ -635,12 +635,12 @@ def test_classmethod_posonlyargs() -> None:
                 @classmethod
                 def foo(cls, x: int, /, y: str) -> int:
                     from typeguard import TypeCheckMemo
-                    from typeguard._functions import check_argument_types, \
-check_return_type
+                    from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
                     memo = TypeCheckMemo(globals(), locals(), self_type=cls)
-                    check_argument_types('Foo.foo', {'x': (x, int), 'y': (y, str)}, \
+                    check_argument_types_internal('Foo.foo', {'x': (x, int), 'y': (y, str)}, \
 memo)
-                    return check_return_type('Foo.foo', x, int, memo)
+                    return check_return_type_internal('Foo.foo', x, int, memo)
             """
         ).strip()
     )
@@ -667,11 +667,11 @@ def test_staticmethod() -> None:
                 @staticmethod
                 def foo(x: int) -> int:
                     from typeguard import TypeCheckMemo
-                    from typeguard._functions import check_argument_types, \
-check_return_type
+                    from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('Foo.foo', {'x': (x, int)}, memo)
-                    return check_return_type('Foo.foo', x, int, memo)
+                    check_argument_types_internal('Foo.foo', {'x': (x, int)}, memo)
+                    return check_return_type_internal('Foo.foo', x, int, memo)
             """
         ).strip()
     )
@@ -695,7 +695,7 @@ def test_new_with_self() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_return_type
+            from typeguard._functions import check_return_type_internal
             from typing import Self
 
             class Foo:
@@ -703,7 +703,7 @@ def test_new_with_self() -> None:
                 def __new__(cls) -> Self:
                     Foo = cls
                     memo = TypeCheckMemo(globals(), locals(), self_type=cls)
-                    return check_return_type('Foo.__new__', super().__new__(cls), \
+                    return check_return_type_internal('Foo.__new__', super().__new__(cls), \
 Self, memo)
             """
         ).strip()
@@ -728,14 +728,14 @@ def test_new_with_explicit_class_name() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_return_type
+            from typeguard._functions import check_return_type_internal
 
             class A:
 
                 def __new__(cls) -> 'A':
                     A = cls
                     memo = TypeCheckMemo(globals(), locals(), self_type=cls)
-                    return check_return_type('A.__new__', object.__new__(cls), A, memo)
+                    return check_return_type_internal('A.__new__', object.__new__(cls), A, memo)
             """
         ).strip()
     )
@@ -765,11 +765,11 @@ def test_local_function() -> None:
 
                 def foo(x: int) -> int:
                     from typeguard import TypeCheckMemo
-                    from typeguard._functions import check_argument_types, \
-check_return_type
+                    from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('wrapper.<locals>.foo', {'x': (x, int)}, memo)
-                    return check_return_type('wrapper.<locals>.foo', x, int, memo)
+                    check_argument_types_internal('wrapper.<locals>.foo', {'x': (x, int)}, memo)
+                    return check_return_type_internal('wrapper.<locals>.foo', x, int, memo)
 
                 def foo2(x: int) -> int:
                     return x
@@ -810,13 +810,13 @@ def test_function_local_class_method() -> None:
 
                         def method(self, x: int) -> int:
                             from typeguard import TypeCheckMemo
-                            from typeguard._functions import check_argument_types, \
-check_return_type
+                            from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
                             memo = TypeCheckMemo(globals(), locals(), \
 self_type=self.__class__)
-                            check_argument_types('wrapper.<locals>.Foo.Bar.method', \
+                            check_argument_types_internal('wrapper.<locals>.Foo.Bar.method', \
 {'x': (x, int)}, memo)
-                            return check_return_type(\
+                            return check_return_type_internal(\
 'wrapper.<locals>.Foo.Bar.method', x, int, memo)
 
                         def method2(self, x: int) -> int:
@@ -841,11 +841,11 @@ def test_keyword_only_argument() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types
+            from typeguard._functions import check_argument_types_internal
 
             def foo(*, x: int) -> None:
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, int)}, memo)
+                check_argument_types_internal('foo', {'x': (x, int)}, memo)
             """
         ).strip()
     )
@@ -866,11 +866,11 @@ def test_positional_only_argument() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types
+            from typeguard._functions import check_argument_types_internal
 
             def foo(x: int, /) -> None:
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, int)}, memo)
+                check_argument_types_internal('foo', {'x': (x, int)}, memo)
             """
         ).strip()
     )
@@ -891,11 +891,11 @@ def test_variable_positional_argument() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types
+            from typeguard._functions import check_argument_types_internal
 
             def foo(*args: int) -> None:
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'args': (args, tuple[int, ...])}, memo)
+                check_argument_types_internal('foo', {'args': (args, tuple[int, ...])}, memo)
             """
         ).strip()
     )
@@ -916,11 +916,11 @@ def test_variable_keyword_argument() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types
+            from typeguard._functions import check_argument_types_internal
 
             def foo(**kwargs: int) -> None:
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'kwargs': (kwargs, dict[str, int])}, memo)
+                check_argument_types_internal('foo', {'kwargs': (kwargs, dict[str, int])}, memo)
             """
         ).strip()
     )
@@ -987,15 +987,15 @@ class TestTypecheckingImport:
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types, check_return_type
+                from typeguard._functions import check_argument_types_internal, check_return_type_internal
                 from typing import TYPE_CHECKING
                 if TYPE_CHECKING:
                     from nonexistent import FooBar
 
                 def foo(x: list[FooBar]) -> list[FooBar]:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'x': (x, list)}, memo)
-                    return check_return_type('foo', x, list, memo)
+                    check_argument_types_internal('foo', {'x': (x, list)}, memo)
+                    return check_return_type_internal('foo', x, list, memo)
                 """
             ).strip()
         )
@@ -1028,7 +1028,7 @@ class TestTypecheckingImport:
                 def foo(x: Any) -> None:
                     memo = TypeCheckMemo(globals(), locals())
                     y: FooBar = x
-                    z: list[FooBar] = check_variable_assignment([y], [[('z', list)]], \
+                    z: list[FooBar] = check_variable_assignment([y], [('z', list)], \
 memo)
                 """
             ).strip()
@@ -1115,12 +1115,12 @@ typing.Collection, Sequence]:
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types
+                from typeguard._functions import check_argument_types_internal
                 from typing import Any, List, Optional
 
                 def foo(x: List[Optional[int]]) -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'x': (x, List[Optional[int]])}, memo)
+                    check_argument_types_internal('foo', {'x': (x, List[Optional[int]])}, memo)
                 """
             ).strip()
         )
@@ -1145,14 +1145,14 @@ typing.Collection, Sequence]:
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types
+                from typeguard._functions import check_argument_types_internal
                 from typing import Any, Iterable, Union, TYPE_CHECKING
                 if TYPE_CHECKING:
                     from typing import Hashable
 
                 def foo(x: Union[Iterable[Hashable], str]) -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'x': (x, Union[Iterable, str])}, memo)
+                    check_argument_types_internal('foo', {'x': (x, Union[Iterable, str])}, memo)
                 """
             ).strip()
         )
@@ -1206,7 +1206,7 @@ class TestAssign:
 
                 def foo() -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    x: int = check_variable_assignment(otherfunc(), [[('x', int)]], \
+                    x: int = check_variable_assignment(otherfunc(), [('x', int)], \
 memo)
                 """
             ).strip()
@@ -1228,15 +1228,15 @@ memo)
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types, \
+                from typeguard._functions import check_argument_types_internal, \
 check_variable_assignment
 
                 def foo(*args: int) -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'args': (args, \
+                    check_argument_types_internal('foo', {'args': (args, \
 tuple[int, ...])}, memo)
                     args = check_variable_assignment((5,), \
-[[('args', tuple[int, ...])]], memo)
+[('args', tuple[int, ...])], memo)
                 """
             ).strip()
         )
@@ -1257,15 +1257,15 @@ tuple[int, ...])}, memo)
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types, \
+                from typeguard._functions import check_argument_types_internal, \
 check_variable_assignment
 
                 def foo(**kwargs: int) -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'kwargs': (kwargs, \
+                    check_argument_types_internal('foo', {'kwargs': (kwargs, \
 dict[str, int])}, memo)
                     kwargs = check_variable_assignment({'a': 5}, \
-[[('kwargs', dict[str, int])]], memo)
+[('kwargs', dict[str, int])], memo)
                 """
             ).strip()
         )
@@ -1295,7 +1295,7 @@ dict[str, int])}, memo)
                 def foo() -> None:
                     memo = TypeCheckMemo(globals(), locals())
                     x: int | str = check_variable_assignment(otherfunc(), \
-[[('x', Union_[int, str])]], memo)
+[('x', Union_[int, str])], memo)
                 """
             ).strip()
         )
@@ -1388,7 +1388,7 @@ dict[str, int])}, memo)
                     x: int
                     z: bytes
                     all = {target} = check_variable_assignment(otherfunc(), \
-[[('all', Any)], [('x', int), ('*y', Any), ('z', bytes)]], memo)
+[('all', Any), [('x', int), ('*y', Any), ('z', bytes)]], memo)
                 """
             ).strip()
         )
@@ -1427,6 +1427,44 @@ self_type=self.__class__)
             ).strip()
         )
 
+    def test_unpacking_assign_one_item_tuple(self) -> None:
+        node = parse(
+            dedent(
+                """
+                class Foo:
+
+                    def foo(self) -> str:
+                        x: str
+                        x = 'test'
+                        (x,) = ('test',)
+                        return x
+                """
+            )
+        )
+        TypeguardTransformer().visit(node)
+        tuple_target = "(x,)" if sys.version_info < (3, 11) else "x,"
+        assert (
+            unparse(node)
+            == dedent(
+                f"""
+                from typeguard import TypeCheckMemo
+                from typeguard._functions import check_return_type_internal, check_variable_assignment
+
+                class Foo:
+
+                    def foo(self) -> str:
+                        memo = TypeCheckMemo(globals(), locals(), \
+self_type=self.__class__)
+                        x: str
+                        x = check_variable_assignment('test', \
+[('x', str)], memo)
+                        {tuple_target} = check_variable_assignment(('test',), \
+[[('x', str)]], memo)
+                        return check_return_type_internal('Foo.foo', x, str, memo)
+                """
+            ).strip()
+        )
+
     def test_assignment_annotated_argument(self) -> None:
         node = parse(
             dedent(
@@ -1442,13 +1480,13 @@ self_type=self.__class__)
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types, \
+                from typeguard._functions import check_argument_types_internal, \
 check_variable_assignment
 
                 def foo(x: int) -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'x': (x, int)}, memo)
-                    x = check_variable_assignment(6, [[('x', int)]], memo)
+                    check_argument_types_internal('foo', {'x': (x, int)}, memo)
+                    x = check_variable_assignment(6, [('x', int)], memo)
                 """
             ).strip()
         )
@@ -1498,12 +1536,12 @@ memo)):
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types, \
+                from typeguard._functions import check_argument_types_internal, \
 check_variable_assignment
 
                 def foo(x: int) -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'x': (x, int)}, memo)
+                    check_argument_types_internal('foo', {'x': (x, int)}, memo)
                     if (x := check_variable_assignment(otherfunc(), [[('x', int)]], memo)):
                         pass
                 """
@@ -1549,7 +1587,7 @@ check_variable_assignment
                 def foo() -> None:
                     memo = TypeCheckMemo(globals(), locals())
                     x: int
-                    x = check_variable_assignment({function}(x, 6), [[('x', int)]], \
+                    x = check_variable_assignment({function}(x, 6), [('x', int)], \
 memo)
                 """
             ).strip()
@@ -1592,14 +1630,14 @@ memo)
             == dedent(
                 """
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types, \
+                from typeguard._functions import check_argument_types_internal, \
 check_variable_assignment
                 from operator import iadd
 
                 def foo(x: int) -> None:
                     memo = TypeCheckMemo(globals(), locals())
-                    check_argument_types('foo', {'x': (x, int)}, memo)
-                    x = check_variable_assignment(iadd(x, 6), [[('x', int)]], memo)
+                    check_argument_types_internal('foo', {'x': (x, int)}, memo)
+                    x = check_variable_assignment(iadd(x, 6), [('x', int)], memo)
                 """
             ).strip()
         )
@@ -1741,9 +1779,9 @@ def test_dont_leave_empty_ast_container_nodes() -> None:
 
             def foo(x: str) -> None:
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types
+                from typeguard._functions import check_argument_types_internal
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, str)}, memo)
+                check_argument_types_internal('foo', {'x': (x, str)}, memo)
             """
         ).strip()
     )
@@ -1788,9 +1826,9 @@ def test_dont_leave_empty_ast_container_nodes_2() -> None:
 
             def foo(x: str) -> None:
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types
+                from typeguard._functions import check_argument_types_internal
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, str)}, memo)
+                check_argument_types_internal('foo', {'x': (x, str)}, memo)
             """
         ).strip()
     )
@@ -1877,9 +1915,9 @@ def test_dont_parse_annotated_2nd_arg() -> None:
 
             def foo(x: Annotated[str, 'foo bar']) -> None:
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_argument_types
+                from typeguard._functions import check_argument_types_internal
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, Annotated[str, 'foo bar'])}, memo)
+                check_argument_types_internal('foo', {'x': (x, Annotated[str, 'foo bar'])}, memo)
             """
         ).strip()
     )
@@ -1904,9 +1942,9 @@ def test_respect_docstring() -> None:
             def foo() -> int:
                 """This is a docstring."""
                 from typeguard import TypeCheckMemo
-                from typeguard._functions import check_return_type
+                from typeguard._functions import check_return_type_internal
                 memo = TypeCheckMemo(globals(), locals())
-                return check_return_type('foo', 1, int, memo)
+                return check_return_type_internal('foo', 1, int, memo)
             '''
         ).strip()
     )
@@ -1933,11 +1971,11 @@ def test_respect_future_import() -> None:
             """module docstring"""
             from __future__ import annotations
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_return_type
+            from typeguard._functions import check_return_type_internal
 
             def foo() -> int:
                 memo = TypeCheckMemo(globals(), locals())
-                return check_return_type('foo', 1, int, memo)
+                return check_return_type_internal('foo', 1, int, memo)
             '''
         ).strip()
     )
@@ -1961,12 +1999,12 @@ def test_literal() -> None:
         == dedent(
             """
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types
+            from typeguard._functions import check_argument_types_internal
             from typing import Literal
 
             def foo(x: Literal['a', 'b']) -> None:
                 memo = TypeCheckMemo(globals(), locals())
-                check_argument_types('foo', {'x': (x, Literal['a', 'b'])}, memo)
+                check_argument_types_internal('foo', {'x': (x, Literal['a', 'b'])}, memo)
             """
         ).strip()
     )

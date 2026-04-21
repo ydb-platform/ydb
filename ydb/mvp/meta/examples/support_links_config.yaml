@@ -1,0 +1,39 @@
+generic:
+  access_service_type: "yandex_v2"
+
+  mlock: false
+
+  logging:
+    stderr: false
+
+  server:
+    http_port: 8788
+    https_port: 8789
+    ca_cert_file: path/to/ca.crt
+    ssl_cert_file: path/to/ssl.crt
+
+  auth:
+    token_file: ydb/mvp/meta/examples/token_file.pb.txt
+
+meta:
+  meta_api_endpoint: grpc://meta.ydb.example.net:2135
+  meta_database: /Root/meta
+  meta_database_token_name: "service-account-jwt"
+
+  grafana:
+    endpoint: https://grafana.example.net
+
+  support_links:
+    cluster:
+      - source: grafana/dashboard
+        title: Cluster Overview
+        url: /d/ydb_cluster/overview
+      - source: grafana/dashboard/search
+        tag:
+          - ydb-cluster
+        folder:
+          - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1
+    database:
+      - source: grafana/dashboard
+        title: Database Overview
+        url: /d/ydb_database/overview

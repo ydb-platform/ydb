@@ -11,18 +11,33 @@
 
 ## Механизм аутентификации
 
-В Kafka API аутентификация выполняется через механизмы `SASL_PLAINTEXT/PLAIN` или `SASL_SSL/PLAIN`.
+В Kafka API поддержано два механизма SASL аутентификации: `PLAIN` и `SCRAM-SHA-256`.
+Оба механизма могут осуществляться как внутри протокола `TLS`, так и вне, порождая соответственно комбинации:
+
+* `SASL_PLAINTEXT/PLAIN`;
+* `SASL_SSL/PLAIN`;
+* `SASL_PLAINTEXT/SCRAM-SHA-256`;
+* `SASL_SSL/SCRAM-SHA-256`.
+
+{% note warning %}
+
+Для использования механизма `SCRAM-SHA-256` при аутентификации существующих пользователей может потребоваться смена пароля.
+
+{% endnote %}
 
 Для аутентификации необходимы:
 
 * `<user-name>` — имя пользователя. Об управлении пользователями читайте в разделе [{#T}](../../security/authentication.md).
 * `<password>` — пароль пользователя. Об управлении пользователями читайте в разделе [{#T}](../../security/authentication.md).
-* `<database>` — [путь базы данных](../../concepts/connect#database).
+* `<database>` — путь к [базе данных](../../concepts/connect#database), с которой предполагается дальнейшее взаимодействие. (Необходим только для механизма `PLAIN`).
+
+Для механизма `SCRAM-SHA-256` база данных определяется на основе настроек подключения [Kafka Connect](./connect/connect-step-by-step.md).
+Целевой базой данных считается та база, к которой относится [узел базы данных](../../concepts/glossary#database-node), имеющий указанный `<ydb-endpoint>`.
 
 Из этих параметров формируются следующие переменные, которые вы можете использовать в
 `sasl.jaas.config` параметре конфигурации клиента Kafka:
 
-* `<sasl.username>` = `<user-name>@<database>`
+* `<sasl.username>` = `<user-name>[@<database>]`
 * `<sasl.password>` = `<password>`
 
 {% note warning %}

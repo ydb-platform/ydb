@@ -13,7 +13,6 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr {
@@ -47,8 +46,6 @@ struct TEvKqpExecuter {
             ui32 NodeId = 0;        // Node where breaker's query text is cached
         };
         TVector<TDeferredBreakerInfo> DeferredBreakers;  // Breaker info for deferred lock scenarios
-
-        THashSet<ui32> ParticipantNodes;
 
         // For BATCH operations only
         TVector<TSerializedCellVec> BatchOperationMaxKeys;
@@ -139,12 +136,10 @@ struct TKqpFederatedQuerySetup;
 
 struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
     std::atomic<bool> EnableRowsDuplicationCheck = false;
-    std::atomic<bool> VerboseMemoryLimitException = false;
     std::atomic<i32> RuntimeParameterSizeLimit = 0;
 
     void ApplyFromTableServiceConfig(const NKikimrConfig::TTableServiceConfig& tableServiceConfig) {
         EnableRowsDuplicationCheck.store(tableServiceConfig.GetEnableRowsDuplicationCheck());
-        VerboseMemoryLimitException.store(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException());
         RuntimeParameterSizeLimit.store(tableServiceConfig.GetExtractPredicateParameterListSizeLimit());
     }
 };
@@ -153,14 +148,17 @@ struct TExecuterConfig : TNonCopyable {
     TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
     const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
     const NKikimrConfig::TTliConfig& TliConfig;
+    NACLib::TUserContext::TPtr UserCtx;
 
     TExecuterConfig(TIntrusivePtr<TExecuterMutableConfig> mutableConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        const NKikimrConfig::TTliConfig& tliConfig
+        const NKikimrConfig::TTliConfig& tliConfig,
+        NACLib::TUserContext::TPtr userCtx
     )
         : MutableConfig(mutableConfig)
         , TableServiceConfig(tableServiceConfig)
         , TliConfig(tliConfig)
+        , UserCtx(userCtx)
     {}
 
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode GetBlockTrackingMode() const {
@@ -177,14 +175,14 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    TPartitionPrunerConfig partitionPrunerConfig, TVector<NKikimr::TTableId> tableIdsForSnapshot, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 IActor* CreateKqpSchemeExecuter(
-    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
+    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,

@@ -52,7 +52,6 @@ private:
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
@@ -285,7 +284,8 @@ enum class EIndexTypeSql {
     GlobalAsync,
     GlobalVectorKMeansTree,
     GlobalFulltextPlain,
-    GlobalFulltextRelevance
+    GlobalFulltextRelevance,
+    GlobalJson
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -299,6 +299,7 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
     case NKqp::EIndexTypeSql::GlobalFulltextPlain:
     case NKqp::EIndexTypeSql::GlobalFulltextRelevance:
+    case NKqp::EIndexTypeSql::GlobalJson:
         return "GLOBAL";
     }
 }
@@ -316,11 +317,15 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalFulltextPlain;
     case EIndexTypeSql::GlobalFulltextRelevance:
         return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
+    case EIndexTypeSql::GlobalJson:
+        return NYdb::NTable::EIndexType::GlobalJson;
     }
 }
 
 TString ReformatYson(const TString& yson);
+TString SortYsonList(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 
 void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
@@ -455,6 +460,7 @@ public:
     void CreateDatabase(const TString& databaseName);
     Tests::TServer& GetServer() const;
     Tests::TClient& GetClient() const;
+    const TString& GetEndpoint() const;
 
 private:
     TPortManager PortManager;

@@ -111,6 +111,8 @@ class Platform(object):
         self.is_armv6hf = self.arch in ('armv6hf',)
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
+        self.is_arm_aml403 = self.arch == 'arm_aml403'
+        self.is_arm64_aml403 = self.arch == 'arm64_aml403'
 
         self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
@@ -156,10 +158,10 @@ class Platform(object):
 
         self.is_32_bit = (
             self.is_x86 or
-            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or
+            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
             self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
         )
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -241,6 +243,8 @@ class Platform(object):
             (self.is_armv7em, 'ARCH_ARM7EM'),
             (self.is_armv5te, 'ARCH_ARM5TE'),
             (self.is_arm, 'ARCH_ARM'),
+            (self.is_arm_aml403, 'ARCH_ARM_AML403'),
+            (self.is_arm64_aml403, 'ARCH_ARM64_AML403'),
             (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
             (self.is_power8le, 'ARCH_POWER8LE'),
@@ -1301,6 +1305,14 @@ class GnuToolchain(Toolchain):
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
 
+        if target.is_arm_aml403:
+            self.c_flags_platform.append('-march=armv8-a -mthumb')
+            self.setup_amlogic_rtos_sdk()
+
+        if target.is_arm64_aml403:
+            self.c_flags_platform.append('-march=armv8-a -mcpu=cortex-a35')
+            self.setup_amlogic64_rtos_sdk()
+
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1318,7 +1330,7 @@ class GnuToolchain(Toolchain):
             target_flags = select(default=[], selectors=[
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
                 (target.is_linux and target.is_power9le, ['-mcpu=power9', '-mtune=power9', '-maltivec']),
-                (target.is_linux and target.is_armv8, ['-march=armv8a']),
+                (target.is_linux and target.is_armv8, ['-march=armv8-a']),
                 (target.is_macos, ['-mmacosx-version-min={}'.format(MACOS_VERSION_MIN)]),
                 (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(IOS_VERSION_MIN)]),
                 (target.is_iossim, ['-mios-simulator-version-min={}'.format(IOS_VERSION_MIN)]),
@@ -1362,6 +1374,12 @@ class GnuToolchain(Toolchain):
         self.c_flags_platform.append('--sysroot')
         self.c_flags_platform.append(var)
 
+    def setup_amlogic_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/amlogic_rtos')
+
+    def setup_amlogic64_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/amlogic64_rtos')
+
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
         self.c_flags_platform.append('-isysroot')
@@ -1395,12 +1413,18 @@ class GnuToolchain(Toolchain):
 
             return get_output('xcrun', '-sdk', sdk, '--show-sdk-path')
 
+        sdk_root = None
         if target.is_iossim:
-            self.env['SDKROOT'] = get_sdk_root('iphonesimulator')
+            sdk_root = get_sdk_root('iphonesimulator')
         elif target.is_ios:
-            self.env['SDKROOT'] = get_sdk_root('iphoneos')
+            sdk_root = get_sdk_root('iphoneos')
         elif target.is_macos:
-            self.env['SDKROOT'] = get_sdk_root('macosx')
+            sdk_root = get_sdk_root('macosx')
+
+        if sdk_root:
+            self.env['SDKROOT'] = sdk_root
+            self.c_flags_platform.append('--sysroot={}'.format(sdk_root))
+            self.swift_flags_platform += ['-sdk', sdk_root]
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
@@ -1611,7 +1635,7 @@ class GnuCompiler(Compiler):
                 '-Wno-undefined-var-template',
             ]
 
-        elif self.tc.is_gcc and self.host.is_riscv64_aw is None:
+        elif self.tc.is_gcc and self.host.is_riscv64_aw is None and self.host.is_arm_aml403 is None:
             self.c_foptions.append('-fno-delete-null-pointer-checks')
             self.c_foptions.append('-fabi-version=8')
 
@@ -2609,6 +2633,8 @@ class Cuda(object):
         if version < (13, 0):
             architectures.extend(['sm_50', 'sm_52', 'sm_60', 'sm_61', 'sm_70'])
 
+        architectures.append('sm_75')
+
         if version >= (11, 0):
             architectures.append('sm_80')
 
@@ -2623,6 +2649,9 @@ class Cuda(object):
 
         if version >= (12, 8):
             architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
+
+        if version >= (12, 9):
+            architectures.extend(['sm_100f', 'sm_103', 'sm_103a', 'sm_103f', 'sm_120f'])
 
         return ':'.join(architectures)
 
@@ -2697,7 +2726,7 @@ class CuDNN(object):
         return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
 
     def auto_cudnn_version(self):
-        return '9.10.2'
+        return '9.12.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

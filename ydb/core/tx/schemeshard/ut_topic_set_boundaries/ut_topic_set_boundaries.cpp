@@ -85,8 +85,6 @@ void CreateExtSubDomain(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, T
 TTestEnv CreateTestEnv(TTestBasicRuntime& runtime) {
     TTestEnvOptions opts;
 
-    opts.EnableTopicSplitMerge(true);
-
     TTestEnv env(runtime, opts);
 
     return env;

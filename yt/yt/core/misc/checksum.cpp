@@ -67,7 +67,8 @@ __m128i FoldTo128(const __m128i* buf128, size_t buflen, __m128i result)
     return result;
 }
 
-ui64 Crc(const void* buf, size_t buflen, ui64 seed) Y_NO_SANITIZE("memory")
+Y_NO_SANITIZE("memory")
+ui64 Crc(const void* buf, size_t buflen, ui64 seed)
 {
     const ui8* ptr = reinterpret_cast<const ui8*>(buf);
 

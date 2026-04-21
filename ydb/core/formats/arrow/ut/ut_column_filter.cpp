@@ -154,4 +154,119 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
             AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
     }
+
+    Y_UNIT_TEST(ReverseBasic) {
+        TColumnFilter filter({ true, false, true, true, false });
+        auto reversed = filter.CreateReversed();
+        UNIT_ASSERT_VALUES_EQUAL(reversed.DebugString(), "{0}[1,2,1,1]");
+    }
+    
+    Y_UNIT_TEST(ReverseOdd) {
+        TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+        filter.Add(true, 4);
+        filter.Add(false, 3);
+        filter.Add(true, 2);
+        auto reversed = filter.CreateReversed();
+        UNIT_ASSERT_VALUES_EQUAL(filter.DebugString(), "{1}[4,3,2]");
+        UNIT_ASSERT_VALUES_EQUAL(reversed.DebugString(), "{1}[2,3,4]");
+    }
+    
+    Y_UNIT_TEST(ReverseEven) {
+        TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+        filter.Add(true, 4);
+        filter.Add(false, 3);
+        filter.Add(true, 2);
+        filter.Add(false, 2);
+        auto reversed = filter.CreateReversed();
+        UNIT_ASSERT_VALUES_EQUAL(filter.DebugString(), "{1}[4,3,2,2]");
+        UNIT_ASSERT_VALUES_EQUAL(reversed.DebugString(), "{0}[2,2,3,4]");
+    }
+
+    Y_UNIT_TEST(ReverseDouble) {
+        TColumnFilter filter({ true, false, true, true, false });
+        auto reversed = filter.CreateReversed();
+        auto doubleReversed = reversed.CreateReversed();
+        auto originalVec = filter.BuildSimpleFilter();
+        auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
+    }
+
+    Y_UNIT_TEST(ReverseComplex) {
+        TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+        filter.Add(true, 4);
+        filter.Add(false, 3);
+        filter.Add(true, 2);
+        filter.Add(false, 1);
+        filter.Add(true, 4);
+        filter.Add(false, 6);
+        filter.Add(true, 6);
+        filter.Add(false, 1);
+        filter.Add(true, 3);
+        filter.Add(false, 2);
+        
+        auto reversed = filter.CreateReversed();
+        auto doubleReversed = reversed.CreateReversed();
+        
+        auto originalVec = filter.BuildSimpleFilter();
+        auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
+    }
+
+    Y_UNIT_TEST(ReverseTotalAllow) {
+        TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+        filter.Add(true, 100);
+        
+        auto reversed = filter.CreateReversed();
+        auto doubleReversed = reversed.CreateReversed();
+        
+        auto originalVec = filter.BuildSimpleFilter();
+        auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
+    }
+
+    Y_UNIT_TEST(ReverseTotalDeny) {
+        TColumnFilter filter = TColumnFilter::BuildDenyFilter();
+        filter.Add(false, 100);
+        
+        auto reversed = filter.CreateReversed();
+        auto doubleReversed = reversed.CreateReversed();
+        
+        auto originalVec = filter.BuildSimpleFilter();
+        auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
+    }
+
+    Y_UNIT_TEST(ReverseAlternating) {
+        TColumnFilter filter({ true, false, true, false, true, false, true, false });
+        auto reversed = filter.CreateReversed();
+        auto doubleReversed = reversed.CreateReversed();
+        
+        auto originalVec = filter.BuildSimpleFilter();
+        auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
+    }
+
+    Y_UNIT_TEST(ReverseSingleSegment) {
+        TColumnFilter filter({ true, true, true, true, true });
+        auto reversed = filter.CreateReversed();
+        auto doubleReversed = reversed.CreateReversed();
+        
+        auto originalVec = filter.BuildSimpleFilter();
+        auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
+    }
+
+    Y_UNIT_TEST(ReversePreservesRecordsCount) {
+        TColumnFilter filter({ true, false, true, true, false, true, false, true });
+        auto reversed = filter.CreateReversed();
+        
+        UNIT_ASSERT_VALUES_EQUAL(filter.GetRecordsCountVerified(), reversed.GetRecordsCountVerified());
+    }
+
+    Y_UNIT_TEST(ReversePreservesFilteredCount) {
+        TColumnFilter filter({ true, false, true, true, false, true, false, true });
+        auto reversed = filter.CreateReversed();
+        
+        UNIT_ASSERT_VALUES_EQUAL(filter.GetFilteredCountVerified(), reversed.GetFilteredCountVerified());
+    }
 }

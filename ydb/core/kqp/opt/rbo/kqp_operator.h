@@ -11,7 +11,8 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/core/yql_cost_function.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <library/cpp/json/writer/json.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -20,8 +21,21 @@ using namespace NYql;
 
 enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
 
-/* Represents aggregation phases. */
-enum EAggregationPhase : ui32 { Intermediate, Final };
+// clang-format off
+#define PHASE_ENUM(X) \
+    X(Undefined)     \
+    X(Intermediate)   \
+    X(Final)
+
+enum class EOpPhase {
+#define X(name) name,
+    PHASE_ENUM(X)
+#undef X
+};
+// clang-format on
+
+// There are already defined ToString for integers.
+TString ToStringPhase(EOpPhase phase);
 
 // clang-format off
 enum EPrintPlanOptions: ui32 {
@@ -32,6 +46,10 @@ enum EPrintPlanOptions: ui32 {
 };
 // clang-format on
 
+enum EPlanToJsonOptions: ui32 {
+    BasicInfo = 0x01
+};
+
 enum EOrderEnforcerAction : ui32 { REQUIRE, MAINTAIN };
 enum EOrderEnforcerReason : ui32 { USER, INTERNAL };
 
@@ -41,6 +59,8 @@ struct TOrderEnforcer {
     TVector<TSortElement> SortElements;
 };
 
+enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
+
 /**
  * Per-operator physical plan properties
  * TODO: Make this more generic and extendable
@@ -49,12 +69,11 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
-    std::optional<ui32> NumOfConsumers;
     bool EnsureAtMostOne = false;
 
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
-    std::optional<EJoinAlgoType> JoinAlgo;
+    std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
 };
 
@@ -67,6 +86,12 @@ public:
     IOperator(EOperator kind, TPositionHandle pos)
         : Kind(kind)
         , Pos(pos) {
+    }
+
+    IOperator(EOperator kind, TPositionHandle pos, const TPhysicalOpProps& props)
+        : Kind(kind)
+        , Pos(pos)
+        , Props(props) {
     }
 
     virtual ~IOperator() = default;
@@ -118,19 +143,30 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) = 0;
 
+    virtual TString GetExplainName() const = 0;
     virtual TString ToString(TExprContext& ctx) = 0;
 
-    bool IsSingleConsumer() {
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags);
+
+    bool IsSingleConsumer() const {
         return Parents.size() <= 1;
+    }
+
+    ui32 GetNumOfConsumers() const {
+        return Parents.size();
     }
 
     const TTypeAnnotationNode* GetTypeAnn() {
         return Type;
     }
 
+    EOperator GetKind() const {
+        return Kind;
+    }
+
     const EOperator Kind;
-    TPhysicalOpProps Props;
     TPositionHandle Pos;
+    TPhysicalOpProps Props;
     const TTypeAnnotationNode* Type = nullptr;
     TVector<TIntrusivePtr<IOperator>> Children;
     TVector<std::pair<IOperator*, ui32>> Parents;
@@ -153,6 +189,10 @@ public:
     }
     IUnaryOperator(EOperator kind, TPositionHandle pos, TIntrusivePtr<IOperator> input)
         : IOperator(kind, pos) {
+        Children.push_back(input);
+    }
+    IUnaryOperator(EOperator kind, TPositionHandle pos, const TPhysicalOpProps& props, TIntrusivePtr<IOperator> input)
+        : IOperator(kind, pos, props) {
         Children.push_back(input);
     }
     TIntrusivePtr<IOperator>& GetInput() {
@@ -204,6 +244,7 @@ public:
         return {};
     }
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "EmptySource"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -213,29 +254,42 @@ class TOpRead: public IOperator {
 public:
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos);
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+            const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "TableFullScan"; }
+
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
-    bool NeedsMap();
+    bool NeedsMap() const;
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     NYql::EStorageType GetTableStorageType() const;
+
+    TExprNode::TPtr GetRanges() const { return Ranges; }
+    TExprNode::TPtr GetTable() const { return TableCallable; }
 
     // TODO: make it private members, we should not access it directly
     TString Alias;
     TVector<TString> Columns;
     TVector<TInfoUnit> OutputIUs;
     NYql::EStorageType StorageType;
+
+    // TODO: put it in read settings.
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
+    TExprNode::TPtr Limit;
+    TExprNode::TPtr Ranges;
+    std::optional<TExpression> OriginalPredicate;
+    ESortDir SortDir{ESortDir::None};
 };
 
 class TMapElement {
 public:
+    TMapElement() = default;
     TMapElement(const TInfoUnit& elementName, const TExpression& expr);
     TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
 
@@ -255,6 +309,9 @@ private:
 class TOpMap: public IUnaryOperator {
 public:
     TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered = false);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements, bool project,
+           bool ordered = false);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -271,9 +328,13 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Map"; }
+
     bool IsOrdered() const {
         return Ordered;
     }
+
+    TVector<TMapElement>& GetMapElements() { return MapElements; }
 
     TVector<TMapElement> MapElements;
     bool Project = true;
@@ -288,8 +349,14 @@ class TOpAddDependencies: public IUnaryOperator {
 public:
     TOpAddDependencies(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns,
                        const TVector<const TTypeAnnotationNode*>& types);
+    TOpAddDependencies(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs);
+
+    TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> GetDependencyPairs();
+    void SetDependencyPairs(const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "AddDependencies"; }
+    
 
     TVector<TInfoUnit> Dependencies;
     TVector<const TTypeAnnotationNode*> Types;
@@ -303,6 +370,8 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Project"; }
+
 
     TVector<TInfoUnit> ProjectList;
 };
@@ -323,31 +392,36 @@ struct TOpAggregationTraits {
 class TOpAggregate: public IUnaryOperator {
 public:
     TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
-                 const EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos);
+                 const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Aggregate"; }
+
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
-    EAggregationPhase AggregationPhase;
+    EOpPhase AggregationPhase;
     bool DistinctAll;
 };
 
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
+    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Filter"; }
+
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
@@ -355,7 +429,9 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+    TExpression GetFilterExpression() const { return FilterExpr; }
 
     TExpression FilterExpr;
 };
@@ -366,18 +442,25 @@ class TOpJoin: public IBinaryOperator {
 public:
     TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
             const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+
+    TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
+            const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Join"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+    TVector<TExpression> JoinFilters;
 };
 
 class TOpUnionAll: public IBinaryOperator {
@@ -385,6 +468,7 @@ public:
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "UnionAll"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -394,28 +478,68 @@ public:
 
 class TOpLimit: public IUnaryOperator {
 public:
-    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+             std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Limit"; }
+
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
+    EOpPhase GetLimitPhase() const {
+        return LimitPhase;
+    }
+
+    TExpression GetLimitCond() const { return LimitCond; }
+    bool HasOffset() const { return OffsetCond.has_value(); }
+    std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
+
+    // Make private.
     TExpression LimitCond;
+private:
+    std::optional<TExpression> OffsetCond;
+    EOpPhase LimitPhase{EOpPhase::Undefined};
 };
 
 class TOpSort: public IUnaryOperator {
 public:
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements,
             std::optional<TExpression> limitCond = std::nullopt);
+    TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TSortElement>& sortElements,
+            std::optional<TExpression> limitCond, const EOpPhase sortPhase);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    EOpPhase GetSortPhase() const {
+        return SortPhase;
+    }
+    void SetSortPhase(const EOpPhase phase) {
+        SortPhase = phase;
+    }
+    TVector<TSortElement> GetSortElements() const {
+        return SortElements;
+    }
+    TVector<TSortElement>& GetSortElements() {
+        return SortElements;
+    }
+    bool IsTopSort() const { return LimitCond.has_value(); }
+    
+    virtual TString GetExplainName() const override { return "Sort"; }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;
+
+private:
+    EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
 /***
@@ -434,6 +558,8 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "CBOTree"; }
+
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -442,11 +568,68 @@ public:
     TVector<TIntrusivePtr<IOperator>> TreeNodes;
 };
 
+class TOpRoot;
+
+struct TOpIterator {
+    struct TIteratorItem {
+        TIteratorItem(TIntrusivePtr<IOperator> curr, TIntrusivePtr<IOperator> parent, size_t idx, std::shared_ptr<TInfoUnit> subplanIU)
+            : Current(curr)
+            , Parent(parent)
+            , ChildIndex(idx)
+            , SubplanIU(subplanIU) {
+        }
+
+        TIntrusivePtr<IOperator> Current;
+        TIntrusivePtr<IOperator> Parent;
+        size_t ChildIndex;
+        std::shared_ptr<TInfoUnit> SubplanIU;
+    };
+
+    using iterator_category = std::input_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+
+    // Build a default iterator for the root of the plan
+    // It will visit all the subplans in their DFS order first and then the main plan
+    TOpIterator(TOpRoot* ptr);
+
+    // Build an iterator for traversing the children of specific operator
+    TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent);
+
+    // Build an iterator to travese the children of a specific iterator, recursing into
+    // subplans, as their UIs are encountered
+    TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, TPlanProps* props);
+
+    TIteratorItem operator*() const;
+
+    // Prefix increment
+    TOpIterator& operator++();
+
+    // Postfix increment
+    TOpIterator operator++(int);
+
+    friend bool operator==(const TOpIterator& a, const TOpIterator& b) {
+        return a.CurrElement == b.CurrElement;
+    };
+    friend bool operator!=(const TOpIterator& a, const TOpIterator& b) {
+        return a.CurrElement != b.CurrElement;
+    };
+
+private:
+    void BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
+                        std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans = false);
+
+    TVector<TIteratorItem> DfsList;
+    size_t CurrElement;
+    TPlanProps* PlanProps;
+};
+
 class TOpRoot: public IUnaryOperator {
 public:
     TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Root"; }
+
     void ComputeParents();
     IGraphTransformer::TStatus ComputeTypes(TRBOContext& ctx);
 
@@ -456,97 +639,20 @@ public:
     void ComputePlanMetadata(TRBOContext& ctx);
     void ComputePlanStatistics(TRBOContext& ctx);
 
+    TOpIterator begin() {
+        return TOpIterator(this);
+    }
+
+    TOpIterator end() {
+        return TOpIterator(nullptr);
+    }
+
+    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
+
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
     TVector<TString> ColumnOrder;
-
-    struct Iterator {
-        struct IteratorItem {
-            IteratorItem(TIntrusivePtr<IOperator> curr, TIntrusivePtr<IOperator> parent, size_t idx, std::shared_ptr<TInfoUnit> subplanIU)
-                : Current(curr)
-                , Parent(parent)
-                , ChildIndex(idx)
-                , SubplanIU(subplanIU) {
-            }
-
-            TIntrusivePtr<IOperator> Current;
-            TIntrusivePtr<IOperator> Parent;
-            size_t ChildIndex;
-            std::shared_ptr<TInfoUnit> SubplanIU;
-        };
-
-        using iterator_category = std::input_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-
-        Iterator(TOpRoot* ptr) {
-            if (!ptr) {
-                CurrElement = -1;
-                return;
-            }
-            Root = ptr;
-
-            std::unordered_set<IOperator*> visited;
-            for (const auto& subplan : Root->PlanProps.Subplans.Get()) {
-                BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
-            }
-            auto child = ptr->GetInput();
-            BuildDfsList(child, {}, size_t(0), visited, nullptr);
-            CurrElement = 0;
-        }
-
-        IteratorItem operator*() const {
-            return DfsList[CurrElement];
-        }
-
-        // Prefix increment
-        Iterator& operator++() {
-            if (CurrElement >= 0) {
-                CurrElement++;
-            }
-            if (CurrElement == DfsList.size()) {
-                CurrElement = -1;
-            }
-            return *this;
-        }
-
-        // Postfix increment
-        Iterator operator++(int) {
-            Iterator tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        friend bool operator==(const Iterator& a, const Iterator& b) {
-            return a.CurrElement == b.CurrElement;
-        };
-        friend bool operator!=(const Iterator& a, const Iterator& b) {
-            return a.CurrElement != b.CurrElement;
-        };
-
-    private:
-        void BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
-                          std::shared_ptr<TInfoUnit> subplanIU) {
-            const auto& children = current->GetChildren();
-            for (size_t idx = 0, e = children.size(); idx < e; ++idx) {
-                BuildDfsList(children[idx], current, idx, visited, subplanIU);
-            }
-            if (!visited.contains(current.get())) {
-                DfsList.push_back(IteratorItem(current, parent, childIdx, subplanIU));
-            }
-            visited.insert(current.get());
-        }
-
-        TVector<IteratorItem> DfsList;
-        size_t CurrElement;
-        TOpRoot* Root;
-    };
-
-    Iterator begin() {
-        return Iterator(this);
-    }
-    Iterator end() {
-        return Iterator(nullptr);
-    }
 
 private:
     void ComputeParentsRec(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, ui32 parentChildIndex) const;

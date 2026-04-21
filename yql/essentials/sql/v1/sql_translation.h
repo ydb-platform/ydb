@@ -111,6 +111,8 @@ std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, T
 
 TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
 
+TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslation& ctx);
+
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx);
 
 /// \return optional prefix
@@ -191,7 +193,7 @@ protected:
     bool ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints);
 
     TMaybe<TColumnSchema> ColumnSchemaImpl(const TRule_column_schema& node);
-    bool CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs);
+    bool CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, bool isCreateTableAs);
 
     bool FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family);
     bool FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family);
@@ -270,7 +272,7 @@ protected:
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterActions);
-    bool ParseSecretSettings(const TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, const TSecretParameters::EOperationMode mode);
+    bool ParseSecretSettings(TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, TSecretParameters::EOperationMode mode);
     [[nodiscard]] bool ParseSecretId(const TRule_id_or_at& node, TString& objectId);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);

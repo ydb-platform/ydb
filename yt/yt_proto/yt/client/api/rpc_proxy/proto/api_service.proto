@@ -544,6 +544,8 @@ message TReqLookupRows
     optional bool enable_partial_result = 7 [default = false];
     optional bool use_lookup_cache = 9 [default = false];
 
+    optional bool allow_missing_key_columns = 14 [default = false];
+
     optional TTabletReadOptions tablet_read_options = 106;
     optional EReplicaConsistency replica_consistency = 11;
 
@@ -590,6 +592,8 @@ message TReqVersionedLookupRows
     optional bool enable_partial_result = 7 [default = false];
     optional bool use_lookup_cache = 9 [default = false];
 
+    optional bool allow_missing_key_columns = 12 [default = false];
+
     optional TTabletReadOptions tablet_read_options = 106;
     optional EReplicaConsistency replica_consistency = 10;
 
@@ -621,6 +625,8 @@ message TReqMultiLookup
 
         optional bool enable_partial_result = 4 [default = false];
         optional bool use_lookup_cache = 5 [default = false];
+
+        optional bool allow_missing_key_columns = 10 [default = false];
 
         required TRowsetDescriptor rowset_descriptor = 6;
 
@@ -2216,7 +2222,7 @@ message TColumnarStatistics
     // Per-column hyperloglog digest to approximate number of unique values
     repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
 
-    optional int64 read_size_estimation = 15;
+    optional int64 read_size_estimate = 15;
 }
 
 message TRspGetColumnarStatistics
@@ -2280,7 +2286,8 @@ message TReqPartitionTables
     optional TFetcherConfig fetcher_config = 3;
     optional TChunkSliceFetcherConfig chunk_slice_fetcher_config = 4;
     required EPartitionTablesMode partition_mode = 5;
-    required int64 data_weight_per_partition = 6;
+    optional int64 data_weight_per_partition = 6;
+    optional int64 compressed_data_size_per_partition = 14;
     optional int32 max_partition_count = 7;
     optional bool enable_key_guarantee = 8;
     optional bool adjust_data_weight_per_partition = 9;

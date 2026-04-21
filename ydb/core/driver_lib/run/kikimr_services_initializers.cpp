@@ -28,6 +28,7 @@
 #include <ydb/core/blobstorage/backpressure/unisched.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
+#include <ydb/core/blobstorage/ddisk/persistent_buffer_mon.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -111,7 +112,7 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy.h>
-#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
 #endif
@@ -134,6 +135,9 @@
 #include <ydb/core/public_http/http_service.h>
 
 #include <ydb/core/quoter/quoter_service.h>
+
+#include <ydb/core/raw_socket/sock_ssl.h>
+#include <ydb/core/raw_socket/sock64.h>
 
 #include <ydb/core/scheme/scheme_type_registry.h>
 
@@ -507,6 +511,31 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     }
 
     result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
+    result.EnableKernelLiveness = false;
+    if (config.GetUseKernelKeepAlive()) {
+        result.EnableKernelLiveness = true;
+
+        result.KernelUserTimeout = result.DeadPeer != TDuration::Zero()
+            ? result.DeadPeer
+            : NActors::DEFAULT_DEADPEER_TIMEOUT;
+        // Keep kernel liveness approximately aligned to KernelUserTimeout while keeping the setup simple.
+        // Target budget on idle links is:
+        //   KernelKeepAliveIdle + KernelKeepAliveInterval * KernelKeepAliveProbes ~= KernelUserTimeout.
+        // Interval is derived from timeout and probes are fixed for predictable behavior.
+        result.KernelKeepAliveInterval = Max(result.KernelUserTimeout / 10, TDuration::Seconds(1));
+        constexpr ui32 keepAliveProbes = 5;
+        result.KernelKeepAliveProbes = keepAliveProbes;
+
+        const ui64 userTimeoutMs = result.KernelUserTimeout.MilliSeconds();
+        const ui64 keepAliveIntervalMs = result.KernelKeepAliveInterval.MilliSeconds();
+        const ui64 keepAliveWindowMs = keepAliveIntervalMs * keepAliveProbes;
+        // Use the remaining budget as keepalive idle. If interval*probes already consumes timeout,
+        // clamp idle to 1s to keep socket options valid and avoid disabling kernel mode.
+        const ui64 keepAliveIdleMs = userTimeoutMs > keepAliveWindowMs
+            ? userTimeoutMs - keepAliveWindowMs
+            : TDuration::Seconds(1).MilliSeconds();
+        result.KernelKeepAliveIdle = Max(TDuration::MilliSeconds(keepAliveIdleMs), TDuration::Seconds(1));
+    }
 
     if (config.HasValidateIncomingPeerViaDirectLookup()) {
         result.ValidateIncomingPeerViaDirectLookup = config.GetValidateIncomingPeerViaDirectLookup();
@@ -538,6 +567,10 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
 
     if (config.HasRdmaChecksum()) {
         result.RdmaChecksum = config.GetRdmaChecksum();
+    }
+
+    if (config.HasCollectSubscriptionStackTrace()) {
+        result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
     return result;
@@ -633,6 +666,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             TChannelsConfig channels;
             auto settings = GetInterconnectSettings(icConfig, numNodes, dataCenters.size());
+            setup->InterconnectCollectSubscriptionStackTrace = settings.CollectSubscriptionStackTrace;
             ui32 interconnectPoolId = GetInterconnectThreadPoolId(appData);
 
             for (const auto& channel : icConfig.GetChannel()) {
@@ -1128,6 +1162,16 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
     if (Config.HasStoredConfigYaml()) {
         nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
+    }
+
+    if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetNbsConfig().GetEnabled()) {
+        const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
+        if (storageConfig.HasGlobalDDiskConfig()) {
+            nodeWardenConfig->DDiskConfig = storageConfig.GetGlobalDDiskConfig();
+        }
+        if (storageConfig.HasGlobalPBufferConfig()) {
+            nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
+        }
     }
 
     nodeWardenConfig->StartupConfigYaml = Config.GetStartupConfigYaml();
@@ -2112,6 +2156,18 @@ void TFailureInjectionInitializer::InitializeServices(NActors::TActorSystemSetup
     setup->LocalServices.emplace_back(MakeBlobStorageFailureInjectionID(NodeId),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
     // FIXME: correct service id
+}
+
+// TMonPersistentBufferInitializer
+
+TMonPersistentBufferInitializer::TMonPersistentBufferInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TMonPersistentBufferInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+    IActor *actor = CreateMonPersistentBufferActor(Config, *appData);
+    setup->LocalServices.emplace_back(MakeMonPersistentBufferID(NodeId),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
 }
 
 // TPersQueueL2CacheInitializer
@@ -3136,6 +3192,51 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
         settings.TcpNotDelay = true;
 
+        std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::make_shared<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>();
+
+        auto readFile = [](std::optional<TString> path) {
+            if (path) {
+                try {
+                    return TFileInput(*path).ReadAll();
+                } catch (const std::exception& ex) {
+                    return TString();
+                }
+            }
+            return TString();
+        };
+
+        TString serverCert = readFile(settings.CertificateFile);
+        TString serverPrivateKey = readFile(settings.PrivateKeyFile);
+        TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+        serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
+
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
+            if (bio) {
+                serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->ServerCert = TSslHolder<X509>();
+            }
+        }
+
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(serverPrivateKey.data(), serverPrivateKey.size()));
+            if (bio) {
+                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
+            }
+        }
+
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
+            if (bio) {
+                serverCreds->CACert = TSslHolder<X509>(
+                    PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->CACert = TSslHolder<X509>();
+            }
+        }
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
@@ -3155,7 +3256,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(), serverCreds),
                            TMailboxType::HTSwap, appData->UserPoolId)
         );
 

@@ -17,6 +17,7 @@
 /ydb/tests/datashard @ydb-platform/datashard
 /ydb/tests/stress/oltp_workload @ydb-platform/datashard
 /ydb/tests/datashard/vector_index/large @ydb-platform/datashard
+/ydb/core/kqp/ut/tli @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
@@ -49,6 +50,7 @@
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_shred @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 
@@ -66,6 +68,7 @@
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/postgresql @ydb-platform/qp
 /ydb/tests/functional/kqp @ydb-platform/qp
+/ydb/tests/functional/query_cache @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
@@ -81,12 +84,6 @@
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/stress @ydb-platform/engineering
 
-#Orphan components @spuchin @maximyurchuk @kirrysin @ydb-platform/duty
-/ydb/services/ydb @ydb-platform/duty
-/ydb/core/util @ydb-platform/duty
-/ydb/core/client @ydb-platform/duty
-/ydb/core/engine @ydb-platform/duty
-
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
 /ydb/core/blobstorage @ydb-platform/blobstorage
 /ydb/core/mind/bscontroller @ydb-platform/blobstorage
@@ -100,6 +97,11 @@
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
 /ydb/tests/functional/dstool @ydb-platform/blobstorage
+/ydb/tests/compatibility/distconf @ydb-platform/blobstorage
+/ydb/tests/stress/testshard_workload @ydb-platform/blobstorage
+/ydb/tools/stress_tool @ydb-platform/blobstorage
+/ydb/core/load_test @ydb-platform/blobstorage
+/ydb/tests/stress/reconfig_state_storage_workload @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
@@ -111,6 +113,8 @@
 /ydb/tests/functional/backup_collection @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/tests/functional/serverless @ydb-platform/core
+/ydb/tests/functional/replication @ydb-platform/core
+/ydb/tests/stress/scheme_board @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics
@@ -127,6 +131,10 @@
 /ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
 /ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
 /ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
+/ydb/tests/stress/topic/ @ydb-platform/Topics
+/ydb/tests/stress/topic_kafka/ @ydb-platform/Topics
+/ydb/tests/stress/topic_sqs/ @ydb-platform/Topics
+/ydb/tests/stress/transfer/ @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 
@@ -143,9 +151,15 @@
 /ydb/library/yql/providers/solomon @ydb-platform/fq
 /ydb/core/public_http/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
+/ydb/tests/compatibility/streaming @ydb-platform/fq
+/ydb/core/external_sources/s3 @ydb-platform/fq
 
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
+
+#NBS / Network Blockstore TEAM:@ydb-platform/nbs
+/ydb/core/nbs @ydb-platform/nbs
+/ydb/tests/functional/nbs @ydb-platform/nbs
 
 /ydb/tests/sql @slonn

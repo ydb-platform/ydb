@@ -21,12 +21,13 @@ enum class EJoinAlgoType {
     LookupJoinReverse,
     MapJoin,
     GraceJoin,
+    ReverseBlockJoin, // New block join can build the left side while streaming the right side
     StreamLookupJoin, //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently impplemented in Dq by LookupInputTransform
     MergeJoin  // To be used in YT
 };
 
 //StreamLookupJoin is not a subject for CBO and not not included here
-static constexpr auto AllJoinAlgos = { EJoinAlgoType::LookupJoin, EJoinAlgoType::LookupJoinReverse, EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::MergeJoin };
+static constexpr auto AllJoinAlgos = { EJoinAlgoType::LookupJoin, EJoinAlgoType::LookupJoinReverse, EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::ReverseBlockJoin, EJoinAlgoType::MergeJoin };
 
 namespace NDq {
 

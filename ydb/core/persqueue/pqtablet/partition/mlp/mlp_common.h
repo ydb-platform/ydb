@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -9,6 +10,10 @@ struct TDLQMessage {
     ui64 Offset;
     ui64 SeqNo;
 };
+
+inline TDLQMessage AsTDLQMessage(const std::pair<ui64, ui64> p) {
+    return TDLQMessage{p.first, p.second};
+}
 
 struct TResult {
     TResult(const NActors::TActorId& sender, ui64 cookie)
@@ -21,13 +26,19 @@ struct TResult {
     ui64 Cookie;
 };
 
+struct TReadMessage {
+    ui64 Offset;
+    ui32 ApproximateReceiveCount;
+    TInstant ApproximateFirstReceiveTimestamp;
+};
+
 struct TReadResult : public TResult {
-    TReadResult(const NActors::TActorId& sender, ui64 cookie, std::deque<ui64>&& offsets)
+    TReadResult(const NActors::TActorId& sender, ui64 cookie, std::deque<TReadMessage>&& messages)
         : TResult(sender, cookie)
-        , Offsets(std::move(offsets))
+        , Messages(std::move(messages))
     {}
 
-    std::deque<ui64> Offsets;
+    std::deque<TReadMessage> Messages;
 };
 
 std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
@@ -82,18 +93,3 @@ struct TDLQMoverSettings {
 NActors::IActor* CreateDLQMover(TDLQMoverSettings&& settings);
 
 } // namespace NKikimr::NPQ::NMLP
-
-template<>
-inline void Out<std::pair<ui64 const, ui64>>(IOutputStream& o, const std::pair<ui64 const, ui64>& p) {
-    o << "(" << p.first << ", " << p.second << ")";
-}
-
-template<>
-inline void Out<std::pair<ui64, ui64>>(IOutputStream& o, const std::pair<ui64, ui64>& p) {
-    o << "(" << p.first << ", " << p.second << ")";
-}
-
-template<>
-inline void Out<NKikimr::NPQ::NMLP::TDLQMessage>(IOutputStream& o, const NKikimr::NPQ::NMLP::TDLQMessage& p) {
-    o << "(" << p.Offset << ", " << p.SeqNo << ")";
-}

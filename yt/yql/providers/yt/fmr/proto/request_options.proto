@@ -53,7 +53,9 @@ enum EFmrReason {
     REASON_UNKNOWN = 0;
     REASON_RESTART_OPERATION = 1;
     REASON_RESTART_QUERY = 2;
-    REASON_UDF_TERMINATE = 3;
+    REASON_FALLBACK_OPERATION = 3;
+    REASON_UDF_TERMINATE = 4;
+    REASON_WORKER_OOM = 5;
 }
 
 enum ESortOrder {
@@ -193,6 +195,7 @@ message TSortedUploadTaskParams {
     string CookieYson = 3;
     uint32 SessionType = 4;
     uint64 Order = 5;
+    optional TSortingColumns SortingColumns = 6;
 }
 
 message TUploadTaskParams {

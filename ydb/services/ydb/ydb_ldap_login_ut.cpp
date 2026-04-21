@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/simple_server.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_defines.h>
 
@@ -20,9 +21,12 @@ namespace {
 
 class TLoginClientConnection {
 public:
-    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)> initLdapSettings, const TLdapClientOptions& ldapClientOptions = {})
+    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)> initLdapSettings,
+        const TLdapClientOptions& ldapClientOptions = {},
+        bool hideAuthenticationFailureReasons = false
+    )
         : LdapClientOptions(ldapClientOptions)
-        , Server(InitAuthSettings(std::move(initLdapSettings)))
+        , Server(InitAuthSettings(std::move(initLdapSettings), hideAuthenticationFailureReasons))
         , Connection(GetDriverConfig(Server.GetPort()))
         , Client(Connection)
     {
@@ -42,20 +46,27 @@ public:
     }
 
 private:
-    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)>&& initLdapSettings) {
+    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)>&& initLdapSettings,
+        bool hideAuthenticationFailureReasons = false)
+    {
         TPortManager tp;
         LdapPort = tp.GetPort(389);
 
         NKikimrConfig::TAppConfig appConfig;
-        auto authConfig = appConfig.MutableAuthConfig();
 
-        authConfig->SetUseBlackBox(false);
-        authConfig->SetUseLoginProvider(true);
-        authConfig->SetEnableLoginAuthentication(LdapClientOptions.IsLoginAuthenticationEnabled);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        auto& authConfig = *appConfig.MutableAuthConfig();
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(true);
+        authConfig.SetEnableLoginAuthentication(LdapClientOptions.IsLoginAuthenticationEnabled);
+
+        initLdapSettings(authConfig.MutableLdapAuthentication(), LdapPort, LdapClientOptions);
+
+        auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenRequirement(true);
+        securityConfig.SetHideAuthenticationFailureReasons(hideAuthenticationFailureReasons);
+
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
-        initLdapSettings(authConfig->MutableLdapAuthentication(), LdapPort, LdapClientOptions);
         return appConfig;
     }
 
@@ -75,8 +86,10 @@ private:
 
 TCertStorage CertStorage;
 
-void LdapAuthWithValidCredentials(const ESecurityConnectionType& secureType) {
-    TString login = "ldapuser";
+void LdapAuthWithValidCredentials(
+        const ESecurityConnectionType& secureType,
+        const TString& login = "ldapuser")
+{
     TString password = "ldapUserPassword";
 
     LdapMock::TLdapMockResponses responses;
@@ -142,6 +155,10 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
     Y_UNIT_TEST(CanAuthWithValidCredentialsLdaps) {
         LdapAuthWithValidCredentials(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(CanAuthWithSpecialSymbolsInLdapUserSid) {
+        LdapAuthWithValidCredentials(ESecurityConnectionType::NON_SECURE, "ldap.user+test-1_2");
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidRobouserLogin) {
@@ -349,15 +366,25 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         loginConnection.Stop();
     }
 
-    Y_UNIT_TEST(LdapAuthSetIncorrectDomain) {
+    Y_UNIT_TEST_TWIN(LdapAuthSetIncorrectDomain, HideAuthenticationFailureReasons) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
         const TString incorrectLdapDomain = "@ldap.domain"; // Correct domain is AuthConfig.LdapAuthenticationDomain: "ldap"
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + incorrectLdapDomain, .Password = password});
-        TLoginClientConnection loginConnection(InitLdapSettings);
+        TLoginClientConnection loginConnection(InitLdapSettings, {}, HideAuthenticationFailureReasons);
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'ldapuser@ldap.domain'");
+
+        static constexpr char error[] = "Cannot find user 'ldapuser@ldap.domain'";
+        const auto exceptionDoesntContain = [](const auto& e) {
+            return e.AsStrBuf().find(error) == std::string::npos;
+        };
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_EXCEPTION_SATISFIES(loginProvider->GetAuthInfo(), yexception, exceptionDoesntContain);
+        } else {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, error);
+        }
 
         loginConnection.Stop();
     }

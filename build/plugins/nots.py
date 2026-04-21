@@ -12,9 +12,9 @@ from _common import (
     rootrel_arc_src,
     sort_uniq,
     to_yesno,
+    split_list_by_value,
 )
 from _dart_fields import create_dart_record
-
 
 if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
@@ -29,6 +29,29 @@ if TYPE_CHECKING:
 ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
+
+TS_LINT_DART_FIELDS = (
+    # dart data can be merged into one. merge key is ScriptRelPath + SourceFolderPath + TestName
+    # we use df.TestName.name_from_macro_args to set different keys to prevent merging
+    # see devtools/ya/test/dartfile/__init__.py
+    df.ScriptRelPath.first_flat,  # required, used to lookup a SUITE_MAP in devtools/ya/test/explore/__init__.py
+    df.SourceFolderPath.normalized,  # required
+    df.TestName.name_from_macro_args,  # required, we use it to pass script name to runner
+    df.TestRecipes.value,  # from macro USE_RECIPE()
+    df.Size.from_macro_args_and_unit,
+    df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
+    df.NodejsRootVarName.value,
+    df.TsCheckType.value,
+)
+
+TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
+    df.TestEnv.value,  # from macro ENV()
+    df.TestData.from_unit,  # from macro DATA()
+    df.TestTimeout.from_unit,  # from macro TIMEOUT()
+    df.Tag.from_unit,  # from macro TAG()
+    df.Requirements.from_unit,  # from macro REQUIREMENTS()
+    df.TsTestForPath.value,
+)
 
 
 class COLORS:
@@ -57,6 +80,7 @@ class TsTestType(StrEnum):
     TSC_TYPECHECK = auto()
     TS_STYLELINT = auto()
     TS_BIOME = auto()
+    TS_CHECK = auto()
 
 
 class UnitType:
@@ -1038,6 +1062,46 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
+def on_ts_check_configure(unit: NotsUnitType) -> None:
+    if not _is_tests_enabled(unit):
+        return
+
+    ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
+    if not ts_check_list:
+        return
+
+    test_files = df.TestFiles.ts_check_srcs(unit, (), {})
+    if not test_files:
+        return
+
+    pm = _create_pm(unit)
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
+    unit.on_setup_extract_output_tars_recipe(pm.module_path)
+
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    if peers:
+        unit.ondepends(peers)
+
+    for script_name, is_medium, check_type in ts_check_list:
+        flat_args = ("ts_check",)
+        spec_args = dict(
+            NAME=[script_name],  # df.TestName.name_from_macro_args expects array
+            TS_CHECK_TYPE=check_type,
+        )
+        if is_medium == "yes":
+            spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
+
+        dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS
+
+        dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
+        dart_record[df.TestFiles.KEY] = test_files
+
+        data = ytest.dump_test(unit, dart_record)
+        if data:
+            unit.set_property(["DART_DATA", data])
+
+
+@_with_report_configure_error
 def on_node_modules_configure(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -1179,11 +1243,21 @@ def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) ->
 
     is_arc_root = root == "${ARCADIA_ROOT}"
     is_rel_for_mod = for_mod.startswith(".")
+    forbid_rel = unit.get("_ALLOW_REL_FOR_PATH") == "no"
+
+    if forbid_rel and not is_arc_root:
+        arc_path = os.path.normpath(rootrel_arc_src(f"{root}/{for_mod}", unit))
+        ymake.report_configure_error(
+            "TS_TEST_FOR does not support RELATIVE path.\n"
+            f"Update your module to {COLORS.cyan}TS_TEST_FOR({arc_path}){COLORS.reset}\n"
+            "See more details in https://st.yandex-team.ru/FBP-3073"
+        )
+        return
 
     if is_arc_root and is_rel_for_mod:
         ymake.report_configure_error(
             "You are using a relative path for a module. "
-            + "You have to add RELATIVE key, like (RELATIVE {})".format(for_mod)
+            "You have to add RELATIVE key, like (RELATIVE {})".format(for_mod)
         )
 
 
@@ -1204,8 +1278,6 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
             )
 
     new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
-    new_items += " "
-    new_items += _build_cmd_output_paths(paths=files_out, hide=True)
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 
 
@@ -1233,7 +1305,7 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
 
     # TODO: FBP-1795
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
-    new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
+    new_items = [f'$MOVE_FILE {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
 
     __on_ts_files(unit, in_files, out_files)

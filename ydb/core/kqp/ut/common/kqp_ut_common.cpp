@@ -627,8 +627,67 @@ TString ReformatYson(const TString& yson) {
     return output.Str();
 }
 
+static void SplitYsonListAtTopLevel(const TString& yson, std::vector<TString>& items) {
+    int depth = 0;
+    char inQuote = 0;
+    bool escape = false;
+    size_t start = 0;
+    const size_t len = yson.size();
+    for (size_t i = 0; i < len; ++i) {
+        const char c = yson[i];
+        if (inQuote) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\' && (inQuote == '"' || inQuote == '\'')) {
+                escape = true;
+            } else if (c == inQuote) {
+                inQuote = 0;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            inQuote = c;
+            continue;
+        }
+        if (c == '[') {
+            if (depth == 0) {
+                start = i + 1;
+            }
+            ++depth;
+            continue;
+        }
+        if (c == ']') {
+            if (depth == 1) {
+                TString item = yson.substr(start, i - start);
+                items.push_back(StripString(item));
+            }
+            --depth;
+            continue;
+        }
+        if (c == ';' && depth == 1) {
+            TString item = yson.substr(start, i - start);
+            items.push_back(StripString(item));
+            start = i + 1;
+        }
+    }
+}
+
+TString SortYsonList(const TString& yson) {
+    std::vector<TString> items;
+    SplitYsonListAtTopLevel(yson, items);
+    std::sort(items.begin(), items.end());
+    return "[" + JoinSeq(";", items) + "]";
+}
+
 void CompareYson(const TString& expected, const TString& actual, const TString& message) {
     UNIT_ASSERT_VALUES_EQUAL_C(ReformatYson(expected), ReformatYson(actual), message);
+}
+
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message) {
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        ReformatYson(SortYsonList(expected)),
+        ReformatYson(SortYsonList(actual)),
+        message);
 }
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
@@ -1853,7 +1912,7 @@ TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 }
 
@@ -1881,6 +1940,10 @@ Tests::TServer& TTestExtEnv::GetServer() const {
 
 Tests::TClient& TTestExtEnv::GetClient() const {
     return *Client;
+}
+
+const TString& TTestExtEnv::GetEndpoint() const {
+    return Endpoint;
 }
 
 void CheckOwner(TSession& session, const TString& path, const TString& name) {

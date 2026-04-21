@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         std::vector<TOutdatedRequest> outdated;
         ui64 requestId = 0;
 
-        manager.PushRequest(1, 10, TSegment{10, 20}, &requestId, &outdated);
+        manager.PushRequest(1, 1, 10, TSegment{10, 20}, &requestId, &outdated);
 
         UNIT_ASSERT(outdated.empty());
         AssertPop(manager, requestId, 10, std::vector<TSegment>{{10, 20}});
@@ -94,11 +94,11 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         ui64 requestId1 = 0;
         ui64 requestId2 = 0;
 
-        manager.PushRequest(1, 100, TSegment{0, 10}, &requestId1, &outdated);
+        manager.PushRequest(1, 1, 100, TSegment{0, 10}, &requestId1, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 101, TSegment{10, 20}, &requestId2, &outdated);
+        manager.PushRequest(1, 1, 101, TSegment{10, 20}, &requestId2, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         AssertPop(manager, requestId1, 100, std::vector<TSegment>{{0, 10}});
@@ -111,11 +111,11 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         ui64 requestId1 = 0;
         ui64 requestId2 = 0;
 
-        manager.PushRequest(1, 10, TSegment{10, 20}, &requestId1, &outdated);
+        manager.PushRequest(1, 1, 10, TSegment{10, 20}, &requestId1, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 11, TSegment{12, 14}, &requestId2, &outdated);
+        manager.PushRequest(1, 1, 11, TSegment{12, 14}, &requestId2, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         AssertPop(manager, requestId1, 10, std::vector<TSegment>{{10, 12}, {14, 20}});
@@ -128,11 +128,11 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         ui64 requestId1 = 0;
         ui64 requestId2 = 0;
 
-        manager.PushRequest(1, 10, TSegment{10, 20}, &requestId1, &outdated);
+        manager.PushRequest(1, 1, 10, TSegment{10, 20}, &requestId1, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 11, TSegment{0, 30}, &requestId2, &outdated);
+        manager.PushRequest(1, 1, 11, TSegment{0, 30}, &requestId2, &outdated);
 
         AssertOutdatedEqual(outdated, {{10, requestId1}});
 
@@ -149,23 +149,23 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         ui64 requestId4 = 0;
         ui64 requestIdOtherVChunk = 0;
 
-        manager.PushRequest(1, 101, TSegment{0, 10}, &requestId1, &outdated);
+        manager.PushRequest(1, 1, 101, TSegment{0, 10}, &requestId1, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 102, TSegment{10, 20}, &requestId2, &outdated);
+        manager.PushRequest(1, 1, 102, TSegment{10, 20}, &requestId2, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 103, TSegment{20, 30}, &requestId3, &outdated);
+        manager.PushRequest(1, 1, 103, TSegment{20, 30}, &requestId3, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(2, 201, TSegment{10, 20}, &requestIdOtherVChunk, &outdated);
+        manager.PushRequest(1, 2, 201, TSegment{10, 20}, &requestIdOtherVChunk, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 104, TSegment{5, 25}, &requestId4, &outdated);
+        manager.PushRequest(1, 1, 104, TSegment{5, 25}, &requestId4, &outdated);
 
         AssertOutdatedEqual(outdated, {{102, requestId2}});
 
@@ -184,19 +184,19 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         ui64 requestId3 = 0;
         ui64 requestId4 = 0;
 
-        manager.PushRequest(1, 11, TSegment{0, 4}, &requestId1, &outdated);
+        manager.PushRequest(1, 1, 11, TSegment{0, 4}, &requestId1, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 12, TSegment{4, 8}, &requestId2, &outdated);
+        manager.PushRequest(1, 1, 12, TSegment{4, 8}, &requestId2, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 13, TSegment{8, 12}, &requestId3, &outdated);
+        manager.PushRequest(1, 1, 13, TSegment{8, 12}, &requestId3, &outdated);
         UNIT_ASSERT(outdated.empty());
 
         outdated.clear();
-        manager.PushRequest(1, 14, TSegment{0, 12}, &requestId4, &outdated);
+        manager.PushRequest(1, 1, 14, TSegment{0, 12}, &requestId4, &outdated);
 
         AssertOutdatedEqual(outdated, {
             {11, requestId1},
@@ -208,6 +208,40 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         AssertPop(manager, requestId2, Max<ui64>(), std::vector<TSegment>{});
         AssertPop(manager, requestId3, Max<ui64>(), std::vector<TSegment>{});
         AssertPop(manager, requestId4, 14, std::vector<TSegment>{{0, 12}});
+    }
+
+    Y_UNIT_TEST(DifferentTabletsDoNotOverlap) {
+        TSegmentManager manager;
+        std::vector<TOutdatedRequest> outdated;
+        ui64 requestIdA = 0;
+        ui64 requestIdB = 0;
+
+        manager.PushRequest(100, 1, 10, TSegment{0, 20}, &requestIdA, &outdated);
+        UNIT_ASSERT(outdated.empty());
+
+        outdated.clear();
+        manager.PushRequest(200, 1, 11, TSegment{0, 20}, &requestIdB, &outdated);
+        UNIT_ASSERT(outdated.empty());
+
+        AssertPop(manager, requestIdA, 10, std::vector<TSegment>{{0, 20}});
+        AssertPop(manager, requestIdB, 11, std::vector<TSegment>{{0, 20}});
+    }
+
+    Y_UNIT_TEST(SameTabletStillOverlaps) {
+        TSegmentManager manager;
+        std::vector<TOutdatedRequest> outdated;
+        ui64 requestId1 = 0;
+        ui64 requestId2 = 0;
+
+        manager.PushRequest(100, 1, 10, TSegment{0, 20}, &requestId1, &outdated);
+        UNIT_ASSERT(outdated.empty());
+
+        outdated.clear();
+        manager.PushRequest(100, 1, 11, TSegment{5, 15}, &requestId2, &outdated);
+        UNIT_ASSERT(outdated.empty());
+
+        AssertPop(manager, requestId1, 10, std::vector<TSegment>{{0, 5}, {15, 20}});
+        AssertPop(manager, requestId2, 11, std::vector<TSegment>{{5, 15}});
     }
 }
 

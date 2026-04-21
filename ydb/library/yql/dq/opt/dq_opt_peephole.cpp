@@ -1013,7 +1013,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    // Build block hash join - now inputs are guaranteed to be blocks
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftInput))
@@ -1023,6 +1022,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
             .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
             .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
+            .Add(7, blockHashJoin.Settings().Ptr())
         .Seal()
         .Build();
 
@@ -1079,8 +1079,13 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     return TExprBase(result);
 }
 
-NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool rewritingFinalAggregator, const bool useBlocks)
-{
+NNodes::TExprBase DqPeepholeRewriteWideCombiner(
+    const NNodes::TExprBase& node,
+    TExprContext& ctx,
+    const bool rewritingFinalAggregator,
+    const bool useBlocks,
+    const bool exportTypeInfo
+) {
     if (!node.Maybe<TCoWideCombiner>()) {
         return node;
     }
@@ -1122,10 +1127,33 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         outputIsFlow = *outputKind;
     }
 
+    auto expandTypeAnnFromNode = [&](const NNodes::TExprBase& src) -> TExprNode::TPtr {
+        if (const TTypeAnnotationNode* typeAnn; src.Ptr() && (typeAnn = src.Ptr()->GetTypeAnn())) {
+            return ExpandType(node.Pos(), *typeAnn, ctx);
+        } else {
+            return ctx.NewList(node.Pos(), {});
+        }
+    };
+
+    auto exportTypeAnnotations = [&](TDqPhyHashCombine& dest, const NNodes::TExprBase& input) -> void {
+        if (!exportTypeInfo) {
+            return;
+        }
+
+        auto children = dest.Ptr()->ChildrenList();
+        TExprNode::TListType typeInfos;
+        typeInfos.push_back(expandTypeAnnFromNode(input));
+        typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.KeyExtractor()));
+        typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.InitHandler()));
+        typeInfos.push_back(expandTypeAnnFromNode(dest));
+        children.push_back(ctx.NewList(node.Pos(), std::move(typeInfos)));
+        dest.Ptr()->ChangeChildrenInplace(std::move(children));
+    };
+
     bool inputIsBlocks = false;
 
     if (simpleReplace) {
-        return Build<TDqPhyHashCombine>(ctx, node.Pos())
+        auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
             .Input(wideCombiner.Input())
             .MemLimit(wideCombiner.MemLimit())
             .KeyExtractor(copyLambda(wideCombiner.KeyExtractor()))
@@ -1133,6 +1161,8 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
             .UpdateHandler(copyLambda(wideCombiner.UpdateHandler()))
             .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
         .Done();
+        exportTypeAnnotations(dqPhyCombine, wideCombiner.Input());
+        return dqPhyCombine;
     }
 
     while (input->IsCallable()) {
@@ -1166,6 +1196,8 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         .UpdateHandler(copyLambda(wideCombiner.UpdateHandler()))
         .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
     .Done();
+
+    exportTypeAnnotations(dqPhyCombine, wrappedInput);
 
     auto dqPhyCombinePtr = dqPhyCombine.Ptr();
 
@@ -1205,18 +1237,18 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
     return NNodes::TExprBase(dqPhyCombinePtr);
 }
 
-NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks) {
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks, const bool exportTypeInfo) {
     if (!node.Maybe<TCoWideCombiner>()) {
         return node;
     }
-    return DqPeepholeRewriteWideCombiner(node, ctx, true, useBlocks);
+    return DqPeepholeRewriteWideCombiner(node, ctx, true, useBlocks, exportTypeInfo);
 }
 
-NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks) {
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks, const bool exportTypeInfo) {
     if (!node.Maybe<TCoWideCombiner>()) {
         return node;
     }
-    return DqPeepholeRewriteWideCombiner(node, ctx, false, useBlocks);
+    return DqPeepholeRewriteWideCombiner(node, ctx, false, useBlocks, exportTypeInfo);
 } // namespace NYql::NDq
 
 }

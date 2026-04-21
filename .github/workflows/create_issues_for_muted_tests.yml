@@ -8,10 +8,15 @@ on:
       - main
   workflow_dispatch:
     inputs:
-        pr_number: 
-            description: 'The pull request number'
+        pr_number:
+            description: 'The pull request number (for comment / append body)'
             required: true
             type: number
+        base_branch:
+            description: 'Branch for YDB scripts and create_issues --branch (PR runs use the merged PR base ref)'
+            required: false
+            type: string
+            default: main
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
@@ -22,58 +27,86 @@ jobs:
   create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
-      ((github.event_name == 'pull_request' && 
-      github.event.pull_request.merged == true &&
-      contains(github.event.pull_request.labels.*.name, 'mute-unmute') &&
-      github.event.pull_request.base.ref == 'main') || 
-      github.event_name == 'workflow_dispatch')
+      ((github.event_name == 'pull_request' &&
+        github.event.pull_request.merged == true ) ||
+       github.event_name == 'workflow_dispatch')
 
     steps:
+      - name: Check mute-unmute label via API
+        id: label_check
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number
+            });
+            const labels = pr.labels.map(l => l.name);
+            console.log('PR labels:', labels);
+            const has = labels.includes('mute-unmute');
+            core.setOutput('has_mute_unmute_label', has ? 'true' : 'false');
+            if (!has) {
+              core.notice(`PR #${pr.number} does not have mute-unmute label (labels: ${labels.join(', ')}), skipping`);
+            }
+
       - name: Set environment variables for branches
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         run: |
-          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref || 'main' }}" >> $GITHUB_ENV
-          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "BASE_BRANCH=${{ github.event.inputs.base_branch }}" >> "$GITHUB_ENV"
+          else
+            echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}" >> "$GITHUB_ENV"
+          fi
 
       - name: Checkout repository
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         uses: actions/checkout@v4
         with:
-            ref: main  # After merge, work with main branch
+            ref: main
 
       - name: Install dependencies
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         run: |
             python -m pip install --upgrade pip
             pip install ydb[yc] PyGithub requests matplotlib numpy pandas
 
       - name: Setup ydb access
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
             ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Create issues for muted tests
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }}
- 
+        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
+
       - name: Add issues to PR
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
-      
+
       - name: Comment PR
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
-            
+
             const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const filePath = '${{ steps.create_issues.outputs.created_issues_file }}';
             const bodyText = fs.readFileSync(filePath, 'utf8');
             const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
-      
+
             github.rest.issues.createComment({
               issue_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }},
               owner: context.repo.owner,
@@ -81,42 +114,16 @@ jobs:
               body: completeBody
             });
 
-      # IMPORTANT: First update muted tests information in DB
       - name: Update muted tests in DB
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      # Then update analytics that depends on muted tests
       - name: Collect test history data
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
-      
+
       - name: Update test monitor
+        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Export GitHub issues
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python3 .github/scripts/analytics/export_issues_to_ydb.py
-
-      - name: Upload GitHub issue mapping table
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python3 .github/scripts/analytics/github_issue_mapping.py
-
-      - name: Upload MUTED test monitor data mart with GitHub issue links
-        continue-on-error: true
-        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window
-
-      - name: Send team-specific messages to Telegram
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
-          TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
-        run: |
-          python .github/scripts/telegram/parse_and_send_team_issues.py \
-            --on-mute-change-update \
-            --file "${{ steps.create_issues.outputs.created_issues_file }}" \
-            --bot-token "$TELEGRAM_BOT_TOKEN" \
-            --team-channels "$TEAM_CHANNELS" \
-            --include-plots \
-            --delay 2
+      # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)

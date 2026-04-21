@@ -26,6 +26,10 @@
 namespace NKikimr::NYamlConfig {
 
 struct TBasicUnknownFieldsCollector : public NProtobufJson::IUnknownFieldsCollector {
+    explicit TBasicUnknownFieldsCollector(TString rootPrefix = {})
+        : RootPrefix(std::move(rootPrefix))
+    {}
+
     void OnEnterMapItem(const TString& key) override {
         CurrentPath.push_back(key);
     }
@@ -43,21 +47,37 @@ struct TBasicUnknownFieldsCollector : public NProtobufJson::IUnknownFieldsCollec
     }
 
     void OnUnknownField(const TString& key, const google::protobuf::Descriptor& value) override {
-        TString path;
-        for (auto& piece : CurrentPath) {
-            path.append("/");
-            path.append(piece);
-        }
-        path.append("/");
-        path.append(key);
-        UnknownKeys[std::move(path)] = {key, value.full_name()};
+        UnknownKeys[BuildPath(key)] = {key, value.full_name()};
     }
 
     const TMap<TString, std::pair<TString, TString>>& GetUnknownKeys() const {
         return UnknownKeys;
     }
 
+    TString GetCurrentPath() const {
+        return BuildPath();
+    }
+
 private:
+    TString BuildPath(TStringBuf leaf = {}) const {
+        TString path;
+        if (RootPrefix) {
+            path.append("/");
+            path.append(RootPrefix);
+        }
+        for (const auto& piece : CurrentPath) {
+            path.append("/");
+            path.append(piece);
+        }
+        if (leaf) {
+            path.append("/");
+            path.append(leaf);
+        }
+        return path;
+    }
+
+private:
+    TString RootPrefix;
     TVector<TString> CurrentPath;
     TMap<TString, std::pair<TString, TString>> UnknownKeys;
 };

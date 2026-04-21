@@ -27,18 +27,18 @@ message TTableServiceConfig {
         }
         optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
-        optional uint64 ChannelChunkSizeLimit = 30 [default = 50331648];        //  48 MB
+        optional uint64 ChannelChunkSizeLimit = 30 [default = 50331648];        // 48 MB
         reserved 3;
         optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];    // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280, (InvalidateCompileCache) = true];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
-        reserved 8; // optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
+        reserved 8;  // optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
         reserved 9;  // optional uint32 InstantMkqlMemoryAllocWaitTimeMs = 9 [default = 20];
         reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
-        optional uint64 MinChannelBufferSize = 12 [default = 2048];          // 2 KB
+        optional uint64 MinChannelBufferSize = 12 [default = 2048];             // 2 KB
 
         reserved 13;
         reserved 14;
@@ -212,6 +212,8 @@ message TTableServiceConfig {
 
         optional uint64 MaxRowsProcessingStreamLookup = 9 [default = 65536];
         optional uint64 MaxTotalBytesQuotaStreamLookup = 10 [default = 2684354560]; // 5_MB * 512
+        optional uint64 MaxInFlightReadsStreamLookup = 11 [default = 50];
+        optional uint64 MaxBytesPerFetchStreamLookup = 12 [default = 268435456]; // 256_MB
     }
 
     message TIteratorReadQuotaSettings {
@@ -392,7 +394,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true, (InvalidateCompileCache) = true];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableNewRBO = 84 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true, (InvalidateCompileCache) = true];
@@ -428,8 +430,8 @@ message TTableServiceConfig {
 
     optional bool EnableOrderOptimizaionFSM = 99 [ default = false , (InvalidateCompileCache) = true];
 
-    optional bool EnableTopSortSelectIndex = 100 [ default = true, (InvalidateCompileCache) = true ];
-    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true , (InvalidateCompileCache) = true];
+    reserved 100; //    optional bool EnableTopSortSelectIndex = 100 [ default = true, (InvalidateCompileCache) = true ];
+    reserved 101; //    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true , (InvalidateCompileCache) = true];
 
     optional bool EnableDataShardCreateTableAs = 102 [default = true, (InvalidateCompileCache) = true];
 
@@ -477,7 +479,7 @@ message TTableServiceConfig {
 
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
+    optional bool DqHashOperatorsUseBlocks = 120 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
@@ -492,4 +494,8 @@ message TTableServiceConfig {
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool UseBlockHashJoin = 124 [default = true, (InvalidateCompileCache) = true];
+
+    optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 };

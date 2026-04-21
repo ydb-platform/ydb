@@ -57,10 +57,9 @@ TEST_P(TAsyncParallelRunnerTest, Do)
         runner.Add(index);
     }
     std::atomic<int> sum = 0;
-    runner.Run([&] (int arg) {
+    WaitFor(runner.Run([&] (int arg) {
         sum += arg;
-    })
-        .BlockingGet()
+    }))
         .ThrowOnError();
     EXPECT_EQ(sum.load(), expectedSum);
 }

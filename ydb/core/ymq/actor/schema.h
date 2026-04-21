@@ -36,6 +36,9 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
 THolder<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveDirectoryEvent(const TString& root, const TString& name);
 
+THolder<TEvTxUserProxy::TEvProposeTransaction>
+    MakeRemoveTopicEvent(const TString& root, const TString& name);
+
 // Create actor that calls AddQuoterResource and handles pipe errors and retries
 TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId);
 TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId);

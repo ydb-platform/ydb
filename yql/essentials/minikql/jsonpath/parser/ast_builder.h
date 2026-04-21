@@ -44,7 +44,7 @@ private:
     TAstNodePtr BuildExpr(const NJsonPathGenerated::TRule_expr& node);
     TAstNodePtr BuildJsonPath(const NJsonPathGenerated::TRule_jsonpath& node);
 
-    void Error(TPosition pos, const TStringBuf message);
+    void Error(TPosition pos, TStringBuf message);
 
     TIssues& Issues_;
 };

@@ -11,18 +11,6 @@ namespace NYdb::NBS::NBlockStore {
 struct TCallContext;
 using TCallContextPtr = TIntrusivePtr<TCallContext>;
 
-struct IBlockStore;
-using IBlockStorePtr = std::shared_ptr<IBlockStore>;
-
-struct ISwitchableBlockStore;
-using ISwitchableBlockStorePtr = std::shared_ptr<ISwitchableBlockStore>;
-
-struct ISessionSwitcher;
-using ISessionSwitcherWeakPtr = std::weak_ptr<ISessionSwitcher>;
-
-struct IAuthProvider;
-using IAuthProviderPtr = std::shared_ptr<IAuthProvider>;
-
 struct IStorage;
 using IStoragePtr = std::shared_ptr<IStorage>;
 
@@ -34,6 +22,12 @@ using IDeviceHandlerPtr = std::shared_ptr<IDeviceHandler>;
 
 struct IDeviceHandlerFactory;
 using IDeviceHandlerFactoryPtr = std::shared_ptr<IDeviceHandlerFactory>;
+
+struct IPartitionDirectService;
+using IPartitionDirectServicePtr = std::shared_ptr<IPartitionDirectService>;
+
+struct TVolumeConfig;
+using TVolumeConfigPtr = std::shared_ptr<TVolumeConfig>;
 
 using TStorageBuffer = std::shared_ptr<char>;
 

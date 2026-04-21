@@ -29,28 +29,22 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
 
     // Take the average of original demand and actual demand, but keep at least 1 if original demand not zero.
-    const auto demand = Demand.load();
-    newQuery->Demand = (demand + ActualDemand.load()) >> 1;
-    if (newQuery->Demand == 0 && demand > 0) {
-        newQuery->Demand = 1;
+    const auto demand = CpuDemand.load();
+    newQuery->CpuDemand = (demand + CpuActualDemand.load()) >> 1;
+    if (newQuery->CpuDemand == 0 && demand > 0) {
+        newQuery->CpuDemand = 1;
     }
-    ActualDemand = 0;
+    CpuActualDemand = 0;
 
     // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
-    const auto burstUsage = BurstUsage.load();
-    const auto burstUsageResume = BurstUsageResume.load();
-    const auto burstUsageExtra = BurstUsageExtra.load();
-    const auto burstThrottle = BurstThrottle.load();
-    newQuery->BurstUsage += burstUsage - PrevBurstUsage;
-    newQuery->BurstUsage += burstUsageResume - PrevBurstUsageResume;
-    newQuery->BurstUsage += burstUsageExtra - PrevBurstUsageExtra;
-    newQuery->BurstThrottle = burstThrottle - PrevBurstThrottle;
-    PrevBurstUsage = burstUsage;
-    PrevBurstUsageResume = burstUsageResume;
-    PrevBurstUsageExtra = burstUsageExtra;
-    PrevBurstThrottle = burstThrottle;
+    const auto burstUsage = CpuBurstUsage.load() + CpuBurstUsageResume.load();
+    const auto burstThrottle = CpuBurstThrottle.load();
+    newQuery->CpuBurstUsage += burstUsage - PrevCpuBurstUsage;
+    newQuery->CpuBurstThrottle = burstThrottle - PrevCpuBurstThrottle;
+    PrevCpuBurstUsage = burstUsage;
+    PrevCpuBurstThrottle = burstThrottle;
 
-    newQuery->Usage = Usage.load();
+    newQuery->CpuUsage = CpuUsage.load();
     return newQuery;
 }
 
@@ -69,7 +63,7 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     }
 
     count = std::min<ui32>(count, SchedulableTasks.size());
-    count = std::min<ui32>(count, Throttle);
+    count = std::min<ui32>(count, CpuThrottle);
 
     for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end();) {
         if (auto task = it->first.lock()) {
@@ -88,9 +82,9 @@ ui32 TQuery::ResumeTasks(ui32 count) {
 }
 
 void TQuery::UpdateActualDemand() {
-    auto demand = Usage + Throttle + 1;
-    auto actualDemand = ActualDemand.load();
-    while (actualDemand < demand && !ActualDemand.compare_exchange_weak(actualDemand, demand)) {}
+    auto demand = CpuUsage + CpuThrottle + 1;
+    auto actualDemand = CpuActualDemand.load();
+    while (actualDemand < demand && !CpuActualDemand.compare_exchange_weak(actualDemand, demand)) {}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -106,7 +100,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
         return;
     }
 
-    auto group = counters->GetKqpCounters()->GetSubgroup("scheduler/pool", id);
+    auto group = counters->GetKqpCounters()->GetSubgroup("schedulerPool", id);
 
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
@@ -123,9 +117,6 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->Throttle     = group->GetCounter("Throttle",     true);
     Counters->FairShare    = group->GetCounter("FairShare",    true);  // snapshot
 
-    Counters->InFlightExtra = group->GetCounter("InFlightExtra", false);
-    Counters->UsageExtra    = group->GetCounter("UsageExtra",    true);
-
     Counters->Delay = group->GetHistogram("Delay",
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 
@@ -136,16 +127,13 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     auto* newPool = new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
 
     if (Counters) {
-        Counters->Limit->Set(GetLimit() * 1'000'000);
-        Counters->Guarantee->Set(GetGuarantee() * 1'000'000);
-        Counters->InFlight->Set(Usage * 1'000'000);
-        Counters->Waiting->Set(Throttle * 1'000'000);
-        Counters->Usage->Set(BurstUsage);
-        Counters->UsageResume->Set(BurstUsageResume);
-        Counters->Throttle->Set(BurstThrottle);
-
-        Counters->InFlightExtra->Set(UsageExtra * 1'000'000);
-        Counters->UsageExtra->Set(BurstUsageExtra);
+        Counters->Limit->Set(GetCpuLimit() * 1'000'000);
+        Counters->Guarantee->Set(GetCpuGuarantee() * 1'000'000);
+        Counters->InFlight->Set(CpuUsage * 1'000'000);
+        Counters->Waiting->Set(CpuThrottle * 1'000'000);
+        Counters->Usage->Set(CpuBurstUsage);
+        Counters->UsageResume->Set(CpuBurstUsageResume);
+        Counters->Throttle->Set(CpuBurstThrottle);
     }
 
     if (IsLeaf()) {
@@ -186,7 +174,7 @@ NSnapshot::TDatabase* TDatabase::TakeSnapshot() {
 // TRoot
 ///////////////////////////////////////////////////////////////////////////////
 
-TRoot::TRoot(TIntrusivePtr<TKqpCounters> counters)
+TRoot::TRoot(const TIntrusivePtr<TKqpCounters>& counters)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>("(ROOT)")
     , TPool("(ROOT)", {})
 {

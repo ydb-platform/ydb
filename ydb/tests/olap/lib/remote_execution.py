@@ -651,7 +651,7 @@ class LongRemoteExecution(AbstractContextManager):
             ''')
         deploy_result = deploy_binary(local_script_path, self.host, os.path.dirname(self._script_path))
         assert deploy_result.get('success', False), deploy_result.get('error', '')
-        execute_command(self.host, f'start-stop-daemon --start --pidfile {self._pid_path} --make-pid --background --no-close --exec {self._script_path}')
+        execute_command(self.host, f'start-stop-daemon --start --pidfile {self._pid_path} --make-pid --background --no-close --exec {self._script_path} >/dev/null 2>&1')
 
     def is_running(self) -> bool:
         if self._finished:
@@ -661,7 +661,7 @@ class LongRemoteExecution(AbstractContextManager):
         return not self._finished
 
     def terminate(self) -> None:
-        execute_command(self.host, f'start-stop-daemon --stop --pidfile {self._pid_path}', raise_on_error=False)
+        execute_command(self.host, f'pkill -f {shlex.quote(self.cmd)}', raise_on_error=False)
 
     def _get_content(self, path: str) -> Optional[str]:
         res = execute_command(self.host, f'cat {path}', raise_on_error=False)

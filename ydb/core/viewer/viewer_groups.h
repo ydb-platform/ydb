@@ -1875,7 +1875,7 @@ public:
         if (vDisk.VDiskStatus) {
             vDisk.Status = NKikimrBlobStorage::EVDiskStatus_Name(*vDisk.VDiskStatus);
         }
-        vDisk.DiskSpace = static_cast<NKikimrViewer::EFlag>(info.GetDiskSpace());
+        vDisk.DiskSpace = GetViewerFlag(info.GetDiskSpace());
         vDisk.Donor = info.GetDonorMode();
         for (auto& donor : info.GetDonors()) {
             vDisk.Donors.emplace_back(donor);

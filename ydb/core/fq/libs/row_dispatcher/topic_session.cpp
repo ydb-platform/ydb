@@ -33,6 +33,7 @@ struct TTopicSessionMetrics {
             const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
             ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
             PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
+            PartitionGroup = PartitionGroup->GetSubgroup("host", "");   // This partition report metrics only on one host. 
         }
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
@@ -275,7 +276,7 @@ private:
     const TActorId RowDispatcherActorId;
     const ui32 PartitionId;
     const NYdb::TDriver Driver;
-    const NYql::IPqGateway::TPtr PqGateway;
+    const NYql::IPqStaticGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     const TRowDispatcherSettings Config;
     const TActorId CompileServiceActorId;
@@ -323,7 +324,7 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         ui64 maxBufferSize,
         bool enableStreamingQueriesCounters);
 
@@ -412,7 +413,7 @@ TTopicSession::TTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     ui64 maxBufferSize,
     bool enableStreamingQueriesCounters)
     : ReadGroup(readGroup)
@@ -1073,7 +1074,7 @@ std::unique_ptr<IActor> NewTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     ui64 maxBufferSize,
     bool enableStreamingQueriesCounters) {
     return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize, enableStreamingQueriesCounters));

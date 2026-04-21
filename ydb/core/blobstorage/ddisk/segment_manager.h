@@ -18,10 +18,11 @@ namespace NKikimr::NDDisk {
     private:
         struct TRequestInFlight;
         using TRequestIt = THashMap<ui64, TRequestInFlight>::iterator;
-        using TSegmentLocation = std::tuple<ui64, ui32, ui32>; // (vchunk_id, begin, end)
+        using TSegmentLocation = std::tuple<ui64, ui64, ui32, ui32>; // (tablet_id, vchunk_id, begin, end)
         using TSegmentIt = TMap<TSegmentLocation, TRequestIt>::iterator;
 
         struct TRequestInFlight {
+            ui64 TabletId;
             ui64 VChunkIndex;
             ui64 SyncId;
             THashMap<TSegment, TSegmentIt> Segments;
@@ -36,12 +37,12 @@ namespace NKikimr::NDDisk {
 
 
     private:
-        void DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::vector<TOutdatedRequest> *outdated);
+        void DropSegment(ui64 tabletId, ui64 vchunkIndex, TSegment dropSegment, std::vector<TOutdatedRequest> *outdated);
 
     public:
         ui64 GetSync(ui64 requestId); // return set of actual subsegments
         void PopRequest(ui64 requestId, std::vector<TSegment> *segments); // return set of actual subsegments
-        void PushRequest(ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated);
+        void PushRequest(ui64 tabletId, ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated);
 
     };
 

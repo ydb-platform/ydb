@@ -155,13 +155,13 @@ namespace NKikimr {
         public:
             TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize, TControlWrapper chunksSoftLocking)
                 : VDiskLogPrefix(std::move(vdiskLogPrefix))
-                , ConstMask(BuildConstMask(vdiskLogPrefix, slotsInChunk))
+                , ConstMask(BuildConstMask(VDiskLogPrefix, slotsInChunk))
                 , ChunksSoftLocking(chunksSoftLocking)
                 , SlotsInChunk(slotsInChunk)
                 , SlotSize(slotSize)
             {}
 
-            TChain(TString vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap::TChain& chain);
+            TChain(TString vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap::TChain& chain, TControlWrapper chunksSoftLocking);
 
             TChain(TChain&&) = default;
             TChain(const TChain&) = delete;
@@ -234,7 +234,7 @@ namespace NKikimr {
                 bool useBucketsV2,
                 TControlWrapper chunksSoftLocking);
 
-            TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);
+            TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap, TControlWrapper chunksSoftLocking);
 
             // return a pointer to corresponding chain delegator by object byte size
             TChain *GetChain(ui32 size);
@@ -318,7 +318,7 @@ namespace NKikimr {
                 ui32 freeChunksReservation,
                 TControlWrapper chunksSoftLocking);
 
-            THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);
+            THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap, TControlWrapper chunksSoftLocking);
 
             ui32 SlotNumberOfThisSize(ui32 size) const {
                 const TChain *chain = Chains.GetChain(size);

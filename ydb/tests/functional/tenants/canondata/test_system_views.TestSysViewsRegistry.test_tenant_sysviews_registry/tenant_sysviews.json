@@ -167,6 +167,14 @@
       {
         "name": "IsTruncated",
         "type": "Bool?"
+      },
+      {
+        "name": "QueryType",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Syntax",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [
@@ -536,6 +544,22 @@
       {
         "name": "UserSID",
         "type": "Utf8?"
+      },
+      {
+        "name": "WmPoolId",
+        "type": "Utf8?"
+      },
+      {
+        "name": "WmState",
+        "type": "Utf8?"
+      },
+      {
+        "name": "WmEnterTime",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "WmExitTime",
+        "type": "Timestamp?"
       }
     ],
     "primary_key": [

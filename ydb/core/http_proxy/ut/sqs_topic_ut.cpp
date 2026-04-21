@@ -1,6 +1,8 @@
 
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
@@ -15,6 +17,8 @@
 #include <library/cpp/string_utils/url/url.h>
 
 #include <format>
+
+#include <array>
 
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
@@ -357,6 +361,113 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"MessageBody", TString(2_MB, 'x')},
             },  400);
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json0, "__type"), "InvalidParameterValue");
+        }
+
+        // Same scenario as TopicAutoscaling.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit; partitioning key is MessageGroupId.
+        // Message body is capped at NSQS::TLimits::MaxMessageSize (~256 KiB), so we send more messages per phase than the topic ut.
+        // autopartitioning_manager: writeSpeedUsagePercent = SumWrittenBytes * 100 / (ScaleThresholdSeconds * WriteSpeedInBytesPerSecond);
+        // must be >= UpUtilizationPercent. Cap WriteSpeed at a PQConfig-allowed value (see InitKikimr AddValidWriteSpeedLimitsKbPerSec)
+        // so ~one max-sized message per 1s stabilization window yields high utilization and NEED_SPLIT together with KLL keys.
+        Y_UNIT_TEST_F(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId, THttpProxyTestMockForSQSTopicWithKllAutosplit) {
+            static constexpr std::array<const char*, 7> MessageGroupKeys = {
+                "kll-sketch-key-a",
+                "kll-sketch-key-b",
+                "kll-sketch-key-c",
+                "kll-sketch-key-d",
+                "kll-sketch-key-e",
+                "kll-sketch-key-f",
+                "kll-sketch-key-g",
+            };
+
+            struct TKllAutosplitPaths {
+                TString Database = "/Root";
+                TString TopicName = "sqs_kll_autosplit_topic";
+                TString ConsumerName = "sqs_kll_autosplit_consumer";
+                TString QueueUrl = std::format("/v1/{}/{}/{}/{}/{}/{}", Database.size(), Database.c_str(), TopicName.size(), TopicName.c_str(), ConsumerName.size(), ConsumerName.c_str());
+            };
+
+            auto driver = MakeDriver(*this);
+            const TKllAutosplitPaths path;
+
+            constexpr ui64 partitionWriteSpeedBytesPerSec = 512 * 1_KB;
+
+            NYdb::NTopic::TCreateTopicSettings createSettings;
+            createSettings
+                .BeginAddSharedConsumer(path.ConsumerName)
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()
+                .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(1)
+                .MaxActivePartitions(100)
+                    .BeginConfigureAutoPartitioningSettings()
+                    .UpUtilizationPercent(1)
+                    .DownUtilizationPercent(1)
+                    .StabilizationWindow(TDuration::Seconds(1))
+                    .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp)
+                    .EndConfigureAutoPartitioningSettings()
+                .EndConfigurePartitioningSettings()
+                .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeedBytesPerSec)
+                .PartitionWriteBurstBytes(partitionWriteSpeedBytesPerSec);
+            UNIT_ASSERT(CreateTopic(driver, path.TopicName, createSettings));
+
+            TTopicClient topicClient(driver);
+            auto describeResult = topicClient.DescribeTopic(path.TopicName).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult);
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTopicDescription().GetPartitions().size(), 1);
+
+            auto describePartitionCount = [&]() -> size_t {
+                auto d = topicClient.DescribeTopic(path.TopicName).GetValueSync();
+                UNIT_ASSERT_C(d.IsSuccess(), d);
+                return d.GetTopicDescription().GetPartitions().size();
+            };
+
+            // Autosplit is async: balancer may skip TEvPartitionScaleStatusChanged with
+            // "partition ... not found" until PartitionGraph updates after a prior split; the
+            // partition then stays NEED_SPLIT without re-sending the direct event. Allow time
+            // for stats-driven retries and SchemeShard alters (debug builds are slow).
+            auto waitAtLeastPartitions = [&](size_t minPartitions, TDuration maxWait) -> size_t {
+                const TInstant deadline = TInstant::Now() + maxWait;
+                size_t last = describePartitionCount();
+                while (last < minPartitions && TInstant::Now() < deadline) {
+                    Sleep(TDuration::Seconds(1));
+                    last = describePartitionCount();
+                }
+                return last;
+            };
+
+            auto sendMessage = [&](const TString& body, ui64 seqNo) {
+                SendMessageWithRetries({
+                    {"QueueUrl", path.QueueUrl},
+                    {"MessageBody", body},
+                    {"MessageGroupId", TString(MessageGroupKeys[seqNo % MessageGroupKeys.size()])},
+                });
+            };
+
+            // SQS SendMessage caps body (+ attributes) at NSQS::TLimits::MaxMessageSize (256 KiB); topic ut uses 1 MiB.
+            const TString msg(NKikimr::NSQS::TLimits::MaxMessageSize - 1, 'a');
+
+            {
+                for (ui64 seq = 1; seq <= 2; ++seq) {
+                    sendMessage(msg, seq);
+                }
+                auto partitionsCount = waitAtLeastPartitions(3, TDuration::Seconds(45));
+                UNIT_ASSERT_C(partitionsCount >= 3, "partitions: " << partitionsCount << " expected: >= 3");
+            }
+            {
+                for (ui64 seq = 3; seq <= 6; ++seq) {
+                    sendMessage(msg, seq);
+                }
+                auto partitionsCount = waitAtLeastPartitions(5, TDuration::Seconds(60));
+                UNIT_ASSERT_C(partitionsCount >= 5, "partitions: " << partitionsCount << " expected: >= 5");
+            }
+            {
+                for (ui64 seq = 7; seq <= 10; ++seq) {
+                    sendMessage(msg, seq);
+                }
+                auto partitionsCount = waitAtLeastPartitions(7, TDuration::Seconds(60));
+                UNIT_ASSERT_C(partitionsCount >= 7, "partitions: " << partitionsCount << " expected: >= 7");
+            }
         }
 
         Y_UNIT_TEST_F(TestSendMessageBatch, TFixture) {
@@ -991,6 +1102,8 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             for (int i = 0; i < params.SharedConsumers; ++i) {
                 auto& consumer = settings.BeginAddSharedConsumer(consumerName(i));
                 consumer.KeepMessagesOrder(params.Fifo);
+                consumer.ReceiveMessageWaitTime(TDuration::Seconds(10));
+                consumer.ReceiveMessageDelay(TDuration::Seconds(1));
                 consumer.DefaultProcessingTimeout(TDuration::Seconds(25));
                 if (params.Dlq) {
                     auto&& dlqSettings = consumer.BeginDeadLetterPolicy();
@@ -1028,7 +1141,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto checkDlq = [&params](const NJson::TJsonValue& json, bool expectRedrivePolicyIfHasDlq = true, std::source_location loc = std::source_location::current()) {
             const TString subcase = std::format("line={}", loc.line());
             if (expectRedrivePolicyIfHasDlq && params.Dlq) {
-                UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), subcase);
+                UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), TStringBuilder() << subcase << " " << json.GetStringRobust());
                 TString redrivePolicyJson = json["Attributes"]["RedrivePolicy"].GetString();
                 NJson::TJsonValue redrivePolicy;
                 UNIT_ASSERT_C(ReadJsonTree(redrivePolicyJson, &redrivePolicy), subcase);
@@ -1073,7 +1186,8 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"QueueUrl", resultQueueUrl},
                 {"AttributeNames", NJson::TJsonArray{"All"}}
             });
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "0");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["ReceiveMessageWaitTimeSeconds"], "10");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
@@ -1549,7 +1663,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto json = CreateQueue({
             {"QueueName", "SetAttrsMain.fifo"},
-            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
 
@@ -1561,13 +1675,14 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto attrJson = GetQueueAttributes({
             {"QueueUrl", queueUrl},
-            {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}}
+            {"AttributeNames", NJson::TJsonArray{"RedrivePolicy", "ContentBasedDeduplication"}}
         });
         UNIT_ASSERT(attrJson["Attributes"].Has("RedrivePolicy"));
         TString resultPolicy = attrJson["Attributes"]["RedrivePolicy"].GetString();
         NJson::TJsonValue policyJson;
         UNIT_ASSERT(NJson::ReadJsonTree(resultPolicy, &policyJson));
         UNIT_ASSERT_VALUES_EQUAL(policyJson["maxReceiveCount"].GetInteger(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["ContentBasedDeduplication"], "true");
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributesRetentionPeriod, TFixture) {

@@ -1,6 +1,10 @@
 PROGRAM(mrjob)
 
-ALLOCATOR(J)
+IF (OS_LINUX)
+    ALLOCATOR(TCMALLOC)
+ELSE()
+    ALLOCATOR(J)
+ENDIF()
 
 SRCS(
     mrjob.cpp

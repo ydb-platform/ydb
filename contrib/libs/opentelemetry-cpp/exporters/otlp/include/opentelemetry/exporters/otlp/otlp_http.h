@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/version.h"
 
@@ -12,14 +14,14 @@ namespace exporter
 namespace otlp
 {
 
-enum class JsonBytesMappingKind
+enum class JsonBytesMappingKind : std::uint8_t
 {
   kHexId,
   kHex,
   kBase64,
 };
 
-enum class HttpRequestContentType
+enum class HttpRequestContentType : std::uint8_t
 {
   kJson,
   kBinary,

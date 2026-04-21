@@ -56,7 +56,6 @@ private:
     bool CallbackScheduled_ = false;
     bool Dead_ = false;
 
-
     class TInvocationGuard
     {
     public:

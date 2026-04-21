@@ -32,7 +32,7 @@ public:
 private:
     const std::string Codicil_;
 
-    void RunCallback(TClosure callback)
+    void RunCallback(const TClosure& callback)
     {
         auto currentInvokerGuard = TCurrentInvokerGuard(this);
         auto codicilGuard = TCodicilGuard(MakeNonOwningCodicilBuilder(Codicil_));

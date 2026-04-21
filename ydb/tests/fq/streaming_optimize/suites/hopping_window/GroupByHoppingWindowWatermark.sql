@@ -1,12 +1,12 @@
 /* syntax version 1 */
 /* dq can not */
+-- TAG: pq-no-shared
 
 PRAGMA dq.MaxTasksPerStage="2";
 PRAGMA dq.WatermarksMode="default";
 PRAGMA dq.ComputeActorType="async";
 
 PRAGMA pq.Consumer="test_client";
--- TAG: pq-no-shared
 
 $input =
     SELECT
@@ -19,7 +19,7 @@ $input =
             k String,
             v Uint64
         )
-        , WATERMARK AS (SystemMetadata("write_time") - Interval("PT8S"))
+        , WATERMARK = SystemMetadata("write_time") - Interval("PT8S")
         , WATERMARK_GRANULARITY = "PT11S"
     );
 

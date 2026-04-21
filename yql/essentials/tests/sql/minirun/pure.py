@@ -64,7 +64,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('pure', suite, case, cfg, config, yql_http_file_server, MINIRUN_PATH,
                                  extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH,
-                                 langver=langver)
+                                 langver=langver, fuzz_universal=True)
 
     to_canonize = []
     assert xfail or os.path.exists(res.results_file)

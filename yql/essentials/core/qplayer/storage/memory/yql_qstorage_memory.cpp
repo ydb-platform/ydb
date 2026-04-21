@@ -42,7 +42,7 @@ public:
             return NThreading::MakeFuture(TMaybe<TQItem>());
         }
 
-        return NThreading::MakeFuture(TMaybe<TQItem>(TQItem({key, it->second})));
+        return NThreading::MakeFuture(TMaybe<TQItem>(TQItem({.Key = key, .Value = it->second})));
     }
 
 private:
@@ -110,7 +110,7 @@ public:
             return NThreading::MakeFuture(TMaybe<TQItem>());
         }
 
-        auto res = TMaybe<TQItem>({It_->first, It_->second});
+        auto res = TMaybe<TQItem>({.Key = It_->first, .Value = It_->second});
         ++It_;
         return NThreading::MakeFuture(res);
     }

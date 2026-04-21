@@ -24,56 +24,49 @@ struct TNodeRequest : TMoveOnly {
     // NOTE: in case there are multiple executers for a single txId - separate them by executerId.
     // TODO: is it even possible to have multiple executers to send the same TxId?
 
-    explicit TNodeRequest(ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TActorId executerId, TInstant startTime)
-        : TxId(txId)
-        , Query(query)
-        , ExecuterId(executerId)
-        , StartTime(startTime)
-    {
-    }
+    explicit TNodeRequest(TActorId queryManId) : QueryManId(queryManId) {}
 
-    TExpirationInfo GetExpirationInfo() const {
-        return std::make_tuple(Deadline, TxId, ExecuterId);
-    }
+    const TActorId QueryManId;
 
-    const ui64 TxId = 0;
-    THashMap<ui64 /* taskId */, std::optional<TActorId>> Tasks;
+    ui64 TxId = 0;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-    const TActorId ExecuterId;
-    const TInstant StartTime;
-
+    TInstant StartTime;
     TInstant Deadline;
+    std::unordered_map<ui64 /* taskId */, std::optional<TActorId>> Tasks;
+
     bool ExecutionCancelled = false;
 };
+
+inline TNodeRequest::TExpirationInfo GetExpirationInfo(TInstant deadline, ui64 txId, TActorId executerId) {
+    return std::make_tuple(deadline, txId, executerId);
+}
 
 class TNodeState {
     static constexpr ui64 BucketsCount = 64;
 
 public:
-    void AddRequest(TNodeRequest&& request);
-    bool HasRequest(ui64 txId) const;
-    bool IsRequestCancelled(ui64 txId, TActorId executerId) const;
-    bool AddTasksToRequest(ui64 txId, TActorId executerId, const TVector<ui64>& taskIds);
-    std::vector<ui64 /* txId */> ClearExpiredRequests();
+    bool AddRequest(TActorId executerId, TActorId queryManId, bool& cancelled, TActorId& requestQueryManId);
+    bool UpdateRequest(TActorId executerId, ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TInstant startTime, TInstant deadline, std::vector<ui64>& tasks, ui64& taskCount);
+    std::vector<TNodeRequest::TExpirationInfo> ClearExpiredRequests();
 
-    bool OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, TActorId executerId);
-    void OnTaskFinished(ui64 txId, ui64 taskId, bool success);
+    bool OnTaskStarted(TActorId executerId, ui64 taskId, TActorId computeActorId);
+    void OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, bool success);
 
     // Returns only started tasks
-    std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
+    std::vector<TNodeRequest::TTaskInfo> GetTasksByExecuterId(TActorId executerId) const;
 
-    void MarkRequestAsCancelled(ui64 txId);
+    void MarkRequestAsCancelled(TActorId executerId);
     void DumpInfo(TStringStream& str, const TCgiParameters& cgiParams) const;
     bool ValidateComputeActorId(const TString& caId, TActorId& computeActorId) const;
     bool ValidateKqpExecuterId(const TString& exId, TActorId& kqpExecuterId) const;
 
 private:
-    inline auto& GetBucketByTxId(ui64 txId) {
-        return Buckets.at(txId % Buckets.size());
+    inline auto& GetBucketByExecuterId(TActorId executerId) {
+        return Buckets.at(executerId.Hash() % Buckets.size());
     }
 
-    inline const auto& GetBucketByTxId(ui64 txId) const {
-        return Buckets.at(txId % Buckets.size());
+    inline const auto& GetBucketByExecuterId(TActorId executerId) const {
+        return Buckets.at(executerId.Hash() % Buckets.size());
     }
 
 private:
@@ -81,7 +74,7 @@ private:
     struct TBucket {
         TRWMutex Mutex;
         std::set<TNodeRequest::TExpirationInfo> ExpiringRequests; // protected by Mutex
-        THashMultiMap<ui64 /* txId */, TNodeRequest> Requests;    // protected by Mutex
+        std::unordered_map<TActorId /* executerId */, TNodeRequest> Requests;    // protected by Mutex
         // TODO: is it even possible to have multiple executers to send the same TxId?
     };
     std::array<TBucket, BucketsCount> Buckets;

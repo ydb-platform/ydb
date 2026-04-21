@@ -11,6 +11,11 @@ namespace {
 
 class TSortedUploadStageOperationManager: public TFmrStageOperationManagerBase {
 public:
+    TSortedUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider)
+        : TFmrStageOperationManagerBase(randomProvider)
+    {
+    }
+
     TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
         YQL_ENSURE(context.ClusterConnections.size() == 1, "SortedUpload should have exactly one cluster connection");
 
@@ -21,7 +26,7 @@ public:
         const auto& partIdStats = context.PartIdStats;
         auto ytCoordinatorService = context.YtCoordinatorService;
 
-        auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
+        auto orderedPartitionerSettings = GetSortedUploadPartitionerSettings(fmrOperationSpec);
         auto orderedPartitioner = TOrderedPartitioner(partIdsForTables, partIdStats, orderedPartitionerSettings);
 
         std::vector<TOperationTableRef> inputTables = {operationParams.Input};
@@ -30,6 +35,13 @@ public:
 
     TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {
         const auto& sortedUploadOperationParams = std::get<TSortedUploadOperationParams>(context.OperationParams);
+
+        YQL_CLOG(INFO, FastMapReduce) << "Starting SortedUpload operation";
+
+        const auto& inputRef = sortedUploadOperationParams.Input;
+        TSortingColumns sortingColumns;
+        sortingColumns.Columns = inputRef.SortColumns;
+        sortingColumns.SortOrders = inputRef.SortOrder;
 
         std::vector<TGeneratedTaskInfo> generatedTasks;
         ui64 taskOrder = 0;
@@ -41,6 +53,7 @@ public:
             sortedUploadTaskParams.Output = sortedUploadOperationParams.Output;
             sortedUploadTaskParams.CookieYson = sortedUploadOperationParams.Cookies[taskOrder];
             sortedUploadTaskParams.Order = taskOrder;
+            sortedUploadTaskParams.SortingColumns = sortingColumns;
 
             generatedTasks.push_back(TGeneratedTaskInfo{
                 .TaskType = ETaskType::SortedUpload,
@@ -63,14 +76,22 @@ public:
         return std::move(FragmentResultsYson_);
     }
 
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& /* params */) const override {
+        return {}; // SortedUpload writes to YT, not to FMR tables
+    }
+
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& /* context */) override {
+        return {}; // SortedUpload writes to YT, not to FMR tables, nothing to clean in TDS
+    }
+
 private:
     std::vector<TString> FragmentResultsYson_;
 };
 
 } // namespace
 
-IFmrStageOperationManager::TPtr MakeSortedUploadStageOperationManager() {
-    return MakeIntrusive<TSortedUploadStageOperationManager>();
+IFmrStageOperationManager::TPtr MakeSortedUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider) {
+    return MakeIntrusive<TSortedUploadStageOperationManager>(randomProvider);
 }
 
 } // namespace NYql::NFmr

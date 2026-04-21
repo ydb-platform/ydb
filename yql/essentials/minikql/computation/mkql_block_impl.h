@@ -11,9 +11,9 @@
 #include <arrow/datum.h>
 #include <arrow/compute/kernel.h>
 
-extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data);
-extern "C" uint64_t GetBitmapPopCountCount(const NYql::NUdf::TUnboxedValuePod data);
-extern "C" uint8_t GetBitmapScalarValue(const NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint64_t GetBlockCount(NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint64_t GetBitmapPopCountCount(NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint8_t GetBitmapScalarValue(NYql::NUdf::TUnboxedValuePod data);
 
 namespace NKikimr::NMiniKQL {
 
@@ -27,7 +27,7 @@ std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types);
 std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
 arrow::compute::OutputType ConvertToOutputType(TType* output);
 
-NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count);
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, uint64_t count);
 
 class TBlockFuncNode: public TMutableComputationNode<TBlockFuncNode> {
 public:
@@ -122,6 +122,6 @@ struct TBlockState: public TComputationValue<TBlockState> {
 
     ui64 Slice();
 
-    NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const;
+    NUdf::TUnboxedValuePod Get(ui64 sliceSize, const THolderFactory& holderFactory, size_t idx) const;
 };
 } // namespace NKikimr::NMiniKQL

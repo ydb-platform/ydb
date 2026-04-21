@@ -16,6 +16,7 @@
 - [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables);
 - [вторичный индекс](../../../../concepts/glossary.md#secondary-index);
 - [векторный индекс](../../../../concepts/glossary.md#vector-index);
+- [полнотекстовый индекс](../../../../concepts/glossary.md#fulltext-index);
 - [топик](../../../../concepts/datamodel/topic.md) (только схема);
 - [представление (view)](../../../../concepts/datamodel/view.md);
 - [асинхронная репликация](../../../../concepts/async-replication.md);

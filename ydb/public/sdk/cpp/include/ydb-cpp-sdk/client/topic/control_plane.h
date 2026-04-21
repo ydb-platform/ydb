@@ -94,6 +94,8 @@ public:
     const std::map<std::string, std::string>& GetAttributes() const;
     bool GetKeepMessagesOrder() const;
     TDuration GetDefaultProcessingTimeout() const;
+    TDuration GetReceiveMessageWaitTime() const;
+    TDuration GetReceiveMessageDelay() const;
     const TDeadLetterPolicy& GetDeadLetterPolicy() const;
 
 private:
@@ -107,6 +109,8 @@ private:
     bool KeepMessagesOrder_;
     TDuration DefaultProcessingTimeout_;
     TDeadLetterPolicy DeadLetterPolicy_;
+    TDuration ReceiveMessageWaitTime_;
+    TDuration ReceiveMessageDelay_;
 };
 
 class TTopicStats {
@@ -352,6 +356,8 @@ public:
 
     uint64_t GetPartitionWriteBurstBytes() const;
 
+    bool GetContentBasedDeduplication() const;
+
     const std::map<std::string, std::string>& GetAttributes() const;
 
     const std::vector<TConsumer>& GetConsumers() const;
@@ -386,6 +392,7 @@ private:
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
     std::optional<EMetricsLevel> MetricsLevel_;
+    bool ContentBasedDeduplication_;
 };
 
 class TConsumerDescription {
@@ -655,6 +662,8 @@ struct TConsumerSettings {
 
     FLUENT_SETTING_OPTIONAL(bool, KeepMessagesOrder);
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageWaitTime);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageDelay);
     FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy)
 
     FLUENT_SETTING(TAttributes, Attributes);
@@ -729,6 +738,8 @@ struct TAlterConsumerSettings {
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
 
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageWaitTime);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageDelay);
     FLUENT_SETTING(TAlterDeadLetterPolicySettings, DeadLetterPolicy);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
@@ -778,6 +789,7 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
 
     FLUENT_SETTING_DEFAULT(uint64_t, RetentionStorageMb, 0);
+    FLUENT_SETTING_DEFAULT(bool, ContentBasedDeduplication, false);
     FLUENT_SETTING_DEFAULT(EMeteringMode, MeteringMode, EMeteringMode::Unspecified);
 
     FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteSpeedBytesPerSecond, 0);
@@ -917,6 +929,7 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
     using TAlterAttributes = std::map<std::string, std::string>;
 
     FLUENT_SETTING_OPTIONAL(TDuration, SetRetentionPeriod);
+    FLUENT_SETTING_OPTIONAL(bool, SetContentBasedDeduplication);
 
     FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
 

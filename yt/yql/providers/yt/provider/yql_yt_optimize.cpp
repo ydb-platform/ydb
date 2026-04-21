@@ -548,7 +548,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                         } else {
                                             itemsCount += tableRecord;
                                         }
-                                        if (info->Table->Meta->IsDynamic) {
+                                        if (info->Table->Meta->IsDynamic || info->Table->Meta->HasRLS) {
                                             useItemsCount = false;
                                         }
                                         YQL_ENSURE(info->Table->Cluster);

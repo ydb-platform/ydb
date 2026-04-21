@@ -59,6 +59,13 @@ TYPathRequest::TYPathRequest(
     ypathExt->set_target_path(std::move(path));
 }
 
+TYPathRequest::TYPathRequest(const TYPathRequest& other)
+    : Tag_(other.Tag_)
+    , Attachments_(other.Attachments())
+{
+    Header_.CopyFrom(other.Header_);
+}
+
 TRequestId TYPathRequest::GetRequestId() const
 {
     return NullRequestId;
@@ -480,9 +487,7 @@ TYsonString SyncYPathGet(
     const IAttributeDictionaryPtr& options)
 {
     auto future = AsyncYPathGet(service, path, attributeFilter, options);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    return optionalResult->ValueOrThrow();
+    return future.AsUnique().GetOrCrash().ValueOrThrow();
 }
 
 TFuture<bool> AsyncYPathExists(
@@ -501,9 +506,7 @@ bool SyncYPathExists(
     const TYPath& path)
 {
     auto future = AsyncYPathExists(service, path);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    return optionalResult->ValueOrThrow();
+    return future.AsUnique().GetOrCrash().ValueOrThrow();
 }
 
 TFuture<void> AsyncYPathSet(
@@ -525,9 +528,7 @@ void SyncYPathSet(
     bool recursive)
 {
     auto future = AsyncYPathSet(service, path, value, recursive);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    optionalResult->ThrowOnError();
+    future.AsUnique().GetOrCrash().ThrowOnError();
 }
 
 TFuture<void> AsyncYPathRemove(
@@ -549,9 +550,7 @@ void SyncYPathRemove(
     bool force)
 {
     auto future = AsyncYPathRemove(service, path, recursive, force);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    optionalResult->ThrowOnError();
+    future.AsUnique().GetOrCrash().ThrowOnError();
 }
 
 std::vector<std::string> SyncYPathList(
@@ -560,9 +559,7 @@ std::vector<std::string> SyncYPathList(
     std::optional<i64> limit)
 {
     auto future = AsyncYPathList(service, path, limit);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    return optionalResult->ValueOrThrow();
+    return future.AsUnique().GetOrCrash().ValueOrThrow();
 }
 
 TFuture<std::vector<std::string>> AsyncYPathList(

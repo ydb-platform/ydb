@@ -16,14 +16,14 @@ namespace {
      * We maintain a white list of callables that we consider part of constant expressions
      * All other callables will not be evaluated
      */
-    THashSet<TString> ConstantFoldingWhiteList = {
+    const THashSet<TString> ConstantFoldingWhiteList = {
         "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
         "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
 
-    THashSet<TString> PgConstantFoldingWhiteList = {
+    const THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
-    TVector<TString> UdfBlackList = {
+    const TVector<TString> UdfBlackList = {
         "RandomNumber",
         "Random",
         "RandomUuid",
@@ -45,7 +45,7 @@ namespace {
             auto udf = TCoUdf(input->Child(0));
             auto udfName = udf.MethodName().StringValue();
 
-            for (auto blck : UdfBlackList) {
+            for (const auto& blck : UdfBlackList) {
                 if (udfName.find(blck) != TString::npos) {
                     return false;
                 }
@@ -290,9 +290,12 @@ bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
         return false;
     }
 
-    if (auto maybeApply = TMaybeNode<TCoApply>(input->Child(0))) {
-        auto apply = maybeApply.Cast();
-        return IsConstantUdf(apply.Callable().Ptr());
+    if (TCoApply::Match(input->Child(0))) {
+        auto apply = input->Child(0);
+        if (apply->ChildrenSize() != 2)  {
+            return false;
+        }
+        return IsConstantUdf(apply->Child(0)) && IsConstantExpr(apply->Child(1));
     }
 
     return false;
@@ -515,6 +518,72 @@ void InferStatisticsForGraceJoin(
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin with labels: " << "[" << JoinSeq(", ", unionOfLabels) << "]" << ", stats: " << resStats->ToString();
+    typeCtx->SetStats(join.Raw(), std::move(resStats));
+}
+
+void InferStatisticsForBlockHashJoin(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    const IProviderContext& ctx,
+    TOptimizerHints hints
+) {
+    auto inputNode = TExprBase(input);
+    auto join = inputNode.Cast<TDqBlockHashJoinCore>();
+
+    auto leftArg = join.LeftInput();
+    auto rightArg = join.RightInput();
+
+    auto leftStats = typeCtx->GetStats(leftArg.Raw());
+    auto rightStats = typeCtx->GetStats(rightArg.Raw());
+
+    if (!leftStats || !rightStats) {
+        return;
+    }
+
+    auto leftLabels = InferLabels(leftStats, join.LeftKeysColumnNames());
+    auto rightLabels = InferLabels(rightStats, join.RightKeysColumnNames());
+
+    leftStats = ApplyRowsHints(leftStats, leftLabels, *hints.CardinalityHints);
+    rightStats = ApplyRowsHints(rightStats, rightLabels, *hints.CardinalityHints);
+
+    leftStats = ApplyBytesHints(leftStats, leftLabels, *hints.BytesHints);
+    rightStats = ApplyBytesHints(rightStats, rightLabels, *hints.BytesHints);
+
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
+
+    for (size_t i = 0; i < join.LeftKeysColumnNames().Size(); i++) {
+        auto alias = ExtractAlias(join.LeftKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue());
+        leftJoinKeys.push_back(TJoinColumn(alias, attrName));
+    }
+    for (size_t i = 0; i < join.RightKeysColumnNames().Size(); i++) {
+        auto alias = ExtractAlias(join.RightKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue());
+        rightJoinKeys.push_back(TJoinColumn(alias, attrName));
+    }
+
+    auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
+
+    auto resStats = std::make_shared<TOptimizerStatistics>(
+        ctx.ComputeJoinStatsV2(
+            *leftStats,
+            *rightStats,
+            leftJoinKeys,
+            rightJoinKeys,
+            EJoinAlgoType::GraceJoin,
+            ConvertToJoinKind(join.JoinKind().StringValue()),
+            FindCardHint(unionOfLabels, *hints.CardinalityHints),
+            join.LeftInput().Maybe<TDqCnHashShuffle>().IsValid(),
+            join.RightInput().Maybe<TDqCnHashShuffle>().IsValid(),
+            FindBytesHint(unionOfLabels, *hints.BytesHints)
+        )
+    );
+
+    resStats->Labels = std::make_shared<TVector<TString>>();
+    resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for BlockHashJoin with labels: " << "[" << JoinSeq(", ", unionOfLabels) << "]" << ", stats: " << resStats->ToString();
     typeCtx->SetStats(join.Raw(), std::move(resStats));
 }
 

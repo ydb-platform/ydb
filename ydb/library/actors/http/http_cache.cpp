@@ -267,6 +267,7 @@ public:
             } else {
                 extraHeaders.Set("traceparent", {});
             }
+            extraHeaders.Set("Accept-Encoding", {}); // disable compression for caching
             it->second.OutgoingRequest = it->second.Request->Duplicate(extraHeaders);
             OutgoingRequests[it->second.OutgoingRequest.Get()] = key;
             ALOG_DEBUG(HttpLog, "OutgoingInitiate " << it->second.GetName());
@@ -286,6 +287,7 @@ public:
                     ALOG_DEBUG(HttpLog, "OutgoingRefresh " << it->second.GetName());
                     THeadersBuilder extraHeaders;
                     extraHeaders.Set("traceparent", {});
+                    extraHeaders.Set("Accept-Encoding", {}); // disable compression for caching
                     it->second.OutgoingRequest = it->second.Request->Duplicate(extraHeaders);
                     OutgoingRequests[it->second.OutgoingRequest.Get()] = it->first;
                     Send(HttpProxyId, new TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));

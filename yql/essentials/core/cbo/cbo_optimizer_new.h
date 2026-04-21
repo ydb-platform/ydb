@@ -65,7 +65,7 @@ enum EJoinKind: ui32 {
 };
 
 EJoinKind ConvertToJoinKind(const TString& joinString);
-TString ConvertToJoinString(const EJoinKind kind);
+TString ConvertToJoinString(EJoinKind kind);
 
 struct TCardinalityHints {
     enum ECardOperation: ui32 {
@@ -220,8 +220,8 @@ struct IProviderContext {
     virtual double ComputeJoinCost(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const double outputRows,
-        const double outputByteSize,
+        double outputRows,
+        double outputByteSize,
         EJoinAlgoType joinAlgo) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStats(
@@ -275,8 +275,8 @@ struct TBaseProviderContext: public IProviderContext {
     double ComputeJoinCost(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const double outputRows,
-        const double outputByteSize,
+        double outputRows,
+        double outputByteSize,
         EJoinAlgoType joinAlgo) const override;
 
     bool IsJoinApplicable(
@@ -365,8 +365,8 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
                        const std::shared_ptr<IBaseOptimizerNode>& right,
                        TVector<NDq::TJoinColumn> leftKeys,
                        TVector<NDq::TJoinColumn> rightKeys,
-                       const EJoinKind joinType,
-                       const EJoinAlgoType joinAlgo,
+                       EJoinKind joinType,
+                       EJoinAlgoType joinAlgo,
                        bool leftAny,
                        bool rightAny,
                        bool nonReorderable = false);

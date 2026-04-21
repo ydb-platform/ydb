@@ -14,81 +14,93 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```golang
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    ```golang
+    package main
 
-  func main() {
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithSessionPoolSizeLimit(500),
+    import (
+      "context"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithSessionPoolSizeLimit(500),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  Библиотека `database/sql` имеет свой пул соединений. Каждое соединение в `database/sql` соответствует конкретной сессии {{ ydb-short-name }}. Управлением пулом соединений в `database/sql` осуществляется с помощью функций `sql.DB.SetMaxOpenConns` и `sql.DB.SetMaxIdleConns`. Подробнее об этом написано в [документации](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns) `database/sql`.
+    Библиотека `database/sql` имеет свой пул соединений. Каждое соединение в `database/sql` соответствует конкретной сессии {{ ydb-short-name }}. Управлением пулом соединений в `database/sql` осуществляется с помощью функций `sql.DB.SetMaxOpenConns` и `sql.DB.SetMaxIdleConns`. Подробнее об этом написано в [документации](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns) `database/sql`.
 
-  Пример кода, использующего размер пула соединений `database/sql`:
+    Пример кода, использующего размер пула соединений `database/sql`:
 
-  ```golang
-  package main
+    ```golang
+    package main
 
-  import (
-    "context"
-    "database/sql"
+    import (
+      "context"
+      "database/sql"
 
-    _ "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+      _ "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
 
-  func main() {
-    db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
-    if err != nil {
-      panic(err)
+    func main() {
+      db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close()
+      db.SetMaxOpenConns(100)
+      db.SetMaxIdleConns(100)
+      db.SetConnMaxIdleTime(time.Second) // workaround for background keep-aliving of YDB sessions
+      ...
     }
-    defer db.Close()
-    db.SetMaxOpenConns(100)
-    db.SetMaxIdleConns(100)
-    db.SetConnMaxIdleTime(time.Second) // workaround for background keep-aliving of YDB sessions
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  this.queryClient = QueryClient.newClient(transport)
-          // 10 - minimum number of active sessions to keep in the pool during the cleanup
-          // 500 - maximum number of sessions in the pool
-          .sessionPoolMinSize(10)
-          .sessionPoolMaxSize(500)
-          .build();
-  ```
+  {% list tabs %}
 
-- JDBC Driver
+  - Native SDK
 
-  При работе с JDBC, как правило, используются внешние пулы соединений, такие как [HikariCP](https://github.com/brettwooldridge/HikariCP) или [C3p0](https://github.com/swaldman/c3p0). В режиме работы по умолчанию {{ ydb-short-name }} JDBC драйвер определяет количество соединений, открытых внешним пулом, и самостоятельно подстраивает размер пула сессий. Поэтому для настройки пула сессий достаточно корректно настроить `HikariCP` или `C3p0`.
+    ```java
+    this.queryClient = QueryClient.newClient(transport)
+            // 10 — минимальное число активных сессий, удерживаемых в пуле при очистке
+            // 500 — максимальный размер пула сессий
+            .sessionPoolMinSize(10)
+            .sessionPoolMaxSize(500)
+            .build();
+    ```
 
-  Пример настройки пула HikariCP в конфигурационном файле Spring:
+  - JDBC
 
-  ```properties
+    При работе с JDBC, как правило, используются внешние пулы соединений, такие как [HikariCP](https://github.com/brettwooldridge/HikariCP) или [C3p0](https://github.com/swaldman/c3p0). В режиме работы по умолчанию {{ ydb-short-name }} JDBC драйвер определяет количество соединений, открытых внешним пулом, и самостоятельно подстраивает размер пула сессий. Поэтому для настройки пула сессий достаточно корректно настроить `HikariCP` или `C3p0`.
+
+    Пример настройки пула HikariCP в конфигурации Spring:
+
+    ```properties
     spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
     spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
-    spring.datasource.hikari.maximum-pool-size=100 # maximum size of JDBC connections
-  ```
+    spring.datasource.hikari.maximum-pool-size=100 # максимум JDBC-соединений
+    ```
+
+  {% endlist %}
 
 - Python
 
@@ -133,5 +145,34 @@
     Установка размера пула на данный момент не поддержана.
 
   {% endlist %}
+
+- C#
+
+  В {{ ydb-short-name }} C# SDK параметры пула сессий задаются через строку подключения:
+
+  ```C#
+  using Ydb.Sdk.Ado;
+
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;MaxPoolSize=500;MinPoolSize=10;SessionIdleTimeout=60");
+  ```
+
+  * `MaxPoolSize` — максимальный размер пула сессий (по умолчанию 100)
+  * `MinPoolSize` — минимальное число сессий, удерживаемых в пуле (по умолчанию 0)
+  * `SessionIdleTimeout` — время простоя сессии в секундах до её закрытия (по умолчанию 300)
+
+  Для Entity Framework и linq2db используйте тот же connectionString.
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

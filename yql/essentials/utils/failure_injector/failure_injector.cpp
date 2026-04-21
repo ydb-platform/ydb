@@ -57,7 +57,7 @@ void TFailureInjector::ReachImpl(std::string_view name, std::function<void()> ac
 void TFailureInjector::SetImpl(std::string_view name, ui64 skip, ui64 countOfFails) {
     with_lock (Lock_) {
         YQL_ENSURE(countOfFails > 0, "failure " << name << ", 'countOfFails' must be positive");
-        FailureSpecs_[TString{name}] = TFailureSpec{skip, countOfFails};
+        FailureSpecs_[TString{name}] = TFailureSpec{.Skip = skip, .CountOfFails = countOfFails};
     }
 }
 

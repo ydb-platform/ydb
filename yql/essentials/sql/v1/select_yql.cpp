@@ -39,15 +39,19 @@ public:
 
 private:
     TNodePtr BuildDataSource() const {
-        return Y("DataSource", Q(Service), Q(Cluster));
+        TNodePtr service = BuildQuotedAtom(Pos_, Service);
+        TNodePtr cluster = BuildQuotedAtom(Pos_, Cluster);
+        return Y("DataSource", std::move(service), std::move(cluster));
     }
 
     TNodePtr BuildKey() const {
+        TNodePtr key = BuildQuotedAtom(Pos_, Key);
+
         if (IsAnonymous) {
-            return Y("TempTable", Q(Key));
+            return Y("TempTable", std::move(key));
         }
 
-        return Y("Key", Q(Y(Q("table"), Y("String", Q(Key)))));
+        return Y("Key", Q(Y(Q("table"), Y("String", std::move(key)))));
     }
 
     TNodePtr Node_;
@@ -124,7 +128,7 @@ private:
                 name = Columns_->at(i);
             }
 
-            columns->Add(Q(std::move(name)));
+            columns->Add(BuildQuotedAtom(Pos_, std::move(name)));
         }
         return columns;
     }
@@ -210,11 +214,11 @@ public:
         if (!InitProjection(ctx, src) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
-            (GroupBy && !NSQLTranslationV1::Init(ctx, src, GroupBy->Keys)) ||
-            (Having && !Having->GetRef().Init(ctx, src) ||
-             !Init(ctx, src, OrderBy) ||
-             (Limit && !Limit->GetRef().Init(ctx, src)) ||
-             (Offset && !Offset->GetRef().Init(ctx, src)))) {
+            (GroupBy && !Init(ctx, src, *GroupBy)) ||
+            (Having && !Having->GetRef().Init(ctx, src)) ||
+            !TYqlSelectLikeNode::Init(ctx, src, OrderBy) ||
+            (Limit && !Limit->GetRef().Init(ctx, src)) ||
+            (Offset && !Offset->GetRef().Init(ctx, src))) {
             return false;
         }
 
@@ -367,6 +371,41 @@ private:
         return true;
     }
 
+    bool Init(TContext& ctx, ISource* src, const TGroupBy& groupBy) const {
+        const auto init = TOverloaded{
+            [&](const TNodePtr& x) {
+                return x->Init(ctx, src);
+            },
+            [&](const TGroupingSets& x) {
+                return Init(ctx, src, x);
+            },
+            [&](const TGroupingSets::TRollup& x) {
+                return NSQLTranslationV1::Init(ctx, src, x.Expressions);
+            },
+            [&](const TGroupingSets::TCube& x) {
+                return NSQLTranslationV1::Init(ctx, src, x.Expressions);
+            },
+        };
+
+        for (const TGroupBy::TElement& element : groupBy.Elements) {
+            if (!std::visit(init, element)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool Init(TContext& ctx, ISource* src, const TGroupingSets& groupingSet) const {
+        for (const TVector<TNodePtr>& set : groupingSet.Sets) {
+            if (!NSQLTranslationV1::Init(ctx, src, set)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     THashSet<TString> UsedLables(const TVector<TNodePtr>& terms) const {
         THashSet<TString> used(terms.size());
         for (const TNodePtr& term : terms) {
@@ -413,7 +452,8 @@ private:
     }
 
     TNodePtr BuildYqlResultItem(TString name, TNodePtr term) const {
-        return Y("YqlResultItem", Q(std::move(name)), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
+        TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
+        return Y("YqlResultItem", std::move(nameAtom), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
     }
 
     TMaybe<TString> ColumnAlias(const TNodePtr& term) const {
@@ -435,9 +475,11 @@ private:
     TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
         const auto build = [this](TNodePtr node, TString name) {
             YQL_ENSURE(!name.empty(), "An empty source name is unsupported");
+
+            TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
             return Q(Y(
                 std::move(node),
-                Q(std::move(name)),
+                std::move(nameAtom),
                 Q(Y(/* Columns are passed through SetColumns */))));
         };
 
@@ -484,10 +526,49 @@ private:
 
     TNodePtr BuildGroupBy(const TGroupBy& groupBy) const {
         TNodePtr clause = Y();
-        for (TNodePtr key : groupBy.Keys) {
-            clause = L(std::move(clause), BuildYqlGroup(std::move(key)));
+        for (const TGroupBy::TElement& element : groupBy.Elements) {
+            clause = L(std::move(clause), BuildGroupByElement(element));
         }
         return clause;
+    }
+
+    TNodePtr BuildGroupByElement(const TGroupBy::TElement& element) const {
+        return std::visit(
+            TOverloaded{
+                [&](const TNodePtr& key) {
+                    return BuildYqlGroup(key);
+                },
+                [&](const TGroupingSets::TRollup& rollup) {
+                    return BuildGroupingSet("rollup", rollup.Expressions);
+                },
+                [&](const TGroupingSets::TCube& cube) {
+                    return BuildGroupingSet("cube", cube.Expressions);
+                },
+                [&](const TGroupingSets& groupingSets) {
+                    return BuildGroupingSet(groupingSets);
+                },
+            },
+            element);
+    }
+
+    TNodePtr BuildGroupingSet(const TGroupingSets& groupingSet) const {
+        TNodePtr node = Y("YqlGroupingSet", Q("sets"));
+        for (const TVector<TNodePtr>& set : groupingSet.Sets) {
+            node = L(std::move(node), Q(BuildList(set)));
+        }
+        return BuildYqlGroup(std::move(node));
+    }
+
+    TNodePtr BuildGroupingSet(TString kind, const TVector<TNodePtr>& exprs) const {
+        return BuildYqlGroup(Y("YqlGroupingSet", Q(std::move(kind)), Q(BuildList(exprs))));
+    }
+
+    TNodePtr BuildList(const TVector<TNodePtr>& exprs) const {
+        TNodePtr list = Y();
+        for (TNodePtr e : exprs) {
+            list = L(std::move(list), std::move(e));
+        }
+        return list;
     }
 
     TNodePtr BuildYqlGroup(TNodePtr node) const {
@@ -653,8 +734,9 @@ public:
 
             if (auto columns = Columns()) {
                 TNodePtr list = Y();
-                for (auto& column : *columns) {
-                    list = L(std::move(list), Q(std::move(column)));
+                for (TString& column : *columns) {
+                    TNodePtr columnAtom = BuildQuotedAtom(Pos_, std::move(column));
+                    list = L(std::move(list), std::move(columnAtom));
                 }
 
                 options->Add(Q(Y(Q("columns"), Q(std::move(list)))));
@@ -805,7 +887,7 @@ EYqlSetOp AllQualified(EYqlSetOp op) {
         case EYqlSetOp::UnionAll:
         case EYqlSetOp::ExceptAll:
         case EYqlSetOp::IntersectAll:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
         case EYqlSetOp::Union:
             return EYqlSetOp::UnionAll;
         case EYqlSetOp::Except:

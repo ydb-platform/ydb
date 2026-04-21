@@ -31,7 +31,7 @@
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
-#include "upb/def.hpp"
+#include "upb/reflection/def.hpp"
 
 #include <grpc/event_engine/event_engine.h>
 
@@ -64,7 +64,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
   class ResourceWatcherInterface : public RefCounted<ResourceWatcherInterface> {
    public:
     virtual void OnGenericResourceChanged(
-        const XdsResourceType::ResourceData* resource)
+        std::shared_ptr<const XdsResourceType::ResourceData> resource)
         Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
     virtual void OnError(y_absl::Status status)
         Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
@@ -239,7 +239,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
     std::map<ResourceWatcherInterface*, RefCountedPtr<ResourceWatcherInterface>>
         watchers;
     // The latest data seen for the resource.
-    std::unique_ptr<XdsResourceType::ResourceData> resource;
+    std::shared_ptr<const XdsResourceType::ResourceData> resource;
     XdsApi::ResourceMetadata meta;
     bool ignored_deletion = false;
   };

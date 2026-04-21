@@ -194,13 +194,15 @@ class KikimrConfigGenerator(object):
             cms_config=None,
             explicit_statestorage_config=None,
             system_tablets=None,
+            system_tablet_backup_config=None,
             protected_mode=False,  # Authentication
             enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
             http_proxy_config=None,
             enable_nbs=False,
-            nbs_database="/Root/NBS",
+            nbs_database_name="/Root/NBS",
+            enable_topic_cloud_events=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -248,6 +250,7 @@ class KikimrConfigGenerator(object):
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
         self.monitoring_tls_ca_path = None
+        self.enable_topic_cloud_events = enable_topic_cloud_events
 
         self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
@@ -600,10 +603,13 @@ class KikimrConfigGenerator(object):
             self.yaml_config["bridge_config"] = bridge_config
 
         if enable_nbs:
+            # vchunk_size must match pdisk chunk size
+            # in-mem pdisks have 32 mb chunks, default is 128 mb
+            vchunk_size = 32 * (1 << 20) if self.__use_in_memory_pdisks else 128 * (1 << 20)
             self.yaml_config["nbs_config"] = {
                 "enabled": True,
                 "nbs_storage_config": {
-                    "scheme_shard_dir": nbs_database,
+                    "scheme_shard_dir": nbs_database_name,
                     "folder_id": "testFolder",
                     "ssd_system_channel_pool_kind": "hdd",
                     "ssd_log_channel_pool_kind": "hdd",
@@ -611,6 +617,8 @@ class KikimrConfigGenerator(object):
                     "pipe_client_retry_count": 3,
                     "pipe_client_min_retry_time": 1,
                     "pipe_client_max_retry_time": 10,
+                    "sync_requests_batch_size": 3,
+                    "vchunk_size": vchunk_size,
                 }
             }
 
@@ -662,6 +670,9 @@ class KikimrConfigGenerator(object):
 
         if self.system_tablets:
             self.yaml_config["system_tablets"] = self.system_tablets
+
+        if system_tablet_backup_config:
+            self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section
@@ -765,6 +776,16 @@ class KikimrConfigGenerator(object):
                     audit_file.write('')
         self.yaml_config['audit_config'] = cfg
 
+        # Topic cloud events: config has enabled + uri. Use file:// for tests (TFileEventsWriter).
+        # Write to a dedicated file in working_dir so tests can read it (topic cloud events
+        # go to ua_uri, not to audit log).
+        if 'pqconfig' in self.yaml_config and self.enable_topic_cloud_events:
+            topic_cloud_events_path = os.path.join(self.__working_dir, 'topic_cloud_events.json')
+            self.yaml_config['pqconfig']['cloud_events_config'] = {
+                'enabled': True,
+                'file_path': topic_cloud_events_path,
+            }
+
     @property
     def metering_file_path(self):
         return self.yaml_config.get('metering_config', {}).get('metering_file_path')
@@ -772,6 +793,20 @@ class KikimrConfigGenerator(object):
     @property
     def audit_file_path(self):
         return self.yaml_config.get('audit_config', {}).get('file_backend', {}).get('file_path')
+
+    @property
+    def topic_cloud_events_file_path(self):
+        """Path to topic cloud events file (when enable_topic_cloud_events=True)."""
+        if not self.enable_topic_cloud_events:
+            return None
+        cfg = self.yaml_config.get('pqconfig', {}).get('cloud_events_config', {})
+        uri = cfg.get('ua_uri', '')
+        if uri.startswith('file://'):
+            path = uri[7:]
+            if path.startswith('//'):
+                path = path[1:]
+            return path
+        return os.path.join(self.__working_dir, 'topic_cloud_events.json')
 
     @property
     def sqs_service_enabled(self):

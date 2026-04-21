@@ -96,19 +96,6 @@ opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> LoggerProvider::Ge
     }
   }
 
-  // Check if creating a new logger would exceed the max number of loggers
-  // TODO: Remove the noexcept from the API's and SDK's GetLogger(~)
-  /*
-  if (loggers_.size() > MAX_LOGGER_COUNT)
-  {
-#if __EXCEPTIONS
-    throw std::length_error("Number of loggers exceeds max count");
-#else
-    std::terminate();
-#endif
-  }
-  */
-
   std::unique_ptr<instrumentationscope::InstrumentationScope> lib =
       instrumentationscope::InstrumentationScope::Create(library_name, library_version, schema_url,
                                                          attributes);

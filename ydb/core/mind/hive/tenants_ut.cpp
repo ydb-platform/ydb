@@ -139,6 +139,47 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             tenants.CreateTenant(request, 2, TDuration::Minutes(1));
         }
 
+        ui64 tenantHiveTablet;
+        {
+            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+            auto& entry = request->ResultSet.emplace_back();
+            entry.Path = SplitPath("/Root/db1");
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+            runtime.Send(new IEventHandle(
+                MakeSchemeCacheID(),
+                sender,
+                new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release())),
+                0);
+
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(handle);
+            auto& resultEntry = reply->Request->ResultSet.front();
+            UNIT_ASSERT_C(resultEntry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok,
+                    "SchemeCache navigate for /Root/db1 failed with status " << static_cast<int>(resultEntry.Status));
+            UNIT_ASSERT(resultEntry.DomainInfo);
+            tenantHiveTablet = resultEntry.DomainInfo->Params.GetHive();
+            UNIT_ASSERT(tenantHiveTablet != 0);
+
+        }
+
+        auto checkCounter = [&](ui64 value) {
+            static constexpr int MAX_RETRIES = 10;
+            int i = 0;
+            while (true) {
+                auto rootCounter = GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN);
+                auto tenantCounter = GetSimpleCounter(runtime, tenantHiveTablet, NHive::COUNTER_NODES_DOWN);
+                if (rootCounter == value && tenantCounter == value) {
+                    return;
+                }
+                if (++i == MAX_RETRIES) {
+                    UNIT_ASSERT_VALUES_EQUAL(rootCounter, value);
+                    UNIT_ASSERT_VALUES_EQUAL(tenantCounter, value);
+                    return;
+                }
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+        };
+
         const auto nodeId = runtime.GetNodeId(tenants.List("/Root/db1").front());
 
         {
@@ -157,7 +198,7 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             Cerr << "Cordon result: " << reply->Record.ShortDebugString() << Endl;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 1);
+        checkCounter(1);
 
         {
             Ydb::Maintenance::DropMaintenanceTaskRequest request;
@@ -171,6 +212,6 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             Cerr << "Uncordon result: " << reply->Record.ShortDebugString() << Endl;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 0);
+        checkCounter(0);
     }
 }

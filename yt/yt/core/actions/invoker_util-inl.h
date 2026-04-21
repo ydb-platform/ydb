@@ -27,7 +27,7 @@ void GuardedInvoke(
             , OnCancel_(std::move(onCancel))
         { }
 
-        TGuard(TGuard&& other)
+        TGuard(TGuard&& other) noexcept
             : OnSuccess_(std::move(other.OnSuccess_))
             , OnCancel_(std::move(other.OnCancel_))
             , WasInvoked_(std::exchange(other.WasInvoked_, true))

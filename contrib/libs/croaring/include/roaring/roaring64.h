@@ -51,6 +51,18 @@ void roaring64_bitmap_free(roaring64_bitmap_t *r);
 roaring64_bitmap_t *roaring64_bitmap_copy(const roaring64_bitmap_t *r);
 
 /**
+ * Copies a bitmap from src to dest. It is assumed that the pointer dest
+ * is to an already allocated bitmap. The content of the dest bitmap is
+ * freed/deleted.
+ *
+ * It might be preferable and simpler to call roaring64_bitmap_copy except
+ * that roaring64_bitmap_overwrite can save on memory allocations.
+ *
+ */
+void roaring64_bitmap_overwrite(roaring64_bitmap_t *dest,
+                                const roaring64_bitmap_t *src);
+
+/**
  * Creates a new bitmap of a pointer to N 64-bit integers.
  */
 roaring64_bitmap_t *roaring64_bitmap_of_ptr(size_t n_args,
@@ -311,6 +323,12 @@ uint64_t roaring64_bitmap_minimum(const roaring64_bitmap_t *r);
 uint64_t roaring64_bitmap_maximum(const roaring64_bitmap_t *r);
 
 /**
+ * Remove run-length encoding even when it is more space efficient.
+ * Return whether a change was applied.
+ */
+bool roaring64_bitmap_remove_run_compression(roaring64_bitmap_t *r);
+
+/**
  * Returns true if the result has at least one run container.
  */
 bool roaring64_bitmap_run_optimize(roaring64_bitmap_t *r);
@@ -506,6 +524,38 @@ void roaring64_bitmap_flip_inplace(roaring64_bitmap_t *r, uint64_t min,
  */
 void roaring64_bitmap_flip_closed_inplace(roaring64_bitmap_t *r, uint64_t min,
                                           uint64_t max);
+/**
+ * Return a copy of the bitmap with all values shifted by offset.
+ *
+ * If `positive` is true, the shift is added, otherwise subtracted. Values that
+ * overflow or underflow uint64_t are dropped. The caller is responsible for
+ * freeing the returned bitmap.
+ */
+roaring64_bitmap_t *roaring64_bitmap_add_offset_signed(
+    const roaring64_bitmap_t *r, bool positive, uint64_t offset);
+
+/**
+ * Return a copy of the bitmap with all values shifted up by offset.
+ *
+ * Values that overflow or underflow uint64_t are dropped. The caller is
+ * responsible for freeing the returned bitmap.
+ */
+static inline roaring64_bitmap_t *roaring64_bitmap_add_offset(
+    const roaring64_bitmap_t *r, uint64_t offset) {
+    return roaring64_bitmap_add_offset_signed(r, true, offset);
+}
+
+/**
+ * Return a copy of the bitmap with all values shifted down by offset.
+ *
+ * Values that overflow or underflow uint64_t are dropped. The caller is
+ * responsible for freeing the returned bitmap.
+ */
+static inline roaring64_bitmap_t *roaring64_bitmap_sub_offset(
+    const roaring64_bitmap_t *r, uint64_t offset) {
+    return roaring64_bitmap_add_offset_signed(r, false, offset);
+}
+
 /**
  * How many bytes are required to serialize this bitmap.
  *

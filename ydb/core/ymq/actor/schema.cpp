@@ -216,6 +216,19 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
 }
 
 THolder<TEvTxUserProxy::TEvProposeTransaction>
+    MakeRemoveTopicEvent(const TString& root, const TString& name)
+{
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    // Transaction info
+    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
+    trans->SetWorkingDir(root);
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
+    trans->MutableDrop()->SetName(name);
+
+    return ev;
+}
+
+THolder<TEvTxUserProxy::TEvProposeTransaction>
     MakeCreateKesusEvent(const TString& root,
                          const TString& kesusName)
 {

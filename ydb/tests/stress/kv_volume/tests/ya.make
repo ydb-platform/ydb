@@ -1,4 +1,3 @@
-IF (NOT WITH_VALGRIND)
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
@@ -28,5 +27,3 @@ PEERDIR(
 )
 
 END()
-
-ENDIF()

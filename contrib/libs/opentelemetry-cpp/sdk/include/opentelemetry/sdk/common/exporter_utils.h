@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -13,7 +15,7 @@ namespace common
 /**
  * ExportResult is returned as result of exporting a batch of Records.
  */
-enum class ExportResult
+enum class ExportResult : std::uint8_t
 {
   // Batch was exported successfully.
   kSuccess = 0,

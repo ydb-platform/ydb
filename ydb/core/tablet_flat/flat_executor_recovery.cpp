@@ -1,11 +1,14 @@
 #include "flat_executor_recovery.h"
 
+#include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
+#include "flat_part_iface.h"
 #include "tablet_flat_executed.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -14,14 +17,16 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
-#include <util/string/hex.h>
 
+
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() << stream)
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
 
@@ -54,9 +59,6 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
         case NScheme::NTypeIds::Bool:
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::Float:
-        case NScheme::NTypeIds::Date:
-        case NScheme::NTypeIds::Datetime:
-        case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Interval:
         case NScheme::NTypeIds::Date32:
         case NScheme::NTypeIds::Datetime64:
@@ -70,11 +72,14 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
             if (!NFormats::MakeCell(*cell, value, type, pool, err)) {
                 throw yexception() << "Failed to parse " << value << " for type " << typeId << ": " << err;
             }
-            if (!NFormats::CheckCellValue(*cell, type)) {
-                throw yexception() << "Invalid value " << value << " for type " << typeId;
-            }
             return TRawTypeValue(cell->Data(), cell->Size(), typeId);
         }
+        case NScheme::NTypeIds::Date:
+            return ToRawTypeValue<NScheme::TDate>(static_cast<ui16>(value.GetUIntegerSafe()), pool);
+        case NScheme::NTypeIds::Datetime:
+            return ToRawTypeValue<NScheme::TDatetime>(static_cast<ui32>(value.GetUIntegerSafe()), pool);
+        case NScheme::NTypeIds::Timestamp:
+            return ToRawTypeValue<NScheme::TTimestamp>(value.GetUIntegerSafe(), pool);
         case NScheme::NTypeIds::PairUi64Ui64: {
             const auto& arr = value.GetArraySafe();
             if (arr.size() != 2) {
@@ -82,14 +87,6 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
             }
             std::pair<ui64, ui64> pair = {arr[0].GetUIntegerSafe(), arr[1].GetUIntegerSafe()};
             return ToRawTypeValue<NScheme::TPairUi64Ui64>(pair, pool);
-        }
-        case NScheme::NTypeIds::ActorId: {
-            TActorId actorId;
-            const auto& v = value.GetStringSafe();
-            if (!actorId.Parse(v.data(), v.size())) {
-                throw yexception() << "Failed to parse ActorId from string: " << v;
-            }
-            return ToRawTypeValue<NScheme::TActorId>(actorId, pool);
         }
         case NScheme::NTypeIds::String:
         default: {
@@ -153,7 +150,8 @@ NTable::ERowOp FindOpFromJson(const NJson::TJsonValue& json) {
 }
 
 void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo* table,
-                std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc)
+                std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc,
+                bool dryRun)
 {
     if (table == nullptr) {
         table = FindTableFromJson(json, txc);
@@ -193,8 +191,18 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
         }
     }
 
+    for (size_t i = 0; i < key.size(); ++i) {
+        if (key[i].IsEmpty()) {
+            ui32 keyColId = table->KeyColumns.at(i);
+            const auto& col = table->Columns.at(keyColId);
+            throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;
+        }
+    }
+
     try {
-        txc.DB.Update(table->Id, *op, key, ops);
+        if (!dryRun) {
+            txc.DB.Update(table->Id, *op, key, ops);
+        }
     } catch (const std::exception& e) {
         throw yexception() << "Failed to update table " << table->Name << " with value " << json << ": " << e.what();
     }
@@ -214,6 +222,156 @@ ui64 RestoreInFlightBytes() {
 
 } // anonymous namespace
 
+class TDryRunExecutor
+    : public TActor<TDryRunExecutor>
+    , public NFlatExecutorSetup::IExecutor
+    , public IExecuting
+{
+    struct TDryRunPages : public NTable::IPages {
+        TResult Locate(const NTable::TMemTable*, ui64, ui32) override { Y_TABLET_ERROR("Not supported"); }
+        TResult Locate(const NTable::TPart*, ui64, NTable::ELargeObj) override { Y_TABLET_ERROR("Not supported"); }
+        const TSharedData* TryGetPage(const NTable::TPart*, TPageId, TGroupId) override { Y_TABLET_ERROR("Not supported"); }
+    };
+
+    struct TDryRunStats : public TExecutorStats {};
+
+public:
+    explicit TDryRunExecutor(ui64 tabletId)
+        : TActor(&TThis::StateWork)
+        , TabletId(tabletId)
+    {}
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
+        }
+    }
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr&) {
+        ProcessPendingScheduled = false;
+        ProcessPending();
+    }
+
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext&) override {
+        PendingTx.push_back(transaction);
+        ScheduleProcessPending();
+    }
+
+    void DetachTablet() override {
+        PassAway();
+    }
+
+    const NTable::TScheme& Scheme() const override { return DB.GetScheme(); }
+    const TExecutorStats& GetStats() const override { return Stats; }
+
+    TExecutorCounters* GetCounters() override { return nullptr; }
+    void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) override {}
+    void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Not supported"));
+    }
+    void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Not supported"));
+    }
+    void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext&) const override {
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Not supported"));
+    }
+    void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr& ev) override {
+        Send(ev->Sender, new TEvTablet::TEvGetCountersResponse());
+    }
+
+    void Boot(TEvTablet::TEvBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void Restored(TEvTablet::TEvRestored::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerBoot(TEvTablet::TEvFBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerUpdate(THolder<TEvTablet::TFUpdateBody>) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerAuxUpdate(TString) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerAttached(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerDetached(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerSyncComplete() override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerGcApplied(ui32, TDuration) override { Y_TABLET_ERROR("Not supported"); }
+
+    ui64 Enqueue(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 EnqueueLowPriority(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    bool CancelTransaction(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(TMonotonic) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(TMonotonic, std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmReadOnlyLease(std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
+    TString BorrowSnapshot(ui32, const TTableSnapshotContext&, TRawVals, TRawVals, ui64) const override { Y_TABLET_ERROR("Not supported"); }
+    ui64 MakeScanSnapshot(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void DropScanSnapshot(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 QueueScan(ui32, TAutoPtr<NTable::IScan>, ui64, const TScanOptions&) override { Y_TABLET_ERROR("Not supported"); }
+    bool CancelScan(ui32, ui64) override { Y_TABLET_ERROR("Not supported"); }
+    TFinishedCompactionInfo GetFinishedCompactionInfo(ui32) const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasSchemaChanges(ui32) const override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactBorrowed(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactMemTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    ui64 CompactTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    bool CompactTables() override { Y_TABLET_ERROR("Not supported"); }
+    void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
+    void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasLoanedParts() const override { Y_TABLET_ERROR("Not supported"); }
+    bool HasBorrowed(ui32, ui64) const override { Y_TABLET_ERROR("Not supported"); }
+    void OnYellowChannels(TVector<ui32>, TVector<ui32>) override { Y_TABLET_ERROR("Not supported"); }
+    NMetrics::TResourceMetrics* GetResourceMetrics() const override { Y_TABLET_ERROR("Not supported"); }
+    float GetRejectProbability() const override { Y_TABLET_ERROR("Not supported"); }
+    void SetPreloadTablesData(THashSet<ui32>) override { Y_TABLET_ERROR("Not supported"); }
+    void StartVacuum(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
+    void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
+    void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void ClearSnapshot(const TTableSnapshotContext&) override { Y_TABLET_ERROR("Not supported"); }
+    void LoanTable(ui32, const TString&) override { Y_TABLET_ERROR("Not supported"); }
+    void CleanupLoan(const TLogoBlobID&, ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void ConfirmLoan(const TLogoBlobID&, const TLogoBlobID&) override { Y_TABLET_ERROR("Not supported"); }
+    void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
+    void DisableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
+    ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
+
+private:
+    void ScheduleProcessPending() {
+        if (!PendingTx.empty() && !ProcessPendingScheduled) {
+            ProcessPendingScheduled = true;
+            Send(SelfId(), new TEvents::TEvWakeup());
+        }
+    }
+
+    void ProcessPending() {
+        constexpr size_t MaxTxPerBatch = 10;
+        for (size_t count = 0; !PendingTx.empty() && count < MaxTxPerBatch; ++count) {
+            auto next = std::move(PendingTx.front());
+            PendingTx.pop_front();
+            Process(next);
+        }
+        ScheduleProcessPending();
+    }
+
+    void Process(TAutoPtr<ITransaction>& transaction) {
+        ++Step0;
+        NTable::TTxStamp stamp(Generation0, Step0);
+        DB.Begin(stamp, Pages);
+        NWilson::TSpan span;
+        TTransactionContext txc(TabletId, Generation0, Step0, DB, *this, Max<ui64>(), 0, span);
+        const auto& ctx = TActivationContext::AsActorContext();
+        bool ready = transaction->Execute(txc, ctx);
+        DB.Commit(stamp, ready);
+        if (ready) {
+            transaction->Complete(ctx);
+        } else {
+            Y_TABLET_ERROR("Dry-run transaction is not ready to commit");
+        }
+    }
+
+    ui64 TabletId;
+
+    NTable::TDatabase DB;
+    TDryRunPages Pages;
+    TDryRunStats Stats;
+    
+    bool ProcessPendingScheduled = false;
+    TDeque<TAutoPtr<ITransaction>> PendingTx;
+};
+
 class TRecoveryShard : public TActor<TRecoveryShard>, public TTabletExecutedFlat {
 public:
     friend class TTxUploadSchema;
@@ -223,6 +381,10 @@ public:
     ITransaction *CreateTxUploadSchema(TEvSchemaData::TPtr ev);
     ITransaction *CreateTxUploadSnapshot(TEvSnapshotData::TPtr ev, size_t startLine = 0);
     ITransaction *CreateTxUploadChangelog(TEvChangelogData::TPtr ev, size_t startLine = 0);
+
+    TStringBuilder LogPrefix() const {
+        return TStringBuilder() << "[" << TabletID() << "] ";
+    }
 
     explicit TRecoveryShard(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateWork)
@@ -258,7 +420,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRestoreBackup, Handle);
             hFunc(TEvBackupReaderResult, Handle);
-            hFunc(TEvBackupInfo, Handle);
+            HFunc(TEvBackupInfo, Handle);
 
             hFunc(TEvSchemaData, Handle);
             hFunc(TEvSnapshotData, Handle);
@@ -270,7 +432,7 @@ public:
 
     void Handle(TEvRestoreBackup::TPtr& ev) {
         if (RestoreState == ERestoreState::NotStarted) {
-            StartRestore(ev->Get()->BackupPath, ev->Sender, ev->Get()->SkipChecksumValidation);
+            StartRestore(ev->Get()->BackupPath, ev->Sender, ev->Get()->SkipChecksumValidation, ev->Get()->DryRun);
         }
     }
 
@@ -279,27 +441,41 @@ public:
         CompleteRestore(msg->Success, msg->Error);
     }
 
-    void Handle(TEvBackupInfo::TPtr& ev) {
+    void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
+        LOG_D("Backup info" << " TotalBytes# " << TotalBytes << " DryRun# " << DryRun);
 
-        using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
-        Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot(EMode::WipeAllData));
+        if (DryRun) {
+            auto* dryRunExec = new TDryRunExecutor(TabletID());
+            ITablet::ExecutorActorID = ctx.RegisterWithSameMailbox(dryRunExec);
+            SetExternalExecutor(dryRunExec);
+            OnActivateExecutor(ctx);
+        } else {
+            using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
+            Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot(EMode::WipeAllData));
+        }
     }
 
     void Handle(TEvSchemaData::TPtr& ev) {
+        LOG_D("Uploading schema");
         Execute(CreateTxUploadSchema(ev));
     }
 
     void Handle(TEvSnapshotData::TPtr& ev) {
+        LOG_D("Uploading snapshot" << " Table# " << ev->Get()->TableName);
         Execute(CreateTxUploadSnapshot(ev));
     }
 
     void Handle(TEvChangelogData::TPtr& ev) {
+        LOG_D("Uploading changelog" << " Lines# " << ev->Get()->Lines.size());
         Execute(CreateTxUploadChangelog(ev));
     }
 
-    void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false) {
+    void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
+        LOG_N("Starting restore" << " Path# " << backupPath << " SkipChecksum# " << skipChecksumValidation << " DryRun# " << dryRun);
         RestoreState = ERestoreState::InProgress;
+        SkipChecksumValidation = skipChecksumValidation;
+        DryRun = dryRun;
 
         BackupPath = backupPath;
         RestoreSubscriber = subscriber;
@@ -310,12 +486,15 @@ public:
     void CompleteRestore(bool success, const TString& error) {
         if (success) {
             if (error) {
+                LOG_N("Restore completed with warning" << " Error# " << error);
                 RestoreState = ERestoreState::DoneWithWarning;
                 Error = error;
             } else {
+                LOG_N("Restore completed");
                 RestoreState = ERestoreState::Done;
             }
         } else {
+            LOG_E("Restore failed" << " Error# " << error);
             RestoreState = ERestoreState::Error;
             Error = error;
         }
@@ -402,10 +581,21 @@ public:
 
         auto cgi = ev->Get()->Cgi();
         if (const auto& path = cgi.Get("restoreBackup")) {
-            if (RestoreState == ERestoreState::NotStarted) {
-                bool skipChecksum = cgi.Has("skipChecksumValidation");
-                StartRestore(path, {}, skipChecksum);
-            }
+            if (ev->Get()->GetMethod() == HTTP_METHOD_POST) {
+                if (RestoreState == ERestoreState::NotStarted) {
+                    bool skipChecksum = cgi.Has("skipChecksumValidation");
+                    bool dryRun = cgi.Has("dryRun");
+                    StartRestore(path, {}, skipChecksum, dryRun);
+                }
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                    "HTTP/1.1 405 Method Not Allowed\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Allow: POST\r\n"
+                    "\r\n"
+                    "restoreBackup requires POST"));
+                return true;
+            } 
         }
 
         TStringStream str;
@@ -425,6 +615,10 @@ public:
 
                         DIV_CLASS("form-group") {
                             DIV_CLASS("col-sm-offset-2 col-sm-10") {
+                                str << "<div class='checkbox'><label>"
+                                    << "<input type='checkbox' id='dryRun' name='dryRun'>"
+                                    << " Dry Run"
+                                    << "</label></div>";
                                 str << "<div class='checkbox'><label>"
                                     << "<input type='checkbox' id='skipChecksumValidation' name='skipChecksumValidation'>"
                                     << " Skip Checksum Validation"
@@ -475,14 +669,17 @@ public:
                             var btn = this;
                             var form = $(btn.form);
 
-                            if (!confirm('Are you sure you want to start restore? This will override existing data')) {
+                            var isDryRun = $('#dryRun').is(':checked');
+                            var msg = isDryRun
+                                ? 'Are you sure you want to start dry-run restore?'
+                                : 'Are you sure you want to start restore? This will override existing data';
+                            if (!confirm(msg)) {
                                 return;
                             }
 
                             $.ajax({
-                                type: "GET",
-                                url: window.location.href,
-                                data: form.serialize(),
+                                type: "POST",
+                                url: window.location.href + '&' + form.serialize(),
                                 success: function(response) {
                                     $('body').html(response);
                                 },
@@ -512,6 +709,9 @@ private:
     ui64 TotalBytes = 0;
 
     TActorId RestoreSubscriber; // only for tests
+
+    bool SkipChecksumValidation = false;
+    bool DryRun = false;
 }; // TRecoveryShard
 
 class TUploadTxResult {
@@ -565,6 +765,8 @@ private:
 
 class TTxUploadSchema : public TTransactionBase<TRecoveryShard> {
 public:
+    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+
     TTxUploadSchema(TRecoveryShard* self, TEvSchemaData::TPtr& schema)
         : TBase(self)
         , Schema(schema)
@@ -589,6 +791,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
+            LOG_E("Schema upload failed" << " Error# " << Error);
             Self->CompleteRestore(false, Error);
             ctx.Send(Schema->Sender, new TEvDataAck(false, Error));
         } else {
@@ -603,6 +806,8 @@ private:
 
 class TTxUploadSnapshot : public TTransactionBase<TRecoveryShard> {
 public:
+    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+
     TTxUploadSnapshot(TRecoveryShard* self, TEvSnapshotData::TPtr& snapshot, size_t startLine)
         : TBase(self)
         , Snapshot(snapshot)
@@ -630,8 +835,9 @@ public:
 
             try {
                 NJson::TJsonValue json;
-                NJson::ReadJsonTree(line, &json, true);
-                UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc);
+                auto config = NFormats::DefaultJsonReaderConfig();
+                NJson::ReadJsonTree(line, &config, &json, true);
+                UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc, Self->DryRun);
 
                 processedBytes += line.size() + 1; // +1 for newline
                 ++i;
@@ -647,6 +853,7 @@ public:
 
         if (i < Snapshot->Get()->Lines.size()) {
             // Start new tx to upload the rest data
+            LOG_D("Snapshot upload partial, continuing from" << " Line# " << i);
             Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -657,11 +864,13 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
+            LOG_D("Snapshot chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Snapshot->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
-         } else if (Result.IsError()) {
+        } else if (Result.IsError()) {
+            LOG_E("Snapshot upload failed" << " Error# " << Result.GetErrorMessage());
             Self->CompleteRestore(false, Result.GetErrorMessage());
             ctx.Send(Snapshot->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -676,6 +885,8 @@ private:
 
 class TTxUploadChangelog : public TTransactionBase<TRecoveryShard> {
 public:
+    TStringBuilder LogPrefix() const { return Self->LogPrefix(); }
+
     TTxUploadChangelog(TRecoveryShard* self, TEvChangelogData::TPtr& changelog, size_t startLine)
         : TBase(self)
         , Changelog(changelog)
@@ -696,7 +907,8 @@ public:
 
             NJson::TJsonValue json;
             try {
-                NJson::ReadJsonTree(line, &json, true);
+                auto config = NFormats::DefaultJsonReaderConfig();
+                NJson::ReadJsonTree(line, &config, &json, true);
             } catch (const std::exception& e) {
                 Result.Error(TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line);
                 return true;
@@ -750,7 +962,7 @@ public:
                 const auto& changesArray = changesJson.GetArray();
                 try {
                     for (const auto& change : changesArray) {
-                        UploadData(change, nullptr, std::nullopt, Pool, txc);
+                        UploadData(change, nullptr, std::nullopt, Pool, txc, Self->DryRun);
                     }
                 } catch (const std::exception& e) {
                     Result.Error(TStringBuilder() << "Failed to upload changelog data: " << e.what() << ", line: " << line);
@@ -768,6 +980,7 @@ public:
 
         if (i < Changelog->Get()->Lines.size()) {
             // Start new tx to upload the rest data
+            LOG_D("Changelog upload partial, continuing from" << " Line# " << i);
             Self->Execute(Self->CreateTxUploadChangelog(std::move(Changelog), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -777,12 +990,14 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-         if (Result.IsDone()) {
+        if (Result.IsDone()) {
+            LOG_D("Changelog chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Changelog->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
+            LOG_E("Changelog upload failed" << " Error# " << Result.GetErrorMessage());
             Self->CompleteRestore(true, Result.GetErrorMessage()); // changelog errors are warnings
             ctx.Send(Changelog->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -816,26 +1031,29 @@ public:
         , SnapshotDirPath(BackupPath.Child("snapshot"))
         , SchemaFilePath(SnapshotDirPath.Child("schema.json"))
         , ChangelogFilePath(BackupPath.Child("changelog.json"))
+        , ChangelogChecksumPath(BackupPath.Child("changelog.json.sha256"))
         , ExpectedTabletType(tabletType)
         , ExpectedTabletId(tabletId)
         , SkipChecksumValidation(skipChecksumValidation)
     {}
 
+    TStringBuilder LogPrefix() const {
+        return TStringBuilder() << "[" << ExpectedTabletId << "] ";
+    }
+
     void Bootstrap() {
-        if (!SnapshotDirPath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
+        LOG_N("Validating backup" << " Path# " << BackupPath);
+
+        if (!BackupPath.Exists()) {
+            return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
         }
 
-        if (!ValidateManifest(SnapshotDirPath)) {
+        if (!ValidateSnapshot()) {
             return;
         }
 
-        if (!SchemaFilePath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
-        }
-
-        if (!ChangelogFilePath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Changelog file doesn't exist: " << ChangelogFilePath);
+        if (!ValidateChangelog()) {
+            return;
         }
 
         ui64 totalBytes = 0;
@@ -845,6 +1063,7 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
 
+        LOG_N("Backup validated" << " TotalBytes# " << totalBytes);
         Send(Owner, new TEvBackupInfo(totalBytes));
         Become(&TThis::StateWork);
     }
@@ -858,6 +1077,7 @@ public:
     }
 
     void Handle(TEvReadBackup::TPtr&) {
+        LOG_D("Sending schema data");
         try {
             TString schemaData = TFileInput(SchemaFilePath).ReadAll();
             Send(Owner, new TEvSchemaData(std::move(schemaData)));
@@ -890,6 +1110,7 @@ public:
                         CurrentTableName = CurrentTableName.substr(0, CurrentTableName.size() - 5);
                     }
 
+                    LOG_D("Processing snapshot file" << " Path# " << CurrentFilePath);
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -900,6 +1121,7 @@ public:
                     CurrentTableName.clear();
                     ChangelogProcessed = true;
 
+                    LOG_D("Processing changelog");
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -907,6 +1129,7 @@ public:
                     }
                 } else {
                     // All files processed
+                    LOG_D("All files processed");
                     return SendResultAndDie(true);
                 }
             }
@@ -939,8 +1162,19 @@ public:
         }
     }
 
-    bool ValidateManifest(const TFsPath& snapshotDir) {
-        auto manifestFile = snapshotDir.Child("manifest.json");
+    bool ValidateSnapshot() {
+        LOG_D("Validating snapshot");
+        if (!SnapshotDirPath.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
+            return false;
+        }
+ 
+        if (!SchemaFilePath.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
+            return false;
+        }
+    
+        auto manifestFile = SnapshotDirPath.Child("manifest.json");
         if (!manifestFile.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest file doesn't exist: " << manifestFile);
             return false;
@@ -955,7 +1189,7 @@ public:
         }
 
         if (!SkipChecksumValidation) {
-            auto manifestChecksumFile = snapshotDir.Child("manifest.json.sha256");
+            auto manifestChecksumFile = SnapshotDirPath.Child("manifest.json.sha256");
             if (!manifestChecksumFile.Exists()) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum file doesn't exist: " << manifestChecksumFile);
                 return false;
@@ -969,8 +1203,7 @@ public:
                 return false;
             }
 
-            auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-            TString actualManifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            TString actualManifestChecksum = NBackup::TSha256Hasher::Hash(manifestStr);
             if (actualManifestChecksum != expectedManifestChecksum) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
                                                          << "expected " << expectedManifestChecksum
@@ -1015,6 +1248,16 @@ public:
             return false;
         }
 
+        if (!manifest.Has("generation") || !manifest["generation"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'generation' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+
+        if (!manifest.Has("step") || !manifest["step"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'step' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+
         if (!manifest.Has("files") || !manifest["files"].IsArray()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'files' array or it is not an array: " << manifest);
             return false;
@@ -1029,7 +1272,7 @@ public:
 
             TString name = fileEntry["name"].GetString();
 
-            auto filePath = snapshotDir.Child(name);
+            auto filePath = SnapshotDirPath.Child(name);
             if (!filePath.Exists()) {
                 SendResultAndDie(false, TStringBuilder() << "File listed in manifest not found: " << filePath);
                 return false;
@@ -1048,28 +1291,133 @@ public:
 
                 TString expectedFileSha256 = fileEntry["sha256"].GetString();
 
-                NOpenSsl::NSha256::TCalcer calcer;
+                NBackup::TSha256Hasher hasher;
                 try {
                     TFileInput input(filePath, 1_MB);
                     char buf[64_KB];
                     size_t bytesRead;
                     while ((bytesRead = input.Read(buf, sizeof(buf))) > 0) {
-                        calcer.Update(buf, bytesRead);
+                        hasher.Update(buf, bytesRead);
                     }
                 } catch (const TIoException& e) {
                     SendResultAndDie(false, TStringBuilder() << "Failed to read file " << filePath << " for checksum validation: " << e.what());
                     return false;
                 }
 
-                auto fileDigest = calcer.Final();
-                TString actualFileSha256 = to_lower(HexEncode(fileDigest.data(), fileDigest.size()));
+                TString actualFileSha256 = hasher.Final();
                 if (actualFileSha256 != expectedFileSha256) {
                     SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
                                              << ": expected " << expectedFileSha256
                                              << ", got " << actualFileSha256);
                     return false;
                 }
+                LOG_D("Checksum validated" << " File# " << name);
             }
+        }
+
+        return true;
+    }
+
+    bool ValidateChangelog() {
+        LOG_D("Validating changelog");
+        if (!ChangelogFilePath.Exists()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog file doesn't exist: " << ChangelogFilePath);
+            return false;
+        }
+
+        if (SkipChecksumValidation) {
+            return true;
+        }
+
+        if (!ChangelogChecksumPath.Exists()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog checksum file doesn't exist: " << ChangelogChecksumPath);
+            return false;
+        }
+
+        TString expectedSha256;
+        try {
+            expectedSha256 = TFileInput(ChangelogChecksumPath).ReadAll();
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Failed to read changelog checksum " << ChangelogChecksumPath << ": " << e.what());
+            return false;
+        }
+
+        NBackup::TSha256Hasher hasher;
+        TString error;
+
+        try {
+            TFileInput input(ChangelogFilePath, 1_MB);
+            TString line;
+            TString prevLine;
+            TString lastValidLine;
+
+            while (input.ReadLine(line)) {
+                auto ok = ValidateChangelogPrevLine(line, lastValidLine, hasher, error);
+                if (!ok) {
+                    break;
+                }
+
+                hasher.Update(line);
+                hasher.Update("\n");
+                lastValidLine = std::move(prevLine);
+                prevLine = std::move(line);
+            }
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Failed to read changelog " << ChangelogFilePath << ": " << e.what());
+            return false;
+        }
+
+        if (error) {
+            SendResultAndDie(false, error);
+            return false;
+        }
+
+        TString sha256 = hasher.Final();
+        if (sha256 != expectedSha256) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog checksum mismatch: expected " << expectedSha256
+                << ", got " << sha256);
+            return false;
+        }
+
+        LOG_D("Changelog validated");
+        return true;
+    }
+
+    bool ValidateChangelogPrevLine(const TString& line, const TString& lastValidLine,
+                                      const NBackup::TSha256Hasher& hasher, TString& error) const
+    {
+        NJson::TJsonValue json;
+        try {
+            auto config = NFormats::DefaultJsonReaderConfig();
+            NJson::ReadJsonTree(line, &config, &json, true);
+        } catch (const std::exception& e) {
+            error = TStringBuilder()
+                << "Failed to parse changelog line " << line << ": " << e.what()
+                << ", last valid line: " << lastValidLine;
+            return false;
+        }   
+
+        if (!json.Has("prev_sha256") || !json["prev_sha256"].IsString()) {
+            error = TStringBuilder()
+                << "Changelog line is missing 'prev_sha256' field: " << line
+                << ", last valid line: " << lastValidLine;
+            return false;
+        }
+
+        TString expectedPrevSha256 = json["prev_sha256"].GetString();
+        TString prevSha256 = hasher.Intermediate();
+        if (prevSha256 != expectedPrevSha256) {
+            error = TStringBuilder()
+                << "Changelog checksum chain mismatch for line " << line
+                << ": expected " << expectedPrevSha256
+                << ", got " << prevSha256
+                << ", last valid line: " << lastValidLine;
+            return false;
         }
 
         return true;
@@ -1091,6 +1439,9 @@ public:
     }
 
     void SendResultAndDie(bool success, const TString& error = "") {
+        if (!success) {
+            LOG_E("Failed" << " Error# " << error);
+        }
         Send(Owner, new TEvBackupReaderResult(success, error));
         PassAway();
     }
@@ -1102,6 +1453,7 @@ private:
     const TFsPath SnapshotDirPath;
     const TFsPath SchemaFilePath;
     const TFsPath ChangelogFilePath;
+    const TFsPath ChangelogChecksumPath;
 
     const TTabletTypes::EType ExpectedTabletType;
     const ui64 ExpectedTabletId;

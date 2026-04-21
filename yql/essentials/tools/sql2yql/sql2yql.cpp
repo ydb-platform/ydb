@@ -128,10 +128,19 @@ bool TestFormat(
     const NYql::TAstParseResult& ast,
     const NSQLTranslation::TTranslationSettings& settings,
     const TString& outFileName,
+    const bool checkTripleFormatting,
     const bool checkDoubleFormatting)
 {
+    auto convergence = NSQLFormat::EConvergenceRequirement::None;
+    if (checkTripleFormatting) {
+        convergence = NSQLFormat::EConvergenceRequirement::Triple;
+    }
+    if (checkDoubleFormatting) {
+        convergence = NSQLFormat::EConvergenceRequirement::Double;
+    }
+
     NYql::TIssues issues;
-    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, checkDoubleFormatting);
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence);
     if (!formatted) {
         Cerr << issues.ToString() << Endl;
         return false;
@@ -254,7 +263,8 @@ int BuildAST(int argc, char** argv) {
     opts.AddLongOption('F', "flags", "SQL pragma flags").SplitHandler(&flags, ',');
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument();
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported).").NoArgument();
-    opts.AddLongOption("test-double-format", "check if formatting already formatted query produces the same result").NoArgument();
+    opts.AddLongOption("test-triple-format", "check that format(format(query)) == format(format(format(query)))").NoArgument();
+    opts.AddLongOption("test-double-format", "check that format(query) == format(format(query))").NoArgument();
     opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
     opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
     opts.AddLongOption("test-complete", "check completion engine").NoArgument();
@@ -449,7 +459,13 @@ int BuildAST(int argc, char** argv) {
             }
 
             if (res.Has("test-format") && isSQLv1 && parseRes.IsOk()) {
-                hasError |= !TestFormat(query, parseRes, settings, outFileNameFormat, res.Has("test-double-format"));
+                hasError |= !TestFormat(
+                    query,
+                    parseRes,
+                    settings,
+                    outFileNameFormat,
+                    /*checkTripleFormatting=*/res.Has("test-triple-format"),
+                    /*checkDoubleFormatting=*/res.Has("test-double-format"));
             }
 
             if (res.Has("test-lexers") && isSQLv1 && parseRes.IsOk()) {

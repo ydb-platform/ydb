@@ -25,7 +25,7 @@ To get started, create tables and populate them with data:
 See the description of the command to init the data load:
 
 ```bash
-{{ ydb-cli }} workload init --help
+{{ ydb-cli }} workload stock init --help
 ```
 
 ### Available parameters {#init_options}

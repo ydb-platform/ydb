@@ -36,29 +36,25 @@ struct TTestCtx : public TTestCtxBase {
     Ctest << " --- " << cmd << Endl;        \
     History << cmd << ", "; }
 
-    void Run() {
+    void RunRandom() {
         UpdateChunkKeeperId();
 
         constexpr ui32 steps = 1000;
         for (ui32 step = 0; step < steps; ++step) {
-            ui32 action = Random(0, 4);
+            ui32 action = Random(0, 32);
 
-            switch (action) {
-            case 0:
+            if (action < 10) {
                 AllocateChunk();
-                break;
-            case 1:
+            } else if (action < 20) {
                 if (TotalAllocated > 0) {
                     FreeChunk();
-                    break;
                 }
-                [[fallthrough]];
-            case 2:
+            } else if (action < 30) {
                 Discover();
-                break;
-            case 3:
+            } else if (action < 31) {
                 RestartVDisk();
-                break;
+            } else {
+                DropChunkKeeper();
             }
         }
     }
@@ -138,9 +134,11 @@ struct TTestCtx : public TTestCtxBase {
         auto resHandle = Env->WaitForEdgeActorEvent<TEvChunkKeeperDiscoverResult>(Edge, false);
         UNIT_ASSERT_C(resHandle, History.Str());
         auto* res = resHandle->Get();
-        
-        ADD_TO_HISTORY("TEvChunkKeeperDiscoverResult(" << PrintSorted(res->Chunks) << ") Actual# " << PrintSorted(Chunks[subsystem]));
-        UNIT_ASSERT_C(Compare(res->Chunks, Chunks[subsystem]), History.Str());
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, History.Str());
+        std::vector<ui32> chunks = GetChunkIdxs(res->Chunks);
+
+        ADD_TO_HISTORY("TEvChunkKeeperDiscoverResult(" << PrintSorted(chunks) << ") Actual# " << PrintSorted(Chunks[subsystem]));
+        UNIT_ASSERT_C(Compare(chunks, Chunks[subsystem]), History.Str());
     }
 
     void UpdateChunkKeeperId() {
@@ -167,6 +165,23 @@ struct TTestCtx : public TTestCtxBase {
         UpdateChunkKeeperId();
     }
 
+    void DropChunkKeeper() {
+        ADD_TO_HISTORY("Drop ChunkKeeper");
+        Env->SetIcbControl(ChunkKeeperId.NodeId(), "VDiskControls.EnableChunkKeeper", 0);
+        Env->StopNode(ChunkKeeperId.NodeId());
+        Env->StartNode(ChunkKeeperId.NodeId());
+        Env->Sim(TDuration::Seconds(15));
+        Env->SetIcbControl(ChunkKeeperId.NodeId(), "VDiskControls.EnableChunkKeeper", 1);
+        Env->StopNode(ChunkKeeperId.NodeId());
+        Env->StartNode(ChunkKeeperId.NodeId());
+        Env->Sim(TDuration::Seconds(15));
+        AllocateEdgeActorOnSpecificNode(ChunkKeeperId.NodeId());
+        GetGroupStatus(GroupId);
+        UpdateChunkKeeperId();
+        Chunks.clear();
+        TotalAllocated = 0;
+    }
+
     template<class T>
     TString PrintSorted(const T& container) {
         auto set = std::set<typename T::value_type>(container.begin(), container.end());
@@ -177,6 +192,14 @@ struct TTestCtx : public TTestCtxBase {
         }
         str << "}";
         return str.Str();
+    }
+
+    std::vector<ui32> GetChunkIdxs(const std::vector<TEvChunkKeeperDiscoverResult::TChunkInfo>& chunks) {
+        std::vector<ui32> res;
+        std::transform(chunks.cbegin(), chunks.cend(), std::back_inserter(res), [&](const auto& chunkInfo) {
+            return chunkInfo.ChunkIdx;
+        });
+        return res;
     }
 
     template<class T1, class T2>
@@ -204,9 +227,88 @@ struct TTestCtx : public TTestCtxBase {
 Y_UNIT_TEST(Random) {
     TTestCtx ctx;
     ctx.Initialize();
-    ctx.Run();
+    ctx.RunRandom();
+}
+
+class TTestSubsystem : public TActorBootstrapped<TTestSubsystem> {
+public:
+    TTestSubsystem(TActorId chunkKeeperId)
+        : ChunkKeeperId(chunkKeeperId)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Send(ChunkKeeperId, new TEvChunkKeeperAllocate(Subsystem));
+    }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvChunkKeeperAllocateResult, Handle)
+        hFunc(TEvChunkKeeperDiscoverResult, Handle)
+        hFunc(TEvChunkKeeperFreeResult, Handle)
+        cFunc(TEvents::TEvWakeup::EventType, HandleWakeup)
+    );
+
+    void Handle(const TEvChunkKeeperAllocateResult::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+        Ctest << "Allocated ChunkIdx# " << *ev->Get()->ChunkIdx << Endl;
+        Schedule(TDuration::Minutes(10), new TEvents::TEvWakeup);
+    }
+
+    void Handle(const TEvChunkKeeperDiscoverResult::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+        Ctest << "Handle TEvChunkKeeperDiscoverResult" << Endl;
+        for (const auto& chunk : ev->Get()->Chunks) {
+            Ctest << "ChunkIdx# " << chunk.ChunkIdx << " ShredRequested# " << chunk.ShredRequested << Endl;
+            if (chunk.ShredRequested) {
+                Send(ChunkKeeperId, new TEvChunkKeeperFree(chunk.ChunkIdx, Subsystem));
+            }
+        }
+    }
+
+    void Handle(const TEvChunkKeeperFreeResult::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+    }
+
+    void HandleWakeup() {
+        Send(ChunkKeeperId, new TEvChunkKeeperDiscover(Subsystem));
+        Schedule(TDuration::Minutes(10), new TEvents::TEvWakeup);
+    }
+
+private:
+    constexpr static NKikimrVDiskData::TChunkKeeperEntryPoint::ESubsystem Subsystem =
+            NKikimrVDiskData::TChunkKeeperEntryPoint::Test1;
+    TActorId ChunkKeeperId;
+};
+
+Y_UNIT_TEST(Shred) {
+    TTestCtx ctx;
+    ctx.Initialize();
+    ctx.UpdateChunkKeeperId();
+
+    {
+        TTestSubsystem* actor = new TTestSubsystem(ctx.ChunkKeeperId);
+        ctx.Env->Runtime->Register(actor, ctx.ChunkKeeperId.NodeId());
+    }
+
+    ctx.Env->Sim(TDuration::Seconds(5));
+
+    while (true) {
+        const TActorId edge = ctx.Env->Runtime->AllocateEdgeActor(ctx.Env->Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(1);
+        ctx.Env->Runtime->SendToPipe(ctx.Env->TabletId, edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerShredResponse>(edge, false,
+                TAppData::TimeProvider->Now() + TDuration::Minutes(30));
+        UNIT_ASSERT(res);
+        if (res->Get()->Record.GetCompleted()) {
+            break;
+        }
+        ctx.Env->Sim(TDuration::Minutes(10));
+    }
+
+    ctx.Env->Sim(TDuration::Seconds(5));
 }
 
 }
 
-}
+} // namespace NKikimr

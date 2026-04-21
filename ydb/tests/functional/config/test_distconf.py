@@ -39,9 +39,9 @@ def fetch_config(config_client):
     return result.config[0].config
 
 
-def get_config_version(yaml_config):
-    config = yaml.safe_load(yaml_config)
-    return config.get('metadata', {}).get('version', 0)
+def bump_config_version(config_dict):
+    config_dict["metadata"]["version"] = config_dict["metadata"].get("version", 0) + 1
+    return config_dict["metadata"]["version"]
 
 
 class DistConfKiKiMRTest(object):
@@ -58,7 +58,7 @@ class DistConfKiKiMRTest(object):
     console_node = 3
 
     @classmethod
-    def setup_class(cls):
+    def _setup_cluster(cls):
         if cls.nodes_count == 0:
             cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
         log_configs = {
@@ -102,23 +102,50 @@ class DistConfKiKiMRTest(object):
         cls.dynconfig_client = DynConfigClient(host, grpc_port)
 
     @classmethod
+    def _teardown_cluster(cls):
+        if hasattr(cls, "cluster") and cls.cluster is not None:
+            cls.cluster.stop()
+        cls.cluster = None
+        cls.swagger_client = None
+        cls.dynconfig_client = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._setup_cluster()
+
+    @classmethod
     def teardown_class(cls):
-        cls.cluster.stop()
+        cls._teardown_cluster()
 
     def check_kikimr_is_operational(self, table_path, tablet_ids):
         for partition_id, tablet_id in enumerate(tablet_ids):
             write_resp = self.cluster.kv_client.kv_write(
                 table_path, partition_id, "key", value_for("key", tablet_id)
             )
+            logger.debug(f"write_resp: {write_resp}")
             assert_that(write_resp.operation.status == StatusIds.SUCCESS)
 
             read_resp = self.cluster.kv_client.kv_read(
                 table_path, partition_id, "key"
             )
+            logger.debug(f"read_resp: {read_resp}")
             assert_that(read_resp.operation.status == StatusIds.SUCCESS)
 
 
 class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
+    @classmethod
+    def setup_class(cls):
+        pass
+
+    @classmethod
+    def teardown_class(cls):
+        pass
+
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        type(self)._setup_cluster()
+        yield
+        type(self)._teardown_cluster()
 
     def test_cluster_is_operational_with_distconf(self):
         table_path = '/Root/mydb/mytable_with_metadata'
@@ -183,12 +210,14 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         # prepare new node
         new_node = self.cluster.prepare_node(self.configurator)
         new_node.format_pdisk(pdisk_path, self.configurator.static_pdisk_size)
-        dumped_fetched_config["metadata"]["version"] = 1
+        bump_config_version(dumped_fetched_config)
 
         # replace config
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+        time.sleep(5)
+
         # start new node
         new_node.start()
 
@@ -361,7 +390,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         # prepare new node
         new_node = self.cluster.prepare_node(self.configurator, seed_nodes_file.name)
         new_node.format_pdisk(pdisk_path, self.configurator.static_pdisk_size)
-        dumped_fetched_config["metadata"]["version"] = 1
+        bump_config_version(dumped_fetched_config)
 
         # replace config
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
@@ -407,7 +436,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         dumped_fetched_config = yaml.safe_load(fetched_config)
 
         # replace config with invalid host config id
-        dumped_fetched_config['metadata']['version'] = 1
+        bump_config_version(dumped_fetched_config)
         dumped_fetched_config["config"]["host_configs"][0]["host_config_id"] = 1000
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
@@ -419,7 +448,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
         # replace config with invalid host config disk path
         dumped_fetched_config["config"]["host_configs"][0]["drive"].append(dumped_fetched_config["config"]["host_configs"][0]["drive"][0])
-        dumped_fetched_config['metadata']['version'] = 1
+        bump_config_version(dumped_fetched_config)
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
@@ -434,7 +463,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             "type": "ROT"
         }
 
-        dumped_fetched_config['metadata']['version'] = 1
+        bump_config_version(dumped_fetched_config)
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
@@ -446,6 +475,104 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         assert_that(replace_config_response.operation.status == StatusIds.BAD_REQUEST)
         assert_that(replace_config_response.operation.issues[0].message == "Dynamic Config V1 is disabled. Use V2 API.")
         logger.debug(replace_config_response.operation)
+
+    def test_dry_run_valid_config_not_applied(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        dumped_config['metadata']['version'] = original_version + 1
+        if 'host_configs' in dumped_config.get('config', {}):
+            for host_config in dumped_config['config']['host_configs']:
+                for drive in host_config.get('drive', []):
+                    if 'expected_slot_count' in drive:
+                        drive['expected_slot_count'] = drive['expected_slot_count'] + 1
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+
+    def test_dry_run_invalid_config_returns_error(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        dumped_config['metadata']['version'] = original_version + 1
+        if 'host_configs' in dumped_config.get('config', {}):
+            first_host_config = dumped_config['config']['host_configs'][0]
+            if 'drive' in first_host_config and len(first_host_config['drive']) > 0:
+                first_host_config['drive'].append(first_host_config['drive'][0].copy())
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run invalid config response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+
+    def test_dry_run_then_real_apply(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        dumped_config['metadata']['version'] = original_version + 1
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=False)
+        logger.debug(f"real replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_real = fetch_config(self.cluster.config_client)
+        fetched_after_real_parsed = yaml.safe_load(fetched_after_real)
+        assert_that(fetched_after_real_parsed['metadata']['version'] == original_version + 1)
+
+    def fetch_config_with_storage(self):
+        from ydb.tests.library.clients.kikimr_config_client import ConfigClient
+        fetch_config_response = self.cluster.config_client.fetch_all_configs(
+            transform=ConfigClient.FetchTransform.ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG)
+        assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
+
+        result = config.FetchConfigResult()
+        fetch_config_response.operation.result.Unpack(result)
+        return result.config[0].config
+
+    def test_dry_run_disable_distconf_does_not_disable(self):
+        fetched_config = self.fetch_config_with_storage()
+        dumped_config = yaml.safe_load(fetched_config)
+        original_version = dumped_config['metadata']['version']
+
+        assert dumped_config.get('config', {}).get('self_management_config', {}).get('enabled', False) is True, \
+            "Distconf should be enabled initially"
+
+        dumped_config['metadata']['version'] = original_version + 1
+        dumped_config['config']['self_management_config']['enabled'] = False
+
+        replace_config_response = self.cluster.config_client.replace_config(
+            yaml.dump(dumped_config), dry_run=True)
+        logger.debug(f"dry_run disable distconf response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_after_dry_run = fetch_config(self.cluster.config_client)
+        fetched_after_dry_run_parsed = yaml.safe_load(fetched_after_dry_run)
+        assert_that(fetched_after_dry_run_parsed['metadata']['version'] == original_version)
+        assert fetched_after_dry_run_parsed.get('config', {}).get('self_management_config', {}).get('enabled', False) is True, \
+            "Distconf should still be enabled after dry_run"
 
 
 class TestDistConfBootstrapValidation:

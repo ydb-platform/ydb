@@ -84,7 +84,7 @@ size_t MatchANSIMultilineComment(TStringBuf prefix) {
             continue;
         }
 
-        if (prefix.size() == 0) {
+        if (prefix.empty()) {
             return 0;
         }
 
@@ -160,7 +160,7 @@ TGenericLexerGrammar MakeGenericLexerGrammar(
     generic.emplace_back(PuntuationMatcher(grammar));
 
     for (const auto& [name, regex] : regexByOtherName) {
-        generic.emplace_back(Compile(name, {regex}));
+        generic.emplace_back(Compile(name, {.Body = regex}));
         if (name == "COMMENT" && ansi) {
             generic.back() = ANSICommentMatcher(name, std::move(generic.back()));
         }

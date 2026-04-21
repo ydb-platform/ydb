@@ -14,33 +14,54 @@ TSortHelper::TSortHelper(
 }
 
 TSortedRowOrdering TSortHelper::GetSortedRowOrdering() const {
+    const ui64 numKeyColumns = SortOrders_.size();
 
-    std::vector<TRowPosition> rowPositions;
+    struct TSortEntry {
+        TRowPosition Position;
+        std::vector<TExtractedKey> Keys;
+    };
+
+    std::vector<TSortEntry> entries;
     for (ui64 blockIndex = 0; blockIndex < Blocks_.size(); ++blockIndex) {
-        for (ui64 rowIndex = 0; rowIndex < Blocks_[blockIndex].Rows.size(); ++rowIndex) {
-            rowPositions.emplace_back(TRowPosition(blockIndex, rowIndex));
+        const auto& block = Blocks_[blockIndex];
+        for (ui64 rowIndex = 0; rowIndex < block.Rows.size(); ++rowIndex) {
+            const auto& row = block.Rows[rowIndex];
+            std::vector<TExtractedKey> keys;
+            keys.reserve(numKeyColumns);
+            for (ui64 colIdx = 0; colIdx < numKeyColumns; ++colIdx) {
+                const auto& range = row[colIdx];
+                if (!range.IsValid()) {
+                    keys.push_back(TExtractedKey{TSmallKeyValue{std::monostate{}}, TStringBuf{}});
+                } else {
+                    TStringBuf val = SliceRange(block.Data, range);
+                    keys.push_back(TExtractedKey{TryExtractSmallYsonValue(val), val});
+                }
+            }
+            entries.push_back(TSortEntry{TRowPosition{blockIndex, rowIndex}, std::move(keys)});
         }
     }
 
-    std::sort(rowPositions.begin(), rowPositions.end(),
-        [this](const TRowPosition& lhs, const TRowPosition& rhs) {
-            auto& lhsBlock = Blocks_[lhs.BlockIndex];
-            auto& lhsRow = lhsBlock.Rows[lhs.RowIndex];
-            auto& rhsBlock = Blocks_[rhs.BlockIndex];
-            auto& rhsRow = rhsBlock.Rows[rhs.RowIndex];
-
-            int c = CompareKeyRowsAcrossYsonBlocks(
-                lhsBlock.Data,
-                lhsRow,
-                rhsBlock.Data,
-                rhsRow,
-                SortOrders_
-            );
-            return c < 0;
+    std::sort(entries.begin(), entries.end(),
+        [&](const TSortEntry& lhs, const TSortEntry& rhs) {
+            for (ui64 colIdx = 0; colIdx < numKeyColumns; ++colIdx) {
+                int c = CompareExtractedKeys(lhs.Keys[colIdx], rhs.Keys[colIdx]);
+                if (SortOrders_[colIdx] == ESortOrder::Descending) {
+                    c = -c;
+                }
+                if (c != 0) {
+                    return c < 0;
+                }
+            }
+            return false;
         }
     );
 
-    return rowPositions;
+    TSortedRowOrdering result;
+    result.reserve(entries.size());
+    for (const auto& entry : entries) {
+        result.emplace_back(entry.Position);
+    }
+    return result;
 }
 
 } // namespace NYql::NFmr

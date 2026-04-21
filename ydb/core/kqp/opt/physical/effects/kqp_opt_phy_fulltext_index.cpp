@@ -1,4 +1,7 @@
 #include "kqp_opt_phy_effects_impl.h"
+
+#include <ydb/core/base/fulltext.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -7,17 +10,55 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-TExprBase BuildFulltextAnalyze(const TExprBase& inputRow, const TIndexDescription* indexDesc, TPositionHandle pos, NYql::TExprContext& ctx)
+TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExprBase& inputRow,
+    const TIndexDescription* indexDesc, TPositionHandle pos, NYql::TExprContext& ctx)
 {
-    // Extract fulltext index settings
-    const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-    YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+    TString settingsProto;
+    TString textColumn;
+    NFulltext::EIndexMode mode = NFulltext::EIndexMode::Invalid;
 
-    const auto& settings = fulltextDesc->GetSettings();
-    YQL_ENSURE(settings.columns().size() == 1, "Expected single text column in fulltext index");
+    if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
+        YQL_ENSURE(indexDesc->KeyColumns.size() == 1, "Expected single key column in JSON index");
+        textColumn = indexDesc->KeyColumns.at(0);
 
-    const TString textColumn = settings.columns().at(0).column();
-    const auto& analyzers = settings.columns().at(0).analyzers();
+        auto columnType = table.GetColumnType(textColumn);
+        YQL_ENSURE(columnType, "Failed to get column type for JSON index column");
+
+        const TTypeAnnotationNode* unpackedType = columnType;
+        if (unpackedType->GetKind() == ETypeAnnotationKind::Optional) {
+            unpackedType = unpackedType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        YQL_ENSURE(unpackedType->GetKind() == ETypeAnnotationKind::Data,
+            "Expected data type for JSON index column");
+
+        auto slot = unpackedType->Cast<TDataExprType>()->GetSlot();
+        switch (slot) {
+            case EDataSlot::Json:
+                mode = NFulltext::EIndexMode::JsonIndexOverJson;
+                break;
+            case EDataSlot::JsonDocument:
+                mode = NFulltext::EIndexMode::JsonIndexOverJsonDocument;
+                break;
+            default:
+                YQL_ENSURE(false, "Unexpected data slot for JSON index column");
+        }
+    } else {
+        // Extract fulltext index settings
+        const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+        YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+
+        const auto& settings = fulltextDesc->GetSettings();
+        YQL_ENSURE(settings.columns().size() == 1, "Expected single text column in fulltext index");
+
+        textColumn = settings.columns().at(0).column();
+        const auto& analyzers = settings.columns().at(0).analyzers();
+
+        // Serialize analyzer settings for FulltextAnalyze
+        YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
+
+        mode = NFulltext::EIndexMode::Fulltext;
+    }
 
     // Get text member from input row
     auto textMember = Build<TCoMember>(ctx, pos)
@@ -25,19 +66,19 @@ TExprBase BuildFulltextAnalyze(const TExprBase& inputRow, const TIndexDescriptio
         .Name().Build(textColumn)
         .Done();
 
-    // Serialize analyzer settings for FulltextAnalyze
-    TString settingsProto;
-    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
     auto settingsLiteral = Build<TCoString>(ctx, pos)
         .Literal().Build(settingsProto)
         .Done();
 
+    auto modeAtom = ctx.NewAtom(pos, ToString(static_cast<ui32>(mode)));
+
     // Create callable for fulltext tokenization
-    // Format: FulltextAnalyze(text: String, settings: String) -> List<Struct<__ydb_token, __ydb_freq>>
+    // Format: FulltextAnalyze(text: String|Utf8|Json|JsonDocument, settings: String, mode: Atom) -> List<Struct<__ydb_token, __ydb_freq>>
     auto analyzeCallable = ctx.Builder(pos)
         .Callable("FulltextAnalyze")
             .Add(0, textMember.Ptr())
             .Add(1, settingsLiteral.Ptr())
+            .Add(2, modeAtom)
         .Seal()
         .Build();
 
@@ -124,7 +165,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
             .Build()
         .Done();
 
-    auto analyzeCallable = BuildFulltextAnalyze(inputRowArg, indexDesc, pos, ctx);
+    auto analyzeCallable = BuildFulltextAnalyze(table, inputRowArg, indexDesc, pos, ctx);
 
     auto analyzeStage = Build<TDqStage>(ctx, pos)
         .Inputs()
@@ -195,7 +236,7 @@ TExprBase BuildFulltextDocsRows(const TKikimrTableDescription& table, const TInd
         }
     }
 
-    auto analyzeCallable = BuildFulltextAnalyze(inputRowArg, indexDesc, pos, ctx);
+    auto analyzeCallable = BuildFulltextAnalyze(table, inputRowArg, indexDesc, pos, ctx);
 
     auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));
     auto stateArg = TCoArgument(ctx.NewArgument(pos, "state"));

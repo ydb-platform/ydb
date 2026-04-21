@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <yql/essentials/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
@@ -72,9 +72,9 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
 
     if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;
@@ -122,7 +122,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TE
 
     for (auto&& [tableName, columnStatistics]:  ColumnStatisticsResponse->ColumnStatisticsByTableName) {
         TypesCtx.ColumnStatisticsByTableName.insert(
-            {std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
+            {std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
         );
     }
 
@@ -182,7 +182,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())
     ) {
         std::shared_ptr<TOptimizerStatistics> dummyStats = nullptr;
-        auto computer = NDq::TPredicateSelectivityComputer(dummyStats, true);
+        auto computer = TPredicateSelectivityComputer(dummyStats, true);
 
         if (TCoFilterBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());
@@ -196,7 +196,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         for (const auto& item: columnStatsUsedMembers.Data) {
             if (auto maybeTableAndColumn = GetTableAndColumnNames(item.Member)) {
                 const auto& [table, column] = *maybeTableAndColumn;
-                using TColumnStatisticsUsedMember = NDq::TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
+                using TColumnStatisticsUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
                 switch (item.PredicateType) {
                 case TColumnStatisticsUsedMember::EEquality:
                     CMColumnsByTableName[table].insert(std::move(column));

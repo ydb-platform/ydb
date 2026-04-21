@@ -78,7 +78,7 @@ public:
     // Scalar value methods
     double GetNumber() const;
     bool GetBool() const;
-    const TStringBuf GetString() const;
+    TStringBuf GetString() const;
 
     ui32 GetSize() const;
 
@@ -87,7 +87,7 @@ public:
     TArrayIterator GetArrayIterator() const;
 
     // Object methods
-    TMaybe<TValue> Lookup(const TStringBuf key) const;
+    TMaybe<TValue> Lookup(TStringBuf key) const;
     TObjectIterator GetObjectIterator() const;
 
     NUdf::TUnboxedValue ConvertToUnboxedValue(const NUdf::IValueBuilder* valueBuilder) const;

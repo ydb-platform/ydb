@@ -2,6 +2,7 @@
 #include "change_record.h"
 #include "type_serialization.h"
 
+#include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
@@ -100,19 +101,6 @@ public:
 
 class TJsonSerializer: public TBaseSerializer {
     friend class TChangeRecord; // used in GetPartitionKey()
-
-    static NJson::TJsonWriterConfig DefaultJsonConfig() {
-        constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
-        constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
-        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
-        return NJson::TJsonWriterConfig {
-            .DoubleNDigits = doubleNDigits,
-            .FloatNDigits = floatNDigits,
-            .FloatToStringMode = floatMode,
-            .ValidateUtf8 = false,
-            .WriteNanAsString = true,
-        };
-    }
 
 protected:
     static auto ParseBody(const TString& protoBody) {
@@ -277,7 +265,7 @@ protected:
 public:
     explicit TJsonSerializer(const TChangeRecordSerializerOpts& opts)
         : TBaseSerializer(opts)
-        , JsonConfig(DefaultJsonConfig())
+        , JsonConfig(NFormats::DefaultJsonWriterConfig())
     {}
 
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
@@ -327,8 +315,14 @@ protected:
             SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
         }
 
-        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
-            json["user"] = record.GetUserSID();
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty() ) {
+                json["user"] = userCtx->GetUserSID();
+            }
+            if (Opts.TraceIds && userCtx->GetUserTraceId()) {
+                json["traceId"] = userCtx->GetUserTraceId().GetHexTraceId();
+            }
         }
 
         const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
@@ -534,14 +528,17 @@ protected:
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
 
-        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
-            auto& userIdentityJson = json["userIdentity"];
-            if (record.GetUserSID() == BUILTIN_ACL_CDC_TTL) {
-                userIdentityJson["type"] = "Service";   
-                userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
-            } else {
-                userIdentityJson["type"] = "User";
-                userIdentityJson["principalId"] = record.GetUserSID();
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
+                auto& userIdentityJson = json["userIdentity"];
+                if (userCtx->GetUserSID() == BUILTIN_ACL_CDC_TTL) {
+                    userIdentityJson["type"] = "Service";
+                    userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
+                } else {
+                    userIdentityJson["type"] = "User";
+                    userIdentityJson["principalId"] = userCtx->GetUserSID();
+                }
             }
         }
     }
@@ -607,8 +604,14 @@ protected:
             // TODO: db & table
         });
 
-        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
-            sourceJson["user"] = record.GetUserSID();
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
+                sourceJson["user"] = userCtx->GetUserSID();
+            }
+            if (Opts.TraceIds && userCtx->GetUserTraceId()) {
+                sourceJson["traceId"] = userCtx->GetUserTraceId().GetHexTraceId();
+            }
         }
     }
 

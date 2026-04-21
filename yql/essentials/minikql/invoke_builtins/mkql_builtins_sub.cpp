@@ -30,21 +30,7 @@ struct TSub: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TSub<TLeft, 
 template <ui8 Precision>
 struct TDecimalSub {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        const auto s = SafeSub(l, r);
-
-        using namespace NYql::NDecimal;
-
-        if (IsNormal<Precision>(l) && IsNormal<Precision>(r) && IsNormal<Precision>(s)) {
-            return NUdf::TUnboxedValuePod(s);
-        }
-
-        if (IsNan(l) || IsNan(r) || !s) {
-            return NUdf::TUnboxedValuePod(Nan());
-        } else {
-            return NUdf::TUnboxedValuePod(s > 0 ? +Inf() : -Inf());
-        }
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::Sub(left.GetInt128(), right.GetInt128(), Precision));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

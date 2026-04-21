@@ -1011,8 +1011,11 @@ private:
     }
 
     bool ParseColumnExtra(const TExprList& columnTuple, TKikimrColumnMetadata& columnMeta, TExprContext& ctx) {
-        auto columnItem = columnTuple.Item(3);
-        if (columnItem.Maybe<TExprList>()) {
+        for (size_t itemId = 3; itemId < columnTuple.Size(); ++itemId) {
+            auto columnItem = columnTuple.Item(itemId);
+            if (!columnItem.Maybe<TExprList>()) {
+                continue;
+            }
             const auto exprs = columnItem.Cast<TExprList>();
             if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
                 columnMeta.Compression = TColumnCompression();
@@ -1028,6 +1031,45 @@ private:
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(columnItem.Pos()), TStringBuilder()
                             << "Only algorithm and level settings supported for column COMPRESSION."));
+                        return false;
+                    }
+                }
+            } else if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnEncoding") {
+                columnMeta.Encoding = TColumnEncodingsList{};
+                auto encodingList = exprs.Item(1).Cast<TExprList>();
+
+                if (encodingList.Empty()) {
+                    columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::UNDEFINED});
+                } else if (encodingList.Size() > 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                    return false;
+                } else {
+                    auto config = encodingList.Item(0).Cast<TExprList>();
+                    if (config.Size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                        return false;
+                    }
+
+                    TString encodingName;
+                    auto pair = config.Item(0).Cast<TExprList>();
+                    if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+                        encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                        return false;
+                    }
+
+                    if (encodingName == "dict") {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                << "ENCODING(DICT) is disabled."));
+                            return false;
+                        }
+                        columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::DICTIONARY});
+                    } else if (encodingName == "off") {
+                        columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::PLAIN});
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
                         return false;
                     }
                 }
@@ -1123,10 +1165,8 @@ private:
                 }
             }
 
-            if (columnTuple.Size() > 3) {
-                if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
-                    return TStatus::Error;
-                }
+            if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
+                return TStatus::Error;
             }
 
             meta->ColumnOrder.push_back(columnName);
@@ -1178,6 +1218,12 @@ private:
                     return TStatus::Error;
                 }
                 indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+            } else if (type == "globalJson") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalJson;
             } else if (type == "localBloomFilter") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
@@ -1196,11 +1242,10 @@ private:
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
 
-            if ((indexType == TIndexDescription::EType::LocalBloomFilter ||
-                 indexType == TIndexDescription::EType::LocalBloomNgramFilter) &&
+            if (indexType == TIndexDescription::EType::LocalBloomNgramFilter &&
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                    "Local bloom indexes are supported only for column tables"));
+                    "Local bloom ngram indexes are supported only for column tables"));
                 return TStatus::Error;
             }
 
@@ -1255,7 +1300,7 @@ private:
                     case TIndexDescription::EType::LocalBloomFilter: {
                         FillLocalBloomFilterSetting(
                             localBloomFilterDescription,
-                            name.StringValue(), value.StringValue(), error);   
+                            name.StringValue(), value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
@@ -1280,6 +1325,7 @@ private:
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
+                case TIndexDescription::EType::GlobalJson:
                     // no specialized index description
                     // no settings validation
                     break;
@@ -1311,32 +1357,53 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalBloomFilter:
-                    if (indexColums.size() != 1 || !dataColums.empty()) {
+                    if (!dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            "Local bloom index requires exactly one index column and does not support data columns"));
+                            "Local bloom index does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
+                    }
+                    if (meta->StoreType == EStoreType::Column) {
+                        // Column-store: keep existing restriction of exactly 1 column
+                        if (indexColums.size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Local bloom index on column tables requires exactly one index column"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else {
+                        // Row-store: columns must be a left-prefix of PK
+                        if (indexColums.empty()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Local bloom index requires at least one PK prefix column"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (indexColums.size() > meta->KeyColumnNames.size()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Bloom filter prefix columns exceed the number of primary key columns"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        for (size_t i = 0; i < indexColums.size(); ++i) {
+                            if (indexColums[i] != meta->KeyColumnNames[i]) {
+                                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                                    << "Bloom filter column '" << indexColums[i]
+                                    << "' does not match PK column '" << meta->KeyColumnNames[i]
+                                    << "' at position " << i));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
                     }
 
                     specializedIndexDescription = std::move(localBloomFilterDescription);
                     break;
-                case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter: {
                     if (indexColums.size() != 1 || !dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             "Local bloom ngram index requires exactly one index column and does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (!localBloomNgramFilterDescription.NgramSize ||
-                        !localBloomNgramFilterDescription.HashesCount ||
-                        !localBloomNgramFilterDescription.FilterSizeBytes ||
-                        !localBloomNgramFilterDescription.RecordsCount) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()),
-                            "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
                     break;
+                }
             }
 
             // IndexState and version, pathId are ignored for create table with index request
@@ -1724,10 +1791,8 @@ private:
                     columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
                     columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
-                    if (columnTuple.Size() > 3) {
-                        if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
-                            return TStatus::Error;
-                        }
+                    if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
+                        return TStatus::Error;
                     }
                 }
             } else if (name == "dropColumns") {
@@ -1910,6 +1975,49 @@ private:
                                     << " Column: \"" << name
                                     << "\". Setting: \"" << key
                                     << "\". Only algorithm and level settings supported for column COMPRESSION"));
+                                return TStatus::Error;
+                            }
+                        }
+                    } else if (alterColumnAction == "changeEncoding") {
+                        const auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
+                        if (!encodingList.Empty()) {
+                            if (encodingList.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            auto config = encodingList.Item(0).Cast<TExprList>();
+                            if (config.Size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            TString encodingName;
+                            auto pair = config.Item(0).Cast<TExprList>();
+                            if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+                                encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+                            } else {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            if (encodingName == "dict") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                        << " Column: \"" << name << "\". ENCODING(DICT) is disabled."));
+                                    return TStatus::Error;
+                                }
+                            } else if (encodingName != "off") {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
                                 return TStatus::Error;
                             }
                         }
@@ -2281,6 +2389,7 @@ private:
                 "batch_size_bytes",
                 "consumer",
                 "directory",
+                "metrics_level",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;
@@ -2316,7 +2425,8 @@ private:
                 "failover_mode",
                 "flush_interval",
                 "batch_size_bytes",
-                "directory"
+                "directory",
+                "metrics_level",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;

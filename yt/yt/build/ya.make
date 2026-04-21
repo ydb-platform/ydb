@@ -34,6 +34,10 @@ ELSE()
     SET(YT_VERSION_TYPE "os")
 ENDIF()
 
+IF (YT_CUSTOM_INTERNAL_BUILD)
+    INCLUDE(${ARCADIA_ROOT}/yt/yt/build/yt_custom_internal/yt_custom_internal.inc)
+ENDIF()
+
 SRCS(
   config.h.in
   build.cpp.in
@@ -41,10 +45,6 @@ SRCS(
 
   ya_version.cpp
 )
-
-IF (MOODYCAMEL_NO_TSAN)
-    CXXFLAGS(-DMOODYCAMEL_NO_TSAN)
-ENDIF()
 
 IF (YT_ROPSAN_ENABLE_ACCESS_CHECK)
     CXXFLAGS(-DYT_ROPSAN_ENABLE_ACCESS_CHECK)

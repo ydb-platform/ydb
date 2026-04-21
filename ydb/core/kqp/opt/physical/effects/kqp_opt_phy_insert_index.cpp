@@ -112,9 +112,15 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const bool needPrecompute = !useStreamIndex
         || !abortOnError
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
-                || index.second->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || index.second->Type == TIndexDescription::EType::GlobalFulltextRelevance;
+            switch (index.second->Type) {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalFulltextRelevance:
+                case TIndexDescription::EType::GlobalJson:
+                    return true;
+                default:
+                    return false;
+            }
         });
 
     TVector<TStringBuf> insertColumns;
@@ -136,7 +142,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     std::optional<TExprBase> insertRows;
     if (needPrecompute) {
         // TODO: don't use precompute here!
-        auto conditionalInsertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx);
+        auto conditionalInsertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx, kqpCtx);
         if (!conditionalInsertRows) {
             return node;
         }
@@ -234,8 +240,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 break;
             }
             case TIndexDescription::EType::GlobalFulltextPlain:
-            case TIndexDescription::EType::GlobalFulltextRelevance: {
-                // For fulltext indexes, we need to tokenize the text and create inserted rows
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson: {
+                // For fulltext and JSON indexes, we need to tokenize the text and create inserted rows
                 auto insertPrecompute = ReadInputToPrecompute(*insertRows, insert.Pos(), ctx);
                 upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertPrecompute, inputColumnsSet, indexTableColumns,
                     false /*forDelete*/, insert.Pos(), ctx);

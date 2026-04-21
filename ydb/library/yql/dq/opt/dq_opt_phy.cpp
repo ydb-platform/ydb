@@ -2972,7 +2972,8 @@ TExprBase DqBuildJoin(
     bool useBlockHashJoin,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
-    bool buildCollectStage
+    bool buildCollectStage,
+    bool blockHashJoinBuildSideLeft
 ) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2987,7 +2988,7 @@ TExprBase DqBuildJoin(
     const bool mapJoinCanBeApplied = joinType != "Full"sv && joinType != "Exclusion"sv;
     if (joinAlgo == EJoinAlgoType::MapJoin && mapJoinCanBeApplied) {
         hashJoin = EHashJoinMode::Map;
-    } else if (joinAlgo == EJoinAlgoType::GraceJoin) {
+    } else if (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
         hashJoin = EHashJoinMode::Grace;
     }
 
@@ -3011,7 +3012,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

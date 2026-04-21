@@ -15,6 +15,67 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 index) {
+    TString writeQuery = Sprintf(R"(
+        (
+            (let keyNull   '( '('key   (Null) ) ) )
+            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key0   '( '('key   (Uint32 '%u ) ) ) )
+            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key1   '( '('key   (Uint32 '%u ) ) ) )
+            (let row1   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key2   '( '('key   (Uint32 '%u ) ) ) )
+            (let row2   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key3   '( '('key   (Uint32 '%u ) ) ) )
+            (let row3   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key4   '( '('key   (Uint32 '%u ) ) ) )
+            (let row4   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key5   '( '('key   (Uint32 '%u ) ) ) )
+            (let row5   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key6   '( '('key   (Uint32 '%u ) ) ) )
+            (let row6   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key7   '( '('key   (Uint32 '%u ) ) ) )
+            (let row7   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key8   '( '('key   (Uint32 '%u ) ) ) )
+            (let row8   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key9   '( '('key   (Uint32 '%u ) ) ) )
+            (let row9   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+
+            (return (AsList
+                        (UpdateRow '__user__Table keyNull row0)
+                        (UpdateRow '__user__Table key0 row0)
+                        (UpdateRow '__user__Table key1 row1)
+                        (UpdateRow '__user__Table key2 row2)
+                        (UpdateRow '__user__Table key3 row3)
+                        (UpdateRow '__user__Table key4 row4)
+                        (UpdateRow '__user__Table key5 row5)
+                        (UpdateRow '__user__Table key6 row6)
+                        (UpdateRow '__user__Table key7 row7)
+                        (UpdateRow '__user__Table key8 row8)
+                        (UpdateRow '__user__Table key9 row9)
+                     )
+            )
+        )
+    )",
+         1000*index + 0,
+         1000*key + 0, 1000*index + 0,
+         1000*key + 1, 1000*index + 1,
+         1000*key + 2, 1000*index + 2,
+         1000*key + 3, 1000*index + 3,
+         1000*key + 4, 1000*index + 4,
+         1000*key + 5, 1000*index + 5,
+         1000*key + 6, 1000*index + 6,
+         1000*key + 7, 1000*index + 7,
+         1000*key + 8, 1000*index + 8,
+         1000*key + 9, 1000*index + 9);
+
+    NKikimrMiniKQL::TResult result;
+    TString err;
+    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+    UNIT_ASSERT_VALUES_EQUAL(err, "");
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+}
+
 Y_UNIT_TEST_SUITE(IndexBuildTest) {
     Y_UNIT_TEST(ShadowDataNotAllowedByDefault) {
         TTestBasicRuntime runtime;
@@ -383,13 +444,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], true);
         UNIT_ASSERT_VALUES_EQUAL(shadowData[1], false);
+        UNIT_ASSERT(shadowData.size() < 3 || shadowData[2] == false);
 
-        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[0], true);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[1], false);
+        UNIT_ASSERT(keepEraseMarkers.size() < 3 || keepEraseMarkers[2] == false);
     }
 
     Y_UNIT_TEST(BaseCase) {
@@ -1546,6 +1609,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
+
+        // Build a non-unique index to check that the table is correctly unlocked
+        TestBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{"test_index", NKikimrSchemeOp::EIndexTypeGlobal, {"index1", "index2"}, {}, globalIndexSettings});
+        auto buildIndexId2 = txId;
+
+        env.TestWaitNotification(runtime, buildIndexId2, tenantSchemeShard);
+
+        descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId2);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
     }
 
     Y_UNIT_TEST(RejectsOnDuplicatesUniq) {
@@ -1596,5 +1668,125 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                            {NLs::PathExist,
                             NLs::IndexesCount(1),
                             NLs::PathVersionEqual(6)});
+    }
+}
+
+
+// Tests for issue #35458: hung index build scans should be restarted after datashard reboot.
+// The datashard persists TEvBuildIndexCreateRequest on receipt; on reboot it sends ABORTED
+// back to schemeshard which then re-sends TEvBuildIndexCreateRequest to restart the scan.
+Y_UNIT_TEST_SUITE(IndexBuildHungScanRestartTests) {
+
+    // When a datashard reboots during an index build scan, the persisted scan request
+    // is found on startup and ABORTED is sent to schemeshard. Schemeshard then retries.
+    Y_UNIT_TEST(HungScanIsRestarted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1, 100);
+
+        // Count how many scan create requests are sent to detect restarts.
+        ui32 scanCreateRequestCount = 0;
+        auto createRequestObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>(
+            [&](TEvDataShard::TEvBuildIndexCreateRequest::TPtr&) {
+                ++scanCreateRequestCount;
+            });
+
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+
+        // Wait for the initial scan request to arrive at datashard.
+        runtime.WaitFor("initial scan request", [&] { return scanCreateRequestCount >= 1; });
+        UNIT_ASSERT_GE(scanCreateRequestCount, 1);
+
+        // Reboot the datashard to simulate a crash mid-scan.
+        // On reboot, the datashard finds the persisted scan request and sends ABORTED
+        // to schemeshard, which then retries by sending a new TEvBuildIndexCreateRequest.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, sender);
+
+        // After reboot, schemeshard should have sent a second TEvBuildIndexCreateRequest.
+        runtime.WaitFor("scan restart after reboot", [&] { return scanCreateRequestCount >= 2; });
+        UNIT_ASSERT_C(scanCreateRequestCount >= 2,
+            "Schemeshard did not restart the scan after datashard reboot (got "
+            << scanCreateRequestCount << " scan create requests, expected at least 2). "
+            "This demonstrates the bug from issue #35458: scans after reboot are never restarted.");
+
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(),
+            (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
+    }
+
+    // Same as above but with two shards: only one reboots, the other finishes normally.
+    // This verifies the reboot-restart mechanism works correctly in a multi-shard scenario.
+    Y_UNIT_TEST(HungScanIsRestartedAfterDatashardReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (ui32 delta = 0; delta < 2; ++delta) {
+            WriteRows(runtime, TTestTxConfig::FakeHiveTablets + delta, 1 + delta, 100 + delta);
+        }
+
+        ui32 restartCount = 0;
+        auto createRequestObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>(
+            [&](TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev) {
+                if (ev->Get()->Record.GetTabletId() == TTestTxConfig::FakeHiveTablets) {
+                    ++restartCount;
+                }
+            });
+
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+
+        // Wait for the scan request to reach the first datashard.
+        runtime.WaitFor("initial scan request to first shard", [&] { return restartCount >= 1; });
+
+        // Reboot the first datashard mid-scan.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, sender);
+
+        // After reboot, schemeshard should retry the first shard.
+        runtime.WaitFor("scan restart after reboot", [&] { return restartCount >= 2; });
+        UNIT_ASSERT_C(restartCount >= 2,
+            "Schemeshard did not restart the scan on shard "
+            << TTestTxConfig::FakeHiveTablets << " after reboot (got "
+            << restartCount << " requests, expected at least 2). "
+            "This demonstrates the bug from issue #35458.");
+
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(),
+            (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
     }
 }

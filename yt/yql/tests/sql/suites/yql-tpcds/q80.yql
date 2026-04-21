@@ -1,13 +1,8 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
-SELECT
-    Ensure(0, FALSE, 'muted: sql panic')
-;
-/*
 $ssr = (
     SELECT
         s_store_id AS store_id,
@@ -64,7 +59,9 @@ $csr = (
         plato.promotion
     WHERE
         cs_sold_date_sk == d_date_sk
-        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+            CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30)
+        )
         AND cs_catalog_page_sk == cp_catalog_page_sk
         AND cs_item_sk == i_item_sk
         AND i_current_price > 50
@@ -96,7 +93,9 @@ $wsr = (
         plato.promotion
     WHERE
         ws_sold_date_sk == d_date_sk
-        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))
+        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+            CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30)
+        )
         AND ws_web_site_sk == web_site_sk
         AND ws_item_sk == i_item_sk
         AND i_current_price > 50
@@ -146,4 +145,3 @@ ORDER BY
     channel,
     id
 LIMIT 100;
-*/

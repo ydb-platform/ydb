@@ -22,8 +22,9 @@
  *     remaining frequent tokens via point lookups, avoiding full scans of large
  *     posting lists.
  *  7. For matched documents, optionally read document lengths from the docs table
- *     and compute BM25 scores.  When a LIMIT is specified, maintain a TopK min-heap
- *     so only the highest-scoring documents survive.
+ *     and compute BM25 scores.  When a LIMIT is specified, maintain a TopK buffer
+ *     with amortized O(1) nth_element compaction so only the highest-scoring
+ *     documents survive.
  *  8. Fetch full row data from the main table (unless "covered" -- all requested
  *     columns are already available from the index key).
  *  9. Stream result rows to the compute actor via ResultQueue / NotifyCA().
@@ -148,7 +149,7 @@ class TTableReader : public TAtomicRefCount<T> {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ResultColumnTypes;
     TVector<i32> ResultColumnIds;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> PartitionInfo;
+    TPartitioning::TCPtr PartitionInfo;
 
 public:
 
@@ -289,62 +290,8 @@ public:
     // Uses binary search on PartitionInfo boundaries to find the first partition
     // that may overlap, then walks forward collecting intersections until the
     // range is fully covered.
-    std::vector<std::pair<ui64, TTableRange>> GetRangePartitioning(const TTableRange& range) {
-
-        YQL_ENSURE(PartitionInfo);
-
-        // Binary search of the index to start with.
-        size_t idxStart = 0;
-        size_t idxFinish = PartitionInfo->size();
-        while ((idxFinish - idxStart) > 1) {
-            size_t idxCur = (idxFinish + idxStart) / 2;
-            const auto& partCur = (*PartitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
-            YQL_ENSURE(partCur.size() <= KeyColumnTypes.size());
-            int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), KeyColumnTypes.data(),
-                                            std::min(partCur.size(), range.From.size()));
-            if (cmp < 0) {
-                idxStart = idxCur;
-            } else {
-                idxFinish = idxCur;
-            }
-        }
-
-        std::vector<TCell> minusInf(KeyColumnTypes.size());
-
-        std::vector<std::pair<ui64, TTableRange>> rangePartition;
-        for (size_t idx = idxStart; idx < PartitionInfo->size(); ++idx) {
-            TTableRange partitionRange{
-                idx == 0 ? minusInf : (*PartitionInfo)[idx - 1].Range->EndKeyPrefix.GetCells(),
-                idx == 0 ? true : !(*PartitionInfo)[idx - 1].Range->IsInclusive,
-                (*PartitionInfo)[idx].Range->EndKeyPrefix.GetCells(),
-                (*PartitionInfo)[idx].Range->IsInclusive
-            };
-
-            if (range.Point) {
-                int intersection = ComparePointAndRange(
-                    range.From,
-                    partitionRange,
-                    KeyColumnTypes,
-                    KeyColumnTypes);
-
-                if (intersection == 0) {
-                    rangePartition.emplace_back((*PartitionInfo)[idx].ShardId, range);
-                } else if (intersection < 0) {
-                    break;
-                }
-            } else {
-                int intersection = CompareRanges(range, partitionRange, KeyColumnTypes);
-
-                if (intersection == 0) {
-                    auto rangeIntersection = Intersect(KeyColumnTypes, range, partitionRange);
-                    rangePartition.emplace_back((*PartitionInfo)[idx].ShardId, rangeIntersection);
-                } else if (intersection < 0) {
-                    break;
-                }
-            }
-        }
-
-        return rangePartition;
+    std::vector<TPartitioning::TIntersection> GetRangePartitioning(const TTableRange& range) {
+        return PartitionInfo->GetIntersectionWithRange(KeyColumnTypes, range);
     }
 };
 
@@ -922,7 +869,7 @@ public:
 
         auto rangePartition = Reader->GetRangePartitioning(range);
         for(const auto& [shardId, range] : rangePartition) {
-            RangesToRead.emplace_back(shardId, range);
+            RangesToRead.emplace_back(shardId, std::move(range));
         }
     }
 };
@@ -1969,22 +1916,22 @@ public:
         for (auto& info : infos) {
             auto ranges = reader->GetRangePartitioning(info->GetPoint());
             YQL_ENSURE(ranges.size() == 1);
-            if (ranges[0].first != lastShard && lastShard != 0 && !allowMultipleShards) {
+            if (ranges[0].ShardId != lastShard && lastShard != 0 && !allowMultipleShards) {
                 break;
             }
 
             prefixSize++;
-            lastShard = ranges[0].first;
-            auto& shardItems = inflightItems[ranges[0].first];
+            lastShard = ranges[0].ShardId;
+            auto& shardItems = inflightItems[ranges[0].ShardId];
             if (shardItems.ShardId == 0) {
-                shardItems.ShardId = ranges[0].first;
+                shardItems.ShardId = ranges[0].ShardId;
             }
-            YQL_ENSURE(shardItems.ShardId == ranges[0].first);
+            YQL_ENSURE(shardItems.ShardId == ranges[0].ShardId);
             if (shardItems.ReadId == 0) {
                 shardItems.ReadId = ReadsState.GetNextReadId();
             }
 
-            shardItems.Points.emplace_back(ranges[0].second);
+            shardItems.Points.emplace_back(TOwnedTableRange(ranges[0].TableRange));
             shardItems.Items.emplace_back(info);
         }
 
@@ -1992,7 +1939,8 @@ public:
             auto evRead = reader->GetReadRequest(inflightItem.ReadId, inflightItem.Points);
             YQL_ENSURE(evRead);
             ReadsState.SendEvRead(shardId, evRead, TReadInfo{.ReadKind = readKind, .Cookie = cookie, .ShardId = shardId});
-            Enqueue(inflightItem.ReadId, std::move(inflightItem));
+            auto readId = inflightItem.ReadId;
+            Enqueue(readId, std::move(inflightItem));
         }
 
         return prefixSize;
@@ -2049,8 +1997,9 @@ public:
  *     ScheduleL2Read() or FetchDocumentDetails().
  *
  *   Phase 4 - Fetch: FetchDocumentDetails() reads document lengths (if BM25),
- *     computes scores, maintains a TopK heap (if LIMIT), and finally reads
- *     full rows from the main table (unless covered).
+ *     computes scores, maintains a TopK buffer with amortized O(1) nth_element
+ *     compaction (if LIMIT), and finally reads full rows from the main table
+ *     (unless covered).
  *
  *   Phase 5 - Deliver: Matched rows are pushed to ResultQueue and the compute
  *     actor is notified via TEvNewAsyncInputDataArrived.  The compute actor
@@ -2129,21 +2078,32 @@ private:
     TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
     i64 Limit = -1;  // User-specified LIMIT; -1 means unlimited.
 
-    // Min-heap element for TopK selection when LIMIT + relevance are active.
+    // Element for TopK selection when LIMIT + relevance are active.
     struct TTopKDocumentInfo {
         double Score;
         TDocumentInfo::TPtr DocumentInfo;
-
-        bool operator<(const TTopKDocumentInfo& other) const {
-            return Score > other.Score;
-        }
     };
 
     TIntrusivePtr<TQueryCtx> QueryCtx;  // BM25 scoring context (created after stats are loaded)
 
-    // TopK min-heap for selecting the highest-scoring documents when LIMIT is set.
-    // Uses operator< comparing Score descending so pop_heap removes the lowest score.
+    // TopK buffer for selecting the highest-scoring documents when LIMIT is set.
+    // Uses an amortized O(1) approach: documents are appended to the buffer,
+    // and when the buffer exceeds threshold, std::nth_element is used to compact
+    // it down to the top Limit entries. This avoids O(log K) per-insert heap overhead.
     std::vector<TTopKDocumentInfo> TopKQueue;
+
+    // Compact TopKQueue down to at most Limit entries by keeping only the
+    // highest-scoring documents.  Uses std::nth_element (O(n) average).
+    void CompactTopK(size_t threshold) {
+        if (TopKQueue.size() >= threshold) {
+            auto nth = TopKQueue.begin() + Limit;
+            std::nth_element(TopKQueue.begin(), nth, TopKQueue.end(),
+                [](const TTopKDocumentInfo& a, const TTopKDocumentInfo& b) {
+                    return a.Score > b.Score;
+                });
+            TopKQueue.resize(Limit);
+        }
+    }
 
     bool ResolveInProgress = true;   // True while SchemeCache resolve is pending
     bool PendingNotify = false;      // True when a TEvNewAsyncInputDataArrived is in flight
@@ -2188,24 +2148,33 @@ private:
     // Each resulting token becomes a TWordReadState entry in Words[].
     // Returns false if no tokens were extracted (reports BAD_REQUEST error).
     bool ExtractAndTokenizeExpression() {
-        YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
-
-        // Get the first expression (assuming single expression for now)
-        const auto& expr = Settings->GetQuerySettings().GetQuery();
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
 
-        for(const auto& column : Settings->GetQuerySettings().GetColumns()) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson) {
+            // For JSON index, tokens are pre-compiled at query compile time
+            YQL_ENSURE(Settings->GetQuerySettings().TokensSize() > 0, "Expected non-empty tokens");
+            YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
 
-            for(const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
-                if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
-                    IsNgram = true;
-                }
+            size_t wordIndex = 0;
+            for (const TString& token : Settings->GetQuerySettings().GetTokens()) {
+                Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, token, IndexTableReader));
+            }
+        } else {
+            YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
+            const auto& expr = Settings->GetQuerySettings().GetQuery();
 
-                if (analyzer.column() == column.GetName()) {
-                    size_t wordIndex = 0;
-                    for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
-                        YQL_ENSURE(IndexTableReader);
-                        Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, query, IndexTableReader));
+            for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
+                for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
+                    if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
+                        IsNgram = true;
+                    }
+
+                    if (analyzer.column() == column.GetName()) {
+                        size_t wordIndex = 0;
+                        for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
+                            YQL_ENSURE(IndexTableReader);
+                            Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, query, IndexTableReader));
+                        }
                     }
                 }
             }
@@ -2221,7 +2190,7 @@ private:
 
     // Route matched documents through the remaining pipeline stages:
     //   1. If relevance mode and documents lack doc_length -> read from docs table.
-    //   2. If LIMIT + relevance -> insert into TopK heap; drain when merge is done.
+    //   2. If LIMIT + relevance -> insert into TopK buffer; compact with nth_element when buffer is full; drain when merge is done.
     //   3. If documents are "covered" -> push directly to ResultQueue.
     //   4. Otherwise -> enqueue main table reads for full row data.
     void FetchDocumentDetails(std::vector<TDocumentInfo::TPtr>& docInfos) {
@@ -2239,24 +2208,19 @@ private:
         if (Limit > 0 && MainTableReader->GetWithRelevance()) {
             for(auto& doc: docInfos) {
                 TopKQueue.emplace_back(doc->GetBM25Score(QueryCtx.GetRef()), std::move(doc));
-                std::push_heap(TopKQueue.begin(), TopKQueue.end());
-                if (TopKQueue.size() > (size_t)Limit) {
-                    std::pop_heap(TopKQueue.begin(), TopKQueue.end());
-                    TopKQueue.pop_back();
-                }
             }
-
+            CompactTopK(static_cast<size_t>(Limit) * 2);
             docInfos.clear();
         }
 
         if (Limit > 0 && !TopKQueue.empty() && L1MergeAlgo->Done() && (!L2MergeAlgo || L2MergeAlgo->Done())) {
             YQL_ENSURE(docInfos.empty());
+            CompactTopK(static_cast<size_t>(Limit) + 1);
             docInfos.reserve(TopKQueue.size());
-            while (!TopKQueue.empty()) {
-                auto&[score, documentInfo] = TopKQueue.back();
+            for (auto& [score, documentInfo] : TopKQueue) {
                 docInfos.emplace_back(std::move(documentInfo));
-                TopKQueue.pop_back();
             }
+            TopKQueue.clear();
         }
 
         if (!docInfos.empty() && docInfos.back()->IsCovered(MainTableCovered)) {

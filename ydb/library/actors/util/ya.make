@@ -18,6 +18,8 @@ SRCS(
     memory_track.h
     memory_tracker.cpp
     memory_tracker.h
+    mutex_guarded_deterministic_random_provider.cpp
+    mutex_guarded_deterministic_random_provider.h
     recentwnd.h
     rope.cpp
     rope.h

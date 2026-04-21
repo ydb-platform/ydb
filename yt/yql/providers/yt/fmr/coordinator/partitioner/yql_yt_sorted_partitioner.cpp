@@ -2,20 +2,9 @@
 
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
 
+#include <unordered_set>
+
 namespace NYql::NFmr {
-
-namespace {
-
-TFmrTableKeysBoundary MakeKeyBound(const NYT::TNode& keyRow, const TSortingColumns& keyColumns) {
-    return TFmrTableKeysBoundary(
-        NYT::NodeToYsonString(keyRow, NYT::NYson::EYsonFormat::Binary),
-        keyColumns.Columns,
-        keyColumns.SortOrders
-    );
-}
-
-} // namespace
-
 
 void TSortedPartitioner::TChunkContainer::Push(TChunkUnit chunk) {
     Chunks_.push_back(std::move(chunk));
@@ -148,11 +137,9 @@ void TSortedPartitioner::TFmrTablesChunkPool::InitTableInputs(const std::vector<
             "SortedPartitioner requires at least one chunk for input table: " << tableId);
 
         std::stable_sort(chunks.begin(), chunks.end(), [](const TChunkUnit& a, const TChunkUnit& b) {
-            Y_ENSURE(a.KeyRange.IsFirstKeySet() && b.KeyRange.IsFirstKeySet(), "Chunk key bounds must be set");
             if (*a.KeyRange.FirstKeysBound != *b.KeyRange.FirstKeysBound) {
                 return *a.KeyRange.FirstKeysBound < *b.KeyRange.FirstKeysBound;
             }
-            Y_ENSURE(a.KeyRange.IsLastKeySet() && b.KeyRange.IsLastKeySet(), "Chunk key bounds must be set");
             return *a.KeyRange.LastKeysBound < *b.KeyRange.LastKeysBound;
         });
 
@@ -287,7 +274,6 @@ TSortedPartitioner::TReadSliceResult TSortedPartitioner::ReadSlice(TFmrTablesChu
         }
 
         slice.ChunksByTable[chunk.TableId].push_back(chunk);
-        slice.Weight += chunk.DataWeight;
 
         const TFmrTableKeysBoundary& interFirst = *intersection.FirstKeysBound;
         const TFmrTableKeysBoundary& effLast = *effectiveRange.LastKeysBound;
@@ -296,11 +282,13 @@ TSortedPartitioner::TReadSliceResult TSortedPartitioner::ReadSlice(TFmrTablesChu
             chunkPool.UpdateFilterBoundary(chunk.TableId, TSortedPartitionerFilterBoundary{.FilterBoundary = sepKey, .IsInclusive = false});
             chunkPool.PutBack(chunk);
         } else if (interFirst <= sepKey && sepKey == effLast) {
+            slice.Weight += chunk.DataWeight;
             chunkPool.UpdateFilterBoundary(chunk.TableId, TSortedPartitionerFilterBoundary{.FilterBoundary = sepKey, .IsInclusive = true});
         } else {
+            YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: undefined behaviour in ReadSlice, intersection doesn't reach separator key";
             return TReadSliceResult{.Error = TFmrError{
                 .Component = EFmrComponent::Coordinator,
-                .Reason = EFmrErrorReason::RestartQuery,
+                .Reason = EFmrErrorReason::FallbackOperation,
                 .ErrorMessage = "Undefined behaviour in ReadSlice: intersection doesn't reach separator key"
             }};
         }
@@ -482,7 +470,17 @@ TPartitionResult TSortedPartitioner::PartitionFmrTables(const std::vector<TFmrTa
     if (auto error = chunkPool.GetError()) {
         return TPartitionResult{.Error = *error};
     }
-    const ui64 maxWeight = Settings_.FmrPartitionSettings.MaxDataWeightPerPart;
+    ui64 maxWeight = Settings_.FmrPartitionSettings.MaxDataWeightPerPart;
+    if (Settings_.FmrPartitionSettings.AdjustDataWeightPerPartition) {
+        ui64 totalWeight = CollectFmrTotalWeight(inputTables);
+        ui64 estimatedParts = (totalWeight + maxWeight - 1) / maxWeight;
+        if (estimatedParts > maxParts && maxParts > 0) {
+            maxWeight = totalWeight / maxParts;
+            YQL_CLOG(INFO, FastMapReduce) << "AdjustDataWeightPerPartition (sorted): adjusted MaxDataWeightPerPart from "
+                << Settings_.FmrPartitionSettings.MaxDataWeightPerPart << " to " << maxWeight
+                << " (totalWeight=" << totalWeight << ", maxParts=" << maxParts << ")";
+        }
+    }
 
     std::vector<TSlice> currentSlices;
     ui64 currentWeight = 0;
@@ -496,12 +494,15 @@ TPartitionResult TSortedPartitioner::PartitionFmrTables(const std::vector<TFmrTa
             break;
         }
         auto& slice = *sliceResult.Slice;
-        if (!currentSlices.empty() && currentWeight + slice.Weight > maxWeight) {
+
+        ui64 newWeight = slice.Weight;
+
+        if (!currentSlices.empty() && currentWeight + newWeight > maxWeight) {
             tasks.emplace_back(CreateTaskInputFromSlices(currentSlices, inputTables));
             currentSlices.clear();
             currentWeight = 0;
         }
-        currentWeight += slice.Weight;
+        currentWeight += newWeight;
         currentSlices.push_back(std::move(slice));
     }
     if (!currentSlices.empty()) {

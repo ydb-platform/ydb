@@ -244,7 +244,9 @@ void WriteDate(IOutputStream& out, i32 year, ui32 month, ui32 day) {
 }
 
 bool WriteDate(IOutputStream& out, ui16 value) {
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     if (!SplitDate(value, year, month, day)) {
         return false;
     }
@@ -255,7 +257,8 @@ bool WriteDate(IOutputStream& out, ui16 value) {
 
 bool WriteDate32(IOutputStream& out, i32 value) {
     i32 year;
-    ui32 month, day;
+    ui32 month;
+    ui32 day;
     if (!SplitDate32(value, year, month, day)) {
         return false;
     }
@@ -299,7 +302,9 @@ void WriteTime(IOutputStream& out, ui32 hour, ui32 min, ui32 sec) {
 }
 
 void WriteTime(IOutputStream& out, ui32 time) {
-    ui32 hour, min, sec;
+    ui32 hour;
+    ui32 min;
+    ui32 sec;
     SplitTime(time, hour, min, sec);
     WriteTime(out, hour, min, sec);
 }
@@ -848,7 +853,9 @@ public:
         }
 
         for (ui16 date = 0; date < Days_.size(); ++date) {
-            ui32 year, month, day;
+            ui32 year;
+            ui32 month;
+            ui32 day;
             Y_ABORT_UNLESS(SplitDateUncached(date, year, month, day));
 
             ++dayOfYear;
@@ -869,7 +876,7 @@ public:
                 weekOfYear = 1;
             }
 
-            Days_[date] = TDayInfo{month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek};
+            Days_[date] = TDayInfo{.Month = month, .Day = day, .DayOfYear = dayOfYear, .WeekOfYear = weekOfYear, .WeekOfYearIso8601 = weekOfYearIso8601, .DayOfWeek = dayOfWeek};
         }
 
         InitializeSolarCycle();
@@ -919,7 +926,9 @@ public:
     bool SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
                        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const {
         if (tzId) {
-            ui32 hour, min, sec;
+            ui32 hour;
+            ui32 min;
+            ui32 sec;
             ToLocalTime64(86400ll * ++date - 1, tzId, year, month, day, hour, min, sec);
             if (year <= 0) {
                 year--;
@@ -1191,16 +1200,17 @@ private:
             auto daysInYear = IsLeapYear(year) ? 366u : 365u;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
             YearsCache_[yearIdx] = TYearCache{
-                date,
-                7 + dayOfWeek,
-                (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7,
-                lastDayOfWeek,
-                weekOfYearIso8601 == 53};
+                .CumulativeDays = date,
+                .WeekOffset = 7 + dayOfWeek,
+                .Iso8601WeekOffset = (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7,
+                .LastDayOfWeek = lastDayOfWeek,
+                .FirstIsoWeek53 = weekOfYearIso8601 == 53};
             ui32 weekOfYear = 1;
             for (ui32 dayOfYear = 0; dayOfYear < daysInYear; ++dayOfYear) {
-                ui32 month, day;
+                ui32 month;
+                ui32 day;
                 EnrichMonthDay(year, dayOfYear, month, day);
-                DaysCache_[date] = TDayCache{month, day, dayOfYear, weekOfYear, weekOfYearIso8601};
+                DaysCache_[date] = TDayCache{.Month = month, .Day = day, .DayOfYear = dayOfYear, .WeekOfYear = weekOfYear, .WeekOfYearIso8601 = weekOfYearIso8601};
 
                 date++;
                 if (dayOfWeek < 6) {
@@ -1354,7 +1364,9 @@ bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear
             return false;
         }
 
-        ui32 hour, min, sec;
+        ui32 hour;
+        ui32 min;
+        ui32 sec;
         ToLocalTime(86400u * ++value - 1u, tzId, year, month, day, hour, min, sec);
         if (!TDateTable::Instance().GetDateOffset(year, month, day, value)) {
             return false;
@@ -1537,7 +1549,9 @@ bool ParseUuid(NUdf::TStringRef buf, void* out, bool shortForm) {
 }
 
 NUdf::TUnboxedValuePod ParseDate(NUdf::TStringRef buf) {
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     ui32 pos = 0;
     if (!ParseNumber(pos, buf, year, 4) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
@@ -1568,7 +1582,9 @@ NUdf::TUnboxedValuePod ParseDate(NUdf::TStringRef buf) {
 }
 
 bool ParseDate32(ui32& pos, NUdf::TStringRef buf, i32& value) {
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     bool beforeChrist = false;
     if (pos < buf.Size()) {
         char c = buf.Data()[pos];
@@ -1623,7 +1639,9 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     ui32 pos = 0;
     bool beforeChrist = false;
     if (pos < buf.size()) {
@@ -1674,7 +1692,9 @@ bool ParseTime(ui32& pos, NUdf::TStringRef buf, ui32& timeValue) {
     if (pos == buf.Size() || buf.Data()[pos] != 'T') {
         return false;
     }
-    ui32 hour, minute, second;
+    ui32 hour;
+    ui32 minute;
+    ui32 second;
     // skip 'T'
     ++pos;
     if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
@@ -1771,7 +1791,9 @@ NUdf::TUnboxedValuePod ParseDatetime64(NUdf::TStringRef buf) {
 }
 
 NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     ui32 pos = 0;
     if (!ParseNumber(pos, buf, year, 4) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
@@ -1794,7 +1816,9 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 hour, minute, second;
+    ui32 hour;
+    ui32 minute;
+    ui32 second;
     // skip 'T'
     ++pos;
     if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
@@ -1890,7 +1914,9 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     ui32 pos = 0;
     bool beforeChrist = false;
     if (pos < buf.size()) {
@@ -1919,7 +1945,9 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 hour, minute, second;
+    ui32 hour;
+    ui32 minute;
+    ui32 second;
     // skip 'T'
     ++pos;
     if (!ParseNumber(pos, buf, hour, 2) || pos == buf.size() || buf.data()[pos] != ':') {
@@ -2017,7 +2045,9 @@ NUdf::TUnboxedValuePod ParseTimestamp64(NUdf::TStringRef buf) {
 }
 
 NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     ui32 pos = 0;
     if (!ParseNumber(pos, buf, year, 4) || pos == buf.Size() || buf.Data()[pos] != '-') {
         return NUdf::TUnboxedValuePod();
@@ -2040,7 +2070,9 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 hour, minute, second;
+    ui32 hour;
+    ui32 minute;
+    ui32 second;
     // skip 'T'
     ++pos;
     if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
@@ -2162,7 +2194,9 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 year, month, day;
+    ui32 year;
+    ui32 month;
+    ui32 day;
     ui32 pos = 0;
     bool beforeChrist = false;
     if (pos < buf.size()) {
@@ -2191,7 +2225,9 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
         return NUdf::TUnboxedValuePod();
     }
 
-    ui32 hour, minute, second;
+    ui32 hour;
+    ui32 minute;
+    ui32 second;
     // skip 'T'
     ++pos;
     if (!ParseNumber(pos, buf, hour, 2) || pos == buf.size() || buf.data()[pos] != ':') {
@@ -2297,7 +2333,12 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    std::optional<ui64> weeks, days, hours, minutes, seconds, microseconds;
+    std::optional<ui64> weeks;
+    std::optional<ui64> days;
+    std::optional<ui64> hours;
+    std::optional<ui64> minutes;
+    std::optional<ui64> seconds;
+    std::optional<ui64> microseconds;
     ui64 num;
 
     while (buf.cend() != pos) {

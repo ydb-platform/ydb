@@ -104,8 +104,8 @@ public:
         DirectPartitionId.Parse(cmd.GetDirectPartitionId().data(), cmd.GetDirectPartitionId().size());
         google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
 
-        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() > 32767) {
-            ythrow NKikimr::TLoadActorException() << "Range must be in [0, 32767]";
+        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() > 1048576) {
+            ythrow NKikimr::TLoadActorException() << "Range must be in [0, 1048576]";
         }
         if (RangeTest.GetZeroRate() > 0) {
             ythrow NKikimr::TLoadActorException() << "ZeroRate is unsupported";
@@ -160,8 +160,16 @@ public:
         proto.SetStartTime(startTime);
         proto.SetEndTime(endTime);
         proto.SetRequestsCompleted(suiteResults.RequestsCompleted);
+        proto.SetRequestsFailed(suiteResults.RequestsFailed);
         proto.SetIops(suiteResults.RequestsCompleted / duration_s);
         proto.SetThroughputMbs(dataSizeMb / duration_s);
+        
+        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, 
+            "Tag# " << Tag << " Test final results: Status=" << static_cast<int>(suiteResults.Status) 
+            << " (0=OK, 1=FAILURE), RequestsCompleted=" << suiteResults.RequestsCompleted 
+            << ", RequestsFailed=" << suiteResults.RequestsFailed 
+            << ", BlocksRead=" << suiteResults.BlocksRead 
+            << ", BlocksWritten=" << suiteResults.BlocksWritten);
 
         if (suiteResults.BlocksRead) {
             proto.SetBlocksRead(suiteResults.BlocksRead);
@@ -178,7 +186,9 @@ public:
             FillLatency(suiteResults.ZeroHist, *proto.MutableZeroLatency());
         }
 
-        NProtobufJson::Proto2Json(proto, result["TestResults"], {});
+        NProtobufJson::TProto2JsonConfig jsonConfig;
+        jsonConfig.SetAddMissingFields(true);
+        NProtobufJson::Proto2Json(proto, result["TestResults"], jsonConfig);
         TestContext.Result = NJson::WriteJson(result, true, true, false);
     }
 
@@ -337,6 +347,13 @@ public:
         auto error = HasError(record)
             ? record.GetError()
             : MakeError(S_OK);
+
+        if (HasError(record)) {
+            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST,
+                "Tag# " << Tag << " Request failed with error: code=" << error.GetCode()
+                << " message=" << error.GetMessage() << " cookie=" << cookie);
+        }
+
         it->second(error, &ctx);
         CookieToRequestCB.erase(it);
     }

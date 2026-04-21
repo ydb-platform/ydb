@@ -57,7 +57,8 @@ struct TTestEnvironment
         {
             Y_UNUSED(callContext);
 
-            auto& info = ReadPromises[request->Range] = {.Request = request};
+            auto& info =
+                ReadPromises[request->Headers.Range] = {.Request = request};
             return info.Promise;
         };
 
@@ -68,7 +69,8 @@ struct TTestEnvironment
         {
             Y_UNUSED(callContext);
 
-            auto& info = WritePromises[request->Range] = {.Request = request};
+            auto& info =
+                WritePromises[request->Headers.Range] = {.Request = request};
             return info.Promise;
         };
 
@@ -79,7 +81,8 @@ struct TTestEnvironment
         {
             Y_UNUSED(callContext);
 
-            auto& info = ZeroPromises[request->Range] = {.Request = request};
+            auto& info =
+                ZeroPromises[request->Headers.Range] = {.Request = request};
             return info.Promise;
         };
     }
@@ -134,9 +137,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         auto range = TBlockRange64::WithLength(1, BlockCount);
 
         // Run request
-        auto request1 = std::make_shared<TReadBlocksLocalRequest>(
-            TRequestHeaders{.VolumeConfig = volumeConfig, .RequestId = 1},
-            range);
+        auto request1 =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = volumeConfig,
+                .RequestId = 1,
+                .Range = range});
         request1->Sglist = guardedSgList;
         auto future1 = env.Wrapper->ReadBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -190,9 +195,11 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         auto range = TBlockRange64::WithLength(1, BlockCount);
 
         // Run request
-        auto request1 = std::make_shared<TReadBlocksLocalRequest>(
-            TRequestHeaders{.VolumeConfig = volumeConfig, .RequestId = 1},
-            range);
+        auto request1 =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = volumeConfig,
+                .RequestId = 1,
+                .Range = range});
         request1->Sglist = guardedSgList;
         auto future1 = env.Wrapper->ReadBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -256,8 +263,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         // Run request
         auto request = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.VolumeConfig = volumeConfig},
-            range);
+            TRequestHeaders{.VolumeConfig = volumeConfig, .Range = range});
         request->Sglist = guardedSgList;
         auto future1 = env.Wrapper->WriteBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -318,8 +324,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         // Run request
         auto request = std::make_shared<TZeroBlocksLocalRequest>(
-            TRequestHeaders{.VolumeConfig = volumeConfig},
-            range);
+            TRequestHeaders{.VolumeConfig = volumeConfig, .Range = range});
         auto future1 = env.Wrapper->ZeroBlocksLocal(
             MakeIntrusive<TCallContext>(),
             std::move(request));
@@ -338,7 +343,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(1, 5),
-                firstZeroBlocks->Request->Range);
+                firstZeroBlocks->Request->Headers.Range);
             firstZeroBlocks->Promise.SetValue(TZeroBlocksLocalResponse());
         }
 
@@ -346,7 +351,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(6, 5),
-                secondZeroBlocks->Request->Range);
+                secondZeroBlocks->Request->Headers.Range);
             secondZeroBlocks->Promise.SetValue(TZeroBlocksLocalResponse());
         }
 
@@ -379,8 +384,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         // Run request
         auto request = std::make_shared<TZeroBlocksLocalRequest>(
-            TRequestHeaders{.VolumeConfig = volumeConfig},
-            range);
+            TRequestHeaders{.VolumeConfig = volumeConfig, .Range = range});
         auto future1 = env.Wrapper->ZeroBlocksLocal(
             MakeIntrusive<TCallContext>(),
             std::move(request));
@@ -399,7 +403,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(1, 5),
-                firstZeroBlocks->Request->Range);
+                firstZeroBlocks->Request->Headers.Range);
             firstZeroBlocks->Promise.SetValue(
                 TZeroBlocksLocalResponse{.Error = MakeError(E_REJECTED)});
         }
@@ -415,7 +419,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(6, 5),
-                secondZeroBlocks->Request->Range);
+                secondZeroBlocks->Request->Headers.Range);
             secondZeroBlocks->Promise.SetValue(TZeroBlocksLocalResponse());
         }
     }
@@ -441,8 +445,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
 
         // Run request
         auto request = std::make_shared<TZeroBlocksLocalRequest>(
-            TRequestHeaders{.VolumeConfig = volumeConfig},
-            range);
+            TRequestHeaders{.VolumeConfig = volumeConfig, .Range = range});
         auto future1 = env.Wrapper->ZeroBlocksLocal(
             MakeIntrusive<TCallContext>(),
             std::move(request));
@@ -461,7 +464,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(1, 5),
-                firstZeroBlocks->Request->Range);
+                firstZeroBlocks->Request->Headers.Range);
             firstZeroBlocks->Promise.SetValue(TZeroBlocksLocalResponse());
         }
 
@@ -469,7 +472,7 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(6, 5),
-                secondZeroBlocks->Request->Range);
+                secondZeroBlocks->Request->Headers.Range);
             secondZeroBlocks->Promise.SetValue(
                 TZeroBlocksLocalResponse{.Error = MakeError(E_REJECTED)});
         }

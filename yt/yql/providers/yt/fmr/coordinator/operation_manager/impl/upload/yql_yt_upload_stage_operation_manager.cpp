@@ -11,6 +11,11 @@ namespace {
 
 class TUploadStageOperationManager: public TFmrStageOperationManagerBase {
 public:
+    TUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider)
+        : TFmrStageOperationManagerBase(randomProvider)
+    {
+    }
+
     TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) final {
         const auto& operationParams = std::get<TUploadOperationParams>(context.OperationParams);
         const auto& fmrOperationSpec = context.FmrOperationSpec;
@@ -32,6 +37,8 @@ public:
     TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {
         const auto& uploadOperationParams = std::get<TUploadOperationParams>(context.OperationParams);
 
+        YQL_CLOG(INFO, FastMapReduce) << "Starting Upload operation";
+
         std::vector<TGeneratedTaskInfo> generatedTasks;
         for (auto& task: context.PartitionResult.TaskInputs) {
             TUploadTaskParams uploadTaskParams;
@@ -48,12 +55,20 @@ public:
 
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
+
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& /* params */) const override {
+        return {}; // Upload writes to YT, not to FMR tables
+    }
+
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& /* context */) override {
+        return {}; // Upload writes to YT, not to FMR tables, nothing to clean in TDS
+    }
 };
 
 } // namespace
 
-IFmrStageOperationManager::TPtr MakeUploadStageOperationManager() {
-    return MakeIntrusive<TUploadStageOperationManager>();
+IFmrStageOperationManager::TPtr MakeUploadStageOperationManager(TIntrusivePtr<IRandomProvider> randomProvider) {
+    return MakeIntrusive<TUploadStageOperationManager>(randomProvider);
 }
 
 } // namespace NYql::NFmr

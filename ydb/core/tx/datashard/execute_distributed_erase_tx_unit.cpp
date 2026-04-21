@@ -158,8 +158,10 @@ public:
                 key.emplace_back(TRawTypeValue(cell.AsRef(), vtype));
             }
 
+            TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+
             if (breakWriteConflicts || checkVolatileDependencies) {
-                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, uniqueKey, volatileDependencies)) {
                     if (breakWriteConflicts) {
                         pageFault = true;
                     } else if (checkVolatileDependencies) {
@@ -171,12 +173,14 @@ public:
             }
 
             if (changeCollector) {
+                auto userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_TTL).Build();
+
                 if (!volatileDependencies.empty() || volatileOrdered) {
-                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId, BUILTIN_ACL_CDC_TTL)) {
+                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId, userCtx)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion, BUILTIN_ACL_CDC_TTL)) {
+                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion, userCtx)) {
                         pageFault = true;
                     }
                 }
@@ -186,7 +190,7 @@ public:
                 continue;
             }
 
-            DataShard.SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+            DataShard.SysLocksTable().BreakLocks(fullTableId, uniqueKey);
 
             if (!volatileDependencies.empty() || volatileOrdered) {
                 txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);

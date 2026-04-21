@@ -955,6 +955,7 @@ private:
     XX(TEvents::TSystem::Wakeup, Wakeup) \
     XX(TEvBlobStorage::EvVGenerationChange, EvVGenerationChange) \
     XX(TEvents::TSystem::Poison, Poison) \
+    XX(EvPostponedPump, EvPostponedPump) \
     // END
 
 #define XX(EVENT, NAME) ::NMonitoring::TDynamicCounters::TCounterPtr EventCounter##NAME;
@@ -1036,7 +1037,7 @@ private:
 
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
 
-            CFunc(TEvPostponedPump::EventType, HandlePostponedPump);
+            CFunc(EvPostponedPump, HandlePostponedPump);
 
             default:
                 Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);

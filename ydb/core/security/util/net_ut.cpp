@@ -100,6 +100,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(IsGoodPeernameFormat("0.0.0.0"));
 
         UNIT_ASSERT(IsGoodPeernameFormat("127.0.0.1:8080"));
+        UNIT_ASSERT(IsGoodPeernameFormat("192.168.1.1:0"));
         UNIT_ASSERT(IsGoodPeernameFormat("192.168.1.1:1"));
         UNIT_ASSERT(IsGoodPeernameFormat("10.0.0.1:65535"));
         UNIT_ASSERT(IsGoodPeernameFormat("172.16.0.1:22"));
@@ -109,6 +110,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:10.0.0.1"));
 
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:127.0.0.1:8080"));
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv4:192.168.1.1:0"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:192.168.1.1:3000"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:10.0.0.1:22"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv4:172.16.0.1:65535"));
@@ -126,6 +128,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(IsGoodPeernameFormat("[::ffff:192.0.2.1]"));
 
         UNIT_ASSERT(IsGoodPeernameFormat("[::1]:8080"));
+        UNIT_ASSERT(IsGoodPeernameFormat("[2001:db8::1]:0"));
         UNIT_ASSERT(IsGoodPeernameFormat("[2001:db8::1]:3000"));
         UNIT_ASSERT(IsGoodPeernameFormat("[fe80::1]:22"));
         UNIT_ASSERT(IsGoodPeernameFormat("[::]:65535"));
@@ -147,6 +150,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
 
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::1]:8080"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:1234"));
+        UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[2001:db8::1]:0"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[2001:db8::1]:3000"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[fe80::1]:22"));
         UNIT_ASSERT(IsGoodPeernameFormat("ipv6:[::]:65535"));
@@ -238,6 +242,14 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         }
         {
             const TString addr{"192.168.1.1"};
+            const TString port{"0"};
+            auto res = ParsePeername(addr + ":" + port);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+            UNIT_ASSERT_STRINGS_EQUAL(addr + ":" + port, NAddr::PrintHostAndPort(*res));
+        }
+        {
+            const TString addr{"192.168.1.1"};
             const TString port{"1"};
             auto res = ParsePeername(addr + ":" + port);
             UNIT_ASSERT(res);
@@ -283,6 +295,14 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         {
             const TString addr{"127.0.0.1"};
             const TString port{"8080"};
+            auto res = ParsePeername("ipv4:" + addr + ":" + port);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+            UNIT_ASSERT_STRINGS_EQUAL(addr + ":" + port, NAddr::PrintHostAndPort(*res));
+        }
+        {
+            const TString addr{"192.168.1.1"};
+            const TString port{"0"};
             auto res = ParsePeername("ipv4:" + addr + ":" + port);
             UNIT_ASSERT(res);
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
@@ -398,6 +418,14 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         {
             const TString addr{"::1"};
             const TString port{"8080"};
+            auto res = ParsePeername("[" + addr + "]" + ":" + port);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+            UNIT_ASSERT_STRINGS_EQUAL("[" + addr + "]" + ":" + port, NAddr::PrintHostAndPort(*res));
+        }
+        {
+            const TString addr{"2001:db8::1"};
+            const TString port{"0"};
             auto res = ParsePeername("[" + addr + "]" + ":" + port);
             UNIT_ASSERT(res);
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
@@ -524,6 +552,14 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         {
             const TString addr{"2001:2db8:85a3:7843:dbaf:8a2e:4370:7334"};
             const TString port{"1234"};
+            auto res = ParsePeername("ipv6:[" + addr + "]" + ":" + port);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
+            UNIT_ASSERT_STRINGS_EQUAL("[" + addr + "]" + ":" + port, NAddr::PrintHostAndPort(*res));
+        }
+        {
+            const TString addr{"2001:db8::1"};
+            const TString port{"0"};
             auto res = ParsePeername("ipv6:[" + addr + "]" + ":" + port);
             UNIT_ASSERT(res);
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));

@@ -4,6 +4,7 @@
 #include "cpu_manager.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
+#include <util/datetime/cputimer.h>
 
 #define POOL_ID() \
     (!TlsThreadContext ? "OUTSIDE" : \
@@ -17,6 +18,12 @@
 
 
 namespace NActors {
+    namespace {
+        TInstant ConvertTsToInstant(NHPTimer::STime ts, TInstant now, NHPTimer::STime nowTs) {
+            return nowTs >= ts ? now - CyclesToDuration(nowTs - ts) : now;
+        }
+    }
+
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
     thread_local TActivationContext *TActivationContextHolder::Value = nullptr;
     TActivationContextHolder TlsActivationContext;
@@ -160,9 +167,21 @@ namespace NActors {
         return TlsThreadContext->MailboxContext.EventEnqueuedTimestamp;
     }
 
+    TInstant TActivationContext::GetCurrentEventEnqueuedTimestamp() {
+        TInstant now = TActivationContext::Now();
+        NHPTimer::STime nowTs = GetCycleCountFast();
+        return ConvertTsToInstant(GetCurrentEventEnqueuedTimestampTs(), now, nowTs);
+    }
+
     NHPTimer::STime TActivationContext::GetCurrentMailboxScheduledTimestampTs() {
         Y_ABORT_UNLESS(TlsThreadContext);
         return TlsThreadContext->MailboxContext.ScheduledTimestamp;
+    }
+
+    TInstant TActivationContext::GetCurrentMailboxScheduledTimestamp() {
+        TInstant now = TActivationContext::Now();
+        NHPTimer::STime nowTs = GetCycleCountFast();
+        return ConvertTsToInstant(GetCurrentMailboxScheduledTimestampTs(), now, nowTs);
     }
 
     ui64 TActivationContext::GetCurrentEventDeliveryTimeUs() {

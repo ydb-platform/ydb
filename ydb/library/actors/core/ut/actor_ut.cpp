@@ -759,10 +759,13 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
 
     struct TQueueTimestamps {
         NHPTimer::STime EventEnqueuedTimestamp = 0;
+        TInstant EventEnqueuedInstant;
         NHPTimer::STime MailboxScheduledTimestamp = 0;
+        TInstant MailboxScheduledInstant;
         ui64 EventDeliveryTimeUs = 0;
         ui64 ActivationTimeUs = 0;
         NHPTimer::STime ObservedTimestamp = 0;
+        TInstant ObservedInstant;
     };
 
     struct TQueueTimestampActor : TActorBootstrapped<TQueueTimestampActor> {
@@ -789,10 +792,13 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
         void Handle(TEvents::TEvWakeup::TPtr&) {
             TQueueTimestamps timestamps;
             timestamps.EventEnqueuedTimestamp = TActivationContext::GetCurrentEventEnqueuedTimestampTs();
+            timestamps.EventEnqueuedInstant = TActivationContext::GetCurrentEventEnqueuedTimestamp();
             timestamps.MailboxScheduledTimestamp = TActivationContext::GetCurrentMailboxScheduledTimestampTs();
+            timestamps.MailboxScheduledInstant = TActivationContext::GetCurrentMailboxScheduledTimestamp();
             timestamps.EventDeliveryTimeUs = TActivationContext::GetCurrentEventDeliveryTimeUs();
             timestamps.ActivationTimeUs = TActivationContext::GetCurrentActivationTimeUs();
             timestamps.ObservedTimestamp = GetCycleCountFast();
+            timestamps.ObservedInstant = TActivationContext::Now();
             Done.SetValue(std::move(timestamps));
             PassAway();
         }
@@ -829,6 +835,8 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
 
         UNIT_ASSERT_C(timestamps.EventEnqueuedTimestamp > 0, "missing current event enqueue timestamp");
         UNIT_ASSERT_C(timestamps.MailboxScheduledTimestamp > 0, "missing current mailbox schedule timestamp");
+        UNIT_ASSERT_C(timestamps.EventEnqueuedInstant.MicroSeconds() > 0, "missing current event enqueue instant");
+        UNIT_ASSERT_C(timestamps.MailboxScheduledInstant.MicroSeconds() > 0, "missing current mailbox schedule instant");
         UNIT_ASSERT_C(
             timestamps.EventDeliveryTimeUs <= static_cast<ui64>(Ts2Us(timestamps.ObservedTimestamp - timestamps.EventEnqueuedTimestamp)),
             "event delivery time must match enqueue timestamp"
@@ -856,6 +864,16 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
             "mailbox timestamp must not be in the future"
                 << ": mailbox=" << timestamps.MailboxScheduledTimestamp
                 << " observed=" << timestamps.ObservedTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.EventEnqueuedInstant <= timestamps.MailboxScheduledInstant,
+            "event instant must not be after mailbox scheduling instant"
+                << ": event=" << timestamps.EventEnqueuedInstant
+                << " mailbox=" << timestamps.MailboxScheduledInstant);
+        UNIT_ASSERT_C(
+            timestamps.MailboxScheduledInstant <= timestamps.ObservedInstant,
+            "mailbox instant must not be in the future"
+                << ": mailbox=" << timestamps.MailboxScheduledInstant
+                << " observed=" << timestamps.ObservedInstant);
     }
 
     struct TTailSenderActor : TActorBootstrapped<TTailSenderActor> {

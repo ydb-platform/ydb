@@ -5404,6 +5404,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NReplication::TEvController::TEvAlterReplicationResult, Handle);
         HFuncTraced(NReplication::TEvController::TEvDropReplicationResult, Handle);
 
+        // scheme change records bounded cleanup continuation
+        HFuncTraced(TEvPrivate::TEvSchemeChangeRecordsCleanup, Handle);
+
         // conditional erase
         HFuncTraced(TEvPrivate::TEvRunConditionalErase, Handle);
         HFuncTraced(TEvPrivate::TEvFlushConditionalEraseBatch, Handle);

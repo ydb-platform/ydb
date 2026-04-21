@@ -282,6 +282,10 @@ public:
     // cleanup tx's redo log bounded; leftover work spills into a follow-up
     // TTxSchemeChangeRecordsCleanup triggered from Complete().
     ui64 SchemeChangeCleanupBatchSize = 1000;
+    // Delay between bounded cleanup tx batches when draining a backlog.
+    // Yields the executor so other SS work (DDL, fetches) can interleave
+    // rather than wait for a long chain of back-to-back cleanup txs.
+    TDuration SchemeChangeCleanupInterval = TDuration::MilliSeconds(10);
 
     // Test-only: counts PersistUpdateNextSchemeChangeOrder calls.
     // Used by unit tests to verify that a multi-part DDL persists the
@@ -926,9 +930,11 @@ public:
     // Returns false if the rowset is not ready (tx will be retried).
     bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder,
         ui64 limit, bool& hasMore);
-    // Public wrapper around Execute(CreateTxSchemeChangeRecordsCleanup(), ...)
-    // so that namespace-level tx structs can kick off a continuation tx from
-    // their Complete() without needing protected-member access.
+    // Schedules a follow-up TTxSchemeChangeRecordsCleanup after
+    // SchemeChangeCleanupInterval. Used by Ack / Unregister / ForceAdvance /
+    // Cleanup Complete() to drain a backlog across multiple bounded txs
+    // without monopolising the executor. Namespace-level tx structs call
+    // this in lieu of the protected Execute().
     void EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx);
     bool CheckSchemeChangeRecordsOverflow(TString& errStr) const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
@@ -1468,6 +1474,7 @@ public:
     bool ProcessPendingConditionalEraseResponseBatch(const TInstant& now, const TActorContext& ctx);
     void ScheduleConditionalEraseRun(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemeChangeRecordsCleanup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvFlushConditionalEraseBatch::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);

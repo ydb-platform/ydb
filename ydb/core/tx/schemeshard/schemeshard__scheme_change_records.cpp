@@ -13,6 +13,10 @@ ui64 TSchemeShard::AllocateSchemeChangeOrderInMemory() {
 }
 
 void TSchemeShard::EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx) {
+    ctx.Schedule(SchemeChangeCleanupInterval, new TEvPrivate::TEvSchemeChangeRecordsCleanup());
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvSchemeChangeRecordsCleanup::TPtr&, const TActorContext& ctx) {
     Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
 }
 

@@ -356,9 +356,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     }
 
     Y_UNIT_TEST(AckDeletesAllAckedRecordsRegardlessOfCount) {
-        // Write more than the old 1000-row cap, ack everything, immediately
-        // read — expect zero records left without any wakeup or time advance.
-        // Uses MkDir to stay within the test runtime event budget.
+        // Write more than the per-tx cleanup cap and ack everything. The
+        // first batch drains in the ack tx itself; the rest drains via a
+        // chain of scheduled continuation cleanups. Poll until the backlog
+        // is empty — no explicit wakeup, but simulated time must advance
+        // for the scheduler to fire the continuation events.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -366,7 +368,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TAutoPtr<IEventHandle> regHandle;
         RegisterSubscriber(runtime, "bulk:sub", regHandle);
 
-        const int kCount = 1200;  // > old cap of 1000
+        const int kCount = 1200;
         for (int i = 1; i <= kCount; ++i) {
             TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("D%d", i));
             env.TestWaitNotification(runtime, txId);
@@ -379,11 +381,17 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TAutoPtr<IEventHandle> ackHandle;
         AckSchemeChangeRecords(runtime, "bulk:sub", tailOrder, ackHandle);
 
-        // IMMEDIATE read — no manual wakeup, no time advance.
-        auto entries = ReadSchemeChangeRecords(runtime);
+        // Drain the continuation chain. Each scheduled cleanup fires after
+        // SchemeChangeCleanupInterval; simulated sleep ticks through them.
+        TVector<TSchemeChangeRecordEntry> entries;
+        for (int i = 0; i < 200; ++i) {
+            entries = ReadSchemeChangeRecords(runtime);
+            if (entries.empty()) break;
+            runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        }
         UNIT_ASSERT_C(entries.empty(),
-            "All " << kCount << " records must be deleted inline by the ack tx; got "
-                << entries.size() << " remaining");
+            "All " << kCount << " records must eventually drain; "
+                << entries.size() << " still remaining");
     }
 
     Y_UNIT_TEST(ForceAdvanceDeletesStaleRecordsInline) {
@@ -443,13 +451,20 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto stillThere = ReadSchemeChangeRecords(runtime);
         UNIT_ASSERT(!stillThere.empty());
 
-        // Unregister slow -> min jumps to fast's tail -> all records go
+        // Unregister slow -> min jumps to fast's tail. The first batch
+        // of up to SchemeChangeCleanupBatchSize records drains in the
+        // unregister tx; the rest drains via scheduled continuation txs.
         TAutoPtr<IEventHandle> unregHandle;
         UnregisterSubscriber(runtime, "slow:sub", unregHandle);
 
-        auto entries = ReadSchemeChangeRecords(runtime);
+        TVector<TSchemeChangeRecordEntry> entries;
+        for (int i = 0; i < 200; ++i) {
+            entries = ReadSchemeChangeRecords(runtime);
+            if (entries.empty()) break;
+            runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        }
         UNIT_ASSERT_C(entries.empty(),
-            "Unregister of the slow subscriber must sweep all " << kCount
-                << " stale records inline; got " << entries.size() << " remaining");
+            "Unregister of the slow subscriber must eventually sweep all "
+                << kCount << " stale records; " << entries.size() << " still remaining");
     }
 }

@@ -4,7 +4,7 @@ import json
 import os
 
 _MUTE_CONFIG_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_config.json')
+    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'mute_config.json')
 )
 
 _REQUIRED_KEYS = (

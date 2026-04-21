@@ -4,7 +4,7 @@
 
 When a user manually closes a mute issue as Completed, every listed test that
 is still muted in CI gets a row in ``fast_unmute_active``. While a row exists,
-``create_new_muted_ya.py`` uses the short window from ``mute_config.json``.
+``mute/create_new_muted_ya.py`` uses the short window from ``mute_config.json``.
 
 **During TTL** (``manual_unmute_ttl_calendar_days``): if a test becomes unmuted
 in monitor data, only that row is removed; automation may post a short
@@ -30,15 +30,15 @@ If someone **closes the issue again** as Completed while tests are still muted,
 the next ``sync`` can insert new rows and start another fast-unmute cycle.
 
 Usage:
-    python3 manual_unmute.py sync
-    python3 manual_unmute.py sync -v   # DEBUG: why each issue/test was skipped
+    python3 .github/scripts/tests/mute/manual_unmute.py sync
+    python3 .github/scripts/tests/mute/manual_unmute.py sync -v   # DEBUG: why each issue/test was skipped
 
 Testing only — unset before real runs.
 
 ``MANUAL_UNMUTE_SIMULATE_UNMUTED``: comma-separated ``full_name`` values removed from the
 "currently muted" set so cleanup behaves as if ``is_muted`` were already 0 (grace path).
 
-``export MANUAL_UNMUTE_SIMULATE_UNMUTED='suite/path/Test.one' && python3 manual_unmute.py sync``
+``export MANUAL_UNMUTE_SIMULATE_UNMUTED='suite/path/Test.one' && python3 .github/scripts/tests/mute/manual_unmute.py sync``
 """
 
 import argparse
@@ -50,13 +50,15 @@ from collections import defaultdict
 
 import ydb
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(_SCRIPT_DIR, '..', 'analytics'))
-sys.path.append(_SCRIPT_DIR)
-sys.path.append(os.path.join(_SCRIPT_DIR, '..'))
+_mutedir = os.path.dirname(os.path.abspath(__file__))
+_tests_dir = os.path.dirname(_mutedir)
+_scripts_dir = os.path.dirname(_tests_dir)
+for _p in (_scripts_dir, os.path.join(_scripts_dir, 'analytics'), _tests_dir):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
-from update_mute_issues import (
+from mute.update_mute_issues import (
     MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     ORG_NAME,
     PROJECT_ID,
@@ -65,9 +67,7 @@ from update_mute_issues import (
     get_project_v2_fields,
     run_query,
 )
-from ydb_wrapper import YDBWrapper
-
-from mute_constants import (
+from mute.constants import (
     get_manual_unmute_currently_muted_lookback_days,
     get_manual_unmute_issue_closed_lookback_days,
     get_manual_unmute_min_runs,
@@ -75,6 +75,7 @@ from mute_constants import (
     get_manual_unmute_window_days,
     get_mute_window_days,
 )
+from ydb_wrapper import YDBWrapper
 
 
 def grace_ttl_calendar_days(mute_window_days, manual_unmute_window_days):
@@ -86,7 +87,7 @@ def grace_ttl_calendar_days(mute_window_days, manual_unmute_window_days):
 
 LABEL_NAME = MANUAL_FAST_UNMUTE_GITHUB_LABEL
 
-# Org project board (same as ``update_mute_issues.PROJECT_ID``).
+# Org project board (same as ``mute.update_mute_issues.PROJECT_ID``).
 PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN = 'Observation'
 PROJECT_STATUS_ON_FAST_UNMUTE_FAIL = 'Muted'
 PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS = 'Unmuted'
@@ -167,7 +168,7 @@ The fast-unmute calendar limit (**{ttl_days}** days from row registration) has p
 
 
 def load_config():
-    """Fast-track window/min-runs — same keys as ``mute_constants`` / ``mute_config.json``."""
+    """Fast-track window/min-runs — same keys as ``mute.constants`` / ``mute_config.json``."""
     return {
         'window_days': get_manual_unmute_window_days(),
         'min_runs': get_manual_unmute_min_runs(),

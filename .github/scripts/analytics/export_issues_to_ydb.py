@@ -461,7 +461,7 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
 
 
 def extract_last_close_actor(issue: Dict[str, Any]) -> Dict[str, Any]:
-    """Who closed the issue — same timeline rule as ``manual_unmute.fetch_issue_closers``."""
+    """Who closed the issue — same timeline rule as ``mute.manual_unmute.fetch_issue_closers``."""
     login = ''
     actor_type = ''
     event_at = None

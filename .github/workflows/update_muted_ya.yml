@@ -80,7 +80,7 @@ jobs:
       - name: Collect testowners
         run: python3 .github/scripts/analytics/upload_testowners.py
 
-      # ``manual_unmute.py sync`` selects CLOSED+COMPLETED candidates from YDB ``issues``;
+      # ``mute/manual_unmute.py sync`` selects CLOSED+COMPLETED candidates from YDB ``issues``;
       # refresh that table here so fast-unmute does not wait for collect_analytics_fast (~30 min).
       - name: Export GitHub issues to YDB
         env:
@@ -90,7 +90,7 @@ jobs:
       - name: Sync manual fast-unmute state
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-        run: python3 .github/scripts/tests/manual_unmute.py sync
+        run: python3 .github/scripts/tests/mute/manual_unmute.py sync
 
   update-muted-tests:
     needs: [setup, collect-testowners-and-sync]
@@ -143,7 +143,7 @@ jobs:
 
       - name: Generate new muted_ya.txt
         run: |
-          .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
+          .github/scripts/tests/mute/create_new_muted_ya.py update_muted_ya \
             --branch=${{ env.BASE_BRANCH }} \
             --muted_ya_file=base_muted_ya.txt \
             --build-type=${{ env.BUILD_TYPE }}

@@ -5,7 +5,7 @@ Send batched Telegram digests for new muted-test GitHub issues.
 How it works
 ------------
 Issues are placed into ``digest_queue`` at the moment they are created
-(by create_new_muted_ya.py).  This script reads unsent rows
+(by mute/create_new_muted_ya.py).  This script reads unsent rows
 (sent_at IS NULL), sends per-team Telegram messages, then marks rows
 as sent by writing sent_at = NOW().
 

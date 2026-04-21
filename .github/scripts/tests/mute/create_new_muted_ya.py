@@ -9,11 +9,16 @@ import logging
 import sys
 from collections import defaultdict
 
-# Add the parent directory to the path to import update_mute_issues
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Runnable as ``python3 .github/scripts/tests/mute/create_new_muted_ya.py``: expose package ``mute``.
+_mutedir = os.path.dirname(os.path.abspath(__file__))
+_tests_dir = os.path.dirname(_mutedir)
+_scripts_dir = os.path.dirname(_tests_dir)
+for _p in (_tests_dir, _scripts_dir, os.path.join(_scripts_dir, 'analytics')):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from mute_check import YaMuteCheck
-from update_mute_issues import (
+from mute.update_mute_issues import (
     ORG_NAME,
     PROJECT_ID,
     close_unmuted_issues,
@@ -23,21 +28,16 @@ from update_mute_issues import (
     get_muted_tests_from_issues,
     map_tests_to_manual_fast_unmute_issue_url,
 )
-
-# Add analytics directory to path for ydb_wrapper import
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
-from ydb_wrapper import YDBWrapper
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
-
-from mute_constants import (
+from mute.constants import (
     get_delete_window_days,
     get_manual_unmute_min_runs,
     get_manual_unmute_window_days,
     get_mute_window_days,
     get_unmute_window_days,
 )
+from mute.naming import mute_file_line_to_tests_monitor_full_name
+from ydb_wrapper import YDBWrapper
+from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
 # Configure logging — root INFO so ydb/grpc don't spam DEBUG (channel options, etc.).
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -45,15 +45,15 @@ for _noisy in ('grpc', 'grpc._cython.cygrpc', 'ydb'):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 dir = os.path.dirname(__file__)
-repo_path = f"{dir}/../../../"
+repo_path = os.path.normpath(os.path.join(dir, '..', '..', '..', '..')) + os.sep
 muted_ya_path = '.github/config/muted_ya.txt'
 
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
-    os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest_config.json')
+    os.path.join(dir, '..', '..', '..', 'config', 'mute_issue_and_digest_config.json')
 )
 
 def load_manual_unmute_config():
-    """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute_constants``."""
+    """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute.constants``."""
     return get_manual_unmute_window_days(), get_manual_unmute_min_runs()
 
 
@@ -173,6 +173,7 @@ def delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, test_strings)
     for line in test_strings:
         if '*' in line or '?' in line:
             continue
+        full_name = mute_file_line_to_tests_monitor_full_name(line)
         query = f"""
         DECLARE $full_name AS Utf8;
         DECLARE $branch AS Utf8;
@@ -185,11 +186,16 @@ def delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, test_strings)
         try:
             ydb_wrapper.execute_dml(
                 query,
-                {'$full_name': line, '$branch': branch, '$build_type': build_type},
+                {'$full_name': full_name, '$branch': branch, '$build_type': build_type},
                 query_name='fast_unmute_grace_delete_on_remute',
             )
         except Exception as exc:
-            logging.warning('Failed to delete grace row for %s: %s', line, exc)
+            logging.warning(
+                'Failed to delete grace row for mute line %r (monitor key %r): %s',
+                line,
+                full_name,
+                exc,
+            )
 
 
 def load_manual_unmute_full_names(ydb_wrapper, branch, build_type):

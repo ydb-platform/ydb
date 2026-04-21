@@ -3,15 +3,17 @@ import sys
 import requests
 from urllib.parse import quote_plus
 
-# Import shared GitHub issue utilities
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# Import shared GitHub issue utilities (``mute/`` → ``tests/`` → ``.github/scripts/``).
+_scripts_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 from github_issue_utils import parse_body, DEFAULT_BUILD_TYPE
 
 
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = '45'
-# GitHub issue label set by ``manual_unmute.py`` while fast-unmute rows exist.
+# GitHub issue label set by ``mute/manual_unmute.py`` while fast-unmute rows exist.
 MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"

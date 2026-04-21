@@ -1925,6 +1925,13 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 60 }]; // 1 minute
+
+        optional uint64 EnablePostponedPumpMs = 14 [(ControlOptions) = {
+            Description: "Postpone Backpressure pump duration for HDD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 200 }]; // disabled
+
     }
 
     message TPDiskControls {

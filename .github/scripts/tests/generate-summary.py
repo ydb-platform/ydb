@@ -439,15 +439,15 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
-    buid_preset_params = '--build unknown_build_type'
+    build_preset_params = '--build unknown_build_type'
     if build_preset == 'release-asan' :
-        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-msan':
-        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-tsan':   
-        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'relwithdebinfo':
-        buid_preset_params = '--build "relwithdebinfo"'
+        build_preset_params = '--build "relwithdebinfo"'
     
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
@@ -535,7 +535,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         test_success_rates={},  # Empty - will be loaded from JSON
         data_file_url=data_file_url,  # URL to JSON data file
         build_preset=build_preset,
-        buid_preset_params=buid_preset_params,
+        build_preset_params=build_preset_params,
         branch=branch,
         pr_number=pr_number,
         pr_url=pr_url,

@@ -993,7 +993,8 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
 }
 
-void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination) {
+void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination,
+    const TDownstreamConnTypes& downstreamMap) {
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
     if (stage.GetIsEffectsStage() && stage.GetSinks().empty()) {
@@ -1081,9 +1082,10 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
         const auto& outputIdx = input.GetOutputIndex();
 
         switch (input.GetTypeCase()) {
-            case NKqpProto::TKqpPhyConnection::kUnionAll:
+            case NKqpProto::TKqpPhyConnection::kUnionAll: {
                 BuildUnionAllChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
                 break;
+            }
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
                 std::optional<EHashShuffleFuncType> hashKind;
                 auto forceSpilling = input.GetHashShuffle().GetUseSpilling();
@@ -1170,17 +1172,18 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             }
 
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                BuildParallelUnionAllChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log, nextOriginTaskId);
-                break;
-            }
-
-            case NKqpProto::TKqpPhyConnection::kScatter: {
-                if (inputStageInfo.Tasks.size() <= 1 && stageInfo.Tasks.size() == 1) {
-                    LOG_D("Scatter downgraded to UnionAll: srcTasks=" << inputStageInfo.Tasks.size()
+                const bool enableScatter = GetMeta().EnableScatterConnection;
+                // Old: scatter only for heavy downstream (Merge/StreamLookup)
+                // if (enableScatter && inputStageInfo.Tasks.size() > 1 && stageInfo.Tasks.size() > 1
+                //     && HasHeavyDownstream(downstreamMap, stageInfo.Id))
+                if (enableScatter && inputStageInfo.Tasks.size() > 1 && stageInfo.Tasks.size() > 1
+                    && !HasStreamLookupDownstream(downstreamMap, stageInfo.Id))
+                {
+                    LOG_D("ParallelUnionAll upgraded to scatter wiring: srcTasks=" << inputStageInfo.Tasks.size()
                         << " dstTasks=" << stageInfo.Tasks.size());
-                    BuildUnionAllChannels(*this, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
-                } else {
                     BuildScatterChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
+                } else {
+                    BuildParallelUnionAllChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log, nextOriginTaskId);
                 }
                 break;
             }
@@ -2022,7 +2025,6 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
                 case NKqpProto::TKqpPhyConnection::kMap:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
-                case NKqpProto::TKqpPhyConnection::kScatter:
                 case NKqpProto::TKqpPhyConnection::kVectorResolve:
                 case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
                     break;
@@ -2053,14 +2055,11 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 ++mapConnectionCount;
                 break;
             }
-            case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
+            case NKqpProto::TKqpPhyConnection::kUnionAll: {
                 break;
             }
-            case NKqpProto::TKqpPhyConnection::kScatter: {
-                if (originStageInfo.Tasks.size() > 1) {
-                    partitionsCount = std::max<ui64>(partitionsCount, std::min<ui64>(originStageInfo.Tasks.size(), nodesCount));
-                }
+            case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
+                partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kVectorResolve: {
@@ -3093,6 +3092,28 @@ void TKqpTasksGraph::ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes) 
     }
 }
 
+bool TKqpTasksGraph::HasHeavyDownstream(const TDownstreamConnTypes& map, const NYql::NDq::TStageId& stageId) {
+    auto it = map.find(stageId);
+    if (it == map.end()) {
+        return false;
+    }
+    for (auto type : it->second) {
+        if (type == NKqpProto::TKqpPhyConnection::kMerge ||
+            type == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TKqpTasksGraph::HasStreamLookupDownstream(const TDownstreamConnTypes& map, const NYql::NDq::TStageId& stageId) {
+    auto it = map.find(stageId);
+    if (it == map.end()) {
+        return false;
+    }
+    return it->second.contains(NKqpProto::TKqpPhyConnection::kStreamLookup);
+}
+
 size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats)
 {
@@ -3105,6 +3126,18 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     }
 
     const auto internalSinksOrder = BuildInternalSinksPriorityOrder();
+
+    TDownstreamConnTypes downstreamMap;
+    for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
+        const auto& tx = Transactions.at(txIdx);
+        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+            const auto& stage = tx.Body->GetStages(stageIdx);
+            for (const auto& input : stage.GetInputs()) {
+                auto originStageId = NYql::NDq::TStageId(txIdx, input.GetStageIndex());
+                downstreamMap[originStageId].insert(input.GetTypeCase());
+            }
+        }
+    }
 
     for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
@@ -3203,7 +3236,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             }
 
             // Not task-related
-            BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+            BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination(), downstreamMap);
         }
         GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
 

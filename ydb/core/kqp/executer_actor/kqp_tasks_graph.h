@@ -411,8 +411,12 @@ public:
 private:
     void FillStages();
 
+    using TDownstreamConnTypes = THashMap<NYql::NDq::TStageId, THashSet<NKqpProto::TKqpPhyConnection::TypeCase>>;
+    static bool HasHeavyDownstream(const TDownstreamConnTypes& map, const NYql::NDq::TStageId& stageId);
+    static bool HasStreamLookupDownstream(const TDownstreamConnTypes& map, const NYql::NDq::TStageId& stageId);
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
-    bool BuildComputeTasks(TStageInfo& stageInfo, ui32 nodesCount); // returns true if affected shards count is unknown
+    bool BuildComputeTasks(TStageInfo& stageInfo, ui32 nodesCount);
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
@@ -421,7 +425,8 @@ private:
     void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);
 
-    void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
+    void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination,
+        const TDownstreamConnTypes& downstreamMap);
     bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
 
     void BuildTransformChannels(const NYql::NDq::TTransform& transform, const TTaskInputMeta& meta, const TString& name,

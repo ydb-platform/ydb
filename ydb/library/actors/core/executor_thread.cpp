@@ -503,7 +503,7 @@ namespace NActors {
             if (TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail)) {
                 TMailbox* mailbox = ThreadCtx.CaptureMailbox(nullptr);
                 Y_ABORT_UNLESS(mailbox, "activation must be not null");
-                executeActivation(mailbox, true, 0);
+                executeActivation(mailbox, true, mailbox->ScheduleMoment);
                 continue;
             }
             TMailbox* capturedMailbox = ThreadCtx.CaptureMailbox(nullptr);

@@ -857,6 +857,61 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
                 << ": mailbox=" << timestamps.MailboxScheduledTimestamp
                 << " observed=" << timestamps.ObservedTimestamp);
     }
+
+    struct TTailSenderActor : TActorBootstrapped<TTailSenderActor> {
+        const TActorId Recipient;
+
+        explicit TTailSenderActor(TActorId recipient)
+            : Recipient(recipient)
+        {}
+
+        void Bootstrap() {
+            Send<ESendingType::Tail>(Recipient, new TEvents::TEvWakeup());
+
+            const ui64 deadline = GetCycleCountFast() + Us2Ts(200);
+            while (GetCycleCountFast() < deadline) {
+            }
+
+            PassAway();
+        }
+    };
+
+    Y_UNIT_TEST(TailSendHasActivationTime) {
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+
+        ui64 ts = GetCycleCountFast();
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
+        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
+            harmonizer->AddPool(setup->Executors[i].Get());
+        }
+        setup->Scheduler = new TBasicSchedulerThread;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TPromise<void> readyPromise = NewPromise<void>();
+        TFuture<void> ready = readyPromise.GetFuture();
+        TPromise<TQueueTimestamps> donePromise = NewPromise<TQueueTimestamps>();
+        TFuture<TQueueTimestamps> done = donePromise.GetFuture();
+
+        const TActorId receiverId = actorSystem.Register(new TQueueTimestampActor(std::move(readyPromise), std::move(donePromise)));
+        ready.GetValueSync();
+        actorSystem.Register(new TTailSenderActor(receiverId));
+
+        const TQueueTimestamps timestamps = done.GetValueSync();
+        actorSystem.Stop();
+
+        UNIT_ASSERT_C(timestamps.ActivationTimeUs > 0, "tail send must have non-zero activation time");
+        UNIT_ASSERT_C(
+            timestamps.ActivationTimeUs <= timestamps.EventDeliveryTimeUs,
+            "tail-send activation time must not exceed event delivery time"
+                << ": activationUs=" << timestamps.ActivationTimeUs
+                << " deliveryUs=" << timestamps.EventDeliveryTimeUs);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TestStateFunc) {

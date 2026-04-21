@@ -13,7 +13,7 @@ from github_issue_utils import parse_body, DEFAULT_BUILD_TYPE
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = '45'
-# GitHub issue label set by ``mute/manual_unmute.py`` while fast-unmute rows exist.
+# GitHub issue label set by ``mute/fast_unmute_github.py`` while fast-unmute rows exist.
 MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"

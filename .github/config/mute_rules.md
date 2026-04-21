@@ -85,7 +85,7 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 Once you have fixed the tests tracked by a mute-issue, you can skip the default 7-day unmute wait by **manually closing the issue as Completed**. The `python3 .github/scripts/tests/mute/manual_unmute.py sync` step on the next workflow run will:
 
 1. Detect CLOSED+COMPLETED issues in the lookback window (`manual_unmute_issue_closed_lookback_days` in `mute_config.json`).
-2. **Human-only trigger:** the *latest* GitHub *Close* event must be by a real user (`User` actor), not a bot. Known automation logins are ignored (see `BOT_LOGINS` in `mute/manual_unmute.py`). If a bot closed the issue, fast-unmute does **not** start — this is intentional.
+2. **Human-only trigger:** the *latest* GitHub *Close* event must be by a real user (`User` actor), not a bot. Known automation logins are ignored (see `BOT_LOGINS` in `mute/fast_unmute_pipeline.py`). If a bot closed the issue, fast-unmute does **not** start — this is intentional.
 3. For every test listed in the issue body that is still muted in CI on the parsed branch(es), register a per-test row in the `fast_unmute_active` YDB table (`test_mute/fast_unmute_active`).
 4. **Leave the issue closed**, add the `manual-fast-unmute` label, update org project **Status**, and post a “fast-unmute started” comment.
 

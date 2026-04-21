@@ -5,6 +5,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/hash.h>
+#include <util/string/builder.h>
 
 #include <optional>
 #include <set>
@@ -48,6 +49,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             return Weight.value_or(1);
         }
 
+        auto GetReadLimit() const {
+            return ReadLimit.value_or(TDuration::Seconds(1));
+        }
+
         void Update(const TStaticAttributes& other) {
             if (other.Weight) {
                 Weight = other.Weight;
@@ -61,6 +66,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             if (other.ReadLimit) {
                 ReadLimit = other.ReadLimit;
             }
+        }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << "Weight: " << GetWeight()
+                << ", CpuLimit: " << GetCpuLimit()
+                << ", CpuGuarantee: " << GetCpuGuarantee()
+                << ", ReadLimit: " << GetReadLimit();
         }
     };
 

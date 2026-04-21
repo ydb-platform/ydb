@@ -97,7 +97,7 @@ public:
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->DatabaseId, attrs);
 
-        LOG_D("Add database: " << ev->Get()->DatabaseId);
+        LOG_D("Add database: " << ev->Get()->DatabaseId << " (" << attrs.ToString() << ")");
     }
 
     void Handle(TEvRemoveDatabase::TPtr&) {
@@ -124,7 +124,7 @@ public:
 
         Y_ASSERT(!poolId.empty());
 
-        LOG_D("Add pool: " << databaseId << "/" << poolId);
+        LOG_D("Add pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
 
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
@@ -170,7 +170,7 @@ public:
 
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
 
-            LOG_D("Update pool: " << databaseId << "/" << poolId);
+            LOG_D("Update pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.

@@ -9,14 +9,24 @@ the test against a shorter unmute window (see `mute_config.json`) instead of
 the default one. Rows are cleaned up when the test is either unmuted, fails
 during the fast window, or the window expires.
 
-If fast-unmute **reverts** (failure comment), rows are removed; org Project
-**Status** is set back to **Muted** and the `manual-fast-unmute` label is removed
-when no fast-unmute rows remain for that issue. CI tests
-remain governed by the **default** unmute rules until those criteria are met.
+If fast-unmute **reverts** (failure in the short window), rows are removed; the
+GitHub issue is **reopened**, org Project **Status** → **Muted**, ``COMMENT_FAIL``
+is posted, and the ``manual-fast-unmute`` label is removed once no
+``fast_unmute_active`` rows remain for that issue.
+
+When tests **pass** fast-unmute (no longer muted in monitor), a **success**
+comment explains they will drop from ``muted_ya`` on the next mute automation
+run; the label is removed when the last fast-unmute row for that issue is gone.
+
+If **only some** tests unmute while others still have ``fast_unmute_active`` rows,
+the issue is **reopened**, Status → **Muted**, remaining rows are cleared, a
+**partial** comment lists unmuted vs still-tracked tests, and the label is removed.
+
+Entering fast-unmute does **not** reopen the issue (issue stays closed); tracking
+uses YDB and the ``manual-fast-unmute`` label.
+
 If someone **closes the issue again** as Completed while tests are still muted,
 the next ``sync`` can insert new rows and start another fast-unmute cycle.
-The issue itself is **not** reopened for fast-unmute; tracking uses YDB and the
-``manual-fast-unmute`` label.
 
 Usage:
     python3 manual_unmute.py sync
@@ -35,6 +45,7 @@ import datetime
 import logging
 import os
 import sys
+from collections import defaultdict
 
 import ydb
 
@@ -107,7 +118,7 @@ The listed tests are still muted in the repo, but CI now evaluates them on a **s
 **What happens next**
 
 - If the tests stay green within the window → they are unmuted automatically (this issue is not reopened for that).
-- If any of these tests fails during the window → the test leaves fast-unmute and returns to the default criteria; a comment is posted here.
+- If any of these tests fails during the window → the test leaves fast-unmute; the issue is **reopened**, project status returns to **Muted**, and a comment is posted.
 - No action needed from you. Please do not edit `muted_ya.txt` manually.
 
 🔗 Workflow run: {workflow_run_url}
@@ -119,6 +130,32 @@ COMMENT_FAIL = """⚠️ **Fast-unmute reverted**
 The following tests failed during the fast-unmute window and are back on the default unmute criteria:
 
 {tests_bullet_list}
+
+{also_unmuted_section}🔗 Workflow run: {workflow_run_url}
+"""
+
+
+COMMENT_SUCCESS = """✅ **Fast-unmute completed**
+
+All tests from this issue passed the fast-unmute window (they are no longer muted in CI data). They will be removed from `muted_ya` on the next mute automation run that updates the repo — no action needed from you.
+
+🔗 Workflow run: {workflow_run_url}
+"""
+
+
+COMMENT_PARTIAL_FAST_UNMUTE = """🔀 **Fast-unmute: partial completion**
+
+Some tests already look **unmuted** in the latest CI data — they will disappear from `muted_ya` when the next mute automation run updates the repo.
+
+Other tests from this issue are **still muted** in CI (or had not yet met the short-window unmute rules). This run **stops** fast-unmute for the whole issue: automation removed the remaining fast-unmute tracking for those tests, so they again follow only the **normal** mute/unmute rules. That is **not** the same as failing the fast-unmute window (no failing run triggered the revert path).
+
+**Unmuted in CI (pending `muted_ya` update):**
+{unmuted_bullets}
+
+**Still muted in CI (fast-unmute tracking cleared in this run):**
+{not_unmuted_bullets}
+
+Project **Status** → **Muted**. The `manual-fast-unmute` label is removed.
 
 🔗 Workflow run: {workflow_run_url}
 """
@@ -366,6 +403,27 @@ def fetch_issue_closers(issue_numbers):
                         break
             result[number] = {'login': login, 'type': actor_type}
     return result
+
+
+def reopen_issue(issue_id):
+    """Reopen a closed issue. No-op if already open."""
+    state_query = """
+    query ($issueId: ID!) {
+      node(id: $issueId) {
+        ... on Issue { state }
+      }
+    }
+    """
+    state_result = run_query(state_query, {'issueId': issue_id})
+    state = ((state_result.get('data') or {}).get('node') or {}).get('state')
+    if state != 'CLOSED':
+        return
+    mutation = """
+    mutation ($issueId: ID!) {
+      reopenIssue(input: {issueId: $issueId}) { issue { id } }
+    }
+    """
+    run_query(mutation, {'issueId': issue_id})
 
 
 def _issue_project_board_item_id(issue_node_id, project_number):
@@ -858,6 +916,8 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
 
     fails_by_issue = {}
     affected_issues = set()
+    issues_cleared_via_unmute = set()
+    unmuted_tests_by_issue = defaultdict(list)
     delete_count = 0
     grace_table_path = None
     try:
@@ -922,7 +982,10 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
                 delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
                 delete_count += 1
                 if issue_number:
-                    affected_issues.add(int(issue_number))
+                    inum = int(issue_number)
+                    affected_issues.add(inum)
+                    issues_cleared_via_unmute.add(inum)
+                    unmuted_tests_by_issue[inum].append(full_name)
                 logging.info('manual_unmute_cleanup: %s (already unmuted)', full_name)
                 continue
 
@@ -952,19 +1015,91 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
         issues_to_delabel = {num for num in affected_issues if remaining.get(num, 0) == 0}
         issue_ids = _fetch_issue_node_ids(affected_issues)
 
-        for issue_number, failed_tests in fails_by_issue.items():
+        partial_issues = {
+            int(n)
+            for n in issues_cleared_via_unmute
+            if int(n) not in fails_by_issue and remaining.get(int(n), 0) > 0
+        }
+        if partial_issues:
+            table_snapshot = fetch_all_rows(ydb_wrapper, table_path)
+        for issue_number in sorted(partial_issues):
+            still_rows = [
+                r
+                for r in table_snapshot
+                if int(r.get('github_issue_number') or 0) == issue_number
+            ]
+            not_unmuted = sorted({r['full_name'] for r in still_rows if r.get('full_name')})
+            unmuted_list = sorted(set(unmuted_tests_by_issue.get(issue_number, [])))
+            for r in still_rows:
+                fn, br, bt = r.get('full_name'), r.get('branch'), r.get('build_type')
+                if fn and br and bt:
+                    delete_row(ydb_wrapper, table_path, fn, br, bt)
+                    delete_count += 1
             issue_id = issue_ids.get(issue_number)
             if not issue_id:
+                logging.warning(
+                    'manual_unmute: partial fast-unmute for issue #%s: cleared YDB rows but no GitHub node id',
+                    issue_number,
+                )
                 continue
+            reopen_issue(issue_id)
             add_issue_comment(
                 issue_id,
-                COMMENT_FAIL.format(
-                    tests_bullet_list=_format_bullet_list(failed_tests),
+                COMMENT_PARTIAL_FAST_UNMUTE.format(
+                    unmuted_bullets=_format_bullet_list(unmuted_list)
+                    if unmuted_list
+                    else '- _(none)_',
+                    not_unmuted_bullets=_format_bullet_list(not_unmuted)
+                    if not_unmuted
+                    else '- _(none)_',
                     workflow_run_url=run_url,
                 ),
             )
             _set_manual_unmute_project_board_status(
                 issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_FAIL
+            )
+            remove_label_from_issue(issue_id)
+
+        for issue_number, failed_tests in fails_by_issue.items():
+            issue_id = issue_ids.get(issue_number)
+            if not issue_id:
+                continue
+            also_unmuted = sorted(
+                set(unmuted_tests_by_issue.get(issue_number, [])) - set(failed_tests)
+            )
+            also_unmuted_section = ''
+            if also_unmuted:
+                also_unmuted_section = (
+                    'These tests **passed** the fast-unmute window in the same sync '
+                    '(they will leave `muted_ya` on the next mute workflow update):\n\n'
+                    + _format_bullet_list(also_unmuted)
+                    + '\n\n'
+                )
+            reopen_issue(issue_id)
+            add_issue_comment(
+                issue_id,
+                COMMENT_FAIL.format(
+                    tests_bullet_list=_format_bullet_list(failed_tests),
+                    also_unmuted_section=also_unmuted_section,
+                    workflow_run_url=run_url,
+                ),
+            )
+            _set_manual_unmute_project_board_status(
+                issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_FAIL
+            )
+
+        success_comment_issues = (
+            issues_to_delabel
+            & issues_cleared_via_unmute
+            - set(fails_by_issue.keys())
+        )
+        for issue_number in sorted(success_comment_issues):
+            issue_id = issue_ids.get(issue_number)
+            if not issue_id:
+                continue
+            add_issue_comment(
+                issue_id,
+                COMMENT_SUCCESS.format(workflow_run_url=run_url),
             )
 
         for issue_number in issues_to_delabel:

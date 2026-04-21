@@ -229,7 +229,8 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
     tableDesc->SetName(pathPair.second);
 
     // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
-    TSet<ui32> bloomPrefixes;
+    // Last specified FPP wins for each prefix length; 0 means "not set, use default".
+    TMap<ui32, double> bloomPrefixes;
     for (const auto& index : req->add_indexes()) {
         if (index.type_case() != Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
             continue;
@@ -240,11 +241,27 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
             return false;
         }
 
-        bloomPrefixes.insert(static_cast<ui32>(index.index_columns_size()));
+        const ui32 prefixLen = static_cast<ui32>(index.index_columns_size());
+        const auto& bloomSettings = index.local_bloom_filter_index();
+        if (bloomSettings.has_false_positive_probability()) {
+            const double fpp = bloomSettings.false_positive_probability();
+            if (fpp <= 0.0 || fpp >= 1.0) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "false_positive_probability must be in range (0, 1)";
+                return false;
+            }
+            bloomPrefixes[prefixLen] = fpp;
+        } else {
+            bloomPrefixes.emplace(prefixLen, 0.0);
+        }
     }
 
-    for (auto&& prefix : bloomPrefixes) {
-        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes()->SetPrefixLength(prefix);
+    for (auto&& [prefixLen, fpp] : bloomPrefixes) {
+        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(prefixLen);
+        if (fpp > 0.0) {
+            entry->SetFalsePositiveProbability(fpp);
+        }
     }
 
     return true;

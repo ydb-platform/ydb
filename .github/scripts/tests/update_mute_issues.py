@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import requests
@@ -13,6 +14,9 @@ REPO_NAME = 'ydb'
 PROJECT_ID = '45'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
+MUTE_CONFIG_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'mute_config.json')
+)
 
 # Github api (personal access token (classic)) token shoud have permitions to
 # repo
@@ -23,6 +27,18 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 # project
 
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
+
+
+def load_observation_window_days():
+    with open(MUTE_CONFIG_PATH, 'r', encoding='utf-8') as config_file:
+        config = json.load(config_file)
+    observation_window_days = int(config["observation_window_days"])
+    if observation_window_days <= 0:
+        raise ValueError("observation_window_days must be a positive integer")
+    return observation_window_days
+
+
+OBSERVATION_WINDOW_DAYS = load_observation_window_days()
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -397,7 +413,14 @@ def generate_github_issue_title_and_body(test_data):
         f"**Summary history:** \n {summary_string}\n"
         "\n\n"
         f"**Test run history:** [link]({test_run_history_link})\n\n"
-        f"More info in [dashboard]({TEST_HISTORY_DASHBOARD})"
+        f"More info in [dashboard]({TEST_HISTORY_DASHBOARD})\n\n"
+        "---\n"
+        "## What to do when tests are fixed?\n\n"
+        "1. Close this issue as **Completed** ✅\n"
+        f"2. Tests will be moved to observation automatically ({OBSERVATION_WINDOW_DAYS}-day observation period)\n"
+        "3. If stable → unmuted automatically, issue closed\n"
+        "4. If any test fails again → issue returns to **Muted**\n\n"
+        "> ⚠️ Do not edit `muted_ya.txt` manually — automation handles it."
     )
 
     return (
@@ -460,13 +483,24 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     return all_issues_with_contet
 
 
-def get_muted_tests_from_issues():
+def _extract_issue_number_from_url(issue_url):
+    if not issue_url:
+        return None
+    try:
+        return int(str(issue_url).rstrip('/').split('/')[-1])
+    except (ValueError, TypeError):
+        return None
+
+
+def get_muted_tests_from_issues(observation_issue_numbers: set[int] = None):
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
+    observation_issue_numbers = observation_issue_numbers or set()
     
     # First, collect all issues for each (test, build_type) key
     for issue in issues:
-        if issues[issue]["state"] != 'CLOSED':
+        issue_number = _extract_issue_number_from_url(issues[issue].get("url"))
+        if issues[issue]["state"] != 'CLOSED' or issue_number in observation_issue_numbers:
             bt = issues[issue].get('build_type') or DEFAULT_BUILD_TYPE
             for test in issues[issue]['tests']:
                 key = (test, bt)
@@ -481,6 +515,7 @@ def get_muted_tests_from_issues():
                         'state': issues[issue]['state'],
                         'branches': issues[issue]['branches'],
                         'build_type': bt,
+                        'issue_number': issue_number,
                         'id': issue,
                     }
                 )

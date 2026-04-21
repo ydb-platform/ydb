@@ -84,7 +84,9 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
+        run: |
+          python3 .github/scripts/tests/mute_observation.py
+          .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
 
       - name: Add issues to PR
         if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'

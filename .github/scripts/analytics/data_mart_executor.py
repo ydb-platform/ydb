@@ -2,6 +2,7 @@
 
 #--query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Db Suite Test Branch Run_start_timestamp --ttl_min 43200 --ttl_key Run_start_timestamp
 import argparse
+import json
 import ydb
 import os
 import re
@@ -11,6 +12,27 @@ from ydb_wrapper import YDBWrapper
 # Get repository path
 dir = os.path.dirname(__file__)
 repo_path = os.path.abspath(f"{dir}/../../../")
+MUTE_CONFIG_PATH = os.path.join(
+    repo_path, ".github", "config", "mute_config.json"
+)
+
+
+def load_query_variables():
+    variables = {}
+    with open(MUTE_CONFIG_PATH, "r", encoding="utf-8") as config_file:
+        config = json.load(config_file)
+    observation_window_days = int(config["observation_window_days"])
+    if observation_window_days <= 0:
+        raise ValueError("observation_window_days must be a positive integer")
+    variables["observation_window_days"] = observation_window_days
+    return variables
+
+
+def render_query_template(sql_query: str, variables: dict) -> str:
+    rendered = sql_query
+    for variable_name, variable_value in variables.items():
+        rendered = rendered.replace(f"{{{variable_name}}}", str(variable_value))
+    return rendered
 
 def ydb_type_to_str(ydb_type, store_type = 'ROW'):
     # Converts YDB type to string representation for table creation
@@ -272,6 +294,8 @@ def main():
         # Read SQL query from file
         with open(sql_query_path, 'r') as file:
             sql_query = file.read()
+        query_variables = load_query_variables()
+        sql_query = render_query_template(sql_query, query_variables)
 
         # Run query to get sample data and column types
         results, column_types = ydb_wrapper.execute_scan_query_with_metadata(sql_query, query_name)

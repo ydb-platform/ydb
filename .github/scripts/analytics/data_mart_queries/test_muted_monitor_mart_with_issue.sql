@@ -1,6 +1,8 @@
 -- GitHub issue fields from github_issue_mapping; analytics area/owner + owner hand-off from tests_monitor.
 -- COALESCE fallback: when effective_* columns are NULL (not yet populated), fall back to owner string + area_to_owner_mapping.
 
+$observation_window_days = {observation_window_days};
+
 $normalize = ($raw_area) -> {
     $parts = String::SplitToList(Cast($raw_area AS String), '/');
     RETURN Cast(
@@ -24,7 +26,8 @@ $gim_latest = (
         github_issue_state AS github_issue_state,
         github_issue_created_at AS github_issue_created_at,
         area_override AS area_override,
-        area_override_since AS area_override_since
+        area_override_since AS area_override_since,
+        observation_since AS observation_since
     FROM (
         SELECT
             g.full_name AS full_name,
@@ -36,6 +39,7 @@ $gim_latest = (
             g.github_issue_created_at AS github_issue_created_at,
             g.area_override AS area_override,
             g.area_override_since AS area_override_since,
+            g.observation_since AS observation_since,
             ROW_NUMBER() OVER (
                 PARTITION BY g.full_name, g.branch, g.build_type
                 ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC
@@ -95,7 +99,8 @@ SELECT
     gim.github_issue_state AS github_issue_state,
     gim.github_issue_created_at AS github_issue_created_at,
     gim.area_override AS area_override,
-    gim.area_override_since AS area_override_since
+    gim.area_override_since AS area_override_since,
+    gim.observation_since AS observation_since
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN $area_fallback AS af
     ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team
@@ -105,4 +110,8 @@ LEFT JOIN $gim_latest AS gim
     AND tm.build_type = gim.build_type
 WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
     AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%')
-    AND tm.is_test_chunk = 0;
+    AND tm.is_test_chunk = 0
+    AND (
+        gim.observation_since IS NULL
+        OR gim.observation_since < CurrentUtcTimestamp() - $observation_window_days * Interval("P1D")
+    );

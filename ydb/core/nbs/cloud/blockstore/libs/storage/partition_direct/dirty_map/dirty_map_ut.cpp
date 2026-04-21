@@ -895,8 +895,636 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(true, readHint1.WaitReady.IsReady());
         UNIT_ASSERT_VALUES_EQUAL(true, readHint2.WaitReady.IsReady());
     }
-}
 
-////////////////////////////////////////////////////////////////////////////////
+    Y_UNIT_TEST(ShouldReadHintsTwoSequentialNonOverlappingInflightRanges)
+    {
+        // Scenario 1.1: Two sequential non-overlapping inflight ranges
+        // Inflight LSN=100: blocks [10..19]
+        // Inflight LSN=200: blocks [30..39]
+        // Request: blocks [0..49]
+        // Expected result:
+        // 1. DDisk for blocks [0..9] (offsetBlocks=0)
+        // 2. PBuffer LSN=100 for blocks [10..19] (offsetBlocks=10)
+        // 3. DDisk for blocks [20..29] (offsetBlocks=20)
+        // 4. PBuffer LSN=200 for blocks [30..39] (offsetBlocks=30)
+        // 5. DDisk for blocks [40..49] (offsetBlocks=40)
+
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Add first inflight range: LSN=100, blocks [10..19]
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Add second inflight range: LSN=200, blocks [30..39]
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(30, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Request read hints for blocks [0..49]
+        auto readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 50));
+
+        // Should have 5 range hints
+        UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
+
+        // Check first hint: DDisk for blocks [0..9] (offsetBlocks=0)
+        UNIT_ASSERT_VALUES_EQUAL(0, readHint.RangeHints[0].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[0].LocationMask.HasDDisk());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readHint.RangeHints[0].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            9,
+            readHint.RangeHints[0].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(0, readHint.RangeHints[0].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(9, readHint.RangeHints[0].VChunkRange.End);
+
+        // Check second hint: PBuffer LSN=100 for blocks [10..19]
+        // (offsetBlocks=10)
+        UNIT_ASSERT_VALUES_EQUAL(100, readHint.RangeHints[1].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[1].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            10,
+            readHint.RangeHints[1].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            19,
+            readHint.RangeHints[1].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(10, readHint.RangeHints[1].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(19, readHint.RangeHints[1].VChunkRange.End);
+
+        // Check third hint: DDisk for blocks [20..29] (offsetBlocks=20)
+        UNIT_ASSERT_VALUES_EQUAL(0, readHint.RangeHints[2].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[2].LocationMask.HasDDisk());
+        UNIT_ASSERT_VALUES_EQUAL(
+            20,
+            readHint.RangeHints[2].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            29,
+            readHint.RangeHints[2].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(20, readHint.RangeHints[2].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(29, readHint.RangeHints[2].VChunkRange.End);
+
+        // Check fourth hint: PBuffer LSN=200 for blocks [30..39]
+        // (offsetBlocks=30)
+        UNIT_ASSERT_VALUES_EQUAL(200, readHint.RangeHints[3].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[3].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            30,
+            readHint.RangeHints[3].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            39,
+            readHint.RangeHints[3].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(30, readHint.RangeHints[3].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(39, readHint.RangeHints[3].VChunkRange.End);
+
+        // Check fifth hint: DDisk for blocks [40..49] (offsetBlocks=40)
+        UNIT_ASSERT_VALUES_EQUAL(0, readHint.RangeHints[4].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[4].LocationMask.HasDDisk());
+        UNIT_ASSERT_VALUES_EQUAL(
+            40,
+            readHint.RangeHints[4].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            49,
+            readHint.RangeHints[4].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(40, readHint.RangeHints[4].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(49, readHint.RangeHints[4].VChunkRange.End);
+
+        // Also check using DebugPrint for a more concise verification
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][0..9][0..9]};"
+            "100{[D.....P+++..][10..19][10..19]};"
+            "0{[D+++..P.....][20..29][20..29]};"
+            "200{[D.....P+++..][30..39][30..39]};"
+            "0{[D+++..P.....][40..49][40..49]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsTwoFullyOverlappingInflightRanges)
+    {
+        // Scenario 1.2: Two fully overlapping inflight ranges (one inside
+        // another) Inflight LSN=100: blocks [10..50] Inflight LSN=200: blocks
+        // [20..30] Request: blocks [10..50] Expected result:
+        // 1. PBuffer LSN=100 for blocks [10..19] (offsetBlocks=0)
+        // 2. PBuffer LSN=200 for blocks [20..30] (offsetBlocks=10)
+        // 3. PBuffer LSN=100 for blocks [31..50] (offsetBlocks=21)
+
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Add first inflight range: LSN=100, blocks [10..50]
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Add second inflight range: LSN=200, blocks [20..30]
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(20, 11),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Request read hints for blocks [10..50]
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+
+        // Should have 3 range hints
+        UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
+
+        // Check first hint: PBuffer LSN=100 for blocks [10..19]
+        // (offsetBlocks=0)
+        UNIT_ASSERT_VALUES_EQUAL(100, readHint.RangeHints[0].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[0].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readHint.RangeHints[0].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            9,
+            readHint.RangeHints[0].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(10, readHint.RangeHints[0].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(19, readHint.RangeHints[0].VChunkRange.End);
+
+        // Check second hint: PBuffer LSN=200 for blocks [20..30]
+        // (offsetBlocks=10)
+        UNIT_ASSERT_VALUES_EQUAL(200, readHint.RangeHints[1].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[1].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            10,
+            readHint.RangeHints[1].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            20,
+            readHint.RangeHints[1].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(20, readHint.RangeHints[1].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(30, readHint.RangeHints[1].VChunkRange.End);
+
+        // Check third hint: PBuffer LSN=100 for blocks [31..50]
+        // (offsetBlocks=21)
+        UNIT_ASSERT_VALUES_EQUAL(100, readHint.RangeHints[2].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[2].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            21,
+            readHint.RangeHints[2].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            40,
+            readHint.RangeHints[2].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(31, readHint.RangeHints[2].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(50, readHint.RangeHints[2].VChunkRange.End);
+
+        // Also check using DebugPrint for a more concise verification
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};"
+            "200{[D.....P+++..][20..30][10..20]};"
+            "100{[D.....P+++..][31..50][21..40]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsTwoPartiallyOverlappingInflightRanges)
+    {
+        // Scenario 1.3: Two partially overlapping inflight ranges
+        // Inflight LSN=100: blocks [10..30]
+        // Inflight LSN=200: blocks [25..45]
+        // Request: blocks [10..45]
+        // Expected result:
+        // 1. PBuffer LSN=100 for blocks [10..24] (offsetBlocks=0)
+        // 2. PBuffer LSN=200 for blocks [25..45] (offsetBlocks=15)
+
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Add first inflight range: LSN=100, blocks [10..30]
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Add second inflight range: LSN=200, blocks [25..45]
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(25, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Request read hints for blocks [10..45]
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 36));
+
+        // Should have 2 range hints
+        UNIT_ASSERT_VALUES_EQUAL(2, readHint.RangeHints.size());
+
+        // Check first hint: PBuffer LSN=100 for blocks [10..24]
+        // (offsetBlocks=0)
+        UNIT_ASSERT_VALUES_EQUAL(100, readHint.RangeHints[0].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[0].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readHint.RangeHints[0].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            14,
+            readHint.RangeHints[0].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(10, readHint.RangeHints[0].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(24, readHint.RangeHints[0].VChunkRange.End);
+
+        // Check second hint: PBuffer LSN=200 for blocks [25..45]
+        // (offsetBlocks=15)
+        UNIT_ASSERT_VALUES_EQUAL(200, readHint.RangeHints[1].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[1].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            15,
+            readHint.RangeHints[1].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            35,
+            readHint.RangeHints[1].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(25, readHint.RangeHints[1].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(45, readHint.RangeHints[1].VChunkRange.End);
+
+        // Also check using DebugPrint for a more concise verification
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..24][0..14]};"
+            "200{[D.....P+++..][25..45][15..35]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsThreeOverlappingInflightRanges)
+    {
+        // Scenario 1.4: Three overlapping inflight ranges with different LSNs
+        // Inflight LSN=100: blocks [10..50]
+        // Inflight LSN=150: blocks [20..40]
+        // Inflight LSN=200: blocks [30..35]
+        // Request: blocks [10..50]
+        // Expected result:
+        // 1. PBuffer LSN=100 for blocks [10..19] (offsetBlocks=0)
+        // 2. PBuffer LSN=150 для блоков [20..29] (offsetBlocks=10)
+        // 3. PBuffer LSN=200 для блоков [30..35] (offsetBlocks=20)
+        // 4. PBuffer LSN=150 для блоков [36..40] (offsetBlocks=26)
+        // 5. PBuffer LSN=100 для блоков [41..50] (offsetBlocks=31)
+
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Add first inflight range: LSN=100, blocks [10..50]
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Add second inflight range: LSN=150, blocks [20..40]
+        dirtyMap.WriteFinished(
+            150,
+            TBlockRange64::WithLength(20, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Add third inflight range: LSN=200, blocks [30..35]
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(30, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        // Request read hints for blocks [10..50]
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+
+        // Should have 5 range hints
+        UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
+
+        // Check first hint: PBuffer LSN=100 for blocks [10..19]
+        // (offsetBlocks=0)
+        UNIT_ASSERT_VALUES_EQUAL(100, readHint.RangeHints[0].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[0].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readHint.RangeHints[0].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            9,
+            readHint.RangeHints[0].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(10, readHint.RangeHints[0].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(19, readHint.RangeHints[0].VChunkRange.End);
+
+        // Check second hint: PBuffer LSN=150 for blocks [20..29]
+        // (offsetBlocks=10)
+        UNIT_ASSERT_VALUES_EQUAL(150, readHint.RangeHints[1].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[1].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            10,
+            readHint.RangeHints[1].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            19,
+            readHint.RangeHints[1].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(20, readHint.RangeHints[1].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(29, readHint.RangeHints[1].VChunkRange.End);
+
+        // Check third hint: PBuffer LSN=200 for blocks [30..35]
+        // (offsetBlocks=20)
+        UNIT_ASSERT_VALUES_EQUAL(200, readHint.RangeHints[2].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[2].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            20,
+            readHint.RangeHints[2].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            25,
+            readHint.RangeHints[2].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(30, readHint.RangeHints[2].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(35, readHint.RangeHints[2].VChunkRange.End);
+
+        // Check fourth hint: PBuffer LSN=150 for blocks [36..40]
+        // (offsetBlocks=26)
+        UNIT_ASSERT_VALUES_EQUAL(150, readHint.RangeHints[3].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[3].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            26,
+            readHint.RangeHints[3].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            30,
+            readHint.RangeHints[3].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(36, readHint.RangeHints[3].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(40, readHint.RangeHints[3].VChunkRange.End);
+
+        // Check fifth hint: PBuffer LSN=100 for blocks [41..50]
+        // (offsetBlocks=31)
+        UNIT_ASSERT_VALUES_EQUAL(100, readHint.RangeHints[4].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readHint.RangeHints[4].LocationMask.HasPBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(
+            31,
+            readHint.RangeHints[4].RequestRelativeRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            40,
+            readHint.RangeHints[4].RequestRelativeRange.End);
+        UNIT_ASSERT_VALUES_EQUAL(41, readHint.RangeHints[4].VChunkRange.Start);
+        UNIT_ASSERT_VALUES_EQUAL(50, readHint.RangeHints[4].VChunkRange.End);
+
+        // Also check using DebugPrint for a more concise verification
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};"
+            "150{[D.....P+++..][20..29][10..19]};"
+            "200{[D.....P+++..][30..35][20..25]};"
+            "150{[D.....P+++..][36..40][26..30]};"
+            "100{[D.....P+++..][41..50][31..40]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsRangeWithEdgesOfRequest_2_1)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+
+        // Should have 5 range hints
+        UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsManyConsecutiveRanges)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const int lsnsCount = 100;
+        for (int i = 1; i <= lsnsCount; ++i) {
+            dirtyMap.WriteFinished(
+                i,
+                TBlockRange64::WithLength(i, 1),
+                TLocationMask::MakePrimaryPBuffers(),
+                TLocationMask::MakePrimaryPBuffers());
+        }
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, lsnsCount + 1));
+
+        UNIT_ASSERT_VALUES_EQUAL(lsnsCount + 1, readHint.RangeHints.size());
+
+        for (size_t i = 0; i < readHint.RangeHints.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(i, readHint.RangeHints[i].Lsn);
+            UNIT_ASSERT_VALUES_EQUAL(
+                i == 0,
+                readHint.RangeHints[i].LocationMask.HasDDisk());
+            UNIT_ASSERT_VALUES_EQUAL(
+                i,
+                readHint.RangeHints[i].RequestRelativeRange.Start);
+            UNIT_ASSERT_VALUES_EQUAL(
+                i,
+                readHint.RangeHints[i].RequestRelativeRange.End);
+            UNIT_ASSERT_VALUES_EQUAL(
+                i,
+                readHint.RangeHints[i].VChunkRange.Start);
+            UNIT_ASSERT_VALUES_EQUAL(i, readHint.RangeHints[i].VChunkRange.End);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsStaircaseWithOverlappedRanges_3_1)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(25, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(40, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 51));
+
+        UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..24][0..14]};"
+            "200{[D.....P+++..][25..39][15..29]};"
+            "300{[D.....P+++..][40..60][30..50]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsFewRangesInsideOfDDiskData_3_3)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(25, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(45, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 61));
+
+        UNIT_ASSERT_VALUES_EQUAL(7, readHint.RangeHints.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][0..9][0..9]};"
+            "100{[D.....P+++..][10..15][10..15]};"
+            "0{[D+++..P.....][16..24][16..24]};"
+            "200{[D.....P+++..][25..30][25..30]};"
+            "0{[D+++..P.....][31..44][31..44]};"
+            "300{[D.....P+++..][45..50][45..50]};"
+            "0{[D+++..P.....][51..60][51..60]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsFewBiggerLsnsInsideOfOneSmaller_3_4)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 91),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(20, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(40, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            400,
+            TBlockRange64::WithLength(70, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 91));
+
+        UNIT_ASSERT_VALUES_EQUAL(7, readHint.RangeHints.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};"
+            "200{[D.....P+++..][20..25][10..15]};"
+            "100{[D.....P+++..][26..39][16..29]};"
+            "300{[D.....P+++..][40..45][30..35]};"
+            "100{[D.....P+++..][46..69][36..59]};"
+            "400{[D.....P+++..][70..75][60..65]};"
+            "100{[D.....P+++..][76..100][66..90]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsReturnDDiskWhenNoQourum_4_1)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        auto inflightCounterBeforeWrite = dirtyMap.GetInflightCount();
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePBuffer(true, true, false, false, false));
+
+        // write result with no quorum is skipped
+        UNIT_ASSERT_VALUES_EQUAL(
+            inflightCounterBeforeWrite,
+            dirtyMap.GetInflightCount());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][10..50][0..40]};",
+            readHint.DebugPrint());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePBuffer(true, true, true, false, false));
+        auto readHint1 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+        UNIT_ASSERT_VALUES_EQUAL(1, readHint1.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "200{[D.....P+++..][10..50][0..40]};",
+            readHint1.DebugPrint());
+    }
+}
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

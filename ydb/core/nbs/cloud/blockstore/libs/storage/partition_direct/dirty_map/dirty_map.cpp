@@ -475,6 +475,34 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         offsetBlocks += segRange.Size();
     }
 
+    // Merge adjacent segments with the same LSN and location mask
+    if (result.RangeHints.size() > 1) {
+        TVector<TReadRangeHint> mergedHints;
+        mergedHints.push_back(std::move(result.RangeHints[0]));
+
+        for (size_t i = 1; i < result.RangeHints.size(); ++i) {
+            auto& prevHint = mergedHints.back();
+            auto& currentHint = result.RangeHints[i];
+
+            // Check if we can merge with the previous segment
+            if (prevHint.Lsn == currentHint.Lsn &&
+                prevHint.LocationMask == currentHint.LocationMask &&
+                prevHint.VChunkRange.End + 1 == currentHint.VChunkRange.Start)
+            {
+                // Merge the ranges
+                prevHint.VChunkRange.End = currentHint.VChunkRange.End;
+                prevHint.RequestRelativeRange.End =
+                    currentHint.RequestRelativeRange.End;
+                // Note: We don't update the lock as it should remain the same
+            } else {
+                // Can't merge, add as a new segment
+                mergedHints.push_back(std::move(currentHint));
+            }
+        }
+
+        result.RangeHints = std::move(mergedHints);
+    }
+
     return result;
 }
 

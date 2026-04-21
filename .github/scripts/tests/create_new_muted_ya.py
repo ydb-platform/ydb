@@ -14,10 +14,14 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from mute_check import YaMuteCheck
 from update_mute_issues import (
+    ORG_NAME,
+    PROJECT_ID,
+    close_unmuted_issues,
     create_and_add_issue_to_project,
     generate_github_issue_title_and_body,
+    get_issues_and_tests_from_project,
     get_muted_tests_from_issues,
-    close_unmuted_issues,
+    map_tests_to_manual_fast_unmute_issue_url,
 )
 
 # Add analytics directory to path for ydb_wrapper import
@@ -929,7 +933,9 @@ def read_tests_from_file(file_path):
 
 def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', build_type=DEFAULT_BUILD_TYPE):
     tests_from_file = read_tests_from_file(file_path)
-    muted_tests_in_issues = get_muted_tests_from_issues()
+    issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
+    muted_tests_in_issues = get_muted_tests_from_issues(issues_index)
+    manual_fast_unmute_issue_by_test = map_tests_to_manual_fast_unmute_issue_url(issues_index)
     prepared_tests_by_suite = {}
     temp_tests_by_suite = {}
     
@@ -960,6 +966,14 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
         if issue_key in muted_tests_in_issues:
             logging.info(
                 f"test {full_name} ({build_type}) already have issue, {muted_tests_in_issues[issue_key][0]['url']}"
+            )
+            continue
+        if issue_key in manual_fast_unmute_issue_by_test:
+            logging.info(
+                'test %s (%s) skipped: existing issue with manual-fast-unmute label: %s',
+                full_name,
+                build_type,
+                manual_fast_unmute_issue_by_test[issue_key],
             )
             continue
 

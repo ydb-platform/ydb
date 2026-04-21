@@ -9,11 +9,14 @@ the test against a shorter unmute window (see `mute_config.json`) instead of
 the default one. Rows are cleaned up when the test is either unmuted, fails
 during the fast window, or the window expires.
 
-If fast-unmute **reverts** (failure comment), rows are removed but the GitHub
-issue stays **open**; org Project **Status** is set back to **Muted**. CI tests
+If fast-unmute **reverts** (failure comment), rows are removed; org Project
+**Status** is set back to **Muted** and the `manual-fast-unmute` label is removed
+when no fast-unmute rows remain for that issue. CI tests
 remain governed by the **default** unmute rules until those criteria are met.
 If someone **closes the issue again** as Completed while tests are still muted,
 the next ``sync`` can insert new rows and start another fast-unmute cycle.
+The issue itself is **not** reopened for fast-unmute; tracking uses YDB and the
+``manual-fast-unmute`` label.
 
 Usage:
     python3 manual_unmute.py sync
@@ -42,6 +45,7 @@ sys.path.append(os.path.join(_SCRIPT_DIR, '..'))
 
 from github_issue_utils import DEFAULT_BUILD_TYPE, parse_body
 from update_mute_issues import (
+    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     ORG_NAME,
     PROJECT_ID,
     REPO_NAME,
@@ -67,7 +71,7 @@ def grace_ttl_calendar_days(mute_window_days, manual_unmute_window_days):
     """
     return max(1, int(mute_window_days) - int(manual_unmute_window_days))
 
-LABEL_NAME = 'manual-fast-unmute'
+LABEL_NAME = MANUAL_FAST_UNMUTE_GITHUB_LABEL
 
 # Org project board (same as ``update_mute_issues.PROJECT_ID``).
 PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN = 'Observation'
@@ -94,17 +98,16 @@ def _simulate_unmuted_full_names():
 
 COMMENT_ENTER = """🚀 **Fast-unmute started**
 
-{closer_mention_line}This issue was **reopened** automatically so automation can track the shorter unmute window after you closed it.
+{closer_mention_line}You closed this issue as completed. The issue stays **closed**; automation registered fast-unmute in YDB and added the `manual-fast-unmute` label.
 
-You closed this issue, signalling that the listed tests are fixed.
-The following tests are now on a **shorter unmute window** ({window_days} days, min {min_runs} clean runs) instead of the default:
+The listed tests are still muted in the repo, but CI now evaluates them on a **shorter unmute window** ({window_days} calendar days, min {min_runs} clean runs) until they qualify for automatic unmute or fail that window:
 
 {tests_bullet_list}
 
 **What happens next**
 
-- If the tests stay green within the window → they are unmuted automatically and this issue is closed again.
-- If any of these tests fails during the window → the test is removed from fast-unmute and returns to the default criteria. This issue stays open.
+- If the tests stay green within the window → they are unmuted automatically (this issue is not reopened for that).
+- If any of these tests fails during the window → the test leaves fast-unmute and returns to the default criteria; a comment is posted here.
 - No action needed from you. Please do not edit `muted_ya.txt` manually.
 
 🔗 Workflow run: {workflow_run_url}
@@ -365,27 +368,6 @@ def fetch_issue_closers(issue_numbers):
     return result
 
 
-def reopen_issue(issue_id):
-    """Reopen a closed issue. Safe to call on already-open issues (no-op)."""
-    state_query = """
-    query ($issueId: ID!) {
-      node(id: $issueId) {
-        ... on Issue { state }
-      }
-    }
-    """
-    state_result = run_query(state_query, {'issueId': issue_id})
-    state = ((state_result.get('data') or {}).get('node') or {}).get('state')
-    if state != 'CLOSED':
-        return
-    mutation = """
-    mutation ($issueId: ID!) {
-      reopenIssue(input: {issueId: $issueId}) { issue { id } }
-    }
-    """
-    run_query(mutation, {'issueId': issue_id})
-
-
 def _issue_project_board_item_id(issue_node_id, project_number):
     """Return Project v2 **item** id for ``issue_node_id`` on board ``project_number``, or ``None``."""
     query = """
@@ -512,7 +494,7 @@ def _set_manual_unmute_project_board_status(issue_node_id, status_label):
 
 
 def set_fast_unmute_reopen_project_status(issue_node_id):
-    """Status → Observation when reopening for fast-unmute."""
+    """Set org project Status → Observation when entering fast-unmute."""
     _set_manual_unmute_project_board_status(
         issue_node_id, PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN
     )
@@ -831,7 +813,6 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
 
         upsert_rows(ydb_wrapper, table_path, issue_rows)
 
-        reopen_issue(issue_id)
         set_fast_unmute_reopen_project_status(issue_id)
         raw_login = (closer.get('login') or '').strip()
         closer_mention_line = f'@{raw_login}\n\n' if raw_login else ''

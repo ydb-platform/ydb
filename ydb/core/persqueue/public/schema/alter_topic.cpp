@@ -260,7 +260,7 @@ TResult ApplyChangesInt(
         pqTabletConfig->ClearMetricsLevel();
     }
 
-    return ValidateConfig(*pqTabletConfig, supportedClientServiceTypes, EOperation::Alter);
+    return {};
 }
 
 TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
@@ -357,19 +357,18 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     }
 
     TResult ApplyChanges(
+        const NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
-        const bool isCdcStream
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-
         targetConfig.CopyFrom(sourceConfig);
 
         // keep previous values or set in ModifyPersqueueConfig
         targetConfig.ClearTotalGroupCount();
         targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
 
-        return ApplyChangesInt(Request, targetConfig, isCdcStream);
+        return ApplyChangesInt(Request, targetConfig, topicInfo.CdcStream);
     }
 
     Ydb::Topic::AlterTopicRequest Request;

@@ -198,46 +198,46 @@ void TPQDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 }
 
 
-TAddReadRuleActor::TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-}
+// TAddReadRuleActor::TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest* request)
+//     : TBase(request, request->GetProtoRequest()->path())
+// {
+// }
 
-void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
-    TBase::Bootstrap(ctx);
-    SendDescribeProposeRequest(ctx);
-    Become(&TBase::StateWork);
-}
+// void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
+//     TBase::Bootstrap(ctx);
+//     SendDescribeProposeRequest(ctx);
+//     Become(&TBase::StateWork);
+// }
 
-void TAddReadRuleActor::ModifyPersqueueConfig(
-    TAppData* appData,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(pqGroupDescription);
+// void TAddReadRuleActor::ModifyPersqueueConfig(
+//     TAppData* appData,
+//     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+//     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+//     const NKikimrSchemeOp::TDirEntry& selfInfo
+// ) {
+//     Y_UNUSED(pqGroupDescription);
 
-    auto* tabletConfig = groupConfig.MutablePQTabletConfig();
-    const auto& pqConfig = appData->PQConfig;
-    auto rule = GetProtoRequest()->read_rule();
+//     auto* tabletConfig = groupConfig.MutablePQTabletConfig();
+//     const auto& pqConfig = appData->PQConfig;
+//     auto rule = GetProtoRequest()->read_rule();
 
-    if (rule.version() == 0) {
-        rule.set_version(selfInfo.GetVersion().GetPQVersion());
-    }
-    auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
+//     if (rule.version() == 0) {
+//         rule.set_version(selfInfo.GetVersion().GetPQVersion());
+//     }
+//     auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
 
-    TString error;
-    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig, nullptr);
-    auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
-                                CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, EOperation::Alter)
-                                : Ydb::StatusIds::BAD_REQUEST;
-    if (status != Ydb::StatusIds::SUCCESS) {
-        return ReplyWithError(status,
-                              status == Ydb::StatusIds::ALREADY_EXISTS ? Ydb::PersQueue::ErrorCode::OK
-                                                                       : Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                              messageAndCode.Message);
-    }
-}
+//     TString error;
+//     auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig, nullptr);
+//     auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
+//                                 CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, EOperation::Alter)
+//                                 : Ydb::StatusIds::BAD_REQUEST;
+//     if (status != Ydb::StatusIds::SUCCESS) {
+//         return ReplyWithError(status,
+//                               status == Ydb::StatusIds::ALREADY_EXISTS ? Ydb::PersQueue::ErrorCode::OK
+//                                                                        : Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+//                               messageAndCode.Message);
+//     }
+// }
 
 TRemoveReadRuleActor::TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request)
     : TBase(request, request->GetProtoRequest()->path())

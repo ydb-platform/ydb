@@ -116,7 +116,12 @@ private:
             applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
         }
 
-        auto result = Settings.Strategy->ApplyChanges(modifyScheme, *config, TopicInfo.Info->Description, TopicInfo.CdcStream);
+        auto result = Settings.Strategy->ApplyChanges(TopicInfo, modifyScheme, *config, TopicInfo.Info->Description);
+        if (!result) {
+            return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
+        }
+
+        result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
         }

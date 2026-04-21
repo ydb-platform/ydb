@@ -245,20 +245,20 @@ private:
     Ydb::Topic::DescribePartitionResult Result;
 };
 
-class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>
-                        , public TCdcStreamCompatible
-{
-    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
+// class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>
+//                         , public TCdcStreamCompatible
+// {
+//     using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
 
-public:
-    TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
+// public:
+//     TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
 
-    void Bootstrap(const NActors::TActorContext& ctx);
-    void ModifyPersqueueConfig(TAppData* appData,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-};
+//     void Bootstrap(const NActors::TActorContext& ctx);
+//     void ModifyPersqueueConfig(TAppData* appData,
+//                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+//                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+//                                const NKikimrSchemeOp::TDirEntry& selfInfo) override;
+// };
 
 class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>
                            , public TCdcStreamCompatible

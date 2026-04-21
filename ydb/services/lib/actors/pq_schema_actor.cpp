@@ -282,11 +282,11 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config,
-                              const TClientServiceTypes& supportedClientServiceTypes,
+                              const TClientServiceTypes& /*supportedClientServiceTypes*/,
                               TString& error, const NKikimrPQ::TPQConfig& /*pqConfig*/,
                               EOperation operation)
     {
-        auto result = NPQ::NSchema::ValidateConfig(config, supportedClientServiceTypes, operation);
+        auto result = NPQ::NSchema::ValidateConfig(config, operation);
         if (!result) {
             error = result.GetErrorMessage();
         }

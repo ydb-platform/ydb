@@ -226,7 +226,7 @@ void DoPQAddReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityP
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Add read rules request");
-    f.RegisterActor(new NGRpcProxy::V1::TAddReadRuleActor(p));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAddConsumerActor(p));
 }
 
 void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {

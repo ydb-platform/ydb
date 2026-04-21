@@ -21,7 +21,6 @@ TResult AddConsumerImpl(
     const TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 ) {
     const auto& pqConfig = AppData()->PQConfig;
-
     auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), pqConfig);
     if (consumerName.empty()) {
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "consumer with empty name is forbidden"};
@@ -430,7 +429,7 @@ TResult FillProposeRequest( // create and alter
         pqTabletConfig->ClearMetricsLevel();
     }
 
-    return ValidateConfig(*pqTabletConfig, GetSupportedClientServiceTypes(), EOperation::Create);
+    return {};
 }
 
 } // namespace

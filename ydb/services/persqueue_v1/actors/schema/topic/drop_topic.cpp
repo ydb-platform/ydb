@@ -38,8 +38,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            Ydb::Topic::DropTopicResponse result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result);
+            this->Reply(Ydb::StatusIds::SUCCESS);
         }
     }
 

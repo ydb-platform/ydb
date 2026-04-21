@@ -22,12 +22,12 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
     }
 
     NPQ::NSchema::TResult ApplyChanges(
+        const NPQ::NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
-        const bool isCdcStream
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-        if (isCdcStream) {
+        if (topicInfo.CdcStream) {
             return {Ydb::StatusIds::SCHEME_ERROR, "Full alter of CDC stream is forbidden"};
         }
         return ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, LocalDc);
@@ -66,8 +66,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            Ydb::Topic::AlterTopicResponse result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result);
+            this->Reply(Ydb::StatusIds::SUCCESS);
         }
     }
 

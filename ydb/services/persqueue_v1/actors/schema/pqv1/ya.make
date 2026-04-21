@@ -7,6 +7,7 @@ PEERDIR(
 
 SRCS(
     actors.cpp
+    add_consumer.cpp
     alter_topic.cpp
     common.cpp
     drop_topic.cpp

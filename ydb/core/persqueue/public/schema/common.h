@@ -60,12 +60,10 @@ TClientServiceTypes GetSupportedClientServiceTypes();
 TResult ValidatePartitionStrategy(const NKikimrPQ::TPQTabletConfig& config);
 TResult ValidateConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 );
 TResult ValidateConsumersConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 );
 

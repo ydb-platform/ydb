@@ -94,6 +94,7 @@ public:
 class THiveHistoryCollector {
 private:
     const ui64 TabletId;
+    const ui32 TabletGeneration;
     const bool Enabled;
     const NActors::NLog::EPriority LogLevel;
     static constexpr ui32 MaxRedirects = 8;
@@ -120,8 +121,9 @@ private:
     }
 
 public:
-    THiveHistoryCollector(const ui64 tabletId, const bool enabled, const NActors::NLog::EPriority logLevel)
+    THiveHistoryCollector(const ui64 tabletId, const ui32 tabletGeneration, const bool enabled, const NActors::NLog::EPriority logLevel)
         : TabletId(tabletId)
+        , TabletGeneration(tabletGeneration)
         , Enabled(enabled)
         , LogLevel(logLevel) {
         if (!Enabled) {
@@ -192,6 +194,7 @@ public:
                 }
             }
         }
+        const ui64 nowMs = TAppData::TimeProvider->Now().MilliSeconds();
         const ui64 recordsCount = historyEntries.size();
         static constexpr ui64 HistoryChunkSize = 50;
         const ui64 chunksTotal = recordsCount ? (recordsCount + HistoryChunkSize - 1) / HistoryChunkSize : 1;
@@ -208,6 +211,7 @@ public:
             ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)(
                 "analyze_leaked_blobs", 1)("event", "hive_channel_history")("status", "ok")("hive_tablet_id", HiveTabletId)(
                 "records_count", recordsCount)("chunk_idx", chunkIdx)("chunks_total", chunksTotal)(
+                "now_ms", nowMs)("current_generation", TabletGeneration)(
                 "chunk_records_count", endIdx - beginIdx)("history_chunk", chunkHistory);
         }
 
@@ -327,7 +331,8 @@ private:
 
 public:
     TRemoveLeakedBlobsActor(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, TActorId csActorId, ui64 csTabletId,
-        const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
+        const ui32 tabletGeneration, const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds,
+        const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIds(std::move(csBlobIDs))
         , CSActorId(csActorId)
@@ -335,7 +340,7 @@ public:
         , PrintLeakedBlobIds(printLeakedBlobIds)
         , LogLevel(logLevel)
         , DsGroupSelector(dsGroupSelector)
-        , HiveHistoryCollector(csTabletId, printLeakedBlobIds, logLevel) {
+        , HiveHistoryCollector(csTabletId, tabletGeneration, printLeakedBlobIds, logLevel) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -420,17 +425,20 @@ class TRemoveLeakedBlobsTask: public INormalizerTask {
     TVector<TTabletChannelInfo> Channels;
     THashSet<TLogoBlobID> CSBlobIDs;
     ui64 TabletId;
+    ui32 TabletGeneration;
     TActorId ActorId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
     bool PrintLeakedBlobIds = false;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
 public:
-    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, ui64 tabletId, TActorId actorId,
+    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, ui64 tabletId, ui32 tabletGeneration,
+        TActorId actorId,
         const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIDs(std::move(csBlobIDs))
         , TabletId(tabletId)
+        , TabletGeneration(tabletGeneration)
         , ActorId(actorId)
         , DsGroupSelector(dsGroupSelector)
         , PrintLeakedBlobIds(printLeakedBlobIds)
@@ -439,7 +447,7 @@ public:
     void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
         NActors::TActivationContext::Register(
             new TRemoveLeakedBlobsActor(
-                std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
+                std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, TabletGeneration, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
     }
 };
 
@@ -488,7 +496,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     Stats.OnCompleted();
     Stats.PrintToLog();
     return std::vector<INormalizerTask::TPtr>{ std::make_shared<TRemoveLeakedBlobsTask>(
-        std::move(Channels), std::move(Result), TabletId, TabletActorId, DsGroupSelector, PrintLeakedBlobIds, LogLevel) };
+        std::move(Channels), std::move(Result), TabletId, txc.Generation, TabletActorId, DsGroupSelector, PrintLeakedBlobIds, LogLevel) };
 }
 
 

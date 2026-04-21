@@ -56,7 +56,7 @@ The *BRO* has the following properties:
 * You can't specify multiple TTL columns.
 * You can't delete the TTL column. However, if this is required, you should first [disable TTL](../../yql/reference/recipes/ttl.md#disable) for the table.
 * Only {{ objstorage-name }} is supported as external storage.
-* For eviction to private S3-compatible storage, configure an [external data source](../datamodel/external_data_source.md) with `AUTH_METHOD="AWS"` and use [`CREATE OBJECT (TYPE SECRET)`](../../yql/reference/syntax/create-object-type-secret.md) in `AWS_ACCESS_KEY_ID_SECRET_NAME` and `AWS_SECRET_ACCESS_KEY_SECRET_NAME`.
+* For eviction to private S3-compatible storage, configure an [external data source](../datamodel/external_data_source.md) with `AUTH_METHOD="AWS"` and use [`CREATE OBJECT (TYPE SECRET)`](../../yql/reference/syntax/create-object-type-secret.md) in `AWS_ACCESS_KEY_ID_SECRET_PATH` and `AWS_SECRET_ACCESS_KEY_SECRET_PATH`.
 * The delete action can only be specified for the last tier.
 
 ## Setup {#setting}

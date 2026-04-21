@@ -4,6 +4,7 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/public/api/protos/ydb_bridge_common.pb.h>
 
@@ -97,6 +98,7 @@ class TJsonCluster : public TViewerPipeClient {
     size_t OffloadMergeAttempts = 2;
     bool UseHealthCheck = true;
     bool UseHealthCheckCache = false; // doesn't work for domain ?
+    bool HealthCheckRequested = false;
     TString DomainName;
     TTabletId RootHiveId = 0;
     bool Tablets = false;
@@ -622,10 +624,16 @@ private:
     std::unique_ptr<NHealthCheck::TEvSelfCheckRequest> MakeSelfCheckRequest() {
         auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
         request->Database = DomainName;
+        i64 timeoutMs = Timeout.MilliSeconds() * 80 / 100;
+        if (timeoutMs <= 0) {
+            timeoutMs = 1;
+        }
+        SetDuration(TDuration::MilliSeconds(timeoutMs), *request->Request.mutable_operation_params()->mutable_operation_timeout());
         return request;
     }
 
     void SendHealthCheckRequest() {
+        HealthCheckRequested = true;
         SelfCheckResult = MakeRequest<NHealthCheck::TEvSelfCheckResult>(NHealthCheck::MakeHealthCheckID(), MakeSelfCheckRequest().release());
     }
 
@@ -648,6 +656,12 @@ private:
                 if (activeNode != 0) {
                     TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
                     auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequestProto>();
+                    i64 timeoutMs = Timeout.MilliSeconds() * 80 / 100;
+                    if (timeoutMs <= 0) {
+                        timeoutMs = 1;
+                    }
+                    SetDuration(TDuration::MilliSeconds(timeoutMs), *request->Record.mutable_operation_params()->mutable_operation_timeout());
+                    HealthCheckRequested = true;
                     SelfCheckResultProto = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(cache, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
                 }
             }
@@ -1111,6 +1125,8 @@ private:
             clusterState = GetClusterStateFromSelfCheck(SelfCheckResult->Get()->Result);
         } else if (SelfCheckResultProto && SelfCheckResultProto->IsOk()) {
             clusterState = GetClusterStateFromSelfCheck(SelfCheckResultProto->Get()->Record);
+        } else if (HealthCheckRequested) {
+            AddProblem("no-health-check");
         } else {
             ui64 worstNodes = 0;
             for (NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::EFlag::Grey; flag <= NKikimrWhiteboard::EFlag::Red; flag = NKikimrWhiteboard::EFlag(flag + 1)) {

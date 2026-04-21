@@ -7,8 +7,7 @@ namespace NKikimr {
 
 namespace {
 
-// Escape meta-characters in an assertion value embedded in a search filter string; see
-// https://www.rfc-editor.org/rfc/rfc2254#page-5
+// Escape LDAP filter value according to https://www.rfc-editor.org/rfc/rfc2254#page-5
 TString EscapeLdapFilterValue(TStringBuf value) {
     TStringBuilder escaped;
     escaped.reserve(value.size() + 4);

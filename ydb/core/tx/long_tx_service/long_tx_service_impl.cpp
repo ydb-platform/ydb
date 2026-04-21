@@ -1271,6 +1271,9 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             }
             bigger->Locks.Append(smaller->Locks);
             bigger->LocksCount += smaller->LocksCount;
+            if (smaller->DeadlockDetectionScheduled && !bigger->DeadlockDetectionScheduled) {
+                ScheduleDeadlockDetection(*bigger, TDuration::Zero());
+            }
             LockIslands.erase(smaller->Id);
         } else {
             // Awaiter and blocker belong to the same island, deadlock is possible.
@@ -1437,6 +1440,8 @@ void TLongTxServiceActor::UnlinkWaitEdge(TWaitEdge& edge) {
             --wn.Island->LocksCount;
             if (!wn.Island->LocksCount) {
                 LockIslands.erase(wn.Island->Id);
+            } else if (wn.DeadlockDetectionVictim && !wn.Island->DeadlockDetectionScheduled) {
+                ScheduleDeadlockDetection(*wn.Island, TDuration::Zero());
             }
             wn.Island = nullptr;
         }
@@ -1461,13 +1466,7 @@ void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
     while (!waitNode.Blockers.Empty()) {
         remove(*waitNode.Blockers.Back());
     }
-    if (waitNode.Island) {
-        --waitNode.Island->LocksCount;
-        if (!waitNode.Island->LocksCount) {
-            LockIslands.erase(waitNode.Island->Id);
-        }
-        waitNode.Island = nullptr;
-    }
+    // waitNode.Island unlinked by UnlinkWaitEdge
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) {
@@ -1567,148 +1566,168 @@ void TLongTxServiceActor::ScheduleDeadlockDetection(TLockIsland& island, TDurati
 }
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) {
+    // Deadlock detection algorithm. We go over the specified lock island and do the following:
+    // 1. Find strongly connected components of the wait graph.
+    // 2. For each non-trivial SCC find the youngest lock - this is the victim.
+    // 3. Break any local intra-SCC wait edges of this lock.
+    // 4. Repeat if any new edges were broken.
+    //
+    // The algorithm is scheduled when:
+    // 1. New edges are added (they could form a new cycle)
+    // 2. Information about a timestamp of some lock appears (this lock could be our victim)
+    // 3. A victim lock is removed from the graph (a new victim may appear in the same SCC)
+    //
+    // This ensures:
+    // 1. Determinism: given the same graph, nodes agree on who should break what and avoid
+    //    unnecessary transaction cancellations.
+    // 2. Forward progress: every cycle is eventually detected and broken, and remaining transactions
+    //    can finish their work.
+    //
+    // Possible TODO: implement topological pre-sorting with a Pearce-Kelly-style algorithm.
+    // This will allow quickly confirming on node addition that no new cycles have been formed.
+    // The complication is that this will require carefully re-running reachability analysis
+    // after edges are removed. Instead, to amortize the cost of edge addition, we simply delay
+    // running the algorithm a bit when new edges are added.
+
     auto islandIt = LockIslands.find(ev->Get()->IslandId);
     if (islandIt == LockIslands.end()) {
         return;
     }
     auto& island = islandIt->second;
 
-    // The higher priority, the more likely we are to break the wait by this lock.
+    // The younger the lock, the more likely we are to break the wait by this lock.
     // We want to abort wait edges of younger locks, so that older transactions can finish their work.
-    auto lockPriorityCmp = [](const TLockStateHandle& left, const TLockStateHandle& right) {
+    auto youngerLockCmp = [](const TLockStateHandle& left, const TLockStateHandle& right) {
         if (left.Timestamp() != right.Timestamp()) {
             return left.Timestamp() > right.Timestamp();
         }
         return left.LockId() > right.LockId();
     };
 
-    TVector<TWaitEdge*> localEdges;
-    for (auto& [id, edge] : WaitEdges) {
-        if (!edge.Broken && id.OwnerId.NodeId() == SelfId().NodeId()
-            && edge.Awaiter.WaitNode().Island == &island) {
-            localEdges.push_back(&edge);
-        }
+    for (auto& node : island.Locks) {
+        node.ClearBookkeeping();
     }
-    std::sort(
-        localEdges.begin(), localEdges.end(),
-        [&](TWaitEdge* left, TWaitEdge* right) {
-            return lockPriorityCmp(left->Awaiter, right->Awaiter);
-        });
 
-    TVector<TWaitNode*> current;
-    TVector<TWaitNode*> next;
-    THashMap<TWaitNode*, TWaitEdge*> prev;
-    TWaitEdge* toBreak = nullptr;
-    for (auto* startEdge : localEdges) {
-        const TWaitNode* startAwaiter = &startEdge->Awaiter.WaitNode();
-        TWaitNode* startBlocker = &startEdge->Blocker.WaitNode();
-        current.clear();
-        current.push_back(startBlocker);
-        next.clear();
-        prev.clear();
-
-        while (!current.empty()) {
-            for (const auto& node : current) {
-                if (node->Blockers.Empty() || !node->Blockers.Front()->Awaiter.Timestamp()) {
+    // Kosaraju SCC algorithm, pass 1: DFS on forward graph (Awaiter -> Blocker edges),
+    // collecting nodes in finish order. Explicit stack to avoid recursion overhead.
+    // Each stack frame is (node, finishing): when finishing=true the node is being
+    // popped after all descendants have been processed.
+    TVector<TWaitNode*> finishOrder;
+    finishOrder.reserve(island.LocksCount);
+    {
+        TVector<std::pair<TWaitNode*, bool>> stack;
+        for (auto& startNode : island.Locks) {
+            if (startNode.DfsVisited) {
+                continue;
+            }
+            stack.push_back({&startNode, false});
+            while (!stack.empty()) {
+                auto [node, finishing] = stack.back();
+                stack.pop_back();
+                if (finishing) {
+                    finishOrder.push_back(node);
                     continue;
                 }
+                if (node->DfsVisited) {
+                    continue;
+                }
+                node->DfsVisited = true;
+                stack.push_back({node, true});
                 for (auto& edge : node->Blockers) {
-                    if (edge.Broken) {
-                        continue;
-                    }
-                    if (&edge.Blocker.WaitNode() == startAwaiter) {
-                        // Found a cycle with startEdge now determine if it is the best edge to break.
-                        bool foundBetter = false;
-                        TWaitEdge* curEdge = &edge;
-                        while (true) {
-                            if (lockPriorityCmp(curEdge->Awaiter, startEdge->Awaiter)) {
-                                foundBetter = true;
-                                break;
-                            }
-
-                            if (&curEdge->Awaiter.WaitNode() == startBlocker) {
-                                break;
-                            } else {
-                                curEdge = prev.at(&curEdge->Awaiter.WaitNode());
-                            }
-                        }
-
-                        if (!foundBetter) {
-                            toBreak = startEdge;
-                            break;
-                        }
-                    } else {
-                        if (prev.emplace(&edge.Blocker.WaitNode(), &edge).second) {
-                            next.push_back(&edge.Blocker.WaitNode());
-                        }
+                    if (!edge.Broken && !edge.Blocker.WaitNode().DfsVisited) {
+                        stack.push_back({&edge.Blocker.WaitNode(), false});
                     }
                 }
-
-                if (toBreak) {
-                    break;
-                }
             }
-
-            if (toBreak) {
-                break;
-            }
-
-            std::swap(current, next);
-            next.clear();
-        }
-
-        if (toBreak) {
-            break;
         }
     }
 
-    if (toBreak) {
-        TXLOG_DEBUG("Breaking the wait edge id: " << toBreak->Id
-            << ", awaiter: " << toBreak->Awaiter.LockInfo(SelfId())
-            << ", blocker: " << toBreak->Blocker.LockInfo(SelfId()));
-        toBreak->Broken = true;
-        Send(
-            toBreak->Id.OwnerId,
-            new TEvLongTxService::TEvWaitingLockDeadlock(toBreak->Id.RequestId));
-        if (Settings.Counters) {
-            Settings.Counters->WaitGraphEdgesBroken->Inc();
-        }
+    // Kosaraju SCC algorithm, pass 2: DFS on reversed graph (Blocker -> Awaiter edges)
+    // in reverse finish order. Each DFS tree is one SCC.
+    //
+    // For each non-trivial SCC, find the youngest awaiter.
+    THashMap<size_t, TLockStateHandle> sccYoungestLock;
+    {
+        size_t sccId = 0;
+        TVector<TWaitNode*> stack;
+        for (auto it = finishOrder.rbegin(); it != finishOrder.rend(); ++it) {
+            TWaitNode* start = *it;
+            if (start->SccId != size_t(-1)) {
+                continue;
+            }
 
+            size_t sccSize = 0;
+            TLockStateHandle youngest;
+            bool hasLockWithoutTimestamp = false;
+
+            stack.push_back(start);
+            while (!stack.empty()) {
+                TWaitNode* node = stack.back();
+                stack.pop_back();
+                if (node->SccId != size_t(-1)) {
+                    continue;
+                }
+                node->SccId = sccId;
+
+                ++sccSize;
+                if (!node->Awaiters.Empty()) {
+                    TLockStateHandle handle(node->Awaiters.Front()->Blocker);
+                    if (!handle.Timestamp()) {
+                        // Timestamp not yet known, ignore this SCC for now.
+                        // Re-invocation will be scheduled when it arrives.
+                        hasLockWithoutTimestamp = true;
+                    } if (!youngest || youngerLockCmp(handle, youngest)) {
+                        youngest = handle;
+                    }
+                }
+
+                // Reversed edges: node->Awaiters contains edges where node is the Blocker,
+                // so edge.Awaiter is the neighbor in the reversed graph.
+                for (auto& edge : node->Awaiters) {
+                    if (!edge.Broken && edge.Awaiter.WaitNode().SccId == size_t(-1)) {
+                        stack.push_back(&edge.Awaiter.WaitNode());
+                    }
+                }
+            }
+            if (sccSize > 1 && !hasLockWithoutTimestamp) {
+                Y_ABORT_UNLESS(youngest);
+                sccYoungestLock[sccId] = youngest;
+            }
+            ++sccId;
+        }
+    }
+
+    // Break intra-SCC local edges of the youngest awaiter in each SCC.
+    // Each break eliminates at least one cycle.
+    // If further cycles remain, the rescheduled invocation handles them.
+    bool anyBroken = false;
+    for (const auto& [sccId, handle] : sccYoungestLock) {
+        handle.WaitNode().DeadlockDetectionVictim = true;
+        for (auto& edge : handle.WaitNode().Blockers) {
+            if (edge.Broken
+                || edge.Id.OwnerId.NodeId() != SelfId().NodeId()
+                || edge.Blocker.WaitNode().SccId != sccId) {
+                continue;
+            }
+
+            TXLOG_DEBUG("Breaking the wait edge id: " << edge.Id
+                << ", awaiter: " << edge.Awaiter.LockInfo(SelfId())
+                << ", blocker: " << edge.Blocker.LockInfo(SelfId()));
+            edge.Broken = true;
+            Send(edge.Id.OwnerId, new TEvLongTxService::TEvWaitingLockDeadlock(edge.Id.RequestId));
+            if (Settings.Counters) {
+                Settings.Counters->WaitGraphEdgesBroken->Inc();
+            }
+            anyBroken = true;
+        }
+    }
+
+    if (anyBroken) {
+        // Reschedule immediately: broken edges are marked but not yet removed,
+        // and other cycles may still exist within this island.
         Send(SelfId(), new TEvPrivate::TEvRunDeadlockDetection(island.Id));
     } else {
         island.DeadlockDetectionScheduled = false;
-    }
-
-    if (toBreak) {
-        TVector<std::tuple<ui64, ui32, ui64, ui32, ui32>> edges;
-        for (const auto& [id, edge] : WaitEdges) {
-            edges.emplace_back(
-                edge.Awaiter.LockId(), edge.Awaiter.LockNodeId(SelfId()),
-                edge.Blocker.LockId(), edge.Blocker.LockNodeId(SelfId()),
-                id.OwnerId.NodeId());
-        }
-        std::sort(edges.begin(), edges.end());
-
-        TStringBuilder sb;
-        for (const auto& [al, an, bl, bn, en] : edges) {
-            sb << "(" << al << "," << an << ") -> (" << bl << "," << bn << ") (en:" << en << ")\n";
-        }
-        TXLOG_DEBUG("FFF WG\n" << sb);
-
-        for (const auto& [id, island] : LockIslands) {
-            TStringBuilder sb;
-            sb << " lc:" << island.LocksCount << " ll:" << island.Locks.Size();
-            for (const auto& lock : island.Locks) {
-                TLockStateHandle handle;
-                if (!lock.Blockers.Empty()) {
-                    handle = lock.Blockers.Front()->Awaiter;
-                } else if (!lock.Awaiters.Empty()) {
-                    handle = lock.Awaiters.Front()->Blocker;
-                }
-                Y_ABORT_UNLESS(handle);
-            }
-            TXLOG_DEBUG("FFF ISLAND Id: " << id << sb);
-        }
     }
 }
 

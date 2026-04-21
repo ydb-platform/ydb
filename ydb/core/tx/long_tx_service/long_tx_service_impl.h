@@ -63,6 +63,20 @@ namespace NLongTxService {
             TIntrusiveList<TWaitEdge, TTagAwaiter> Awaiters;
             // Outgoing edges blocking this lock (this == Awaiter)
             TIntrusiveList<TWaitEdge, TTagBlocker> Blockers;
+
+            // True if the lock has been marked by deadlock detection. After such lock
+            // has been removed, we need to run deadlock detection again to break any
+            // remaining cycles.
+            bool DeadlockDetectionVictim = false;
+
+            // Bookkeeping for the SCC finding algorithm
+            bool DfsVisited = false;
+            size_t SccId = -1;
+
+            void ClearBookkeeping() {
+                DfsVisited = false;
+                SccId = -1;
+            }
         };
 
         enum class ERequestType {

@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_C(found, "MkDir should produce a scheme change record");
     }
 
-    Y_UNIT_TEST(WatermarkIsZeroWhenNoInFlightOps) {
+    Y_UNIT_TEST(WatermarkDoesNotRegressAfterAllOpsComplete) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -537,7 +537,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
         auto result = ReadSchemeChangeRecordsFull(runtime);
         UNIT_ASSERT(!result.Entries.empty());
-        UNIT_ASSERT_VALUES_EQUAL(result.WatermarkPlanStep, 0u);
+        // Clients rely on WatermarkPlanStep being monotonic: once reported at
+        // some value, it must not drop below it even when TxInFlight empties.
+        UNIT_ASSERT_C(result.WatermarkPlanStep > 0,
+            "WatermarkPlanStep must not regress to 0 after an op completes, got: "
+                << result.WatermarkPlanStep);
     }
 
     Y_UNIT_TEST(WatermarkReflectsInFlightPlanStep) {
@@ -598,9 +602,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         env.TestWaitNotification(runtime, firstTxId);
 
         auto result2 = ReadSchemeChangeRecordsFull(runtime);
-        UNIT_ASSERT_VALUES_EQUAL_C(result2.WatermarkPlanStep, 0u,
-            "WatermarkPlanStep should be 0 after all ops complete, got: "
-                << result2.WatermarkPlanStep);
+        UNIT_ASSERT_C(result2.WatermarkPlanStep >= result.WatermarkPlanStep,
+            "WatermarkPlanStep must not regress after all ops complete: had "
+                << result.WatermarkPlanStep << ", now " << result2.WatermarkPlanStep);
     }
 
     Y_UNIT_TEST(CreateTableWithIndexProducesMultipleRecords) {

@@ -3631,6 +3631,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 txState.MinStep =       txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::MinStep>(InvalidStepId);
                 txState.PlanStep =      txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::PlanStep>(InvalidStepId);
+                if (txState.PlanStep != InvalidStepId && ui64(txState.PlanStep) > Self->MaxObservedOpPlanStep) {
+                    Self->MaxObservedOpPlanStep = ui64(txState.PlanStep);
+                }
 
                 TString extraData =     txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::ExtraBytes>("");
                 txState.StartTime =     TInstant::MicroSeconds(txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::StartTime>());

@@ -738,6 +738,9 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                 // for scheme change records persistence (not all operations set it themselves)
                 if (auto* txState = Self->FindTx(opId)) {
                     txState->PlanStep = step;
+                    if (ui64(step) > Self->MaxObservedOpPlanStep) {
+                        Self->MaxObservedOpPlanStep = ui64(step);
+                    }
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};

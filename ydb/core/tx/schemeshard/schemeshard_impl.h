@@ -278,6 +278,12 @@ public:
     TLocalPathId NextLocalPathId = 0;
     ui64 NextSchemeChangeOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
+    // Advances whenever any in-flight op is assigned a PlanStep. Used by
+    // Fetch to report a monotonic WatermarkPlanStep: when TxInFlight is
+    // empty, the raw min would drop to 0, so we report this ceiling
+    // instead. Coordinator PlanSteps are globally monotonic, so this
+    // value is always a safe upper bound for completed work.
+    ui64 MaxObservedOpPlanStep = 0;
     // Per-tx row cap for DeleteAckedSchemeChangeRecords. Keeps a single
     // cleanup tx's redo log bounded; leftover work spills into a follow-up
     // TTxSchemeChangeRecordsCleanup triggered from Complete().

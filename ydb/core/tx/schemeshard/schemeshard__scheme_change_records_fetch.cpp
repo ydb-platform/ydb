@@ -151,18 +151,25 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         // A proper fix needs a structural TxInFlight wrapper — defer to a
         // follow-up PR. In the meantime subscriber-paced fetches keep this
         // well under the DDL admission path's budget.
-        ui64 watermarkPlanStep = 0;
+        ui64 currentMinInFlight = 0;
         for (const auto& [opId, txState] : Self->TxInFlight) {
             if (txState.PlanStep != InvalidStepId
                 && txState.State != TTxState::Done
                 && txState.State != TTxState::Aborted) {
                 ui64 ps = ui64(txState.PlanStep.GetValue());
-                if (watermarkPlanStep == 0 || ps < watermarkPlanStep) {
-                    watermarkPlanStep = ps;
+                if (currentMinInFlight == 0 || ps < currentMinInFlight) {
+                    currentMinInFlight = ps;
                 }
             }
         }
-        Result->Record.SetWatermarkPlanStep(watermarkPlanStep);
+        // When in-flight ops exist, they cap the watermark to their earliest
+        // PlanStep. When none are in-flight, report the highest PlanStep any
+        // op has ever been assigned — coordinator PlanSteps are monotonic,
+        // so this is the tightest safe upper bound and never regresses.
+        const ui64 watermark = (currentMinInFlight != 0)
+            ? currentMinInFlight
+            : Self->MaxObservedOpPlanStep;
+        Result->Record.SetWatermarkPlanStep(watermark);
 
         return true;
     }

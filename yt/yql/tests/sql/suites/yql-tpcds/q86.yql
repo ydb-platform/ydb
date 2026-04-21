@@ -1,6 +1,6 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: Window and aggregation functions are not allowed in this context */
+/* custom error: YqlSelect unsupported: Window function Rank */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -14,6 +14,7 @@ SELECT
             Grouping(i_category) + Grouping(i_class),
             CASE
                 WHEN Grouping(i_class) == 0 THEN i_category
+                ELSE NULL
             END
         ORDER BY
             Sum(ws_net_paid) DESC
@@ -34,6 +35,7 @@ ORDER BY
     lochierarchy DESC,
     CASE
         WHEN lochierarchy == 0 THEN i_category
+        ELSE NULL
     END,
     rank_within_parent
 LIMIT 100;

@@ -393,6 +393,7 @@ private:
             YQL_ENSURE(!GetEnv("YQL_DETERMINISTIC_MODE"), "Can't calculate lineage");
             return;
         }
+        auto& lineageFields = LineageRefs_.emplace(tableName, TMapLimited<TStringBuf, const TVectorLimited<TFieldLineage>*>(Allocator_.get())).first->second;
         for (const auto& fi : *lineage.Fields) {
             TVectorLimited<TFieldLineage> items(Allocator_.get());
             for (const auto& i : lineage.Fields->at(fi.first).Items) {
@@ -403,7 +404,7 @@ private:
             if (!inserted) {
                 it->second += 1;
             }
-            LineageRefs_.try_emplace(tableName, TMapLimited<TStringBuf, const TVectorLimited<TFieldLineage>*>(Allocator_.get())).first->second.emplace(fi.first, &it->first);
+            lineageFields.emplace(fi.first, &it->first);
         }
     }
 
@@ -516,7 +517,12 @@ private:
     void WriteLineageRef(NYson::TYsonWriter& writer, const TStringBuf& tableName) {
         writer.OnKeyedItem("Lineage");
         writer.OnBeginMap();
-        for (const auto& [fieldName, lineage] : LineageRefs_.at(tableName)) {
+        const auto& lineageRefs = LineageRefs_.at(tableName);
+        if (lineageRefs.empty()) {
+            writer.OnEndMap();
+            return;
+        }
+        for (const auto& [fieldName, lineage] : lineageRefs) {
             writer.OnKeyedItem(fieldName);
             if (Version_ > 1 && LineageSets_.at(*lineage) > 1) {
                 writer.OnBeginList();

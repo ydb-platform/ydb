@@ -3888,10 +3888,10 @@ Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
 Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
 #if ANTLR_VER == 3
     ExpectFailWithFuzzyError("USE ydb;   ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
-                             "<main>:1:40: Error: local: alternative is not implemented yet: \\d+:\\d+: local_index\\n");
+                             "<main>:1:40: Error: local index must specify subtype with USING\n");
 #else
     ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
-                        "<main>:1:40: Error: local: alternative is not implemented yet: \n");
+                        "<main>:1:40: Error: local index must specify subtype with USING\n");
 #endif
 }
 
@@ -4000,6 +4000,50 @@ Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterAndDropIndexIsCorrect) {
             WITH (ngram_size=3, hashes_count=2, filter_size_bytes=512, records_count=1024, case_sensitive=true),
         PRIMARY KEY (pk)
         );
+        ALTER TABLE table DROP INDEX idx;
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableWithMinMaxIndex) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+        pk INT32 NOT NULL,
+        col String,
+        INDEX idx LOCAL USING min_max ON (col),
+        PRIMARY KEY (pk))
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTableAddMinMaxIndex) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table ADD INDEX idx
+        LOCAL USING min_max
+        ON (col)
+        )sql");
+
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(AlterTableAddIndexGlobalMinMaxIsNotSupported) {
+    ExpectFailWithError("USE ydb; ALTER TABLE table ADD INDEX idx GLOBAL USING min_max ON (col)",
+                        "<main>:1:55: Error: MIN_MAX index can only be LOCAL\n");
+}
+
+Y_UNIT_TEST(AlterTableAddIndexLocalMinMaxCoverIsNotSupported) {
+    ExpectFailWithError("USE ydb; ALTER TABLE table ADD INDEX idx LOCAL USING min_max ON (col) COVER (payload)",
+                        "<main>:1:66: Error: COVER is not supported for local MIN_MAX index\n");
+}
+
+Y_UNIT_TEST(MinMaxIndexAddDrop) {
+    const auto result = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table ADD INDEX idx LOCAL USING min_max on (col);
         ALTER TABLE table DROP INDEX idx;
         )sql");
 
@@ -13979,6 +14023,290 @@ Y_UNIT_TEST(PriorityPragmaOverField) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
 }
 
+Y_UNIT_TEST(WindowSmoke) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(x) OVER (
+            PARTITION BY x, y
+            ORDER BY x, y
+            ROWS UNBOUNDED PRECEDING
+        ) FROM plato.x;
+
+        SELECT Sum(x) OVER w FROM plato.x WINDOW w AS (
+            PARTITION BY x, y
+            ORDER BY x, y
+            ROWS UNBOUNDED PRECEDING
+        );
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlWindow", "YqlAggWin"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlWindow"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAggWin"], 2);
+}
+
+Y_UNIT_TEST(WindowFrameRowsUnboundedPreceding) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(x) OVER (ROWS UNBOUNDED PRECEDING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'up))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))"); // 'c for pg
+}
+
+Y_UNIT_TEST(WindowFrameRangeUnboundedPreceding) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b RANGE UNBOUNDED PRECEDING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'range))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'up))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'c))");
+}
+
+Y_UNIT_TEST(WindowFrameGroupsUnboundedPreceding) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b GROUPS UNBOUNDED PRECEDING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'groups))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'up))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))"); // 'c for pg
+}
+
+Y_UNIT_TEST(WindowFrameRows1Preceding) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS 1 PRECEDING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))"); // 'c for pg
+}
+
+Y_UNIT_TEST(WindowFrameRowsBetweenUnboundedPrecedingAndUnboundedFollowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'up))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'uf))");
+}
+
+Y_UNIT_TEST(WindowFrameRowsBetweenUnboundedPrecedingAndCurrentRow) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'up))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))"); // 'c for pg
+}
+
+Y_UNIT_TEST(WindowFrameRowsBetween1PrecedingAnd1Following) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))");
+}
+
+Y_UNIT_TEST(WindowFrameRowsBetween2PrecedingAnd1Preceding) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN 2 PRECEDING AND 1 PRECEDING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from_value (EvaluateExpr (Int32 '"2"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'p))");
+}
+
+Y_UNIT_TEST(WindowFrameRowsBetweenCurrentRowAnd2Following) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to_value (EvaluateExpr (Int32 '"2"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))"); // 'c for pg
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))");
+}
+
+Y_UNIT_TEST(WindowFrameRowsBetweenCurrentRowAndCurrentRow) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'rows))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))"); // 'c for pg
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))");   // 'c for pg
+}
+
+Y_UNIT_TEST(WindowFrameRangeBetween1PrecedingAnd1Following) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'range))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))");
+}
+
+Y_UNIT_TEST(WindowFrameRangeBetweenIntervalPrecedingAndFollowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b RANGE BETWEEN Interval('P1D') PRECEDING AND Interval('P1D') FOLLOWING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from_value (EvaluateExpr )");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to_value (EvaluateExpr )");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'range))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))");
+}
+
+Y_UNIT_TEST(WindowFrameGroupsBetween1PrecedingAnd1Following) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to_value (EvaluateExpr (Int32 '"1"))))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('type 'groups))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('from 'p))");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('('to 'f))");
+}
+
+Y_UNIT_TEST(WindowFrameRowsBetweenUnboundedPrecedingAndCurrentRowExcludeCurrentRow) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW) FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Frame exclusion is not supported yet");
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {
@@ -14221,10 +14549,10 @@ Y_UNIT_TEST(DoesntWorkOnOldLangVersion) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 4);
     ExpectFailWithError("create view plato.foo as select 1;",
-                        "<main>:1:13: Error: CREATE VIEW is not available before language version 2025.05\n",
+                        "<main>:1:1: Error: CREATE VIEW is not available before language version 2025.05\n",
                         settings);
     ExpectFailWithError("create view plato.foo as do begin select 1; end do;",
-                        "<main>:1:13: Error: CREATE VIEW is not available before language version 2025.05\n",
+                        "<main>:1:1: Error: CREATE VIEW is not available before language version 2025.05\n",
                         settings);
 }
 
@@ -14292,7 +14620,7 @@ Y_UNIT_TEST(NewSyntaxDoesntWorkOnYdb) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view ydb.foo as do begin select 1; end do",
-                        "<main>:1:13: Error: CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for ydb provider. Please use CREATE VIEW ... AS SELECT\n",
+                        "<main>:1:1: Error: CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for ydb provider. Please use CREATE VIEW ... AS SELECT\n",
                         settings);
 }
 
@@ -14300,15 +14628,15 @@ Y_UNIT_TEST(OldSyntaxDoesntWorkOnYt) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view plato.foo as select 1;",
-                        "<main>:1:13: Error: CREATE VIEW ... AS SELECT syntax is not supported for yt provider. Please use CREATE VIEW ... AS DO BEGIN ... END DO\n",
+                        "<main>:1:1: Error: CREATE VIEW ... AS SELECT syntax is not supported for yt provider. Please use CREATE VIEW ... AS DO BEGIN ... END DO\n",
                         settings);
 }
 
 Y_UNIT_TEST(EmptyViewBody) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
-    ExpectFailWithError("create view plato.foo as do begin end do", "<main>:1:13: Error: Empty view body is not allowed\n", settings);
-    ExpectFailWithError("create view plato.foo as do begin /*comment*/;; end do", "<main>:1:13: Error: Empty view body is not allowed\n", settings);
+    ExpectFailWithError("create view plato.foo as do begin end do", "<main>:1:29: Error: Empty view body is not allowed\n", settings);
+    ExpectFailWithError("create view plato.foo as do begin /*comment*/;; end do", "<main>:1:29: Error: Empty view body is not allowed\n", settings);
 }
 
 Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
@@ -14323,7 +14651,7 @@ Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
 Y_UNIT_TEST(ErrorOnMissingCluster) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
-    ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n", settings);
+    ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:13: Error: No cluster name given and no default cluster is selected\n", settings);
 }
 
 Y_UNIT_TEST(CreateViewIfNotExists) {

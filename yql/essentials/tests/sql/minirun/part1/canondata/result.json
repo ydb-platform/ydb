@@ -1783,6 +1783,20 @@
             "uri": "https://{canondata_backend}/1937492/605eaa68c39ca4bb3a8a098de75adad14cc178b5/resource.tar.gz#test.test_select_yql-uncorrelated_where_in-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-window_pg_tutorial_1-default.txt-Debug]": [
+        {
+            "checksum": "2f6c64b7ff78c5a8f41503dd00e38585",
+            "size": 1879,
+            "uri": "https://{canondata_backend}/1777230/086d52f16d5636cda753c93a6d77da88187a7f3f/resource.tar.gz#test.test_select_yql-window_pg_tutorial_1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-window_pg_tutorial_1-default.txt-Results]": [
+        {
+            "checksum": "3ffe99e00271c076224c1d7fa2e3c4fc",
+            "size": 3170,
+            "uri": "https://{canondata_backend}/1777230/086d52f16d5636cda753c93a6d77da88187a7f3f/resource.tar.gz#test.test_select_yql-window_pg_tutorial_1-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[seq_mode-shared_named_expr-default.txt-Debug]": [
         {
             "checksum": "6de9752b20a85eb7d5c4b1508dfd607d",
@@ -1893,6 +1907,20 @@
             "checksum": "e6fa6c1cd5fcb0365c8d37188d57098a",
             "size": 762,
             "uri": "https://{canondata_backend}/1784117/c1c7de2cd671e324140e51d7eda942f845f3a5be/resource.tar.gz#test.test_union_all-error_second_field-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[window-fuse_filter_field_subset-default.txt-Debug]": [
+        {
+            "checksum": "886a4080f3e17e7b98be0340e1490adc",
+            "size": 2148,
+            "uri": "https://{canondata_backend}/1903885/03285fc07e0d7ed757d008d5b800e168e6d187de/resource.tar.gz#test.test_window-fuse_filter_field_subset-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-fuse_filter_field_subset-default.txt-Results]": [
+        {
+            "checksum": "9a69f5c2601f615180a5319b466f0447",
+            "size": 5449,
+            "uri": "https://{canondata_backend}/1775319/a59505eafec9f112aa0bdb590ea40e3b40c6b1b9/resource.tar.gz#test.test_window-fuse_filter_field_subset-default.txt-Results_/results.txt"
         }
     ],
     "test.test[window-fuse_with_rename_session_start_last-default.txt-Debug]": [

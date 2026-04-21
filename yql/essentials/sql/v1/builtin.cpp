@@ -4231,6 +4231,12 @@ TNodeResult BuildBuiltinFunc(
                 return std::unexpected(ESQLError::Basic);
             }
 #endif
+
+            if (isYqlSelect && funcInfo.Kind == "Window") {
+                return UnsupportedYqlSelect(
+                    ctx, TStringBuilder() << "Window function " << funcInfo.CanonicalSqlName);
+            }
+
             return Wrap(funcInfo.Callback(pos, args));
         } else if (normalizedName == "udf") {
             if (mustUseNamed && *mustUseNamed) {

@@ -32,6 +32,7 @@ constexpr TStringBuf ValueAttribute = "value";
 constexpr TStringBuf VerAction = "ver";
 constexpr TStringBuf ArgsAction = "args";
 constexpr TStringBuf TypeAction = "type";
+constexpr TStringBuf RunConfigAction = "runConfig";
 
 class TPolyArgs: public IPolyArgs {
 public:
@@ -62,6 +63,7 @@ public:
             if (MatchPredicate(Parsed_[i].first, args, version)) {
                 ret.Index = i;
                 ret.CallableType = Parsed_[i].second.Type;
+                ret.RunConfigType = Parsed_[i].second.RunConfig;
                 return ret;
             }
         }
@@ -102,6 +104,7 @@ private:
         TMaybe<TLangVersion> LangVer;
         TMaybe<TVector<NYT::TNode>> Args;
         TMaybe<NYT::TNode> Type;
+        TMaybe<NYT::TNode> RunConfig;
     };
 
     using TParsedData = TVector<std::pair<TPredicate, TAction>>;
@@ -232,6 +235,12 @@ private:
         auto typeIt = map.find(TypeAction);
         if (typeIt != map.end()) {
             ret.Type = typeIt->second;
+        }
+
+        auto runConfigIt = map.find(RunConfigAction);
+        if (runConfigIt != map.end()) {
+            CHECK_CONFIG(ret.Type.Defined(), "runConfig requires type action");
+            ret.RunConfig = runConfigIt->second;
         }
 
         CHECK_CONFIG(!ret.Type.Defined() || !hasUnresolved);

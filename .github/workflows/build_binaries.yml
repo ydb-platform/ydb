@@ -88,7 +88,7 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ inputs.ref }}
     - name: Print debug information
@@ -115,7 +115,7 @@ jobs:
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ${{ inputs.build-target }} -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
     - name: Upload binary to artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.os }}-binary
         path: ${{ inputs.build-target }}/${{ matrix.binary }}

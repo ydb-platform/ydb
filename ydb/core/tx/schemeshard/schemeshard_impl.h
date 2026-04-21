@@ -888,9 +888,8 @@ public:
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
     ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
-    // In-memory bump only; the caller is responsible for a single
-    // PersistUpdateNextSchemeChangeOrder at the end of its tx. Used
-    // when allocating multiple records in one batch.
+    // Caller is responsible for a single PersistUpdateNextSchemeChangeOrder
+    // at the end of its tx; use for multi-record batches.
     ui64 AllocateSchemeChangeOrderInMemory();
 
     struct TSchemeChangeRecordData {

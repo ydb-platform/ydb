@@ -356,11 +356,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     }
 
     Y_UNIT_TEST(AckDeletesAllAckedRecordsRegardlessOfCount) {
-        // Write more than the per-tx cleanup cap and ack everything. The
-        // first batch drains in the ack tx itself; the rest drains via a
-        // chain of scheduled continuation cleanups. Poll until the backlog
-        // is empty — no explicit wakeup, but simulated time must advance
-        // for the scheduler to fire the continuation events.
+        // Ack of a backlog larger than SchemeChangeCleanupBatchSize drains
+        // via a scheduled continuation chain; poll until empty.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -381,8 +378,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TAutoPtr<IEventHandle> ackHandle;
         AckSchemeChangeRecords(runtime, "bulk:sub", tailOrder, ackHandle);
 
-        // Drain the continuation chain. Each scheduled cleanup fires after
-        // SchemeChangeCleanupInterval; simulated sleep ticks through them.
         TVector<TSchemeChangeRecordEntry> entries;
         for (int i = 0; i < 200; ++i) {
             entries = ReadSchemeChangeRecords(runtime);
@@ -451,9 +446,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         auto stillThere = ReadSchemeChangeRecords(runtime);
         UNIT_ASSERT(!stillThere.empty());
 
-        // Unregister slow -> min jumps to fast's tail. The first batch
-        // of up to SchemeChangeCleanupBatchSize records drains in the
-        // unregister tx; the rest drains via scheduled continuation txs.
+        // Unregister slow -> min jumps to fast's tail -> drain via continuation chain.
         TAutoPtr<IEventHandle> unregHandle;
         UnregisterSubscriber(runtime, "slow:sub", unregHandle);
 

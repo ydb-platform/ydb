@@ -944,14 +944,8 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         return;
     }
 
-    // Two-pass structure:
-    //   Pass 1 builds sort keys for every eligible (txId, partIdx) pair.
-    //   Pass 2 re-resolves each pair, allocates the Order, and persists.
-    //
-    // The split exists because Order must be monotonic in (PlanStep, TxId,
-    // PartIdx), which means we sort before allocating. Both passes do the
-    // same lookups; pass 2 is authoritative (re-fetches the live state),
-    // pass 1 only decides what to sort.
+    // Order must be monotonic in (PlanStep, TxId, PartIdx), so we collect
+    // sort keys first, sort, then allocate in a second pass.
     struct TSortKey {
         TStepId PlanStep;
         TTxId TxId;
@@ -984,17 +978,13 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
 
     NIceDb::TNiceDb db(txc.DB);
 
-    // Bump NextSchemeChangeOrder in memory per record, but persist the
-    // sysparam once at the end of this tx — only the final value matters.
+    // Persist NextSchemeChangeOrder once per batch, not once per record.
     bool anyAllocated = false;
 
     for (const auto& key : keys) {
         const TTxId txId = key.TxId;
         const ui32 partIdx = key.PartIdx;
 
-        // Re-resolve the live state. Nothing mutates these maps between
-        // passes on the single-threaded tablet executor today, but
-        // re-resolving keeps pass 2 self-contained and defensive.
         auto txStateIt = ss->TxInFlight.find(TOperationId(txId, partIdx));
         if (txStateIt == ss->TxInFlight.end()) {
             continue;

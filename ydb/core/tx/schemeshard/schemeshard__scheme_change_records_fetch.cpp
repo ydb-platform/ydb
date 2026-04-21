@@ -223,9 +223,6 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        // Reactive cleanup: delete records that just became stale in the same
-        // tx, up to SchemeChangeCleanupBatchSize rows. If more remain, drain
-        // them via a TTxSchemeChangeRecordsCleanup chain triggered below.
         if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(),
                 Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
             return false;
@@ -334,7 +331,6 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             maxOrder = Max(maxOrder, o);
         }
 
-        // Single range scan on metadata, filter by requested set.
         THashSet<ui64> metaExisting;
         {
             auto metaRowset = db.Table<Schema::SchemeChangeRecords>()
@@ -355,7 +351,6 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             }
         }
 
-        // Single range scan on bodies, filter by existing set.
         THashMap<ui64, TString> bodyByOrder;
         if (!metaExisting.empty()) {
             auto bodyRowset = db.Table<Schema::SchemeChangeRecordDetails>()
@@ -376,8 +371,7 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             }
         }
 
-        // Emit one entry per requested occurrence (preserving order and duplicates)
-        // for orders whose metadata exists. Body is empty when details row is absent.
+        // Iterate requestedOrders (not metaExisting) to preserve request order and duplicates.
         for (ui64 order : requestedOrders) {
             if (!metaExisting.contains(order)) {
                 continue;

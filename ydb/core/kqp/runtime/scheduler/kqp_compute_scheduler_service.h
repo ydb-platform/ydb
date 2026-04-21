@@ -31,7 +31,7 @@ private:
 
     TRWMutex Mutex;
     NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex
-    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries;    // protected by Mutex
+    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries; // protected by Mutex
 
     // Special virtual queries per each pool to create SchedulableRead upon them, used for datashards and columnshards.
     // TODO: get rid of read queries - just pass somehow the real query to datashards.
@@ -78,7 +78,7 @@ struct TEvAddDatabase : public TEventLocal<TEvAddDatabase, TEvents::EvAddDatabas
 };
 
 struct TEvRemoveDatabase : public TEventLocal<TEvRemoveDatabase, TEvents::EvRemoveDatabase> {
-    TString Id;
+    TString DatabaseId;
 };
 
 struct TEvAddPool : public TEventLocal<TEvAddPool, TEvents::EvAddPool> {

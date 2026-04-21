@@ -3275,6 +3275,19 @@ public:
         ChangesQueue = std::move(changesQueue);
     }
 
+    auto GetSchedulableRead(const TString& poolId) const {
+        NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
+
+        if (!poolId.empty()) {
+            auto readIt = SchedulableReads.find(poolId);
+            if (readIt != SchedulableReads.end()) {
+                schedulableRead = readIt->second;
+            }
+        }
+
+        return schedulableRead;
+    }
+
 protected:
     // Redundant init state required by flat executor implementation
     void StateInit(TAutoPtr<NActors::IEventHandle> &ev) {

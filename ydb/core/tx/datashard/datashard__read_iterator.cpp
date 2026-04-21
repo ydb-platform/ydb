@@ -2078,26 +2078,24 @@ public:
             }
         }
 
-        if (!state.PoolId.empty()) {
-            auto schedulableRead = Self->SchedulableReads.at(state.PoolId);
-            if (!schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
-                SetStatusError(
-                    Result->Record,
-                    Ydb::StatusIds::OVERLOADED,
-                    TStringBuilder() << "Read quota exceeded for pool " << state.PoolId
-                        << " (shard# " << Self->TabletID()
-                        << " node# " << ctx.SelfID.NodeId() << ")");
-                Result->Record.SetThrottled(true);
-                return EExecutionStatus::DelayComplete;
-            }
+        auto schedulableRead = Self->GetSchedulableRead(state.PoolId);
+        if (schedulableRead && !schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+            SetStatusError(
+                Result->Record,
+                Ydb::StatusIds::OVERLOADED,
+                TStringBuilder() << "Read quota exceeded for pool " << state.PoolId
+                    << " (shard# " << Self->TabletID()
+                    << " node# " << ctx.SelfID.NodeId() << ")");
+            Result->Record.SetThrottled(true);
+            return EExecutionStatus::DelayComplete;
         }
 
         LWTRACK(ReadExecute, state.Request->Orbit);
         bool readResult = Read(txc, ctx, state);
 
-        if (!state.PoolId.empty()) {
+        if (schedulableRead) {
             Reader->UpdateCycles();
-            Self->SchedulableReads.at(state.PoolId)->ReturnQuota(Reader->ElapsedCycles());
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
         }
 
         if (!readResult) {
@@ -3399,9 +3397,8 @@ public:
         LWTRACK(ReadExecute, state.Request->Orbit);
 
         // Try to consume schedulable read quota before reading
-        NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
-        if (!state.PoolId.empty()) {
-            schedulableRead = Self->SchedulableReads.at(state.PoolId);
+        auto schedulableRead = Self->GetSchedulableRead(state.PoolId);
+        if (schedulableRead) {
             if (!schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
                 // KQP read quota exhausted, reschedule with delay.
                 // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
@@ -3418,9 +3415,7 @@ public:
         auto returnConsumedQuota = [&]() -> void {
             if (schedulableRead) {
                 Reader->UpdateCycles();
-                if (!state.PoolId.empty()) {
-                    schedulableRead->ReturnQuota(Reader->ElapsedCycles());
-                }
+                schedulableRead->ReturnQuota(Reader->ElapsedCycles());
             }
         };
 

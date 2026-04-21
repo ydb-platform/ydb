@@ -37,12 +37,6 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     }
 
     if (AvailableQuotaMs <= 0  || !TryIncreaseUsage()) {
-        if (AvailableQuotaMs < static_cast<i64>(expectedQuotaMs)) {
-            TStringStream ss;
-            ss << "AvailableQuotaMs: " << AvailableQuotaMs << Endl;
-            Cerr << ss.Str();
-        }
-
         return false;
     }
 
@@ -71,26 +65,14 @@ TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
     if (AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {
-        auto delay = TDuration::MilliSeconds(10) + RandomDuration(TDuration::MilliSeconds(1));
-
-        TStringStream ss;
-        ss << "EstimateQuota (no usage): " << delay << Endl;
-        Cerr << ss.Str();
-
         // Quota available, but TryIncreaseUsage() failed (fair-share exhausted)
-        return delay;
+        return TDuration::MilliSeconds(10) + RandomDuration(TDuration::MilliSeconds(1));
     }
 
     // Quota deficit — calculate refill time
     i64 deficitMs = static_cast<i64>(expectedQuotaMs) - AvailableQuotaMs;
     ui64 waitMs = static_cast<ui64>(std::ceil(deficitMs / QuotaPerSecond));
     auto delay = TDuration::MilliSeconds(std::max<ui64>(waitMs, 1));
-
-    {
-        TStringStream ss;
-        ss << "EstimateQuota (no read): " << delay << Endl;
-        Cerr << ss.Str();
-    }
 
     return delay;
 }

@@ -89,7 +89,7 @@ def post_install(self):
 
     with self.yamakes["grpcpp_channelz"] as m:
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/channelz")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/channelz")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/channelz")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     # fix induced deps

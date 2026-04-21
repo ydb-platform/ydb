@@ -953,7 +953,6 @@ RECURSE(
     src/compiler/grpc_cpp_plugin
     src/compiler/grpc_plugin_support
     src/compiler/grpc_python_plugin
-    src/proto/grpc/channelz
     src/proto/grpc/health/v1
     third_party/address_sorting
     third_party/upb

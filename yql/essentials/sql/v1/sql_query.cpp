@@ -2961,10 +2961,10 @@ bool StoreAlterIndexSettingValue(
     }
 
     indexSettings.emplace(name, TIndexDescription::TIndexSetting{
-        .Name = name,
-        .NamePosition = id.Pos,
-        .Value = std::move(parsedValue),
-        .ValuePosition = ctx.Pos()
+                                    .Name = name,
+                                    .NamePosition = id.Pos,
+                                    .Value = std::move(parsedValue),
+                                    .ValuePosition = ctx.Pos()});
     });
 
     return true;

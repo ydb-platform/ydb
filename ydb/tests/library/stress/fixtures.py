@@ -70,22 +70,19 @@ class StressFixture:
             timeout_seconds=timeout_seconds
         )
 
-        database_nodes = self.cluster.register_and_start_slots(self.shared_database_name, count=3, encryption_key=None)
         self.cluster.wait_tenant_up(self.shared_database_name)
 
         self.serverless_database_name = "/Root/serverless_db"
 
-        self.cluster.remove_database(
-        self.serverless_database_name,
-        timeout_seconds=timeout_seconds
-        )
+        self.cluster.remove_database(self.serverless_database_name,
+                                     timeout_seconds=timeout_seconds)
 
         self.cluster.create_serverless_database(
             self.serverless_database_name,
             hostel_db=self.shared_database_name,
             timeout_seconds=timeout_seconds,
-            schema_quotas=None, # нужны ли?
-            disk_quotas=None, # нужны ли?
+            schema_quotas=None,
+            disk_quotas=None,
             attributes={
                 "cloud_id": "CLOUD_ID_VAL",
                 "folder_id": "FOLDER_ID_VAL",

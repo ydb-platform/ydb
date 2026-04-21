@@ -1736,6 +1736,24 @@ struct TUniquePtrSerializer
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TUnderlyingSerializer = TDefaultSerializer>
+struct TDerefSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const T& obj)
+    {
+        TUnderlyingSerializer::Save(context, *obj);
+    }
+
+    template <class T, class C>
+    static void Load(C& context, T& obj)
+    {
+        TUnderlyingSerializer::Load(context, *obj);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TUnderlyingSerializer = TDefaultSerializer>
 struct TNonNullableIntrusivePtrSerializer
 {
     template <class T, class C>

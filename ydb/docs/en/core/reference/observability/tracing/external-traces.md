@@ -19,4 +19,4 @@ If the [`external_throttling`](./setup.md#external-throttling) section is presen
 
 ## SDK support
 
-Some SDKs support the transmission of trace-ids. You can find their list and usage examples on the [{#T}](../../../recipes/ydb-sdk/debug-jaeger.md) page.
+Some SDKs support the transmission of trace-ids. You can find their list and usage examples on the [Enabling tracing in Jaeger](../../../recipes/ydb-sdk/debug-jaeger.md) page.

@@ -22,7 +22,6 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 {% if feature_secondary_index == true %}
         INDEX `<index_name>`
           [GLOBAL|LOCAL]
-          [UNIQUE]
           [SYNC|ASYNC]
           [USING <index_type>]
           ON ( <index_columns> )

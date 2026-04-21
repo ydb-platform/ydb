@@ -22,7 +22,6 @@
 {% if feature_secondary_index == true %}
         INDEX `<index_name>`
           [GLOBAL|LOCAL]
-          [UNIQUE]
           [SYNC|ASYNC]
           [USING <index_type>]
           ON ( <index_columns> )
@@ -40,7 +39,6 @@
 {% if feature_map_tables %}
     WITH ( key = value, ... )
 {% endif %}
-
 {% if oss == true and backend_name == "YDB" %}
 
 {% if feature_olap_tables %}

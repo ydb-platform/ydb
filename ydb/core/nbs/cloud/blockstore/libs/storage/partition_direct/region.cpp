@@ -27,7 +27,8 @@ TRegion::TRegion(
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHandoffDelay,
+    TDuration writeHedgingDelay,
+    TDuration writeRequestTimeout,
     TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
@@ -49,7 +50,8 @@ TRegion::TRegion(
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
             vChunkSize,
-            writeHandoffDelay,
+            writeHedgingDelay,
+            writeRequestTimeout,
             traceSamplePeriod,
             vChunkCounters);
         vChunk->Start();

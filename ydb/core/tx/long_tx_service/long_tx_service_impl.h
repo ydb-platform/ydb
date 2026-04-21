@@ -222,14 +222,6 @@ namespace NLongTxService {
                 return std::visit([] (auto ptr) { return !!ptr; }, Impl);
             }
 
-            bool operator==(const TLockStateHandle& right) const = default;
-
-            ui64 Hash() const {
-                return std::visit([](auto ptr) {
-                    return std::hash<void*>{}(ptr);
-                }, Impl);
-            }
-
             ui64 LockId() const {
                 return std::visit([](auto ptr) {
                     return ptr->LockId;

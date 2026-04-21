@@ -111,11 +111,6 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     auto filterExpr = MakeConjunction(join->JoinFilters);
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
-    
-    // In case of a semi-join we're done, we output the filter
-    if (join->JoinKind == "LeftSemi") {
-        return newFilter;
-    }
 
     // We need to remap the appropriate side of the output columns, so we can join on the same columns again
     // without confilcts

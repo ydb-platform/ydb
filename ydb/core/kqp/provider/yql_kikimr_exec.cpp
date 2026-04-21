@@ -1942,7 +1942,7 @@ public:
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
             TVector<TSetColumnConstraintSettings> constraintSetObjects;
-            auto applyLocalBloomFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
+            auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
                 if (desc.NgramSize) {
                     proto->set_ngram_size(*desc.NgramSize);
@@ -2490,7 +2490,7 @@ public:
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
                                 auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
-                                applyLocalBloomFilterIndex(proto, localBloomNgramFilterDesc);
+                                applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
                             }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
@@ -2668,7 +2668,7 @@ public:
                             }
 
                             auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
-                            applyLocalBloomFilterIndex(proto, localBloomNgramFilterDesc);
+                            applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
                         } else {
                             if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),

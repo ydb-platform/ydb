@@ -2144,11 +2144,6 @@ private:
             return;
         }
 
-        if (connection.Maybe<TDqCnScatter>()) {
-            connectionProto.MutableScatter();
-            return;
-        }
-
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
             const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();

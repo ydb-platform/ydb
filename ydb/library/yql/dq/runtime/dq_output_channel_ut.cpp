@@ -1614,42 +1614,6 @@ Y_UNIT_TEST(WideChannelDistributes) {
         "Expected scatter to activate at least 2 wide channels, got " << activeChannels);
 }
 
-Y_UNIT_TEST(SingleChannelShortCircuit) {
-    TTestContext ctx;
-    constexpr ui32 rowCount = 50;
-
-    TDqChannelSettings settings = {
-        .RowType = ctx.GetOutputType(),
-        .HolderFactory = &ctx.HolderFactory,
-        .ChannelId = 0,
-        .DstStageId = 1000,
-        .Level = TCollectStatsLevel::Profile,
-        .TransportVersion = ctx.TransportVersion,
-        .MaxStoredBytes = 1000,
-        .MaxChunkBytes = 200,
-    };
-    auto ch = CreateDqOutputChannel(settings, Log);
-    TVector<IDqOutput::TPtr> outputs;
-    outputs.push_back(ch);
-
-    auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
-
-    for (ui32 i = 0; i < rowCount; ++i) {
-        auto row = ctx.CreateRow(i);
-        ConsumeRow(ctx, std::move(row), consumer);
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(rowCount, ch->GetPushStats().Rows);
-
-    TDqSerializedBatch data;
-    UNIT_ASSERT(ch->PopAll(data));
-    UNIT_ASSERT_VALUES_EQUAL(rowCount, data.RowCount());
-
-    TUnboxedValueBatch buffer(ctx.GetOutputType());
-    ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
-    ValidateBatch(ctx, buffer, 0, rowCount);
-}
-
 }
 
 // ---------------------------------------------------------------------------

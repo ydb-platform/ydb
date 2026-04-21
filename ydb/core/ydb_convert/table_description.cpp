@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
@@ -133,6 +134,102 @@ bool ValidateRenameIndexRequest(
     return true;
 }
 
+template <typename TSettings, typename TProto>
+void FillLocalBloomNgramProto(TProto* ngram, const TSettings& ngramSettings) {
+    const auto derived = NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::BuildDerivedSettings(
+        ngramSettings.has_false_positive_probability()
+            ? ngramSettings.false_positive_probability()
+            : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability,
+        ngramSettings.ngram_size()
+            ? ngramSettings.ngram_size()
+            : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize,
+        ngramSettings.has_case_sensitive()
+            ? ngramSettings.case_sensitive()
+            : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
+    ngram->SetNGrammSize(derived.NgramSize);
+    ngram->SetCaseSensitive(derived.CaseSensitive);
+    ngram->SetFalsePositiveProbability(derived.FalsePositiveProbability);
+    ngram->SetFilterSizeBytes(derived.FilterSizeBytes);
+    ngram->SetHashesCount(derived.HashesCount);
+    ngram->SetRecordsCount(derived.RecordsCount);
+}
+
+bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    if (!in.indexes_size()) {
+        return true;
+    }
+
+    THashMap<TString, ui32> nameToId;
+    ui32 nextColumnId = 1;
+    for (const auto& col : tableDesc.GetSchema().GetColumns()) {
+        nameToId[col.GetName()] = nextColumnId++;
+    }
+
+    auto fail = [&status, &error](const TString& msg) -> bool {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = msg;
+        return false;
+    };
+
+    ui32 nextIndexId = 1;
+    for (const auto& index : in.indexes()) {
+        if (index.name().empty()) {
+            return fail("Index must have a name");
+        }
+
+        if (index.index_columns_size() != 1) {
+            return fail("Only one index column is supported for local bloom indexes");
+        }
+
+        if (!index.data_columns().empty()) {
+            return fail("Data columns are not supported for local bloom indexes");
+        }
+
+        const TString& colName = index.index_columns(0);
+        auto idIt = nameToId.find(colName);
+        if (idIt == nameToId.end()) {
+            return fail(TStringBuilder() << "Unknown index column: " << colName);
+        }
+
+        const ui32 columnId = idIt->second;
+
+        auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
+        olapIndex->SetId(nextIndexId++);
+        olapIndex->SetName(index.name());
+
+        switch (index.type_case()) {
+            case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                    return fail("Local bloom filter index support is disabled");
+                }
+                olapIndex->SetClassName("BLOOM_FILTER");
+                auto* bloom = olapIndex->MutableBloomFilter();
+                const auto& bloomSettings = index.local_bloom_filter_index();
+                const double bloomFpp = bloomSettings.has_false_positive_probability()
+                    ? bloomSettings.false_positive_probability()
+                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
+                bloom->SetFalsePositiveProbability(bloomFpp);
+                bloom->AddColumnIds(columnId);
+                break;
+            }
+            case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                    return fail("Local bloom ngram filter index support is disabled");
+                }
+                olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
+                auto* ngram = olapIndex->MutableBloomNGrammFilter();
+                const auto& ngramSettings = index.local_bloom_ngram_filter_index();
+                FillLocalBloomNgramProto(ngram, ngramSettings);
+                ngram->SetColumnId(columnId);
+                break;
+            }
+            default:
+                return fail("Unsupported index type for column table import");
+        }
+    }
+    return true;
+}
 
 }
 
@@ -1657,7 +1754,8 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             }
 
             auto* bloom = index->mutable_local_bloom_filter_index();
-            if (filterPrefix.HasFalsePositiveProbability()) {
+            if (filterPrefix.HasFalsePositiveProbability() &&
+                filterPrefix.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
                 bloom->set_false_positive_probability(filterPrefix.GetFalsePositiveProbability());
             }
 
@@ -2343,6 +2441,10 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
+        return false;
+    }
+
+    if (!FillColumnTableIndexesFromCreateRequest(tableDesc, in, status, error)) {
         return false;
     }
 

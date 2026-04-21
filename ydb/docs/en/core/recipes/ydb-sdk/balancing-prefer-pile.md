@@ -8,15 +8,11 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
 
 {% list tabs %}
 
-<<<<<<< HEAD
-- С++
-=======
 - Go
 
   This functionality is not currently supported.
 
 - C++
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 
   ```cpp
   #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -34,8 +30,6 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   This functionality is not currently supported.
@@ -48,5 +42,4 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
 
   This functionality is not currently supported.
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

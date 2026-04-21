@@ -111,8 +111,6 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   This functionality is not currently supported.
@@ -148,5 +146,4 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   {% endlist %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

@@ -143,8 +143,6 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
 
   This functionality is not currently supported.
 
-<<<<<<< HEAD
-=======
 - Python
 
   This functionality is not currently supported.
@@ -153,5 +151,4 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

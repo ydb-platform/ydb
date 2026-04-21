@@ -102,8 +102,6 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -152,5 +150,4 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

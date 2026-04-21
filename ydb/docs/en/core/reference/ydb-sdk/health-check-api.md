@@ -26,8 +26,6 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
-<<<<<<< HEAD
-=======
 - Java
 
   This functionality is not currently supported.
@@ -45,7 +43,6 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   await monitoring.selfCheck();
   ```
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -92,8 +89,6 @@ The complete list of extra parameters is presented below:
   };
   ```
 
-<<<<<<< HEAD
-=======
 - Java
 
   This functionality is not currently supported.
@@ -106,7 +101,6 @@ The complete list of extra parameters is presented below:
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}
 
 | Parameter | Type | Description |

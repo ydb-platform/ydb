@@ -4,11 +4,13 @@ This section contains code recipes in different programming languages for [vecto
 
 The following operations are covered in detail:
 
-* [Connecting to YDB](#connect-ydb)
-* [Creating a table for storing vectors](#create-table)
-* [Inserting vectors into the table](#insert-vectors)
-* [Adding a vector index](#add-vector-index)
-* [Searching for nearest vectors](#search-by-vector)
+- [Vector search](#vector-search)
+  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
+  - [Creating a table {#create-table}](#creating-a-table-create-table)
+  - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
+  - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
+  - [Vector search {#search-by-vector}](#vector-search-search-by-vector)
+  - [Full example {#full-example}](#full-example-full-example)
 
 This recipe creates a text store with the following structure:
 
@@ -762,8 +764,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 
 - Python
 
-<<<<<<< HEAD
-=======
     {% cut "asyncio" %}
 
     ```python
@@ -812,7 +812,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 
     {% endcut %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
     ```python
     def add_vector_index(
         pool: ydb.QuerySessionPool,

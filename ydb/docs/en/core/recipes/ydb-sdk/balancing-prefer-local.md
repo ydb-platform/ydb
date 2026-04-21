@@ -107,8 +107,6 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -199,5 +197,4 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

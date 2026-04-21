@@ -2078,12 +2078,12 @@ public:
             }
         }
 
-        auto schedulableRead = Self->GetSchedulableRead(state.PoolId);
+        const auto& schedulableRead = state.SchedulableRead;
         if (schedulableRead && !schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
             SetStatusError(
                 Result->Record,
                 Ydb::StatusIds::OVERLOADED,
-                TStringBuilder() << "Read quota exceeded for pool " << state.PoolId
+                TStringBuilder() << "Read quota for resource pool exceeded" // TODO: add pool id
                     << " (shard# " << Self->TabletID()
                     << " node# " << ctx.SelfID.NodeId() << ")");
             Result->Record.SetThrottled(true);
@@ -3397,7 +3397,7 @@ public:
         LWTRACK(ReadExecute, state.Request->Orbit);
 
         // Try to consume schedulable read quota before reading
-        auto schedulableRead = Self->GetSchedulableRead(state.PoolId);
+        const auto& schedulableRead = state.SchedulableRead;
         if (schedulableRead) {
             if (!schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
                 // KQP read quota exhausted, reschedule with delay.
@@ -3770,14 +3770,6 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         isHeadRead = false;
     }
 
-    if (record.HasPoolId() && SchedulableReadFactory) {
-        auto readIt = SchedulableReads.find(record.GetPoolId());
-        if (readIt == SchedulableReads.end()) {
-            readIt = SchedulableReads.emplace(record.GetPoolId(), (*SchedulableReadFactory)->Get(record.GetPoolId())).first;
-            Y_ENSURE(readIt->second);
-        }
-    }
-
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {
         Y_DEBUG_ABORT_UNLESS(ev->InterconnectSession);
@@ -3796,14 +3788,18 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         sessionId = ev->InterconnectSession;
     }
 
+    NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory) {
+        schedulableRead = (*SchedulableReadFactory)->Get(record.GetPoolId());
+    }
+
     ui64 localReadId = NextTieBreakerIndex++;
     auto pr = ReadIterators.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(readId),
         std::forward_as_tuple(
             readId, localReadId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
-            sessionId, readVersion, isHeadRead, record.GetPoolId(),
-            AppData()->MonotonicTimeProvider->Now()));
+            sessionId, readVersion, isHeadRead, AppData()->MonotonicTimeProvider->Now(), schedulableRead));
     Y_ENSURE(pr.second);
 
     auto& state = pr.first->second;

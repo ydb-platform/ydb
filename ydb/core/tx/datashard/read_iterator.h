@@ -3,6 +3,7 @@
 #include "datashard.h"
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/locks/locks.h>
 
@@ -125,14 +126,14 @@ public:
     TReadIteratorState(
             const TReadIteratorId& readId, ui64 localReadId, const TPathId& pathId,
             const TActorId& sessionId, const TRowVersion& readVersion, bool isHeadRead,
-            const TString& poolId, TMonotonic ts)
+            TMonotonic ts, NKqp::NScheduler::TSchedulableReadPtr schedulableRead)
         : ReadId(readId)
         , LocalReadId(localReadId)
         , PathId(pathId)
         , ReadVersion(readVersion)
         , IsHeadRead(isHeadRead)
+        , SchedulableRead(std::move(schedulableRead))
         , SessionId(sessionId)
-        , PoolId(poolId)
         , StartTs(ts)
     {}
 
@@ -199,13 +200,13 @@ public:
     // State itself //
 
     TQuota Quota;
+    NKqp::NScheduler::TSchedulableReadPtr SchedulableRead;
 
     // Number of rows processed so far
     ui64 TotalRows = 0;
     ui64 TotalRowsLimit = Max<ui64>();
 
     TActorId SessionId;
-    TString PoolId;
     TMonotonic StartTs;
     bool IsFinished = false;
     bool ReadContinuePending = false;

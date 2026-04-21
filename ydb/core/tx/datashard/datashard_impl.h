@@ -3202,7 +3202,6 @@ private:
     TVector<ui64> GlobalTxIdCache;
 
     std::optional<NKqp::NScheduler::TSchedulableReadFactoryPtr> SchedulableReadFactory;
-    THashMap<NKqp::NScheduler::NHdrf::TPoolId, NKqp::NScheduler::TSchedulableReadPtr> SchedulableReads;
 
 public:
     struct TBreakerInfo {
@@ -3273,19 +3272,6 @@ public:
 
     void SetChangesQueue(THashMap<ui64, TEnqueuedRecord>&& changesQueue) {
         ChangesQueue = std::move(changesQueue);
-    }
-
-    auto GetSchedulableRead(const TString& poolId) const {
-        NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
-
-        if (!poolId.empty()) {
-            auto readIt = SchedulableReads.find(poolId);
-            if (readIt != SchedulableReads.end()) {
-                schedulableRead = readIt->second;
-            }
-        }
-
-        return schedulableRead;
     }
 
 protected:

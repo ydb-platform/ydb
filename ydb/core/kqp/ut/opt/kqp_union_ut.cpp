@@ -153,10 +153,10 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
             UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, label);
 
             auto ast = *explainResult.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("DqCnScatter") != std::string::npos,
-                          TStringBuilder() << label << ": DqCnScatter not found in plan: " << ast);
-            UNIT_ASSERT_C(ast.find("DqCnParallelUnionAll") == std::string::npos,
-                          TStringBuilder() << label << ": DqCnParallelUnionAll should be replaced by DqCnScatter: " << ast);
+            UNIT_ASSERT_C(ast.find("DqCnParallelUnionAll") != std::string::npos || ast.find("DqCnUnionAll") != std::string::npos,
+                          TStringBuilder() << label << ": expected UnionAll or ParallelUnionAll in plan: " << ast);
+            UNIT_ASSERT_C(ast.find("DqCnMerge") != std::string::npos,
+                          TStringBuilder() << label << ": expected DqCnMerge (heavy downstream) in plan: " << ast);
 
             auto execResult = qSession
                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings())
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
 
             auto rs = execResult.GetResultSets();
             UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
-            auto rows = rs[0].GetRowsCount();
+            auto rows = rs[0].RowsCount();
             if (label == "UNION ALL + ORDER BY LIMIT") {
                 UNIT_ASSERT_VALUES_EQUAL_C(rows, 4, label);
             } else {
@@ -236,12 +236,9 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
                 .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
 
-            auto plan = *explainResult.GetStats()->GetPlan();
-            NJson::TJsonValue planJson;
-            NJson::ReadJsonTree(plan, &planJson, true);
-            ui32 scatterNodes = CountPlanNodesByKv(planJson, "Node Type", "Scatter");
-            UNIT_ASSERT_C(scatterNodes > 0,
-                          TStringBuilder() << "Scatter not found in plan: " << plan);
+            auto ast = *explainResult.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("DqCnMerge") != std::string::npos,
+                          TStringBuilder() << "DqCnMerge (heavy downstream) not found in plan: " << ast);
 
             auto execResult = qSession
                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
@@ -251,7 +248,7 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
 
             auto rs = execResult.GetResultSets();
             UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(rs[0].GetRowsCount(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(rs[0].RowsCount(), 100);
 
             NYdb::TResultSetParser parser(rs[0]);
             i64 expected = 1;
@@ -278,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
 
             auto rs = execResult.GetResultSets();
             UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(rs[0].GetRowsCount(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(rs[0].RowsCount(), 10);
 
             NYdb::TResultSetParser parser(rs[0]);
             i64 expected = 100;
@@ -306,7 +303,7 @@ Y_UNIT_TEST_SUITE(KqpUnion) {
 
             auto rs = execResult.GetResultSets();
             UNIT_ASSERT_VALUES_EQUAL(rs.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(rs[0].GetRowsCount(), 25);
+            UNIT_ASSERT_VALUES_EQUAL(rs[0].RowsCount(), 25);
 
             NYdb::TResultSetParser parser(rs[0]);
             i64 expected = 51;

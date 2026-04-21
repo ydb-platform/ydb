@@ -1154,10 +1154,6 @@ public:
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
-        if (Outputs.size() == 1) {
-            Outputs[0]->Push(std::move(value));
-            return;
-        }
         auto [idx, level] = Router_.PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         Outputs[idx]->Push(std::move(value));
@@ -1165,10 +1161,6 @@ public:
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
-        if (Outputs.size() == 1) {
-            Outputs[0]->WidePush(values, count);
-            return;
-        }
         auto [idx, level] = Router_.PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         std::copy(values, values + count, Tmp.begin());

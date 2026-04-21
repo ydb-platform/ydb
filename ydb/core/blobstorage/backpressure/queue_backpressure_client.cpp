@@ -120,7 +120,15 @@ public:
         RequestReadiness(nullptr, ctx);
         UpdateRequestTrackingStats(ctx);
         Become(&TThis::StateFuncWrapper);
-        TControlBoard::RegisterSharedControl(EnablePostponedPumpMs, icb->DSProxyControls.EnablePostponedPumpMs);
+
+        TActorSystem *actorSystem = TActivationContext::ActorSystem();
+        if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+            TControlBoard::RegisterSharedControl(EnablePostponedPumpMs, icb->DSProxyControls.EnablePostponedPumpMs);
+        } else {
+            QLOG_CRIT_S("BSQ21", "BSQueue is unable to discover ICB");
+            EnablePostponedPumpMs = 0;
+        }
     }
 
 private:

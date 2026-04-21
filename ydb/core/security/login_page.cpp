@@ -1,10 +1,14 @@
 #include "login_page.h"
 #include "login_shared_func.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/core/util/wildcard.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/url/url.h>
 
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/core/audit/audit_log.h>
@@ -18,11 +22,121 @@
 #include <ydb/library/security/util.h>
 
 #include <util/datetime/base.h>  // for ToInstant
+#include <util/string/ascii.h>
+
+#include <optional>
 
 
 namespace {
 
 using namespace NKikimr;
+
+struct TWebLoginCorsParams {
+    TString AllowOrigin;
+    bool AllowCredentials = false;
+};
+
+static bool WebLoginHostsEqual(TStringBuf left, TStringBuf right) {
+    return left.size() == right.size() && AsciiEqualsIgnoreCase(left, right);
+}
+
+static std::optional<TWebLoginCorsParams> ResolveWebLoginCors(
+    const NHttp::THttpIncomingRequestPtr& request,
+    TStringBuf configuredAllowOrigin)
+{
+    NHttp::THeaders headers(request->Headers);
+    TString requestOrigin = TString(headers["Origin"]);
+
+    if (requestOrigin.empty()) {
+        TWebLoginCorsParams params;
+        params.AllowOrigin = "*";
+        params.AllowCredentials = false;
+        return params;
+    }
+
+    if (configuredAllowOrigin) {
+        if (IsMatchesWildcards(requestOrigin, configuredAllowOrigin)) {
+            TWebLoginCorsParams params;
+            params.AllowOrigin = std::move(requestOrigin);
+            params.AllowCredentials = true;
+            return params;
+        }
+        return std::nullopt;
+    }
+
+    if (requestOrigin == TStringBuf("null")) {
+        return std::nullopt;
+    }
+
+    TStringBuf originScheme;
+    TStringBuf originHost;
+    ui16 originPort = 0;
+    if (!TryGetSchemeHostAndPort(requestOrigin, originScheme, originHost, originPort)) {
+        return std::nullopt;
+    }
+    if (originScheme != TStringBuf("http://") && originScheme != TStringBuf("https://")) {
+        return std::nullopt;
+    }
+
+    const bool secure = request->Endpoint && request->Endpoint->Secure;
+    const TStringBuf requestScheme = secure ? TStringBuf("https://") : TStringBuf("http://");
+    if (originScheme != requestScheme) {
+        return std::nullopt;
+    }
+
+    // Same-origin uses Host + this hop's TLS; behind TLS-terminating proxy use MonitoringConfig.AllowOrigin.
+    TString syntheticRequestUrl = TStringBuilder() << requestScheme << request->Host;
+    TStringBuf unusedScheme;
+    TStringBuf requestHost;
+    ui16 requestPort = 0;
+    if (!TryGetSchemeHostAndPort(syntheticRequestUrl, unusedScheme, requestHost, requestPort)) {
+        return std::nullopt;
+    }
+
+    if (!WebLoginHostsEqual(originHost, requestHost) || originPort != requestPort) {
+        return std::nullopt;
+    }
+
+    TWebLoginCorsParams params;
+    params.AllowOrigin = std::move(requestOrigin);
+    params.AllowCredentials = true;
+    return params;
+}
+
+static void ApplyWebLoginCorsHeaders(NHttp::THeadersBuilder& headers, const TWebLoginCorsParams& cors) {
+    headers.Set("Access-Control-Allow-Origin", cors.AllowOrigin);
+    if (cors.AllowCredentials) {
+        headers.Set("Access-Control-Allow-Credentials", "true");
+    }
+    headers.Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
+    headers.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+}
+
+static void AppendWebSessionCookieAttributes(TStringBuilder& builder, const NHttp::THttpIncomingRequestPtr& request) {
+    builder << "; Path=/; HttpOnly; SameSite=Strict";
+    if (request->Endpoint && request->Endpoint->Secure) {
+        builder << "; Secure";
+    }
+}
+
+static bool TryInitWebLoginCors(
+    const NHttp::THttpIncomingRequestPtr& request,
+    const NActors::TActorContext& ctx,
+    TWebLoginCorsParams* out)
+{
+    TStringBuf configuredAllowOrigin;
+    if (TAppData* appData = AppData(ctx)) {
+        if (appData->Mon) {
+            configuredAllowOrigin = TStringBuf(appData->Mon->GetConfig().AllowOrigin);
+        }
+    }
+    auto resolved = ResolveWebLoginCors(request, configuredAllowOrigin);
+    if (!resolved) {
+        return false;
+    }
+    *out = std::move(*resolved);
+    return true;
+}
 
 void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID, const TString& sanitizedToken) {
     static const TString WebLoginComponentName = "web-login";
@@ -101,6 +215,10 @@ public:
     void Bootstrap() {
         ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI());
 
+        if (!TryInitWebLoginCors(Request, ActorContext(), &Cors_)) {
+            return ReplyCorsForbiddenAndPassAway();
+        }
+
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
@@ -177,30 +295,26 @@ public:
 
     void ReplyOptionsAndPassAway() {
         NHttp::THeadersBuilder headers;
-        SetCORS(headers);
+        ApplyWebLoginCorsHeaders(headers, Cors_);
         headers.Set("Allow", "OPTIONS, POST");
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("204", "No Content", headers)));
         PassAway();
     }
 
-    void SetCORS(NHttp::THeadersBuilder& headers) {
-        TStringBuilder res;
-        TString origin = TString(NHttp::THeaders(Request->Headers)["Origin"]);
-        if (origin.empty()) {
-            origin = "*";
-        }
-        headers.Set("Access-Control-Allow-Origin", origin);
-        headers.Set("Access-Control-Allow-Credentials", "true");
-        headers.Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-        headers.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+    void ReplyCorsForbiddenAndPassAway() {
+        Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponseBadRequest("Invalid CORS origin")));
+        PassAway();
     }
 
     void ReplyCookieAndPassAway(const TString& cookie) {
         ALOG_DEBUG(NActorsServices::HTTP, "Login success for " << User);
         NHttp::THeadersBuilder headers;
-        SetCORS(headers);
+        ApplyWebLoginCorsHeaders(headers, Cors_);
         TDuration maxAge = ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now();
-        headers.Set("Set-Cookie", TStringBuilder() << "ydb_session_id=" << cookie << "; Max-Age=" << maxAge.Seconds());
+        TStringBuilder cookieHeader;
+        cookieHeader << "ydb_session_id=" << cookie << "; Max-Age=" << maxAge.Seconds();
+        AppendWebSessionCookieAttributes(cookieHeader, Request);
+        headers.Set("Set-Cookie", cookieHeader);
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("200", "OK", headers)));
         PassAway();
     }
@@ -208,7 +322,7 @@ public:
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
         ALOG_ERROR(NActorsServices::HTTP, "Login fail for " << User << ": " << error);
         NHttp::THeadersBuilder headers;
-        SetCORS(headers);
+        ApplyWebLoginCorsHeaders(headers, Cors_);
         headers.Set("Content-Type", "application/json");
         NJson::TJsonValue body;
         body["error"] = error;
@@ -219,6 +333,7 @@ public:
 protected:
     TActorId Sender;
     NHttp::THttpIncomingRequestPtr Request;
+    TWebLoginCorsParams Cors_;
     TDuration Timeout = TDuration::Seconds(60);
     TString User;
     TString Database;
@@ -246,6 +361,10 @@ public:
 
     void Bootstrap() {
         ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI());
+
+        if (!TryInitWebLoginCors(Request, ActorContext(), &Cors_)) {
+            return ReplyCorsForbiddenAndPassAway();
+        }
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -293,28 +412,25 @@ public:
 
     void ReplyOptionsAndPassAway() {
         NHttp::THeadersBuilder headers;
+        ApplyWebLoginCorsHeaders(headers, Cors_);
         headers.Set("Allow", "OPTIONS, POST");
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("204", "No Content", headers)));
         PassAway();
     }
 
-    void SetCORS(NHttp::THeadersBuilder& headers) {
-        TStringBuilder res;
-        TString origin = TString(NHttp::THeaders(Request->Headers)["Origin"]);
-        if (origin.empty()) {
-            origin = "*";
-        }
-        headers.Set("Access-Control-Allow-Origin", origin);
-        headers.Set("Access-Control-Allow-Credentials", "true");
-        headers.Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-        headers.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+    void ReplyCorsForbiddenAndPassAway() {
+        Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponseBadRequest("Invalid CORS origin")));
+        PassAway();
     }
 
     void ReplyDeleteCookieAndPassAway(const TString& userSID, const TString& sanitizedToken) {
         ALOG_DEBUG(NActorsServices::HTTP, "Logout success");
         NHttp::THeadersBuilder headers;
-        SetCORS(headers);
-        headers.Set("Set-Cookie", "ydb_session_id=; Max-Age=0");
+        ApplyWebLoginCorsHeaders(headers, Cors_);
+        TStringBuilder cookieHeader;
+        cookieHeader << "ydb_session_id=; Max-Age=0";
+        AppendWebSessionCookieAttributes(cookieHeader, Request);
+        headers.Set("Set-Cookie", cookieHeader);
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("200", "OK", headers)));
 
         AuditLogWebUILogout(*Request, userSID, sanitizedToken);
@@ -325,7 +441,7 @@ public:
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
         ALOG_ERROR(NActorsServices::HTTP, "Logout: " << error);
         NHttp::THeadersBuilder headers;
-        SetCORS(headers);
+        ApplyWebLoginCorsHeaders(headers, Cors_);
         headers.Set("Content-Type", "application/json");
         NJson::TJsonValue body;
         body["error"] = error;
@@ -336,6 +452,7 @@ public:
 protected:
     TActorId Sender;
     NHttp::THttpIncomingRequestPtr Request;
+    TWebLoginCorsParams Cors_;
     TDuration Timeout = TDuration::Seconds(5);
 };
 

@@ -248,7 +248,7 @@ Linq To DB doesn't manage migrations. The DDL below is illustrative—apply it w
 
 ### {{ ydb-short-name }} Indexes how to set parameters
 
-With the [Index] attribute you can set name, columns, and uniqueness. The provider creates a GLOBAL secondary index.
+With the [Index] attribute you can set name and columns. The provider creates a GLOBAL secondary index.
 Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; add them using a separate DDL statement after table creation.
 
 #### Option A — attribute (name + Unique)
@@ -259,7 +259,7 @@ Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; a
 
   ```csharp
   [Table(Name = "Groups", IsColumnAttributeRequired = false)]
-  [Index("GroupName", Name = "group_name_index", Unique = true)]
+  [Index("GroupName", Name = "group_name_index")]
   public class Group
   {
       [PrimaryKey, Column("GroupId")] public int Id { get; set; }
@@ -269,7 +269,7 @@ Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; a
       [Column] public string? Department { get; set; }
   }
 
-  // When you call db.CreateTable<Group>(), a GLOBAL UNIQUE index on GroupName is created.
+  // When you call db.CreateTable<Group>(), a GLOBAL index on GroupName is created.
   ```
 
 {% endlist %}
@@ -285,7 +285,7 @@ CREATE TABLE Groups (
 );
 
 ALTER TABLE Groups
-  ADD INDEX group_name_index GLOBAL UNIQUE
+  ADD INDEX group_name_index GLOBAL
        ON (GroupName);
 ```
 

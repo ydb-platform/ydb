@@ -107,8 +107,8 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
         default:
             ++ErrorCount;
             if (ErrorCount >= Requests.size() * MAX_ATTEMPTS) {
-                TStringBuilder error("ErrorReason# ");
-                error << msg->ErrorReason;
+                TStringBuilder error;
+                error << " ErrorReason# " << msg->ErrorReason;
                 error << " ErrorCount# " << ErrorCount;
                 error << " MAX_ATTEMPTS# " << MAX_ATTEMPTS;
                 return ReplyAndDie(NKikimrProto::ERROR, ctx, error);

@@ -41,4 +41,14 @@ const std::map<i64, TString> THistorgamBorders::TimeBordersMicroseconds = [] {
 }();
 
 const std::set<i64> THistorgamBorders::PortionRecordBorders = {0, 2500, 5000, 7500, 9000, 10000, 20000, 40000, 80000, 160000, 320000, 640000, 1024000};
+
+const std::set<i64> THistorgamBorders::PortionWidthBorders = [] {
+    std::set<i64> result{0};
+    for (auto i = 1ULL; i <= 10'000'000'000ULL; i *= 10) {
+        for (auto j = 1; j < 10; j++) {
+            result.insert(i * j);
+        }
+    }
+    return result;
+}();
 }

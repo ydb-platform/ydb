@@ -34,7 +34,8 @@ TVChunk::TVChunk(
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHandoffDelay,
+    TDuration writeHedgingDelay,
+    TDuration writeRequestTimeout,
     TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
@@ -45,7 +46,8 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , WriteHandoffDelay(writeHandoffDelay)
+    , WriteHedgingDelay(writeHedgingDelay)
+    , WriteRequestTimeout(writeRequestTimeout)
     , TraceSamplePeriod(traceSamplePeriod)
     , Counters(counters)
 {
@@ -366,7 +368,8 @@ void TVChunk::DoWriteBlocksLocal(
                     std::move(request),
                     lsn,
                     span->GetTraceId(),
-                    WriteHandoffDelay,
+                    WriteHedgingDelay,
+                    WriteRequestTimeout,
                     pbufferReplyTimeout);
             break;
         case EWriteMode::DirectPBuffersFilling:
@@ -380,7 +383,8 @@ void TVChunk::DoWriteBlocksLocal(
                     std::move(request),
                     lsn,
                     span->GetTraceId(),
-                    WriteHandoffDelay);
+                    WriteHedgingDelay,
+                    WriteRequestTimeout);
             break;
     }
 

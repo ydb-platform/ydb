@@ -187,17 +187,90 @@ public:
         TSessionPoolStatCollector(::NMonitoring::TIntGauge* activeSessions = nullptr
         , ::NMonitoring::TIntGauge* inPoolSessions = nullptr
         , ::NMonitoring::TRate* fakeSessions = nullptr
-        , ::NMonitoring::TIntGauge* waiters = nullptr)
+        , ::NMonitoring::TIntGauge* waiters = nullptr
+        , std::shared_ptr<NMetrics::IMetricRegistry> externalRegistry = {}
+        , std::string database = {}
+        , std::string clientType = {})
         : ActiveSessions(activeSessions)
         , InPoolSessions(inPoolSessions)
         , FakeSessions(fakeSessions)
         , Waiters(waiters)
+        , ExternalRegistry_(std::move(externalRegistry))
+        , Database_(std::move(database))
+        , ClientType_(std::move(clientType))
         { }
 
         ::NMonitoring::TIntGauge* ActiveSessions;
         ::NMonitoring::TIntGauge* InPoolSessions;
         ::NMonitoring::TRate* FakeSessions;
         ::NMonitoring::TIntGauge* Waiters;
+
+        void UpdateConnectionCount(std::int64_t value) {
+            if (!ExternalRegistry_) {
+                return;
+            }
+            ExternalRegistry_->Gauge(
+                "db.client.connection.count",
+                ConnectionPoolLabels(),
+                "The number of connections that are currently in state described by the state attribute.",
+                "{connection}"
+            )->Set(static_cast<double>(value));
+        }
+
+        void UpdatePendingRequests(std::int64_t value) {
+            if (!ExternalRegistry_) {
+                return;
+            }
+            ExternalRegistry_->Gauge(
+                "db.client.connection.pending_requests",
+                ConnectionPoolLabels(),
+                "The number of current pending requests for an open connection.",
+                "{request}"
+            )->Set(static_cast<double>(value));
+        }
+
+        void IncConnectionTimeouts() {
+            if (!ExternalRegistry_) {
+                return;
+            }
+            ExternalRegistry_->Counter(
+                "db.client.connection.timeouts",
+                ConnectionPoolLabels(),
+                "The number of connection timeouts that have occurred trying to obtain a connection from the pool.",
+                "{timeout}"
+            )->Inc();
+        }
+
+        void RecordConnectionCreateTime(double seconds) {
+            if (!ExternalRegistry_) {
+                return;
+            }
+            ExternalRegistry_->Histogram(
+                "db.client.connection.create_time",
+                {0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10},
+                ConnectionPoolLabels(),
+                "The time it took to create a new connection.",
+                "s"
+            )->Record(seconds);
+        }
+
+        bool HasExternalRegistry() const {
+            return static_cast<bool>(ExternalRegistry_);
+        }
+
+    private:
+        NMetrics::TLabels ConnectionPoolLabels() const {
+            return {
+                {"db.system.name", "ydb"},
+                {"db.namespace", Database_},
+                {"db.client.connection.pool.name", YdbClientApiAttributeValue(ClientType_)},
+                {"ydb.client.api", YdbClientApiAttributeValue(ClientType_)},
+            };
+        }
+
+        std::shared_ptr<NMetrics::IMetricRegistry> ExternalRegistry_;
+        std::string Database_;
+        std::string ClientType_;
     };
 
     struct TClientRetryOperationStatCollector {
@@ -258,27 +331,6 @@ public:
                     {"sensor", "Request/Operations"}
                 })->Inc();
             }
-            if (ExternalRegistry_) {
-                const std::string clientApi = YdbClientApiAttributeValue(ClientType_);
-                NMetrics::TLabels labels = {
-                    {"db.system.name", "ydb"},
-                    {"db.namespace", Database_},
-                    {"db.operation.name", operationName},
-                    {"ydb.client.api", clientApi},
-                };
-                ExternalRegistry_->Counter(
-                    "db.client.operation.requests",
-                    labels,
-                    "Number of database client operations started.",
-                    "{operation}"
-                )->Inc();
-                ExternalRegistry_->Counter(
-                    "db.client.operation.errors",
-                    labels,
-                    "Number of database client operations that failed.",
-                    "{error}"
-                );
-            }
         }
 
         void IncErrorCount(const std::string& operationName, EStatus status) {
@@ -296,17 +348,20 @@ public:
             }
             if (ExternalRegistry_) {
                 const std::string clientApi = YdbClientApiAttributeValue(ClientType_);
+                const std::string statusName = TStringBuilder() << status;
                 NMetrics::TLabels labels = {
                     {"db.system.name", "ydb"},
                     {"db.namespace", Database_},
                     {"db.operation.name", operationName},
                     {"ydb.client.api", clientApi},
+                    {"db.response.status_code", statusName},
+                    {"error.type", statusName},
                 };
                 ExternalRegistry_->Counter(
-                    "db.client.operation.errors",
+                    "db.client.operation.failed",
                     labels,
                     "Number of database client operations that failed.",
-                    "{error}"
+                    "{operation}"
                 )->Inc();
             }
         }
@@ -478,10 +533,12 @@ public:
             auto waiters = registry->IntGauge({ DatabaseLabel_, {"ydb_client", clientType},
                 {"sensor", "Sessions/WaitForReturn"} });
 
-            return TSessionPoolStatCollector(activeSessions, inPoolSessions, fakeSessions, waiters);
+            return TSessionPoolStatCollector(activeSessions, inPoolSessions, fakeSessions, waiters,
+                ExternalMetricRegistry_, Database_, clientType);
         }
 
-        return TSessionPoolStatCollector();
+        return TSessionPoolStatCollector(nullptr, nullptr, nullptr, nullptr,
+            ExternalMetricRegistry_, Database_, clientType);
     }
 
     TClientStatCollector GetClientStatCollector(const std::string& clientType) {

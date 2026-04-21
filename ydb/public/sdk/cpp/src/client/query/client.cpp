@@ -430,8 +430,12 @@ public:
         auto promise = NThreading::NewPromise<TCreateSessionResult>();
 
         auto self = shared_from_this();
+        const auto createStartTime = std::chrono::steady_clock::now();
 
-        auto extractor = [promise, self] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
+        auto extractor = [promise, self, createStartTime] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
+            const double elapsedSec =
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
+            self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
             if (resp) {
                 if (resp->status() != Ydb::StatusIds::SUCCESS) {
                     NYdb::NIssue::TIssues opIssues;

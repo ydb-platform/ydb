@@ -353,7 +353,10 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     TString rightLabel = join.RightLabel().Maybe<TCoAtom>() ? TString(join.RightLabel().Cast<TCoAtom>().Value()) : "";
 
     TMaybeNode<TCoAtomList> lookupColumns;
-    if (auto read = rightReadMatch.Read.Maybe<TKqlReadTableBase>()) {
+
+    if (rightReadMatch.ExtractMembers) {
+        lookupColumns = rightReadMatch.ExtractMembers.Cast().Members();
+    } else if (auto read = rightReadMatch.Read.Maybe<TKqlReadTableBase>()) {
         lookupColumns = read.Columns().Cast();
     } else {
         auto readRanges = rightReadMatch.Read.Maybe<TKqlReadTableRangesBase>();

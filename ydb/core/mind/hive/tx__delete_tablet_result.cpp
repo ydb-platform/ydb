@@ -60,7 +60,7 @@ public:
                 Self->DeleteTablet(tablet->Id);
             } else {
                 Success = false;
-                BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
+                BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status) << ", reason: " << msg->ErrorReason);
                 Y_ENSURE_LOG(tablet->IsDeleting(), " tablet " << tablet->Id);
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
             }

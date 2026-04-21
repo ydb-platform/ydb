@@ -162,10 +162,12 @@ struct TEvTabletBase {
     struct TEvDeleteTabletResult : public TEventLocal<TEvDeleteTabletResult, EvDeleteTabletResult> {
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletId;
+        const TString ErrorReason;
 
-        TEvDeleteTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
+        TEvDeleteTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TString &reason = TString())
             : Status(status)
             , TabletId(tabletId)
+            , ErrorReason(reason)
         {}
     };
 

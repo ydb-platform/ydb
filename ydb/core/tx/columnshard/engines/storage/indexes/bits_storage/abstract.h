@@ -1,4 +1,5 @@
 #pragma once
+
 #include "array_power2.h"
 
 #include <ydb/library/conclusion/result.h>

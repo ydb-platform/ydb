@@ -228,7 +228,6 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         TArrayPower2BitsStorage maxStorage(MaxBitsSize);
         VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxStorage);
 
-        // auto maxBits = maxInserter.ExtractBits();
         const ui64 setBitsCount = maxStorage.CountSetBits();
 
         const double m = static_cast<double>(MaxBitsSize);

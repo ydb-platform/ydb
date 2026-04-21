@@ -19,7 +19,8 @@ TString TArrayPower2BitsStorage::SerializeDynBitMapCompatible() const {
 }
 
 TArrayPower2BitsStorage TArrayPower2BitsStorage::Fold(ui32 times) const {
-    Y_ABORT_UNLESS(DataSize % times == 0);
+    Y_ABORT_UNLESS(std::has_single_bit(times));
+    Y_ABORT_UNLESS(times < DataSize);
     auto newDataSize = DataSize / times;
     std::unique_ptr<ui64[]> newData(new ui64[newDataSize]);
     std::fill(newData.get(), newData.get() + newDataSize, 0);

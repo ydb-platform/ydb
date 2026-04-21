@@ -20,7 +20,7 @@ void CheckInsertedValues(const std::unordered_set<ui64>& inserted, ui32 size, co
 }
 
 void TestSerializeRestoreArrayStorage(IBitsStorageConstructor& constructor) {
-    ui32 size = 16384;
+    constexpr ui32 size = 16384;
 
     TFastRng64 rng(100500);
     std::unordered_set<ui64> inserted;
@@ -39,7 +39,7 @@ void TestSerializeRestoreArrayStorage(IBitsStorageConstructor& constructor) {
 }
 
 void TestSerializeRestoreDynBitMap(IBitsStorageConstructor& constructor) {
-    ui32 size = 16384;
+    constexpr ui32 size = 16384;
 
     TFastRng64 rng(100500);
     std::unordered_set<ui64> inserted;

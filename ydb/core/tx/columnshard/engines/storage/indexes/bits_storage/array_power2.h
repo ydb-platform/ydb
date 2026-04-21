@@ -28,7 +28,15 @@ private:
         : DataSize(dataSize)
         , Data(std::move(data))
         , SizeMask(DataSize - 1) {
-        Y_ABORT_UNLESS((dataSize & (dataSize - 1)) == 0);
+        Y_ABORT_UNLESS(std::has_single_bit(dataSize));
+    }
+
+    Y_FORCE_INLINE ui64 ItemMaskForHash(ui64 hash) const {
+        return (ui64{1} << (hash & ItemMask));
+    }
+
+    Y_FORCE_INLINE ui64 IndexForHash(ui64 hash) const {
+        return (hash >> SizeShift) & SizeMask;
     }
 
 public:
@@ -38,7 +46,7 @@ public:
         , SizeMask(DataSize - 1) {
         Y_ABORT_UNLESS(bitSize >= BitsInItem);
         std::fill(Data.get(), Data.get() + DataSize, 0);
-        Y_ABORT_UNLESS((bitSize & (bitSize - 1)) == 0);
+        Y_ABORT_UNLESS(std::has_single_bit(bitSize));
     }
 
     TString SerializeToString() const {
@@ -48,11 +56,11 @@ public:
     TString SerializeDynBitMapCompatible() const;
 
     Y_FORCE_INLINE void operator()(const ui64 hash) {
-        Data[(hash >> SizeShift) & SizeMask] |= (static_cast<ui64>(1) << (hash & ItemMask));
+        Data[IndexForHash(hash)] |= ItemMaskForHash(hash);
     }
 
     bool Get(const ui64 hash) const {
-        return Data[(hash >> SizeShift) & SizeMask] & (static_cast<ui64>(1) << (hash & ItemMask));
+        return Data[IndexForHash(hash)] & ItemMaskForHash(hash);
     }
 
     ui32 CountSetBits() const {

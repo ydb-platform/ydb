@@ -8,6 +8,10 @@ ui64 TSchemeShard::AllocateSchemeChangeOrder(NIceDb::TNiceDb& db) {
     return id;
 }
 
+ui64 TSchemeShard::AllocateSchemeChangeOrderInMemory() {
+    return ++NextSchemeChangeOrder;
+}
+
 void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry) {
     using T = Schema::SchemeChangeRecords;
     db.Table<T>().Key(entry.Order).Update(

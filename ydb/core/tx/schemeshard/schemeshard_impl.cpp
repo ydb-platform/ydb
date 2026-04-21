@@ -3694,6 +3694,7 @@ void TSchemeShard::PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const {
 void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const {
     db.Table<Schema::SysParams>().Key(Schema::SysParam_NextSchemeChangeOrder).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeOrder)));
+    ++NextSchemeChangeOrderPersistCount;
 }
 
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr) const {

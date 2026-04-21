@@ -988,6 +988,10 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
 
     NIceDb::TNiceDb db(txc.DB);
 
+    // Bump NextSchemeChangeOrder in memory per record, but persist the
+    // sysparam once at the end of this tx — only the final value matters.
+    bool anyAllocated = false;
+
     for (const auto& candidate : candidates) {
         TTxId txId = candidate.TxId;
 
@@ -1009,7 +1013,8 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
 
         TPathElement::TPtr path = ss->PathsById.at(pathId);
 
-        ui64 order = ss->AllocateSchemeChangeOrder(db);
+        ui64 order = ss->AllocateSchemeChangeOrderInMemory();
+        anyAllocated = true;
 
         TString pathName = path->Name;
         NKikimrSchemeOp::EPathType objectType = path->PathType;
@@ -1047,6 +1052,10 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
                 << " partIdx=" << candidate.PartIdx
                 << " path=" << pathName
                 << " type=" << ui32(txState.TxType));
+    }
+
+    if (anyAllocated) {
+        ss->PersistUpdateNextSchemeChangeOrder(db);
     }
 }
 

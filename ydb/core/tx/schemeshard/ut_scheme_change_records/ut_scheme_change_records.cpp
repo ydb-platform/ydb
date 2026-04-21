@@ -773,6 +773,54 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         }
     }
 
+    Y_UNIT_TEST(PersistsNextSchemeChangeOrderOncePerBatch) {
+        // A multi-part DDL must persist the NextSchemeChangeOrder sysparam
+        // once for the whole batch, not once per emitted record.
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "batchpersist:sub", regHandle);
+
+        // Quiesce: read+unregister the temp subscriber triggers bookkeeping writes.
+        // Reset the counter after setup so we measure only the target DDL.
+        schemeshard->NextSchemeChangeOrderPersistCount = 0;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Main"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "IdxByValue"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The DDL has >= 3 parts → >= 3 records → pre-fix would persist >=3 times.
+        auto entries = ReadSchemeChangeRecords(runtime);
+        size_t thisTxRecords = 0;
+        for (const auto& e : entries) {
+            if (e.TxId == (ui64)txId) ++thisTxRecords;
+        }
+        UNIT_ASSERT_C(thisTxRecords >= 3,
+            "Indexed-table DDL should emit at least 3 records, got " << thisTxRecords);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->NextSchemeChangeOrderPersistCount, 1u,
+            "Expected one NextSchemeChangeOrder persist for a multi-part DDL, got "
+            << schemeshard->NextSchemeChangeOrderPersistCount);
+    }
+
     Y_UNIT_TEST(FetchBodiesUnorderedAndDuplicateRequestedOrdersHandled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -279,6 +279,11 @@ public:
     ui64 NextSchemeChangeOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
 
+    // Test-only: counts PersistUpdateNextSchemeChangeOrder calls.
+    // Used by unit tests to verify that a multi-part DDL persists the
+    // NextSchemeChangeOrder sysparam once per batch, not once per record.
+    mutable ui64 NextSchemeChangeOrderPersistCount = 0;
+
     struct TSubscriberInfo {
         ui64 LastAckedOrder = 0;
         TInstant LastActivityAt;
@@ -872,6 +877,10 @@ public:
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
     ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
+    // In-memory bump only; the caller is responsible for a single
+    // PersistUpdateNextSchemeChangeOrder at the end of its tx. Used
+    // when allocating multiple records in one batch.
+    ui64 AllocateSchemeChangeOrderInMemory();
 
     struct TSchemeChangeRecordData {
         ui64 Order = 0;

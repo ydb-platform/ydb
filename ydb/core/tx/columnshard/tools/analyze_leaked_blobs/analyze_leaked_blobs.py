@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import bisect
+from collections import defaultdict
 import re
 import sys
 from dataclasses import dataclass, field
@@ -41,18 +42,29 @@ def extract_iso_dt(line: str) -> datetime | None:
         return None
 
 
-def extract_int_field(line: str, key: str) -> int:
+def extract_int_field_optional(line: str, key: str) -> int | None:
     match = re.search(rf"{re.escape(key)}=(\d+);", line)
     if not match:
-        raise ValueError(f"required field {key} not found in line: {line}")
+        return None
     return int(match.group(1))
 
+def extract_int_field(line: str, key: str) -> int:
+    res = extract_int_field_optional(line, key)
+    if res is None:
+        raise ValueError(f"required field {key} not found in line: {line}")
+    return res
 
-def extract_text_field(line: str, key: str) -> str | None:
+def extract_text_field_optional(line: str, key: str) -> str | None:
     match = re.search(rf"{re.escape(key)}=([^;]+);", line)
     if not match:
         return None
     return match.group(1)
+
+def extract_text_field(line: str, key: str) -> str:
+    res = extract_text_field_optional(line, key)
+    if res is None:
+        raise ValueError(f"required field {key} not found in line: {line}")
+    return res
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,17 +145,34 @@ class TabletStats:
 class Interval:
     tablet_id: int
     channel: int
-    generation: int
+    group_id: int
+    from_generation: int
+    to_generation: int # exclusive
     beginning_ms: int
     end_ms: int  # exclusive
+    current_interval: bool
     blobs: list[BlobId] = field(default_factory=list)
+
+    def has_blobs(self) -> bool:
+        return len(self.blobs) > 0
+
+    def get_blob_generation_range(self) -> tuple[int, int]:
+        first = self.blobs[0].generation
+        last = first
+        for blob in self.blobs:
+            if blob.generation < first:
+                first = blob.generation
+            if blob.generation > last:
+                last = blob.generation
+        return first, last
 
 
 @dataclass
 class Tablet:
     tablet_id: int
-    now_ms: int
     no_localdb_blobs: bool
+    now_ms: int = -1
+    current_generation: int = -1
     stats: TabletStats = field(default_factory=TabletStats)
     # Hive history
     hive_chunks_count: int | None = None
@@ -171,15 +200,30 @@ class Tablet:
         for channel, history in enumerate(self.history_by_channel):
             for idx, record in enumerate(history):
                 end_ms = self.now_ms
+                end_generation = self.current_generation + 1
+                current_interval = True
                 if idx + 1 < len(history):
                     end_ms = history[idx + 1].timestamp_ms
-                interval = Interval(self.tablet_id, channel, record.from_generation, record.timestamp_ms, end_ms)
+                    end_generation = history[idx + 1].from_generation
+                    current_interval = False
+                interval = Interval(
+                    self.tablet_id,
+                    channel,
+                    record.group_id,
+                    record.from_generation,
+                    end_generation,
+                    record.timestamp_ms,
+                    end_ms,
+                    current_interval,
+                )
                 self.intervals[channel].append(interval)
         
         for blobId in self.leaked_blob_ids:
-            idx = bisect.bisect_right(self.intervals[blobId.channel], blobId.generation, key=lambda x: x.generation) - 1
+            idx = bisect.bisect_right(self.intervals[blobId.channel], blobId.generation, key=lambda x: x.from_generation) - 1
             assert idx >= 0
-            self.intervals[blobId.channel][idx].blobs.append(blobId)
+            interval = self.intervals[blobId.channel][idx]
+            assert interval.from_generation <= blobId.generation < interval.to_generation
+            interval.blobs.append(blobId)
         
         # there may be many blob ids, we do not duplicate them in memory
         self.leaked_blob_ids.clear()
@@ -246,6 +290,12 @@ class Tablet:
         self.hive_records_parsed += len(records)
         for rec in records:
             self.history_by_channel[rec.channel].append(rec)
+
+    def set_hive_snapshot(self, now_ms: int, current_generation: int) -> None:
+        assert self.now_ms == -1 or self.now_ms == now_ms
+        self.now_ms = now_ms
+        assert self.current_generation == -1 or self.current_generation == current_generation
+        self.current_generation = current_generation
 
     def add_blobs(self, chunks_total: int, chunk_idx: int, blob_ids: list[BlobId], small_blob_threashold: int):
         assert self.chunks_count == 0 or self.chunks_count == chunks_total
@@ -390,7 +440,7 @@ class Parser:
         if self.From and self.To and self.From > self.To:
             raise SystemExit("--from must be <= --to")
 
-    def parse(self, now_ms: int) -> Table:
+    def parse(self) -> Table:
         tablets: dict[int, Tablet] = {}
         with self.LogPath.open("r", encoding="utf-8", errors="replace") as inp:
             for raw_line in inp:
@@ -401,15 +451,15 @@ class Parser:
                     self.LinesSkippedByTime += 1
                     continue
 
-                event = extract_text_field(line, "event")
+                event = extract_text_field_optional(line, "event")
                 if event is None:
                     continue
 
-                tablet_id = extract_int_field(line, "tablet_id")
+                tablet_id = extract_int_field_optional(line, "tablet_id")
                 if tablet_id is None:
                     continue
 
-                tablet = tablets.setdefault(tablet_id, Tablet(tablet_id=tablet_id, now_ms=now_ms, no_localdb_blobs=self.Args.no_localdb_blobs))
+                tablet = tablets.setdefault(tablet_id, Tablet(tablet_id=tablet_id, no_localdb_blobs=self.Args.no_localdb_blobs))
                 if event == "hive_channel_history":
                     self._parse_hive_channel_history_event(line, tablet)
                     continue
@@ -426,6 +476,12 @@ class Parser:
         status = extract_text_field(line, "status")
         if status != "ok":
             return
+        now_ms_text: str = extract_text_field(line, "now_ms")
+        current_generation_text: str = extract_text_field(line, "current_generation")
+        tablet.set_hive_snapshot(
+            int(now_ms_text),
+            int(current_generation_text),
+        )
         records_count = extract_int_field(line, "records_count")
         chunks_total = extract_int_field(line, "chunks_total")
         chunk_idx = extract_int_field(line, "chunk_idx")
@@ -486,10 +542,16 @@ class Parser:
 @dataclass
 class HistoryStats:
     internals_count: int = 0
+    intervals_with_blobs_count: int = 0
+    blobs_in_intervals: int = 0
     blobs_in_current_intervals: int = 0
     current_intervals_count: int = 0
+    current_intervals_with_blobs_count: int = 0
     oldest_current_interval: int = 0
     youngest_current_interval: int = 0
+    closed_intervals_count: int = 0
+    closed_intervals_with_blobs_count: int = 0
+    blobs_in_closed_intervals: int = 0
 
 
 @dataclass
@@ -530,10 +592,16 @@ class StatsPrinter:
 
         print("=== Intervals Stats ===")
         print(f"internals_count: {human_count(history_stats.internals_count)}")
+        print(f"intervals_with_blobs_count: {human_count(history_stats.intervals_with_blobs_count)}")
+        print(f"blobs_in_intervals: {human_count(history_stats.blobs_in_intervals)}")
         print(f"blobs_in_current_intervals: {human_count(history_stats.blobs_in_current_intervals)}")
         print(f"current_intervals_count: {human_count(history_stats.current_intervals_count)}")
+        print(f"current_intervals_with_blobs_count: {human_count(history_stats.current_intervals_with_blobs_count)}")
         print(f"oldest_current_interval: {ms_to_iso_utc(history_stats.oldest_current_interval)}")
         print(f"youngest_current_interval: {ms_to_iso_utc(history_stats.youngest_current_interval)}")
+        print(f"closed_intervals_count: {human_count(history_stats.closed_intervals_count)}")
+        print(f"closed_intervals_with_blobs_count: {human_count(history_stats.closed_intervals_with_blobs_count)}")
+        print(f"blobs_in_closed_intervals: {human_count(history_stats.blobs_in_closed_intervals)}")
     
     def print_issues(self, issues: list[str]) -> None:
         if issues:
@@ -553,40 +621,398 @@ class DataPoint:
 @dataclass
 class HistoryAnalyzer:
     intervals: list[Interval]
-    now_ms: int
     folder_for_plots: Path
     stats: HistoryStats = field(default_factory=HistoryStats)
 
     def __post_init__(self) -> None:
+        intervals_with_blobs_count = 0
+        blobs_in_intervals = 0
         current_intervals_count = 0
+        current_intervals_with_blobs_count = 0
         blobs_in_current_intervals = 0
         oldest_current_interval = 0
         youngest_current_interval = 0
+        closed_intervals_count = 0
+        closed_intervals_with_blobs_count = 0
+        blobs_in_closed_intervals = 0
 
         for i in self.intervals:
-            if i.end_ms == self.now_ms:
+            blobs_in_intervals += len(i.blobs)
+            if i.has_blobs():
+                intervals_with_blobs_count += 1
+            if i.current_interval:
                 current_intervals_count += 1
                 blobs_in_current_intervals += len(i.blobs)
+                if i.has_blobs():
+                    current_intervals_with_blobs_count += 1
                 if not oldest_current_interval or i.beginning_ms < oldest_current_interval:
                     oldest_current_interval = i.beginning_ms
                 if not youngest_current_interval or i.beginning_ms > youngest_current_interval:
                     youngest_current_interval = i.beginning_ms
+            # closed interval
+            else:
+                closed_intervals_count += 1
+                if i.has_blobs():
+                    closed_intervals_with_blobs_count += 1
+                    blobs_in_closed_intervals += len(i.blobs)
 
         self.stats.internals_count = len(self.intervals)
+        self.stats.intervals_with_blobs_count = intervals_with_blobs_count
+        self.stats.blobs_in_intervals = blobs_in_intervals
         self.stats.current_intervals_count = current_intervals_count
+        self.stats.current_intervals_with_blobs_count = current_intervals_with_blobs_count
         self.stats.blobs_in_current_intervals = blobs_in_current_intervals
         self.stats.oldest_current_interval = oldest_current_interval
         self.stats.youngest_current_interval = youngest_current_interval
+        self.stats.closed_intervals_count = closed_intervals_count
+        self.stats.closed_intervals_with_blobs_count = closed_intervals_with_blobs_count
+        self.stats.blobs_in_closed_intervals = blobs_in_closed_intervals
 
     def draw_what_makes_sense(self) -> None:
+        if self.stats.internals_count > 0:
+            self._draw_intervals_by_generation_range(current_only=False)
         if self.stats.current_intervals_count > 0 and self.stats.blobs_in_current_intervals > 0:
             self._draw_current_interval_beginning_distribution()
+            self._draw_intervals_by_generation_range(current_only=True)
+            self._draw_blobs_count_by_generation(only_current_intervals=True)
+        if self.stats.blobs_in_intervals > 0:
+            self._draw_blobs_count_by_group()
+            self._draw_blobs_count_by_channel()
+            self._draw_blobs_count_by_generation(only_current_intervals=False)
+            self._draw_generation_rate()
+        if self.stats.closed_intervals_count > 0 and self.stats.blobs_in_closed_intervals > 0:
+            self._draw_interval_generation_distribution()
+    
+    def _draw_blobs_count_by_group(self) -> None:
+        group_to_blobs_count: dict[int, int] = defaultdict(int)
+        for i in self.intervals:
+            if i.has_blobs():
+                group_to_blobs_count[i.group_id] += len(i.blobs)
+        if not group_to_blobs_count:
+            return
+        sorted_groups = sorted(group_to_blobs_count.items(), key=lambda x: x[0])
+        x_groups = list(range(1, len(sorted_groups) + 1))
+        x_group_labels = [str(group) for group, _ in sorted_groups]
+        y_blobs_count = [blobs_count for _, blobs_count in sorted_groups]
+
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+
+        fig, ax = plt.subplots(figsize=(13, 6))
+        ax.bar(
+            x_groups,
+            y_blobs_count,
+            color="tab:blue",
+            alpha=0.8,
+            label="leaked blobs count",
+        )
+        ax.set_xlabel("Group index")
+        ax.set_ylabel("Leaked blobs count")
+        ax.set_title("Leaked Blobs by Group")
+        ax.set_xticks(x_groups, x_group_labels, rotation=90)
+        ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
+        ax.legend(loc="upper right")
+        fig.tight_layout()
+        fig.savefig(
+            self.folder_for_plots / "blobs_count_by_group.png",
+            dpi=140,
+        )
+        plt.close(fig)
+
+    def _draw_blobs_count_by_channel(self) -> None:
+        channel_to_blobs_count: list[int] = [0] * EXPECTED_CHANNELS_PER_TABLET
+        for i in self.intervals:
+            if i.has_blobs():
+                channel_to_blobs_count[i.channel] += len(i.blobs)
+
+        x_channels = list(range(EXPECTED_CHANNELS_PER_TABLET))
+        y_blobs_count = channel_to_blobs_count
+
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+
+        fig, ax = plt.subplots(figsize=(13, 6))
+        ax.bar(
+            x_channels,
+            y_blobs_count,
+            color="tab:cyan",
+            alpha=0.8,
+            label="leaked blobs count",
+        )
+        ax.set_xlabel("Channel")
+        ax.set_ylabel("Leaked blobs count")
+        ax.set_title("Leaked Blobs by Channel")
+        ax.set_xticks(x_channels)
+        ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
+        ax.legend(loc="upper right")
+        fig.tight_layout()
+        fig.savefig(
+            self.folder_for_plots / "blobs_count_by_channel.png",
+            dpi=140,
+        )
+        plt.close(fig)
+
+
+    def _draw_intervals_by_generation_range(self, current_only: bool) -> None:
+        generation_range_to_intervals_count: dict[int, int] = defaultdict(int)
+        for i in self.intervals:
+            if current_only and not i.current_interval:
+                continue
+            generation_range = i.to_generation - i.from_generation
+            assert generation_range > 0
+            generation_range_to_intervals_count[generation_range] += 1
+        if not generation_range_to_intervals_count:
+            return
+        sorted_generation_ranges = sorted(generation_range_to_intervals_count.items(), key=lambda x: x[0])
+        x_generation_ranges = [generation_range for generation_range, _ in sorted_generation_ranges]
+        y_intervals_running: list[int] = []
+        intervals_running = 0
+        for _, count in sorted_generation_ranges:
+            intervals_running += count
+            y_intervals_running.append(intervals_running)
+
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+
+        fig, ax = plt.subplots(figsize=(13, 6))
+        ax.plot(
+            x_generation_ranges,
+            y_intervals_running,
+            color="tab:orange",
+            linewidth=2,
+            marker="o",
+            markersize=3,
+            label="running intervals count",
+        )
+        # Long-tail ranges hide the head on linear scale.
+        # Log X keeps tiny ranges visible while preserving full domain.
+        ax.set_xscale("log")
+        ax.set_xlabel("Generation range (to_generation - from_generation), log scale")
+        ax.set_ylabel("Intervals count")
+        ax.set_title(
+            "Intervals by Generation Range"
+            + (" (Current Intervals)" if current_only else " (All Intervals)")
+        )
+        ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.5)
+        ax.legend(loc="upper left")
+        fig.tight_layout()
+        fig.savefig(
+            self.folder_for_plots
+            / (
+                "current_intervals_by_generation_range.png"
+                if current_only
+                else "intervals_by_generation_range.png"
+            ),
+            dpi=140,
+        )
+        plt.close(fig)
+
+    def _draw_generation_rate(self) -> None:
+        gen_steps_per_day: list[float] = []
+        for i in self.intervals:
+            time_span_days: float = (i.end_ms - i.beginning_ms) / (24 * 60 * 60 * 1000)
+            if not i.has_blobs() or time_span_days < 1:
+                continue
+            generation_span = i.to_generation - i.from_generation
+            assert generation_span > 0
+            generation_steps_per_day: float = generation_span / time_span_days
+            gen_steps_per_day.append(generation_steps_per_day)
+        
+        if not gen_steps_per_day:
+            return
+        gen_steps_per_day.sort()
+        avg_rate = sum(gen_steps_per_day) / len(gen_steps_per_day)
+
+        # Easy to tweak for experiments.
+        BUCKETS_COUNT = min(10, len(gen_steps_per_day))
+
+        bucket_count = min(BUCKETS_COUNT, len(gen_steps_per_day))
+        bucket_avg_rates: list[float] = []
+        bucket_intervals_counts: list[int] = []
+        bucket_labels: list[str] = []
+        n = len(gen_steps_per_day)
+        for idx in range(bucket_count):
+            begin = idx * n // bucket_count
+            end = (idx + 1) * n // bucket_count
+            bucket = gen_steps_per_day[begin:end]
+            assert bucket
+
+            bucket_min = bucket[0]
+            bucket_max = bucket[-1]
+            bucket_avg = sum(bucket) / len(bucket)
+
+            bucket_avg_rates.append(bucket_avg)
+            bucket_intervals_counts.append(len(bucket))
+            bucket_labels.append(f"{bucket_min:.2f}..{bucket_max:.2f}")
+
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+
+        fig, ax = plt.subplots(figsize=(14, 6))
+        x = list(range(1, bucket_count + 1))
+        ax.plot(
+            x,
+            bucket_intervals_counts,
+            color="tab:purple",
+            linewidth=2,
+            marker="o",
+            markersize=4,
+            label="intervals count",
+        )
+        ax.set_xlabel("Quantile bucket")
+        ax.set_ylabel("Intervals count")
+        ax.set_title(f"Generation Steps per Day (Quantile Buckets), mean rate: {avg_rate:.2f}")
+        ax.set_xticks(x, bucket_labels, rotation=45, ha="right")
+        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+        ax.legend(loc="upper left")
+        fig.tight_layout()
+        fig.savefig(
+            self.folder_for_plots / "generation_rate.png",
+            dpi=140,
+        )
+        plt.close(fig)
+
+    def _draw_blobs_count_by_generation(self, only_current_intervals: bool) -> None:
+        # (generation gap from the start of the interval, blobs_count)
+        gap_from_start_to_blobs_count: dict[int, int] = defaultdict(int)
+        gap_from_end_to_blobs_count: dict[int, int] = defaultdict(int)
+        for i in self.intervals:
+            if only_current_intervals and not i.current_interval:
+                continue
+            for blob in i.blobs:
+                gen_gap_from_start = blob.generation - i.from_generation
+                gen_gap_from_end = i.to_generation - blob.generation - 1
+                assert gen_gap_from_start >= 0 and gen_gap_from_end >= 0
+                gap_from_start_to_blobs_count[gen_gap_from_start] += 1
+                gap_from_end_to_blobs_count[gen_gap_from_end] += 1
+        
+        sorted_start_gaps = sorted(gap_from_start_to_blobs_count.items(), key=lambda x: x[0])
+        sorted_end_gaps = sorted(gap_from_end_to_blobs_count.items(), key=lambda x: x[0])
+        x_start_gaps = [gap for gap, _ in sorted_start_gaps]
+        x_end_gaps = [gap for gap, _ in sorted_end_gaps]
+        blobs_count_running = 0
+        y_start_blobs_count_running = []
+        for _, blobs_count in sorted_start_gaps:
+            blobs_count_running += blobs_count
+            y_start_blobs_count_running.append(blobs_count_running)
+        blobs_count_running = 0
+        y_end_blobs_count_running = []
+        for _, blobs_count in sorted_end_gaps:
+            blobs_count_running += blobs_count
+            y_end_blobs_count_running.append(blobs_count_running)
+
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+
+        fig, ax = plt.subplots(figsize=(13, 6))
+        ax.plot(
+            x_start_gaps,
+            y_start_blobs_count_running,
+            color="tab:green",
+            linewidth=2,
+            marker="o",
+            markersize=3,
+            label="running blobs count from start",
+        )
+        ax.plot(
+            x_end_gaps,
+            y_end_blobs_count_running,
+            color="tab:blue",
+            linewidth=2,
+            marker="o",
+            markersize=3,
+            label="running blobs count from end",
+        )
+        ax.set_xlabel("Distance to start/end (generation) of interval")
+        ax.set_ylabel("Running blobs count")
+        ax.set_title(f"Running Blobs Count by Distance to Start/End of Interval{' (only current intervals)' if only_current_intervals else ''}")
+        ax.set_xscale("log")
+        ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.5)
+        ax.legend(loc="upper left")
+        fig.tight_layout()
+        fig.savefig(
+            self.folder_for_plots / f"blobs_count_by_generation_gap_{'current' if only_current_intervals else 'all'}.png",
+            dpi=140,
+        )
+        plt.close(fig)
+
+
+    def _draw_interval_generation_distribution(self) -> None:
+        # (generation_range, blobs_count)
+        intervals: list[tuple[int, int]] = []
+        for i in self.intervals:
+            if not i.has_blobs():
+                continue
+            first, last = i.get_blob_generation_range()
+            intervals.append((last - first, len(i.blobs)))
+        assert intervals
+
+        gen_range_to_data: dict[int, list[int]] = defaultdict(lambda: [0, 0]) # [intervals_count, blobs_count]
+        for gen_range, blobs_count in intervals:
+            gen_range_to_data[gen_range][0] += 1
+            gen_range_to_data[gen_range][1] += blobs_count
+        sorted_ranges = sorted(gen_range_to_data.items(), key=lambda x: x[0])
+        x_gen_ranges = [gen_range for gen_range, _ in sorted_ranges]
+        y_intervals_count = [intervals_count for _, [intervals_count, _] in sorted_ranges]
+        y_intervals_count_running = []
+        y_blobs_count_running = []
+        intervals_running = 0
+        blobs_running = 0
+        for _, [intervals_count, blobs_count] in sorted_ranges:
+            intervals_running += intervals_count
+            blobs_running += blobs_count
+            y_intervals_count_running.append(intervals_running)
+            y_blobs_count_running.append(blobs_running)
+
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+
+        fig, ax_left = plt.subplots(figsize=(13, 6))
+        ax_right = ax_left.twinx()
+        intervals_line = ax_left.plot(
+            x_gen_ranges,
+            y_intervals_count,
+            color="tab:purple",
+            linewidth=2,
+            marker="o",
+            markersize=3,
+            label="intervals count",
+        )[0]
+        running_intervals_line = ax_left.plot(
+            x_gen_ranges,
+            y_intervals_count_running,
+            color="tab:orange",
+            linewidth=2,
+            marker="o",
+            markersize=3,
+            label="running intervals count",
+        )[0]
+        running_blobs_line = ax_right.plot(
+            x_gen_ranges,
+            y_blobs_count_running,
+            color="tab:green",
+            linewidth=2,
+            marker="o",
+            markersize=3,
+            label="running blobs count",
+        )[0]
+        ax_left.set_xlabel("Blob generation range (max - min)")
+        ax_left.set_ylabel("Intervals count", color="tab:purple")
+        ax_right.set_ylabel("Blobs count", color="tab:green")
+        ax_left.tick_params(axis="y", labelcolor="tab:purple")
+        ax_right.tick_params(axis="y", labelcolor="tab:green")
+        ax_left.set_title("Intervals by Blob Generation Range")
+        ax_left.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+        ax_left.legend(
+            handles=[intervals_line, running_intervals_line, running_blobs_line],
+            loc="upper left",
+        )
+        fig.tight_layout()
+        fig.savefig(
+            self.folder_for_plots / "interval_generation_range_distribution.png",
+            dpi=140,
+        )
+        plt.close(fig)
 
     def _draw_current_interval_beginning_distribution(self) -> None:
         # (beginning_ms, blobs_count)
         current_intervals: list[tuple[int, int]] = []
         for i in self.intervals:
-            if i.end_ms == self.now_ms:
+            if i.current_interval:
                 current_intervals.append((i.beginning_ms, len(i.blobs)))
         assert current_intervals
 
@@ -645,8 +1071,7 @@ def main() -> None:
     args = parse_args()
     parser = Parser(args)
     printer = StatsPrinter()
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    table = parser.parse(now_ms)
+    table = parser.parse()
 
     issues = table.validate()
     if args.require_complete_log and issues:
@@ -655,7 +1080,7 @@ def main() -> None:
         raise SystemExit(1)
 
     intervals = table.build_intervals()
-    history_analyzer = HistoryAnalyzer(intervals, now_ms, folder_for_plots=parser.OutputFolder)
+    history_analyzer = HistoryAnalyzer(intervals, folder_for_plots=parser.OutputFolder)
     printer.print_stats(parser, table.get_stats(), history_analyzer.stats, issues)
 
     history_analyzer.draw_what_makes_sense()

@@ -588,6 +588,8 @@ namespace Tests {
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
+            TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end());
+            appData.DefaultUserSIDs = std::move(defaultUserSIDs);
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();

@@ -38,18 +38,40 @@ private:
         return !SecurityToken.empty() || !GetDefaultUserSIDs().empty();
     }
 
+    bool IsTokenRequired() const {
+        if (GetEnforceUserTokenRequirement()) {
+            return true;
+        }
+
+        // Admin access
+        if (RequireAdminAccess && !GetAdministrationAllowedSIDs().empty()) {
+            return true;
+        }
+
+         // Acts in case of !EnforceUserTokenRequirement: If user specify token,
+         // it is checked and required to be valid for futher usage of YDB.
+         // If user doesn't specify token, no checks are made.
+        if (GetEnforceUserTokenCheckRequirement() && IsTokenExists()) {
+            return true;
+        }
+
+        return false;
+    }
+
     void ProcessAuthorizeTicketResult(THolder<TEvTicketParser::TEvAuthorizeTicketResult> result, const TActorContext& ctx) {
         if (result->HasError()) {
             if (IsTokenRequired()) {
                 return static_cast<TDerived*>(this)->OnAccessDenied(result->Error, ctx);
             }
-        } else {
-            UserAdmin = IsAdministrator(AppData(), result->Token.Get());
-            if (RequireAdminAccess && !UserAdmin) {
-                return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
-            }
         }
+
         AuthorizeTicketResult = std::move(result);
+
+        UserAdmin = IsAdministrator(AppData(), GetParsedToken().Get());
+        if (RequireAdminAccess && !UserAdmin) {
+            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
+        }
+
         static_cast<TBootstrap*>(this)->Bootstrap(ctx);
     }
 
@@ -61,6 +83,12 @@ private:
         if (IsTokenRequired()) {
             return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied - error parsing token", .Retryable = false}, ctx);
         }
+
+        UserAdmin = IsAdministrator(AppData(), GetParsedToken().Get());
+        if (RequireAdminAccess && !UserAdmin) {
+            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
+        }
+
         static_cast<TBootstrap*>(this)->Bootstrap(ctx);
     }
 
@@ -160,20 +188,6 @@ public:
     }
 
 public:
-    bool IsTokenRequired() const {
-        if (GetEnforceUserTokenRequirement()) {
-            return true;
-        }
-
-         // Acts in case of !EnforceUserTokenRequirement: If user specify token,
-         // it is checked and required to be valid for futher usage of YDB.
-         // If user doesn't specify token, no checks are made.
-        if (GetEnforceUserTokenCheckRequirement() && IsTokenExists()) {
-            return true;
-        }
-
-        return false;
-    }
 
     void Bootstrap(const TActorContext& ctx) {
         if (InternalToken) {
@@ -184,13 +198,15 @@ public:
                 return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied without user token", .Retryable = false}, ctx);
             }
             if (SecurityToken.empty()) {
+                TIntrusivePtr<NACLib::TUserToken> userToken;
                 if (!GetDefaultUserSIDs().empty()) {
-                    TIntrusivePtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(GetDefaultUserSIDs());
-                    THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
-                    ctx.Send(ctx.SelfID, AuthorizeTicketResult.Release());
+                    userToken = new NACLib::TUserToken(GetDefaultUserSIDs());
                 } else {
-                    return static_cast<TBootstrap*>(this)->Bootstrap(ctx);
+                    userToken = nullptr;
                 }
+
+                THolder<TEvTicketParser::TEvAuthorizeTicketResult> authorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
+                ctx.Send(ctx.SelfID, authorizeTicketResult.Release());
             } else {
                 ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                     .Ticket = SecurityToken,

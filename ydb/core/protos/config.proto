@@ -1595,6 +1595,30 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressStartupCatchupCount = 38 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup catchup processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressStartupCatchupPerPDiskCount = 39 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup catchup processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryCount = 40 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryPerPDiskCount = 41 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {

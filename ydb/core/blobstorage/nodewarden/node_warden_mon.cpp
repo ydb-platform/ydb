@@ -109,10 +109,10 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             }
         }
 
-        TAG(TH3) { out << "Brokers"; }
+        TAG(TH3) { out << "VDisk Brokers"; }
         DIV() {
-            out << "<a href=\"?page=localrecoverybroker\">Local Recovery Broker</a><br>";
-            out << "<a href=\"?page=startupcatchupbroker\">Startup Catchup Broker</a>";
+            out << "<a href=\"?page=localrecoverybroker\">VDisk Local Recovery Broker</a><br>";
+            out << "<a href=\"?page=startupcatchupbroker\">VDisk Startup Catchup Broker</a>";
         }
 
         TAG(TH3) { out << "StorageConfig"; }

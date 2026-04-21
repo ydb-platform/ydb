@@ -289,12 +289,14 @@ namespace NKikimr {
 
             void Handle(NMon::TEvHttpInfo::TPtr& ev) {
                 TStringStream str;
+                TString nodeLimit = GetNodeLimit() ? ToString(GetNodeLimit()) : "unlimited";
+                TString perPDiskLimit = GetPerPDiskLimit() ? ToString(GetPerPDiskLimit()) : "unlimited";
                 HTML(str) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-body") {
                             str << "Broker Service Id: " << this->SelfId() << "<br>";
-                            str << "Node Limit: " << GetNodeLimit() << "<br>";
-                            str << "Per-PDisk Limit: " << GetPerPDiskLimit() << "<br>";
+                            str << "Node Limit: " << nodeLimit << "<br>";
+                            str << "Per-PDisk Limit: " << perPDiskLimit << "<br>";
                             str << "Active VDisks: " << Active.size() << "<br>";
                             str << "Waiting VDisks: " << WaitQueue.size();
                         }

@@ -1609,6 +1609,66 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         });
     }
 
+    Y_UNIT_TEST(CreateCdcStreamOnIndexedMigratedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+        )");
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "Tenant");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "Tenant", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("Tenant"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        TestCreateCdcStream(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Tenant/Table"), {
+            NLs::PathExist,
+        });
+    }
+
 } // TCdcStreamTests
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {

@@ -16,7 +16,6 @@
     * `fulltext_plain` — basic fulltext index. Described in detail in [{#T}](../create_table/fulltext_index.md).
     * `fulltext_relevance` — fulltext index with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) statistics for relevance scoring. Described in detail in [{#T}](../create_table/fulltext_index.md).
 
-* `UNIQUE` — creates an index with uniqueness guarantee for inserted values.
 * `<index_columns>` — comma-separated list of column names from the created table that can be used for index searches. Must be specified.
 * `<cover_columns>` — comma-separated list of column names from the created table that will be saved in the index in addition to search columns, providing the ability to get additional data without accessing the table. Empty by default.
 * `<parameter_name>` and `<parameter_value>` — index parameters specific to a particular `<index_type>`.

@@ -86,7 +86,7 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
-        SetRequestIdHeader(&responseHeaders, GetLogContext());
+        SetRequestIdHeader(responseHeaders, GetRequestId());
         ReplyAndPassAway(Request->CreateResponse(event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }

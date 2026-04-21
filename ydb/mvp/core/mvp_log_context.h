@@ -7,13 +7,41 @@
 namespace NMVP {
 
 constexpr TStringBuf REQUEST_ID_HEADER = "X-Request-Id";
-constexpr size_t MAX_REQUEST_ID_LENGTH = 256;
+constexpr size_t MAX_REQUEST_ID_LENGTH = 64;
 
-struct TMvpLogContext {
+inline bool IsValidRequestId(TStringBuf requestId) {
+    return !requestId.empty()
+        && requestId.size() <= MAX_REQUEST_ID_LENGTH
+        && NHttp::IsValidHeaderData(requestId);
+}
+
+inline TString NormalizeRequestId(TStringBuf requestId) {
+    if (IsValidRequestId(requestId)) {
+        return TString(requestId);
+    }
+    return CreateGuidAsString();
+}
+
+class TMvpLogContext {
+private:
     TString RequestId;
+
+public:
+    TMvpLogContext()
+        : RequestId(NormalizeRequestId({}))
+    {}
+
+    explicit TMvpLogContext(TStringBuf requestId)
+        : RequestId(NormalizeRequestId(requestId))
+    {}
+
+    TStringBuf GetRequestId() const {
+        return RequestId;
+    }
 };
 
 TString GetLogPrefix(const TMvpLogContext* context);
+TStringBuf GetRequestId(const TMvpLogContext* context);
 TMvpLogContext CreateMvpLogContext(const NHttp::THttpIncomingRequestPtr& request);
 
 class TMvpLogContextProvider {
@@ -35,15 +63,20 @@ public:
         return NMVP::GetLogPrefix(GetLogContext());
     }
 
-    void SetLogContext(const TMvpLogContext& logContext) {
-        LogContext = logContext;
+    TStringBuf GetRequestId() const {
+        return NMVP::GetRequestId(GetLogContext());
+    }
+
+    void SetLogContext(const TMvpLogContext* logContext) {
+        LogContext = logContext ? *logContext : TMvpLogContext();
     }
 };
 
-inline bool IsValidRequestId(TStringBuf requestId) {
-    return !requestId.empty()
-        && requestId.size() <= MAX_REQUEST_ID_LENGTH
-        && NHttp::IsValidHeaderData(requestId);
+inline TStringBuf GetRequestId(const TMvpLogContext* context) {
+    if (!context) {
+        return {};
+    }
+    return context->GetRequestId();
 }
 
 inline TString GetRequestId(const NHttp::THttpIncomingRequestPtr& request) {
@@ -58,25 +91,18 @@ inline TString GetRequestId(const NHttp::THttpIncomingRequestPtr& request) {
 }
 
 inline TMvpLogContext CreateMvpLogContext(const NHttp::THttpIncomingRequestPtr& request) {
-    TString requestId = GetRequestId(request);
-    if (requestId.empty()) {
-        requestId = CreateGuidAsString();
-    }
-    return {.RequestId = std::move(requestId)};
+    return TMvpLogContext(GetRequestId(request));
 }
 
 inline TString GetLogPrefix(const TMvpLogContext* context) {
-    if (!context || context->RequestId.empty()) {
+    if (!context) {
         return {};
     }
-    return TStringBuilder() << "X-Request-Id: " << context->RequestId << ", ";
+    return TStringBuilder() << "X-Request-Id: " << context->GetRequestId() << ", ";
 }
 
-inline void SetRequestIdHeader(NHttp::THeadersBuilder* headers, const TMvpLogContext* context) {
-    if (!headers || !context || !IsValidRequestId(context->RequestId)) {
-        return;
-    }
-    headers->Set(REQUEST_ID_HEADER, context->RequestId);
+inline void SetRequestIdHeader(NHttp::THeadersBuilder& headers, TStringBuf requestId) {
+    headers.Set(REQUEST_ID_HEADER, requestId);
 }
 
 } // namespace NMVP

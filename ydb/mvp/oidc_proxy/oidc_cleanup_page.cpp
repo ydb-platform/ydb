@@ -24,7 +24,7 @@ void THandlerCleanup::Bootstrap() {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(CookieName));
     SetCORS(Request, &responseHeaders);
-    SetRequestIdHeader(&responseHeaders, GetLogContext());
+    SetRequestIdHeader(responseHeaders, GetRequestId());
 
     ReplyAndPassAway(Request->CreateResponse("200", "OK", responseHeaders));
 }

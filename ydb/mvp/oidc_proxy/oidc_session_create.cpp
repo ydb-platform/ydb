@@ -65,7 +65,7 @@ void THandlerSessionCreate::Bootstrap() {
 void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);
-    SetRequestIdHeader(&responseHeaders, GetLogContext());
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     responseHeaders.Set("Content-Type", "text/plain");
     return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
 }
@@ -84,7 +84,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
         } else {
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Parse(response->Headers);
-            SetRequestIdHeader(&responseHeaders, GetLogContext());
+            SetRequestIdHeader(responseHeaders, GetRequestId());
             return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
     }
@@ -112,7 +112,7 @@ void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie() {
 
 void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders) {
     SetCORS(Request, responseHeaders);
-    SetRequestIdHeader(responseHeaders, GetLogContext());
+    SetRequestIdHeader(*responseHeaders, GetRequestId());
     responseHeaders->Set("Location", Context.GetRequestedAddress());
     ReplyAndPassAway(Request->CreateResponse("302", "Found", *responseHeaders));
 }
@@ -121,7 +121,7 @@ void THandlerSessionCreate::SendUnknownErrorResponseAndDie() {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/html");
     SetCORS(Request, &responseHeaders);
-    SetRequestIdHeader(&responseHeaders, GetLogContext());
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     const static TStringBuf BAD_REQUEST_HTML_PAGE = "<html>"
                                                         "<head>"
                                                             "<title>"

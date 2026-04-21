@@ -68,7 +68,7 @@ void THandlerSessionCreateNebius::ProcessSessionToken(const NJson::TJsonValue& j
 
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);
-    SetRequestIdHeader(&responseHeaders, GetLogContext());
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(sessionCookieName, sessionCookieValue, expiresIn));
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     ReplyAndPassAway(Request->CreateResponse("302", "Cookie set", responseHeaders));

@@ -17,17 +17,6 @@
 
 namespace NMVP::NOIDC {
 
-namespace {
-
-NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl, const TMvpLogContext* logContext) {
-    headers.Set("Content-Type", "application/json; charset=utf-8");
-    SetCORS(request, &headers);
-    SetRequestIdHeader(&headers, logContext);
-    TString body {"{\"error\":\"Authorization Required\",\"authUrl\":\"" + redirectUrl + "\"}"};
-    return request->CreateResponse("401", "Unauthorized", headers, body);
-}
-
-} // namespace
 TRestoreOidcContextResult::TRestoreOidcContextResult(const TStatus& status, const TContext& context)
     : Context(context)
     , Status(status)
@@ -88,7 +77,7 @@ void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& va
     meta.Aux.emplace_back(name, value);
 }
 
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, const TMvpLogContext* logContext) {
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId) {
     TContext context(request);
     const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
                                                  << "?response_type=code"
@@ -100,13 +89,15 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
                                                                      << GetAuthCallbackUrl();
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
-    SetRequestIdHeader(&responseHeaders, logContext);
+    SetRequestIdHeader(responseHeaders, requestId);
     responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
-    if (context.IsAjaxRequest()) {
-        return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl, logContext);
+    if (context.IsNavigationRequest()) {
+        responseHeaders.Set(LOCATION_HEADER, redirectUrl);
+        return request->CreateResponse("302", "Authorization required", responseHeaders);
     }
-    responseHeaders.Set(LOCATION_HEADER, redirectUrl);
-    return request->CreateResponse("302", "Authorization required", responseHeaders);
+    responseHeaders.Set("Content-Type", "application/json; charset=utf-8");
+    TString body {"{\"error\":\"Authorization Required\",\"authUrl\":\"" + redirectUrl + "\"}"};
+    return request->CreateResponse("401", "Unauthorized", responseHeaders, body);
 }
 
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state) {
@@ -340,11 +331,11 @@ NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams&
     return outRequest;
 }
 
-NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage, const TMvpLogContext* logContext) {
+NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage, TStringBuf requestId) {
     NHttp::THeadersBuilder headers;
     headers.Set("Content-Type", "text/html");
     SetCORS(request, &headers);
-    SetRequestIdHeader(&headers, logContext);
+    SetRequestIdHeader(headers, requestId);
 
     TStringBuilder html;
     html << "<html><head><title>403 Forbidden</title></head><body bgcolor=\"white\"><center><h1>";
@@ -354,11 +345,11 @@ NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIn
     return request->CreateResponse("403", "Forbidden", headers, html);
 }
 
-NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage, const TMvpLogContext* logContext) {
+NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage, TStringBuf requestId) {
     NHttp::THeadersBuilder headers;
     headers.Set("Content-Type", "text/html");
     SetCORS(request, &headers);
-    SetRequestIdHeader(&headers, logContext);
+    SetRequestIdHeader(headers, requestId);
 
     TStringBuilder html;
     html << "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>";

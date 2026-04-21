@@ -23,7 +23,7 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
     Send(Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), NActors::IEventHandle::FlagTrackDelivery);
     if (!ProtectedPage.IsHttpSchemeAllowed() || !ProtectedPage.IsRequestedHostAllowed(Settings.AllowedProxyHosts)) {
-        return ReplyAndPassAway(CreateResponseForbiddenHost(Request, ProtectedPage, GetLogContext()));
+        return ReplyAndPassAway(CreateResponseForbiddenHost(Request, ProtectedPage, GetRequestId()));
     }
     NHttp::THeaders headers(Request->Headers);
     TStringBuf authHeader = headers.Get(AUTHORIZATION_HEADER);
@@ -60,7 +60,7 @@ void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEv
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
         BLOG_D("Can not process incomplete request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-        ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(Request, "Failed to process streaming response", GetLogContext()));
+        ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(Request, "Failed to process streaming response", GetRequestId()));
     }
 }
 
@@ -124,7 +124,7 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool
     auto timeout = GetRequestTimeout();
     ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
     ExtensionManager->SetExtensionTimeout(timeout);
-    ExtensionManager->SetLogContext(*GetLogContext());
+    ExtensionManager->SetLogContext(GetLogContext());
     ExtensionManager->ArrangeExtensions(Request);
 
     TProxiedRequestParams params(Request, authHeader, secure, ProtectedPage, Settings);

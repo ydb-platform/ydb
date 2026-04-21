@@ -96,7 +96,7 @@ void THandlerImpersonateStart::ProcessImpersonatedToken(const NJson::TJsonValue&
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(impersonatedCookieName, impersonatedCookieValue, expiresIn));
     SetCORS(Request, &responseHeaders);
-    SetRequestIdHeader(&responseHeaders, GetLogContext());
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     ReplyAndPassAway(Request->CreateResponse("200", "OK", responseHeaders));
 }
 
@@ -118,7 +118,7 @@ void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRespon
                 responseHeaders.Set("Content-Type", headers.Get("Content-Type"));
             }
             SetCORS(Request, &responseHeaders);
-            SetRequestIdHeader(&responseHeaders, GetLogContext());
+            SetRequestIdHeader(responseHeaders, GetRequestId());
             return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
     }
@@ -135,7 +135,7 @@ void THandlerImpersonateStart::ReplyBadRequestAndPassAway(const TString& errorMe
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/plain");
     SetCORS(Request, &responseHeaders);
-    SetRequestIdHeader(&responseHeaders, GetLogContext());
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
 }
 

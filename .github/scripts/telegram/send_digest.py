@@ -12,6 +12,8 @@ as sent by writing sent_at = NOW().
 There are no timing assumptions, no cursors, no historical-data floods.
 The queue is the single source of truth for "what still needs to be sent".
 
+Scheduled by ``.github/workflows/telegram_scheduled_notifications.yml`` (job **Mute digest to Telegram**).
+
 Reads profiles from .github/config/mute_issue_and_digest_config.json
 and runs only those whose ``schedule_utc_hours`` contains the current UTC hour
 and whose ``schedule_weekdays`` contains the current ISO weekday (1=Mon … 7=Sun).

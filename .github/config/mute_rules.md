@@ -194,7 +194,7 @@ graph TB
     
     UpdateAnalyticsAfterMerge --> AsyncAnalytics[⏱️ export_issues / mappings /<br/>test_muted_monitor_mart …<br/>collect_analytics_fast<br/>~every 30 min, separate workflow]
     
-    DigestQ --> SendDigest[📤 alert_queued_jobs.yml<br/>job send-digest: send_digest.py<br/>~every 30 min UTC]
+    DigestQ --> SendDigest[📤 telegram_scheduled_notifications.yml<br/>job Mute digest to Telegram<br/>send_digest.py ~30 min UTC]
     SendDigest --> TG[Telegram per team]
     
     AsyncAnalytics --> End2([End])
@@ -218,7 +218,7 @@ graph TB
 
 ### What runs where (sequence)
 
-There are **three pieces**: (1) every hour **`update_muted_ya.yml`** refreshes data and may open a mute PR; (2) after that PR merges, **`create_issues_for_muted_tests.yml`** creates GitHub issues and **enqueues `digest_queue`**; (3) on its own schedule, **`alert_queued_jobs.yml`** (job **Send mute digest**) runs **`send_digest.py`** and sends **Telegram** from that queue. Diagrams **1–2** are the mute repo path; **3** is the digest mailing path.
+There are **three pieces**: (1) every hour **`update_muted_ya.yml`** refreshes data and may open a mute PR; (2) after that PR merges, **`create_issues_for_muted_tests.yml`** creates GitHub issues and **enqueues `digest_queue`**; (3) on its own schedule, **`telegram_scheduled_notifications.yml`** (GitHub name *Telegram scheduled notifications*, job **Mute digest to Telegram**) runs **`send_digest.py`** and sends **Telegram** from that queue. Diagrams **1–2** are the mute repo path; **3** is the digest mailing path.
 
 #### 1) Hourly: `update_muted_ya.yml` (one workflow run)
 
@@ -261,19 +261,19 @@ sequenceDiagram
     WF->>YDB: enqueue digest_queue for new mute issues
 ```
 
-#### 3) Mute digest to Telegram: `alert_queued_jobs.yml` (job Send mute digest)
+#### 3) Mute digest to Telegram: `telegram_scheduled_notifications.yml` (job Mute digest to Telegram)
 
-Runs on a **different** timer than mute PRs (~every 30 min UTC in the same workflow file as CI queue alerts). **`send_digest.py`** uses [mute_issue_and_digest_config.json](./mute_issue_and_digest_config.json) to decide **which UTC hours / weekdays** to send. Same overview in flowchart form: [Mute digest queue to Telegram](#mute-digest-queue-to-telegram).
+Runs on a **different** timer than mute PRs (~every 30 min UTC in the same workflow file as **CI queue Telegram alerts**). **`send_digest.py`** uses [mute_issue_and_digest_config.json](./mute_issue_and_digest_config.json) to decide **which UTC hours / weekdays** to send.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant AJ as alert_queued_jobs send-digest job
+    participant AJ as telegram_scheduled_notifications
     participant CFG as mute_issue_and_digest_config
     participant YDB as YDB digest_queue
     participant TG as Telegram
 
-    Note over AJ: Cron ~30 min same workflow file as alert_queued_jobs
+    Note over AJ: Cron ~30 min workflow telegram_scheduled_notifications.yml
     AJ->>CFG: read schedule profiles mute_issue_and_digest_config.json
     AJ->>AJ: skip hour if no profile matches now unless --force
     AJ->>YDB: read rows where sent_at empty still-open issues only

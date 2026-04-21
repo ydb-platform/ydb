@@ -140,63 +140,7 @@ ALTER TABLE my_table
     * `clusters`: количество кластеров в k-means, определяющее ширину поиска (рекомендуется 64-512).
     * `overlap_clusters`: количество кластеров нижнего уровня, в которые добавляется каждый вектор (рекомендуется 3).
 
-Внутри векторный индекс состоит из скрытых индексных таблиц вида `indexImpl*Table`. В [запросах на выборку](../yql/reference/syntax/select/vector_index.md) с использованием векторного индекса эти таблицы отображаются в [статистике запросов](query-plans-optimization.md). Подробнее об устройстве векторного индекса см. в отдельной статье [{#T}](vector-indexes-kmeans-tree-type.md).
-
-## Примеры создания векторных индексов {#creation-examples}
-
-Векторный индекс может быть **покрывающим**, что означает включение дополнительных колонок для возможности чтения из индекса без обращения к основной таблице.
-
-Или же он может быть с поддержкой **фильтрации**, что позволяет учитывать дополнительные колонки для быстрой фильтрации при выполнении чтения.
-
-Ниже приведены примеры создания векторного индекса различных типов.
-
-### Базовый векторный индекс {#basic}
-
-Глобальный векторный индекс по колонке `embedding`:
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (embedding)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
-
-### Векторный индекс с покрывающими колонками {#covering-example}
-
-Покрывающий векторный индекс, включающий дополнительную колонку `data`, чтобы избежать чтения из основной таблицы при поиске:
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (embedding) COVER (data)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
-
-### Векторный индекс с фильтрацией {#filtered-example}
-
-Векторный индекс с фильтрацией, позволяющий фильтровать по колонке `user` в момент выполнения векторного поиска:
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (user, embedding)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
-
-### Векторный индекс с фильтрацией и покрывающими колонками {#filtered-covering}
-
-Векторный индекс с фильтрацией и покрывающими колонками:
-
-```yql
-ALTER TABLE my_table
-  ADD INDEX my_index
-  GLOBAL USING vector_kmeans_tree
-  ON (user, embedding) COVER (data)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
-```
+Внутри векторный индекс состоит из скрытых индексных таблиц вида `indexImpl*Table`. В [запросах на выборку](#select) с использованием векторного индекса эти таблицы отображаются в [статистике запросов](query-plans-optimization.md). Подробнее об устройстве векторного индекса см. в отдельной статье [{#T}](vector-indexes-kmeans-tree-type.md).
 
 ### Перекрытие кластеров {#overlap-clusters}
 

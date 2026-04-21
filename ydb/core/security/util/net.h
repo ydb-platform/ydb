@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/fwd.h>
+#include <util/network/address.h>
 
 namespace NKikimr::NSecurity {
 
@@ -21,5 +22,6 @@ bool IsIPv6(TStringBuf address);
 //     3. ipv6:<ipv6>
 //     4. ipv6:[<ipv6>]:<port>
 bool IsGoodPeernameFormat(TStringBuf peername);
+NAddr::IRemoteAddrPtr ParsePeername(TStringBuf peername);
 
 } // namespace NKikimr::NSecurity

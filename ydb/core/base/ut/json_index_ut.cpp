@@ -87,6 +87,7 @@ const TString compError = "Comparison is not allowed between literals on both si
 const TString varError = "Variables are not supported at the moment";
 const TString predError = "Predicates are not allowed in this context";
 const TString filterError = "'@' is only allowed inside filters";
+const TString emptyError = "Cannot collect tokens for the given JSON path";
 
 }  // namespace
 
@@ -370,8 +371,8 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateQueries("$.a.b - (-$.c.d)", {"\1a\1b", "\1c\1d"});
 
         // Both operands are literals - no path to collect
-        ValidateQueries("1 + 2", {});
-        ValidateQueries("(+(-1.5)) * 2.0", {});
+        ValidateError("1 + 2", emptyError);
+        ValidateError("(+(-1.5)) * 2.0", emptyError);
 
         // Wildcard on left, path on right - both collected
         ValidateJsonExists("$.a.* + $.b", {"\1a", "\1b"});
@@ -704,10 +705,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("$ <= $.a", {"", "\1a"});
         ValidateJsonValue("$.a >= $", {"\1a", ""});
 
-        // Both sides are literals - both dropped, empty result
-        ValidateJsonValue("1 < 2", {});
-        ValidateJsonValue("1.5 >= -2.0", {});
-        ValidateJsonValue("true != false", {});
+        // Both sides are literals - error
+        ValidateError("1 < 2", emptyError, ECallableType::JsonValue);
+        ValidateError("1.5 >= -2.0", emptyError, ECallableType::JsonValue);
+        ValidateError("true != false", emptyError, ECallableType::JsonValue);
 
         // Arithmetic expression as operand (same as BinaryArithmeticOp behavior)
         // $.a + $.b produces mode=And, comparison also sets And - compatible

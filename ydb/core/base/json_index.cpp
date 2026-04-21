@@ -723,7 +723,18 @@ TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
 }
 
 TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType) {
-    return TQueryCollector(path, callableType).Collect();
+    auto result = TQueryCollector(path, callableType).Collect();
+    if (!result.IsError()) {
+        if (result.GetTokens().empty()) {
+            result = TCollectResult(TIssue("Cannot collect tokens for the given JSON path"));
+        }
+
+        if (callableType != ECallableType::JsonValue) {
+            result.StopCollecting();
+        }
+    }
+
+    return result;
 }
 
 TCollectResult MergeAnd(TCollectResult left, TCollectResult right) {

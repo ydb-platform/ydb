@@ -2048,19 +2048,19 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
                     if (tx.ReqToShardIdx.empty()) {
                         ++tx.CompletedRounds;
                         if (tx.CompletedRounds >= tx.MaxRounds) {
-                            actorToTxState.erase(txIt);
                             Cerr << "TX " << tx.Lock.GetLockId() << " succeeded" << Endl;
+                            actorToTxState.erase(txIt);
                             ++successfulTxs;
                         }
                     }
                 } else {
+                    Cerr << "TX " << tx.Lock.GetLockId() << " failed" << Endl;
                     for (const auto& [pendingReqId, shardIdx] : tx.ReqToShardIdx) {
                         auto cancelEv = std::make_unique<NEvents::TDataEvents::TEvLockRowsCancel>(
                             pendingReqId);
                         nodePipes.at(tx.NodeIdx).at(shardIdx)->Send(tx.EdgeActor, cancelEv.release());
                     }
                     actorToTxState.erase(txIt);
-                    Cerr << "TX " << tx.Lock.GetLockId() << " failed" << Endl;
                     ++failedTxs;
                 }
             }
@@ -2074,8 +2074,8 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             Cerr << status << ": " << count << Endl;
         }
 
-        UNIT_ASSERT_GT_C(
-            successfulTxs, REQUIRED_SUCCESSFUL_TXS,
+        UNIT_ASSERT_C(
+            actorToTxState.empty(),
             "Wait graph:\n" << GetWaitGraphStr(runtime, 0));
         UNIT_ASSERT(responseStatusStats[NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK] > 0);
     }

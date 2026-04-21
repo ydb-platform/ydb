@@ -125,6 +125,7 @@ namespace NLongTxService {
             THashMap<TActorId, ui64> NewSubscribers;
             THashMap<TActorId, ui64> RepliedSubscribers;
             TInstant Timestamp = TInstant::Zero();
+            bool TimestampReady = false;
             // Intrusive heap support
             size_t HeapIndex = -1;
             TMonotonic ExpiresAt;
@@ -251,6 +252,14 @@ namespace NLongTxService {
                 return std::visit([](auto ptr) {
                     return ptr->Timestamp;
                 }, Impl);
+            }
+
+            bool TimestampReady() const {
+                struct TVisitor {
+                    bool operator()(TLockState*) { return true; }
+                    bool operator()(TProxyLockState* ls) { return ls->TimestampReady; }
+                };
+                return std::visit(TVisitor{}, Impl);
             }
 
             TLockState* LocalState() const {

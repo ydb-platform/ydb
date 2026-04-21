@@ -729,8 +729,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     if (lockStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
         lock.State = EProxyLockState::Subscribed;
         bool gotTimestamp = false;
-        if (lockTimestamp && !lock.Timestamp) {
+        if (!lock.TimestampReady) {
             lock.Timestamp = lockTimestamp;
+            lock.TimestampReady = true;
             gotTimestamp = true;
         }
         for (auto& pr : lock.NewSubscribers) {
@@ -1313,13 +1314,6 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         WaitEdges.erase(it);
         actuallyRemoved.push_back(id);
 
-        if (Settings.Counters) {
-            Settings.Counters->WaitGraphEdges->Dec();
-            if (id.OwnerId.NodeId() == SelfId().NodeId()) {
-                Settings.Counters->LocalWaitGraphEdges->Dec();
-            }
-        }
-
         TXLOG_DEBUG("Removed wait edge id: " << id
             << ", awaiter: " << awaiterInfo
             << ", blocker: " << blockerInfo);
@@ -1458,7 +1452,7 @@ void TLongTxServiceActor::UnlinkWaitEdge(TWaitEdge& edge) {
 void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
     auto remove = [&](TWaitEdge& edge) {
         UnlinkWaitEdge(edge);
-        WaitEdges.erase(edge.Id); // Unlinks the edge from the list.
+        WaitEdges.erase(edge.Id);
     };
     while (!waitNode.Awaiters.Empty()) {
         remove(*waitNode.Awaiters.Back());
@@ -1672,7 +1666,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
                 ++sccSize;
                 if (!node->Awaiters.Empty()) {
                     TLockStateHandle handle(node->Awaiters.Front()->Blocker);
-                    if (!handle.Timestamp()) {
+                    if (!handle.TimestampReady()) {
                         // Timestamp not yet known, ignore this SCC for now.
                         // Re-invocation will be scheduled when it arrives.
                         hasLockWithoutTimestamp = true;

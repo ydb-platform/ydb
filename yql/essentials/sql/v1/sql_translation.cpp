@@ -5823,6 +5823,7 @@ bool TSqlTranslation::ParseViewQuery(
     const TString& service,
     const TDeferredAtom& cluster)
 {
+    Token(beforeToken);
     if (!body.HasBlock2()) {
         Error() << "Empty view body is not allowed";
         return false;
@@ -6174,7 +6175,15 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
     }
 }
 
-TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context) {
+TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPathIgnoreAt(const TRule_object_ref& node, TObjectOperatorContext& context, bool useTablePrefix) {
+    return DoParseObjectPath(node, context, /* ignoreAt = */ true, useTablePrefix);
+}
+
+TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context) {
+    return DoParseObjectPath(node, context, /* ignoreAt = */ false, /* useTablePrefix = */ true);
+}
+
+TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix) {
     // object_ref: (cluster_expr .)? id_or_at
 
     if (node.HasBlock1()) {
@@ -6184,12 +6193,11 @@ TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, T
     }
 
     const auto& [hasAt, objectId] = Id(node.GetRule_id_or_at2(), *this);
-    if (hasAt) {
+    if (!ignoreAt && hasAt) {
         Error() << "'@' is not allowed prefix for object name";
         return Nothing();
     }
-
-    return BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId);
+    return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId) : objectId);
 }
 
 bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {

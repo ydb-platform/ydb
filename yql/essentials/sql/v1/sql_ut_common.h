@@ -14549,10 +14549,10 @@ Y_UNIT_TEST(DoesntWorkOnOldLangVersion) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 4);
     ExpectFailWithError("create view plato.foo as select 1;",
-                        "<main>:1:13: Error: CREATE VIEW is not available before language version 2025.05\n",
+                        "<main>:1:1: Error: CREATE VIEW is not available before language version 2025.05\n",
                         settings);
     ExpectFailWithError("create view plato.foo as do begin select 1; end do;",
-                        "<main>:1:13: Error: CREATE VIEW is not available before language version 2025.05\n",
+                        "<main>:1:1: Error: CREATE VIEW is not available before language version 2025.05\n",
                         settings);
 }
 
@@ -14620,7 +14620,7 @@ Y_UNIT_TEST(NewSyntaxDoesntWorkOnYdb) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view ydb.foo as do begin select 1; end do",
-                        "<main>:1:13: Error: CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for ydb provider. Please use CREATE VIEW ... AS SELECT\n",
+                        "<main>:1:1: Error: CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for ydb provider. Please use CREATE VIEW ... AS SELECT\n",
                         settings);
 }
 
@@ -14628,15 +14628,15 @@ Y_UNIT_TEST(OldSyntaxDoesntWorkOnYt) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view plato.foo as select 1;",
-                        "<main>:1:13: Error: CREATE VIEW ... AS SELECT syntax is not supported for yt provider. Please use CREATE VIEW ... AS DO BEGIN ... END DO\n",
+                        "<main>:1:1: Error: CREATE VIEW ... AS SELECT syntax is not supported for yt provider. Please use CREATE VIEW ... AS DO BEGIN ... END DO\n",
                         settings);
 }
 
 Y_UNIT_TEST(EmptyViewBody) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
-    ExpectFailWithError("create view plato.foo as do begin end do", "<main>:1:13: Error: Empty view body is not allowed\n", settings);
-    ExpectFailWithError("create view plato.foo as do begin /*comment*/;; end do", "<main>:1:13: Error: Empty view body is not allowed\n", settings);
+    ExpectFailWithError("create view plato.foo as do begin end do", "<main>:1:29: Error: Empty view body is not allowed\n", settings);
+    ExpectFailWithError("create view plato.foo as do begin /*comment*/;; end do", "<main>:1:29: Error: Empty view body is not allowed\n", settings);
 }
 
 Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
@@ -14651,7 +14651,7 @@ Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
 Y_UNIT_TEST(ErrorOnMissingCluster) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
-    ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n", settings);
+    ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:13: Error: No cluster name given and no default cluster is selected\n", settings);
 }
 
 Y_UNIT_TEST(CreateViewIfNotExists) {

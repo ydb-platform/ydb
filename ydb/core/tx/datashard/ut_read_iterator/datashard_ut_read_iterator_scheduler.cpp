@@ -194,14 +194,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     // Verify that setting PoolId on a request against a scheduler with tight
     // quota still delivers all rows — continuations must retry internally rather
     // than returning OVERLOADED to the client.
-    // With ReadLimit=10 ms and in-test reads completing in ~0 ms, ReturnQuota
+    // With ReadLimit=5 ms and in-test reads completing in ~0 ms, ReturnQuota
     // refills the bucket immediately, so reads complete quickly.
     Y_UNIT_TEST(ShouldCompleteContinuationReadWithTightQuota) {
         constexpr ui32 kRows = 3;
-        // 10 ms per second = tight budget; in unit-tests reads take ~0 ms so
+        // 5 ms per second = tight budget; in unit-tests reads take ~0 ms so
         // ReturnQuota() restores almost all quota, allowing every continuation
         // to proceed without a real delay.
-        TSchedulerTestHelper helper(/*readLimitMs=*/10u);
+        TSchedulerTestHelper helper(/*readLimitMs=*/5u);
         helper.UpsertMany(1, kRows);
 
         auto request = helper.MakeReadRequest(1, NKikimrDataEvents::FORMAT_CELLVEC);
@@ -215,8 +215,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
             auto result = helper.WaitResult();
             UNIT_ASSERT_C(result, "Timed out waiting for read result");
             // Continuations must never surface OVERLOADED to the client.
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(),
-                                      Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             rowsReceived += result->GetRowsCount();
             if (result->Record.GetFinished()) {
                 break;

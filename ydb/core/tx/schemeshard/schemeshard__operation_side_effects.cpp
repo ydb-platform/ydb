@@ -944,45 +944,41 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         return;
     }
 
-    struct TCandidate {
+    // Two-pass structure:
+    //   Pass 1 builds sort keys for every eligible (txId, partIdx) pair.
+    //   Pass 2 re-resolves each pair, allocates the Order, and persists.
+    //
+    // The split exists because Order must be monotonic in (PlanStep, TxId,
+    // PartIdx), which means we sort before allocating. Both passes do the
+    // same lookups; pass 2 is authoritative (re-fetches the live state),
+    // pass 1 only decides what to sort.
+    struct TSortKey {
+        TStepId PlanStep;
         TTxId TxId;
         ui32 PartIdx;
-        TStepId PlanStep;
-        TOperationId OpId;
     };
-    TVector<TCandidate> candidates;
+    TVector<TSortKey> keys;
 
     for (const auto& txId : DoneTransactions) {
-        auto it = ss->Operations.find(txId);
-        if (it == ss->Operations.end()) {
+        auto opIt = ss->Operations.find(txId);
+        if (opIt == ss->Operations.end() || !opIt->second->IsReadyToDone(ctx)) {
             continue;
         }
-
-        TOperation::TPtr operation = it->second;
-        if (!operation->IsReadyToDone(ctx)) {
-            continue;
-        }
+        const TOperation::TPtr& operation = opIt->second;
 
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
-            TOperationId partOpId(txId, partIdx);
-
-            auto txStateIt = ss->TxInFlight.find(partOpId);
+            auto txStateIt = ss->TxInFlight.find(TOperationId(txId, partIdx));
             if (txStateIt == ss->TxInFlight.end()) {
                 continue;
             }
-
-            const TTxState& txState = txStateIt->second;
-
-            TPathId pathId = txState.TargetPathId;
-            if (!ss->PathsById.contains(pathId)) {
+            if (!ss->PathsById.contains(txStateIt->second.TargetPathId)) {
                 continue;
             }
-
-            candidates.push_back(TCandidate{txId, partIdx, txState.PlanStep, partOpId});
+            keys.push_back({txStateIt->second.PlanStep, txId, partIdx});
         }
     }
 
-    std::sort(candidates.begin(), candidates.end(), [](const TCandidate& a, const TCandidate& b) {
+    std::sort(keys.begin(), keys.end(), [](const TSortKey& a, const TSortKey& b) {
         return std::tie(a.PlanStep, a.TxId, a.PartIdx) < std::tie(b.PlanStep, b.TxId, b.PartIdx);
     });
 
@@ -992,54 +988,50 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
     // sysparam once at the end of this tx — only the final value matters.
     bool anyAllocated = false;
 
-    for (const auto& candidate : candidates) {
-        TTxId txId = candidate.TxId;
+    for (const auto& key : keys) {
+        const TTxId txId = key.TxId;
+        const ui32 partIdx = key.PartIdx;
 
-        auto txStateIt = ss->TxInFlight.find(candidate.OpId);
+        // Re-resolve the live state. Nothing mutates these maps between
+        // passes on the single-threaded tablet executor today, but
+        // re-resolving keeps pass 2 self-contained and defensive.
+        auto txStateIt = ss->TxInFlight.find(TOperationId(txId, partIdx));
         if (txStateIt == ss->TxInFlight.end()) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "DoPersistSchemeChangeRecords: no scheme change record logged for txId=" << txId
-                    << " partIdx=" << candidate.PartIdx
-                    << ", TxInFlight entry disappeared between passes");
             continue;
         }
-
         const TTxState& txState = txStateIt->second;
-        TPathId pathId = txState.TargetPathId;
 
-        if (!ss->PathsById.contains(pathId)) {
+        auto pathIt = ss->PathsById.find(txState.TargetPathId);
+        if (pathIt == ss->PathsById.end()) {
             continue;
         }
+        const TPathElement::TPtr& path = pathIt->second;
 
-        TPathElement::TPtr path = ss->PathsById.at(pathId);
+        auto opIt = ss->Operations.find(txId);
+        if (opIt == ss->Operations.end() || partIdx >= opIt->second->Parts.size()) {
+            continue;
+        }
+        const TOperation::TPtr& operation = opIt->second;
 
         ui64 order = ss->AllocateSchemeChangeOrderInMemory();
         anyAllocated = true;
 
-        TString pathName = path->Name;
-        NKikimrSchemeOp::EPathType objectType = path->PathType;
-        TString userSid = path->Owner;
-        ui64 schemaVersion = ss->GetPathVersion(TPath::Init(pathId, ss)).GetGeneralVersion();
-
         TString body;
         {
-            auto opIt = ss->Operations.find(txId);
-            if (opIt != ss->Operations.end() && candidate.PartIdx < opIt->second->Parts.size()) {
-                bool ok = opIt->second->Parts[candidate.PartIdx]->GetTransaction().SerializeToString(&body);
-                Y_DEBUG_ABORT_UNLESS(ok);
-            }
+            bool ok = operation->Parts[partIdx]->GetTransaction().SerializeToString(&body);
+            Y_DEBUG_ABORT_UNLESS(ok);
         }
 
         ss->PersistSchemeChangeRecord(db, {
             .Order = order,
             .TxId = txId,
             .TxType = txState.TxType,
-            .PathId = pathId,
-            .Path = pathName,
-            .ObjectType = objectType,
+            .PathId = txState.TargetPathId,
+            .Path = path->Name,
+            .ObjectType = path->PathType,
             .Status = NKikimrScheme::StatusSuccess,
-            .UserSid = userSid,
-            .SchemaVersion = schemaVersion,
+            .UserSid = path->Owner,
+            .SchemaVersion = ss->GetPathVersion(TPath::Init(txState.TargetPathId, ss)).GetGeneralVersion(),
             .CompletedAtUs = ctx.Now(),
             .PlanStep = txState.PlanStep,
             .Body = body,
@@ -1049,8 +1041,8 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             "DoPersistSchemeChangeRecords: logged entry"
                 << " order=" << order
                 << " txId=" << txId
-                << " partIdx=" << candidate.PartIdx
-                << " path=" << pathName
+                << " partIdx=" << partIdx
+                << " path=" << path->Name
                 << " type=" << ui32(txState.TxType));
     }
 

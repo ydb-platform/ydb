@@ -14,8 +14,6 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/hive.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -1639,12 +1637,6 @@ void PreProcessResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse* res
 
 class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1> {
 private:
-    enum class EBrowseMode {
-        None,
-        NameService,
-        Hive,
-    };
-
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1>;
     TActorId Initiator;
     TTabletTypes::EType TabletType;
@@ -1653,8 +1645,6 @@ private:
     THashMap<ui32, TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     ui32 NumWorkers;
     ui32 WorkerId;
-    EBrowseMode BrowseMode = EBrowseMode::None;
-    TActorId HivePipe;
     std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
 public:
@@ -1688,45 +1678,11 @@ public:
         ++NodesRequested;
     }
 
-    void Die(const TActorContext& ctx) override {
-        if (HivePipe) {
-            NTabletPipe::CloseClient(ctx, HivePipe);
-            HivePipe = {};
-        }
-        TBase::Die(ctx);
-    }
-
-    bool BrowseNodesViaHive(const TActorContext& ctx) {
-        const auto* domain = AppData(ctx)->DomainsInfo->GetDomain();
-        const ui64 hiveId = AppData(ctx)->DomainsInfo->GetHive();
-        const TSubDomainKey domainKey = domain ? TSubDomainKey(domain->SchemeRoot, 1) : TSubDomainKey();
-        if (hiveId == TDomainsInfo::BadTabletId || !domainKey) {
-            return false;
-        }
-
-        HivePipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, hiveId));
-
-        auto request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
-        request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(domainKey);
-        NTabletPipe::SendData(ctx, HivePipe, request.Release());
-
-        BrowseMode = EBrowseMode::Hive;
-        return true;
-    }
-
-    void BrowseNodesViaNameservice(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId();
-        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        BrowseMode = EBrowseMode::NameService;
-    }
-
     void Bootstrap(const TActorContext& ctx) {
-        SessionSubscriptions.emplace();
-        SessionSubscriptions->SetSelfId(TActorIdentity(ctx.SelfID));
+        SessionSubscriptions.emplace(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
-            if (!BrowseNodesViaHive(ctx)) {
-                BrowseNodesViaNameservice(ctx);
-            }
+            const TActorId nameserviceId = GetNameserviceActorId();
+            ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
             LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V1 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
@@ -1743,9 +1699,6 @@ public:
     STFUNC(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
-            HFunc(TEvHive::TEvResponseHiveNodeStats, HandleBrowse);
-            HFunc(TEvTabletPipe::TEvClientConnected, HandleHiveConnected);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleHiveDestroyed);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -1761,13 +1714,12 @@ public:
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-        if (BrowseMode != EBrowseMode::NameService) {
-            return;
-        }
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
+        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
-            if ((i++ % NumWorkers) == WorkerId) {
+            ++i;
+            if (i % NumWorkers == WorkerId) {
                 SendRequest(ni.NodeId, ctx);
             }
         }
@@ -1775,68 +1727,6 @@ public:
             TBase::Become(&TThis::StateRequested);
         } else {
             ReplyAndDie(ctx);
-        }
-    }
-
-    void HandleBrowse(TEvHive::TEvResponseHiveNodeStats::TPtr &ev, const TActorContext &ctx) {
-        if (BrowseMode != EBrowseMode::Hive) {
-            return;
-        }
-
-        if (HivePipe) {
-            NTabletPipe::CloseClient(ctx, HivePipe);
-            HivePipe = {};
-        }
-        BrowseMode = EBrowseMode::None;
-
-        TVector<ui32> nodeIds;
-        nodeIds.reserve(ev->Get()->Record.NodeStatsSize());
-        for (const auto& nodeStats : ev->Get()->Record.GetNodeStats()) {
-            if (nodeStats.HasNodeId()) {
-                nodeIds.push_back(nodeStats.GetNodeId());
-            }
-        }
-        SortUnique(nodeIds);
-
-        ui32 i = 0;
-        for (ui32 nodeId : nodeIds) {
-            if ((i++ % NumWorkers) == WorkerId) {
-                SendRequest(nodeId, ctx);
-            }
-        }
-
-        if (NodesRequested > 0) {
-            TBase::Become(&TThis::StateRequested);
-        } else {
-            ReplyAndDie(ctx);
-        }
-    }
-
-    void HandleHiveConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-        if (BrowseMode != EBrowseMode::Hive || ev->Get()->ClientId != HivePipe) {
-            return;
-        }
-
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                "aggregator actor failed to connect to hive " << ev->Get()->TabletId
-                << " status " << ev->Get()->Status << ", fallback to nameservice");
-            NTabletPipe::CloseClient(ctx, HivePipe);
-            HivePipe = {};
-            BrowseNodesViaNameservice(ctx);
-        }
-    }
-
-    void HandleHiveDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->ClientId != HivePipe) {
-            return;
-        }
-
-        HivePipe = {};
-        if (BrowseMode == EBrowseMode::Hive) {
-            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                "aggregator actor hive pipe destroyed before node list response, fallback to nameservice");
-            BrowseNodesViaNameservice(ctx);
         }
     }
 
@@ -2026,12 +1916,6 @@ public:
 
 class TClusterLabeledCountersAggregatorActorV2 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2> {
 protected:
-    enum class EBrowseMode {
-        None,
-        NameService,
-        Hive,
-    };
-
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2>;
     THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> Response;
     TTabletLabeledCountersResponseContext ResponseContext;
@@ -2043,8 +1927,6 @@ protected:
     TString Group;
     ui32 NumWorkers;
     ui32 WorkerId;
-    EBrowseMode BrowseMode = EBrowseMode::None;
-    TActorId HivePipe;
     std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
     TMerger Merger;
@@ -2087,45 +1969,11 @@ public:
         ++NodesRequested;
     }
 
-    void Die(const TActorContext& ctx) override {
-        if (HivePipe) {
-            NTabletPipe::CloseClient(ctx, HivePipe);
-            HivePipe = {};
-        }
-        TBase::Die(ctx);
-    }
-
-    bool BrowseNodesViaHive(const TActorContext& ctx) {
-        const auto* domain = AppData(ctx)->DomainsInfo->GetDomain();
-        const ui64 hiveId = AppData(ctx)->DomainsInfo->GetHive();
-        const TSubDomainKey domainKey = domain ? TSubDomainKey(domain->SchemeRoot, 1) : TSubDomainKey();
-        if (hiveId == TDomainsInfo::BadTabletId || !domainKey) {
-            return false;
-        }
-
-        HivePipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, hiveId));
-
-        auto request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
-        request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(domainKey);
-        NTabletPipe::SendData(ctx, HivePipe, request.Release());
-
-        BrowseMode = EBrowseMode::Hive;
-        return true;
-    }
-
-    void BrowseNodesViaNameservice(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId();
-        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        BrowseMode = EBrowseMode::NameService;
-    }
-
     void Bootstrap(const TActorContext& ctx) {
-        SessionSubscriptions.emplace();
-        SessionSubscriptions->SetSelfId(TActorIdentity(ctx.SelfID));
+        SessionSubscriptions.emplace(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
-            if (!BrowseNodesViaHive(ctx)) {
-                BrowseNodesViaNameservice(ctx);
-            }
+            const TActorId nameserviceId = GetNameserviceActorId();
+            ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
             LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V2 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
@@ -2142,9 +1990,6 @@ public:
     STFUNC(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
-            HFunc(TEvHive::TEvResponseHiveNodeStats, HandleBrowse);
-            HFunc(TEvTabletPipe::TEvClientConnected, HandleHiveConnected);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleHiveDestroyed);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -2160,13 +2005,12 @@ public:
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-        if (BrowseMode != EBrowseMode::NameService) {
-            return;
-        }
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
+        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
-            if ((i++ % NumWorkers) == WorkerId) {
+            ++i;
+            if (i % NumWorkers == WorkerId) {
                 SendRequest(ni.NodeId, ctx);
             }
         }
@@ -2174,68 +2018,6 @@ public:
             TBase::Become(&TThis::StateRequested);
         } else {
             ReplyAndDie(ctx);
-        }
-    }
-
-    void HandleBrowse(TEvHive::TEvResponseHiveNodeStats::TPtr &ev, const TActorContext &ctx) {
-        if (BrowseMode != EBrowseMode::Hive) {
-            return;
-        }
-
-        if (HivePipe) {
-            NTabletPipe::CloseClient(ctx, HivePipe);
-            HivePipe = {};
-        }
-        BrowseMode = EBrowseMode::None;
-
-        TVector<ui32> nodeIds;
-        nodeIds.reserve(ev->Get()->Record.NodeStatsSize());
-        for (const auto& nodeStats : ev->Get()->Record.GetNodeStats()) {
-            if (nodeStats.HasNodeId()) {
-                nodeIds.push_back(nodeStats.GetNodeId());
-            }
-        }
-        SortUnique(nodeIds);
-
-        ui32 i = 0;
-        for (ui32 nodeId : nodeIds) {
-            if ((i++ % NumWorkers) == WorkerId) {
-                SendRequest(nodeId, ctx);
-            }
-        }
-
-        if (NodesRequested > 0) {
-            TBase::Become(&TThis::StateRequested);
-        } else {
-            ReplyAndDie(ctx);
-        }
-    }
-
-    void HandleHiveConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-        if (BrowseMode != EBrowseMode::Hive || ev->Get()->ClientId != HivePipe) {
-            return;
-        }
-
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                "aggregator actor failed to connect to hive " << ev->Get()->TabletId
-                << " status " << ev->Get()->Status << ", fallback to nameservice");
-            NTabletPipe::CloseClient(ctx, HivePipe);
-            HivePipe = {};
-            BrowseNodesViaNameservice(ctx);
-        }
-    }
-
-    void HandleHiveDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->ClientId != HivePipe) {
-            return;
-        }
-
-        HivePipe = {};
-        if (BrowseMode == EBrowseMode::Hive) {
-            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                "aggregator actor hive pipe destroyed before node list response, fallback to nameservice");
-            BrowseNodesViaNameservice(ctx);
         }
     }
 

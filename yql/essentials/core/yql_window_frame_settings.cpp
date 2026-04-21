@@ -725,7 +725,7 @@ TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode
     auto frameSpec = node.Child(0);
     bool isCompact = GetSettingByName(frameSpec->Children(), "compact") != nullptr;
 
-    if (node.IsCallable("WinOnRows")) {
+    if (node.IsCallable({"WinOnRows", "WinFilter"})) {
         if (!GetSettingByName(frameSpec->Children(), "begin") || !GetSettingByName(frameSpec->Children(), "end")) {
             ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
                                 TStringBuilder() << "Expected begin and end for row frames."));

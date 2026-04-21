@@ -362,8 +362,18 @@ bool IsUserspaceThread(size_t tid)
 {
 #if defined(__linux__)
     TFileInput file(Format("/proc/%v/stat", tid));
-    auto statFields = SplitString(file.ReadLine(), " ");
-    constexpr int StartStackIndex = 27;
+    auto line = file.ReadLine();
+    // The format of /proc/PID/stat is: "pid (comm) state ...".
+    // Field 2 (comm) is the process name wrapped in parentheses and may contain
+    // spaces and even parentheses. The kernel always closes it with ')', so we
+    // find the last ')' and split only the fields that follow it.
+    auto closeParenPos = line.rfind(')');
+    auto statFields = SplitString(
+        closeParenPos != TString::npos ? line.substr(closeParenPos + 2) : line,
+        " ");
+    // Fields are now 0-indexed starting from field 3 (state). StartStackIndex
+    // is field 28 (0-indexed as 25) in the original 1-based numbering.
+    constexpr int StartStackIndex = 25;
     if (statFields.size() < StartStackIndex) {
         return false;
     }
@@ -397,7 +407,9 @@ std::string GetCurrentProcessName()
 std::string GetCurrentProcessCommandLine()
 {
 #if defined(__linux__)
-    return std::string(Trim(TUnbufferedFileInput("/proc/self/cmdline").ReadAll(), "\n"));
+    auto cmdline = TUnbufferedFileInput("/proc/self/cmdline").ReadAll();
+    auto delimiterPos = cmdline.find('\0');
+    return delimiterPos == std::string::npos ? cmdline : cmdline.substr(0, delimiterPos);
 #elif defined(_win_)
     return ::GetCommandLineA();
 #else

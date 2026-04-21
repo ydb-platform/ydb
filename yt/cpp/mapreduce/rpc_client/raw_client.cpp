@@ -49,8 +49,6 @@ using namespace NYT::NConcurrency;
 //   - "session_timeout"
 [[maybe_unused]] const TDuration TableReaderTimeout = TDuration::Minutes(35);
 
-constexpr ssize_t MaxWriteChunkSize = 500_KB;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 ESecurityAction FromApiSecurityAction(NSecurityClient::ESecurityAction action)
@@ -193,19 +191,6 @@ NYTree::INodePtr ToApiNode(const TNode& node)
     return NYTree::ConvertToNode(NYson::TYsonString(NodeToYsonString(node, NYson::EYsonFormat::Binary)));
 }
 
-// Write data in small chunks to avoid generating large RPC attachments.
-template <class TWriteFn>
-void WriteInChunks(const void* buf, size_t len, const TWriteFn& writeFn)
-{
-    auto data = TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len));
-    std::vector<TFuture<void>> futures;
-    futures.reserve((std::ssize(data) + MaxWriteChunkSize - 1) / MaxWriteChunkSize);
-    for (ssize_t offset = 0; offset < std::ssize(data); offset += MaxWriteChunkSize) {
-        futures.push_back(writeFn(data.Slice(offset, Min(offset + MaxWriteChunkSize, std::ssize(data)))));
-    }
-    WaitAndProcess(AllSucceeded(std::move(futures)));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSyncRpcInputStream
@@ -239,8 +224,6 @@ private:
     }
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 class TSyncRpcOutputStream
     : public IOutputStream
 {
@@ -251,9 +234,8 @@ public:
 
     void DoWrite(const void* buf, size_t len) override
     {
-        WriteInChunks(buf, len, [this] (const TSharedRef& ref) {
-            return Underlying_->Write(ref);
-        });
+        auto sharedBuffer = TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len));
+        WaitAndProcess(Underlying_->Write(sharedBuffer));
     }
 
     void DoFinish() override
@@ -1002,9 +984,7 @@ public:
 private:
     void DoWrite(const void* buf, size_t len) override
     {
-        WriteInChunks(buf, len, [this] (const TSharedRef& ref) {
-            return Writer_->Write(ref);
-        });
+        WaitAndProcess(Writer_->Write(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len))));
     }
 
     void DoFinish() override
@@ -1669,9 +1649,7 @@ private:
 
     void DoWrite(const void* buf, size_t len) override
     {
-        WriteInChunks(buf, len, [this] (const TSharedRef& ref) {
-            return Underlying_->Write(ref);
-        });
+        WaitAndProcess(Underlying_->Write(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len))));
     }
 
     void DoFinish() override

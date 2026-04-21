@@ -23,6 +23,7 @@ public:
     struct TMatchResult {
         ui32 Index = Max<ui32>();
         TMaybe<NYT::TNode> CallableType;
+        TMaybe<NYT::TNode> RunConfigType;
     };
 
     // may fill callable type if specified, otherwise resolved callable type should be used

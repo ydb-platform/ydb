@@ -251,6 +251,12 @@ private:
     [[nodiscard]] TLocationMask FilterLocations(
         TLocationMask mask,
         TBlockRange64 range) const;
+    [[nodiscard]] TReadRangeHint MakeReadRangeHint(
+        TLocationMask locationMask,
+        ui64 lsn,
+        TBlockRange64 range,
+        ui64 offsetBlocks);
+    void AddReadHint(TReadHint& result, TReadRangeHint&& hint) const;
 
     const ui32 BlockSize;
     const ui64 BlockCount;

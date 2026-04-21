@@ -340,56 +340,62 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
     return result;
 }*/
 
+TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
+    TLocationMask locationMask,
+    ui64 lsn,
+    TBlockRange64 range,
+    ui64 offsetBlocks)
+{
+    if (locationMask.Empty()) {
+        locationMask = FilterLocations(DesiredDDisks, range);
+    } else if (locationMask.HasDDisk()) {
+        locationMask = locationMask.LogicalAnd(DesiredDDisks);
+        locationMask = FilterLocations(locationMask, range);
+    }
+
+    locationMask = locationMask.Exclude(DisabledLocations);
+    Y_ABORT_UNLESS(!locationMask.Empty());
+
+    return {
+        locationMask,
+        lsn,
+        TBlockRange64::WithLength(offsetBlocks, range.Size()),
+        range,
+        locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
+                                 : TRangeLock(this, lsn)};
+}
+
+void TBlocksDirtyMap::AddReadHint(
+    TReadHint& result,
+    TReadRangeHint&& hint) const
+{
+    if (result.RangeHints.empty()) {
+        result.RangeHints.push_back(std::move(hint));
+        return;
+    }
+
+    auto& prevHint = result.RangeHints.back();
+    // попробовать смержить элементы. TODO вынести в функцию
+    if (prevHint.Lsn == hint.Lsn &&
+        prevHint.LocationMask == hint.LocationMask &&
+        prevHint.VChunkRange.End + 1 == hint.VChunkRange.Start)
+    {
+        prevHint.VChunkRange.End = hint.VChunkRange.End;
+        prevHint.RequestRelativeRange.End = hint.RequestRelativeRange.End;
+    } else {
+        result.RangeHints.push_back(std::move(hint));
+    }
+}
+
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
 
-    auto makeDefaultHint = [this](TBlockRange64 range, ui64 offsetBlocks)
-    {
-        // Filter out disabled locations.
-        auto locationMask = FilterLocations(DesiredDDisks, range);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            0,
-            TBlockRange64::WithLength(
-                offsetBlocks,
-                range.Size()),   // RequestRelativeRange
-            range,               // VChunkRange
-            TRangeLock(this, range, locationMask));
-    };
-
-    auto makeHint = [this](
-                        TLocationMask locationMask,
-                        ui64 lsn,
-                        TBlockRange64 range,
-                        ui64 offsetBlocks)
-    {
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        // Filter out disabled locations.
-        if (locationMask.HasDDisk()) {
-            locationMask = locationMask.LogicalAnd(DesiredDDisks);
-        }
-        locationMask = locationMask.Exclude(DisabledLocations);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            lsn,
-            TBlockRange64::WithLength(offsetBlocks, range.Size()),
-            range,
-            locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
-                                     : TRangeLock(this, lsn));
-    };
-
     if (!Inflight.HasOverlaps(range)) {
-        result.RangeHints.push_back(makeDefaultHint(range, 0));
+        result.RangeHints.push_back(MakeReadRangeHint({}, 0, range, 0));
         return result;
     }
 
-    // Собрать все перекрывающиеся inflight записи
     struct TOverlappingItem
     {
         ui64 Key;
@@ -398,109 +404,87 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
     };
 
     TVector<TOverlappingItem> overlappingItems;
+    overlappingItems.reserve(16);
+
+    TVector<ui64> boundaries;
+    boundaries.reserve(34);
+    boundaries.push_back(range.Start);
+    boundaries.push_back(range.End + 1);
+
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
         {
             overlappingItems.push_back({item.Key, item.Range, &item.Value});
+
+            if (item.Range.Start > range.Start && item.Range.Start <= range.End)
+            {
+                boundaries.push_back(item.Range.Start);
+            }
+
+            const ui64 rangeEnd = item.Range.End + 1;
+            if (rangeEnd > range.Start && rangeEnd <= range.End + 1) {
+                boundaries.push_back(rangeEnd);
+            }
+
             return TInflightMap::EEnumerateContinuation::Continue;
         });
 
-    // Алгоритм sweep-line: для каждого блока в запрашиваемом диапазоне
-    // определяем inflight-запись с максимальным LSN (наиболее свежие данные).
-    //
-    // Строим список «событий» — границ inflight-диапазонов, пересекающихся с
-    // запросом. Между соседними событиями все блоки принадлежат одному и тому
-    // же набору активных inflight-записей, поэтому достаточно выбрать запись с
-    // максимальным LSN для каждого такого сегмента.
-
-    // Собрать все граничные точки внутри запрашиваемого диапазона.
-    TVector<ui64> boundaries;
-    boundaries.push_back(range.Start);
-    for (const auto& item: overlappingItems) {
-        if (item.Range.Start > range.Start && item.Range.Start <= range.End) {
-            boundaries.push_back(item.Range.Start);
-        }
-        if (item.Range.End + 1 > range.Start && item.Range.End + 1 <= range.End)
-        {
-            boundaries.push_back(item.Range.End + 1);
-        }
-    }
-    boundaries.push_back(range.End + 1);
-
     Sort(boundaries.begin(), boundaries.end());
-    boundaries.erase(
-        std::unique(boundaries.begin(), boundaries.end()),
-        boundaries.end());
+    boundaries.erase(std::ranges::unique(boundaries).begin(), boundaries.end());
 
-    // Для каждого сегмента [boundaries[i], boundaries[i+1]) найти inflight с
-    // максимальным LSN.
+    Sort(
+        overlappingItems.begin(),
+        overlappingItems.end(),
+        [](const TOverlappingItem& lhs, const TOverlappingItem& rhs)
+        {
+            if (lhs.Range.Start != rhs.Range.Start) {
+                return lhs.Range.Start < rhs.Range.Start;
+            }
+            return lhs.Key > rhs.Key;
+        });
+
+    result.RangeHints.reserve(boundaries.size() - 1);
+
     ui64 offsetBlocks = 0;
 
     for (size_t i = 0; i + 1 < boundaries.size(); ++i) {
-        const ui64 segStart = boundaries[i];
-        const ui64 segEnd = boundaries[i + 1] - 1;
-        const auto segRange =
-            TBlockRange64::MakeClosedInterval(segStart, segEnd);
+        const ui64 segmentStart = boundaries[i];
+        const ui64 nextBoundary = boundaries[i + 1];
+        const ui64 segmentEnd = nextBoundary - 1;
+        const auto segmentRange =
+            TBlockRange64::MakeClosedInterval(segmentStart, segmentEnd);
 
-        // Найти inflight с максимальным LSN, покрывающий этот сегмент.
         const TOverlappingItem* bestItem = nullptr;
         for (const auto& item: overlappingItems) {
-            if (item.Range.Contains(segRange)) {
-                if (bestItem == nullptr || item.Key > bestItem->Key) {
-                    bestItem = &item;
-                }
+            if (item.Range.Start > segmentStart) {
+                break;
+            }
+            if (item.Range.End >= segmentEnd &&
+                (bestItem == nullptr || item.Key > bestItem->Key))
+            {
+                bestItem = &item;
             }
         }
 
         if (bestItem == nullptr) {
-            // Нет inflight для этого сегмента — читаем с DDisk.
-            result.RangeHints.push_back(
-                makeDefaultHint(segRange, offsetBlocks));
+            auto hint = MakeReadRangeHint({}, 0, segmentRange, offsetBlocks);
+            AddReadHint(result, std::move(hint));
         } else {
-            if (bestItem->Value->ReadMask().Empty()) {
-                // Нужно ждать quorum.
+            const auto readMask = bestItem->Value->ReadMask();
+            if (readMask.Empty()) {
                 result.WaitReady = bestItem->Value->GetQuorumReadyFuture();
                 result.RangeHints.clear();
                 return result;
             }
 
-            result.RangeHints.push_back(makeHint(
-                bestItem->Value->ReadMask(),
-                bestItem->Value->ReadMask().OnlyDDisk() ? 0 : bestItem->Key,
-                segRange,
-                offsetBlocks));
+            const ui64 lsn = readMask.OnlyDDisk() ? 0 : bestItem->Key;
+            auto hint =
+                MakeReadRangeHint(readMask, lsn, segmentRange, offsetBlocks);
+            AddReadHint(result, std::move(hint));
         }
 
-        offsetBlocks += segRange.Size();
-    }
-
-    // Merge adjacent segments with the same LSN and location mask
-    if (result.RangeHints.size() > 1) {
-        TVector<TReadRangeHint> mergedHints;
-        mergedHints.push_back(std::move(result.RangeHints[0]));
-
-        for (size_t i = 1; i < result.RangeHints.size(); ++i) {
-            auto& prevHint = mergedHints.back();
-            auto& currentHint = result.RangeHints[i];
-
-            // Check if we can merge with the previous segment
-            if (prevHint.Lsn == currentHint.Lsn &&
-                prevHint.LocationMask == currentHint.LocationMask &&
-                prevHint.VChunkRange.End + 1 == currentHint.VChunkRange.Start)
-            {
-                // Merge the ranges
-                prevHint.VChunkRange.End = currentHint.VChunkRange.End;
-                prevHint.RequestRelativeRange.End =
-                    currentHint.RequestRelativeRange.End;
-                // Note: We don't update the lock as it should remain the same
-            } else {
-                // Can't merge, add as a new segment
-                mergedHints.push_back(std::move(currentHint));
-            }
-        }
-
-        result.RangeHints = std::move(mergedHints);
+        offsetBlocks += segmentRange.Size();
     }
 
     return result;

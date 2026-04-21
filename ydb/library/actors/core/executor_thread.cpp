@@ -218,6 +218,7 @@ namespace NActors {
 
         ThreadCtx.ResetOverwrittenEventsPerMailbox();
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
+        Y_ABORT_UNLESS(mailboxScheduledTimestampTs, "mailbox scheduled timestamp must be set");
         ThreadCtx.SetMailboxScheduledTimestampTs(mailboxScheduledTimestampTs);
         for (; execCtx.ExecutedEvents < ThreadCtx.OverwrittenEventsPerMailbox(); execCtx.ExecutedEvents++) {
             if (std::unique_ptr<IEventHandle> evExt = mailbox->Pop()) {
@@ -253,9 +254,7 @@ namespace NActors {
 
                     if (firstEvent) {
                         ThreadCtx.SetActivationTimeUs(CalculateWaitingTimeUs(mailboxScheduledTimestampTs, hpprev));
-                        double usec = mailboxScheduledTimestampTs
-                            ? ExecutionStats.AddActivationStats(mailboxScheduledTimestampTs, hpprev)
-                            : 0;
+                        double usec = ExecutionStats.AddActivationStats(mailboxScheduledTimestampTs, hpprev);
                         if (usec > 500) {
                             GLOBAL_LWPROBE(ACTORLIB_PROVIDER, SlowActivation, TlsThreadContext->Pool()->PoolId, usec / 1000.0);
                         }

@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         // Invalid peername formats
         UNIT_ASSERT(!IsGoodPeernameFormat(""));
         UNIT_ASSERT(!IsGoodPeernameFormat("invalid_format"));
-        
+
         // Invalid IPv4 formats
         UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:"));
         UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:0"));
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsGoodPeernameFormat("1.-1.1.1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("1.a.1.1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("127.0.0.1:port"));
-        
+
         // Invalid IPv4 with prefix formats
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:2001:db8::1"));
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:256.1.1.1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:127.0.0.1:port"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv4:invalid"));
-        
+
         // Invalid IPv6 formats
         UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:"));
         UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:0"));
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!IsGoodPeernameFormat("[::1]:port"));
         UNIT_ASSERT(!IsGoodPeernameFormat(":::1"));
         UNIT_ASSERT(!IsGoodPeernameFormat("2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234"));
-        
+
         // Invalid IPv6 with prefix formats
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:"));
         UNIT_ASSERT(!IsGoodPeernameFormat("ipv6:192.168.1.1"));
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         }
         {
             const TString addr{"192.168.1.1"};
-            const TString port{"1"}; 
+            const TString port{"1"};
             auto res = ParsePeername(addr + ":" + port);
             UNIT_ASSERT(res);
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         }
         {
             const TString addr{"10.0.0.1"};
-            const TString port{"65535"}; 
+            const TString port{"65535"};
             auto res = ParsePeername(addr + ":" + port);
             UNIT_ASSERT(res);
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
@@ -252,13 +252,13 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         }
         {
             const TString addr{"172.16.0.1"};
-            const TString port{"22"}; 
+            const TString port{"22"};
             auto res = ParsePeername(addr + ":" + port);
             UNIT_ASSERT(res);
             UNIT_ASSERT_STRINGS_EQUAL(addr, NAddr::PrintHost(*res));
             UNIT_ASSERT_STRINGS_EQUAL(addr + ":" + port, NAddr::PrintHostAndPort(*res));
         }
-        
+
         // Valid IPv4 peername formats (part 3: ipv4:<ipv4>)
         {
             const TString addr{"127.0.0.1"};
@@ -495,7 +495,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         // Invalid peername formats
         UNIT_ASSERT(!ParsePeername(""));
         UNIT_ASSERT(!ParsePeername("invalid_format"));
-        
+
         // Invalid IPv4 formats
         UNIT_ASSERT(!ParsePeername("127.0.0.1:"));
         UNIT_ASSERT(!ParsePeername("127.0.0.1:0"));
@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!ParsePeername("1.-1.1.1"));
         UNIT_ASSERT(!ParsePeername("1.a.1.1"));
         UNIT_ASSERT(!ParsePeername("127.0.0.1:port"));
-        
+
         // Invalid IPv4 with prefix formats
         UNIT_ASSERT(!ParsePeername("ipv4:"));
         UNIT_ASSERT(!ParsePeername("ipv4:2001:db8::1"));
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!ParsePeername("ipv4:256.1.1.1"));
         UNIT_ASSERT(!ParsePeername("ipv4:127.0.0.1:port"));
         UNIT_ASSERT(!ParsePeername("ipv4:invalid"));
-        
+
         // Invalid IPv6 formats
         UNIT_ASSERT(!ParsePeername("[::1]:"));
         UNIT_ASSERT(!ParsePeername("[::1]:0"));
@@ -531,7 +531,7 @@ Y_UNIT_TEST_SUITE(TNetUtilTest) {
         UNIT_ASSERT(!ParsePeername("[::1]:port"));
         UNIT_ASSERT(!ParsePeername(":::1"));
         UNIT_ASSERT(!ParsePeername("2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234"));
-        
+
         // Invalid IPv6 with prefix formats
         UNIT_ASSERT(!ParsePeername("ipv6:"));
         UNIT_ASSERT(!ParsePeername("ipv6:192.168.1.1"));

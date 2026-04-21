@@ -38,8 +38,8 @@ TMaybe<TIpv6Address> GetAddress(TStringBuf address) {
 NAddr::IRemoteAddrPtr ParseAddress(const TIpWithPort& addr) {
     struct sockaddr_in sa4;
     struct sockaddr_in6 sa6;
-    const sockaddr* sa;
-    socklen_t len;
+    [[maybe_unused]] const sockaddr* sa;
+    [[maybe_unused]] socklen_t len;
     addr.Address.ToSockaddrAndSocklen(sa4, sa6, sa, len, addr.Port);
 
     if (addr.Address.IsIpv6()) {

@@ -2008,14 +2008,14 @@
           pool.stop()
           driver.stop()
 
-        if __name__ == "__main__":
-            main(
-                ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
-                ydb_database=os.environ.get("YDB_DATABASE", "/local"),
-                ydb_credentials=ydb.credentials_from_env_variables(),
-                table_name="ydb_vector_search",
-                index_name="ydb_vector_index",
-            )
+      if __name__ == "__main__":
+          main(
+              ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
+              ydb_database=os.environ.get("YDB_DATABASE", "/local"),
+              ydb_credentials=ydb.credentials_from_env_variables(),
+              table_name="ydb_vector_search",
+              index_name="ydb_vector_index",
+          )
       ```
 
     - Native SDK (Asyncio)

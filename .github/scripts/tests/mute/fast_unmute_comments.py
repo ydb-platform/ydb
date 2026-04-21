@@ -7,18 +7,18 @@ def format_bullet_list(tests):
 
 COMMENT_ENTER = """🚀 **Fast-unmute started**
 
-{closer_mention_line}You closed this issue as completed. The issue stays **closed**; automation registered fast-unmute in YDB and added the `manual-fast-unmute` label.
+{closer_mention_line}Issue stays **closed**. Label `manual-fast-unmute` added.
 
-The listed tests are still muted in the repo, but CI now evaluates them on a **shorter unmute window** ({window_days} calendar days, min {min_runs} clean runs) until they qualify for automatic unmute:
+These tests are still listed in `muted_ya`, but CI will try to unmute them sooner ({window_days} days window, at least {min_runs} clean runs):
 
 {tests_bullet_list}
 
-**What happens next**
+**What to expect**
 
-- **While time runs** (``manual_unmute_ttl_calendar_days`` calendar days per row from registration): if a test is already **unmuted in CI data**, only its fast-unmute row is removed; you may see a short **progress** comment if other tests on this issue are still tracked.
-- **All tests unmuted in CI before anyone hits the deadline** → success comment, project **Status → Unmuted**, fast-unmute label removed (this issue stays **closed**).
-- **After the deadline**, if any test is **still muted** in CI → this issue is **reopened**, **Status → Muted**, all fast-unmute rows for this issue are cleared, one summary comment, label removed.
-- No action needed from you. Please do not edit `muted_ya.txt` manually.
+- If tests go green in CI before the limit → board **Unmuted**, label removed.
+- If the limit passes and something is still red → this issue **reopens**, board **Muted**, label removed.
+
+You do not need to do anything. Please do not edit `muted_ya.txt` by hand.
 
 🔗 Workflow run: {workflow_run_url}
 """
@@ -26,17 +26,17 @@ The listed tests are still muted in the repo, but CI now evaluates them on a **s
 
 COMMENT_SUCCESS = """✅ **Fast-unmute completed**
 
-All tests from this issue are **no longer muted** in CI data before the fast-unmute deadline. They will be removed from `muted_ya` on the next mute automation run that updates the repo — no action needed from you.
+Every test on this issue is green in CI before the time limit. The mute list in the repo will catch up on the next routine update.
 
-Project **Status** → **Unmuted**. The `manual-fast-unmute` label is removed.
+**Status** → **Unmuted**. Label `manual-fast-unmute` removed.
 
 🔗 Workflow run: {workflow_run_url}
 """
 
 
-COMMENT_PROGRESS = """📌 **Fast-unmute: progress**
+COMMENT_PROGRESS = """⏱️ **Fast-unmute: progress**
 
-While the deadline is still running for other tests on this issue, these are **already unmuted** in CI data — the fast-unmute row was removed only for them:
+These already show as unmuted in CI. Other tests on this issue are still in the shorter window:
 
 {unmuted_bullets}
 
@@ -44,18 +44,16 @@ While the deadline is still running for other tests on this issue, these are **a
 """
 
 
-COMMENT_TTL_INCOMPLETE = """⏱️ **Fast-unmute: deadline passed**
+COMMENT_TTL_INCOMPLETE = """❌ **Fast-unmute: deadline passed**
 
-The fast-unmute calendar limit (**{ttl_days}** days from row registration) has passed, but at least one test is **still muted** in CI. Fast-unmute tracking for **this whole issue** is cleared, the issue is **reopened**, project **Status** → **Muted**, and the `manual-fast-unmute` label is removed.
+At least one **(test, branch, build)** on this issue stayed muted past **its** **{ttl_days}**-day window. This issue is **reopened**, board **Muted**, label `manual-fast-unmute` removed.
 
-**Already unmuted in CI (pending `muted_ya` update):**
+**Green in CI** (already unmuted there, or will be shortly once the mute list in the repo updates):
 {graduated_bullets}
 
-**Still muted after the deadline:**
+**Still on the CI mute list** when the window closed — at least one of these stayed muted and led to the reopen:
 {stuck_bullets}
 
-**Tracking cleared early (same issue, deadline not reached for that row):**
-{cleared_other_bullets}
 
 🔗 Workflow run: {workflow_run_url}
 """

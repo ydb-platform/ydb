@@ -69,15 +69,22 @@ jobs:
           sparse-checkout: .github/scripts/telegram
       - name: Install dependencies
         run: pip install requests
-      - name: Collect failed platform names
-        id: failed-platforms
+      # Best-effort: if gh query fails (permissions/rate limits/transient errors),
+      # we still want to deliver the failure notification without the job list.
+      - name: Collect failed job names
+        id: failed-jobs
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FAILED=$(gh run view ${{ github.run_id }} --repo ${{ github.repository }} \
-            --json jobs --jq '[.jobs[] | select(.conclusion == "failure") | .name] | join(", ")')
-          echo "Failed platforms: $FAILED"
-          echo "platforms=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "jobs=" >> "$GITHUB_OUTPUT"
+          if FAILED=$(gh run view ${{ github.run_id }} --repo ${{ github.repository }} \
+            --json jobs --jq '[.jobs[] | select(.conclusion == "failure") | .name] | join(", ")'); then
+            echo "Failed jobs: $FAILED"
+            echo "jobs=$FAILED" >> "$GITHUB_OUTPUT"
+          else
+            echo "Warning: failed to collect failed job names; continuing without them."
+          fi
       - name: Send Telegram notification
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
@@ -85,9 +92,9 @@ jobs:
           BUILD_TARGET="${{ inputs.build-target || 'ydb/apps/ydb' }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CHAT_ID="${{ inputs.telegram-chat-id || '311589523' }}"
-          FAILED="${{ steps.failed-platforms.outputs.platforms }}"
+          FAILED="${{ steps.failed-jobs.outputs.jobs }}"
           if [ -n "$FAILED" ]; then
-            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. Failed: ${FAILED}. [View run](${RUN_URL})"
+            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. Failed jobs: ${FAILED}. [View run](${RUN_URL})"
           else
             MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. [View run](${RUN_URL})"
           fi

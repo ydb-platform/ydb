@@ -51,7 +51,8 @@ jobs:
     with:
       build-target: ${{ inputs.build-target || 'ydb/apps/ydb' }}
       binary-name: ${{ inputs.binary-name || 'ydb' }}
-      ref: main
+      # Scheduled runs always build main; manual dispatch uses the branch it was launched from.
+      ref: ${{ github.event_name == 'schedule' && 'main' || github.ref_name }}
       build-linux-amd: ${{ github.event_name != 'schedule' && inputs.build-linux-amd || false }}
       build-linux-arm: ${{ github.event_name != 'schedule' && inputs.build-linux-arm || false }}
       build-darwin-amd: ${{ github.event_name != 'schedule' && inputs.build-darwin-amd || false }}

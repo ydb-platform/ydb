@@ -156,6 +156,7 @@ public:
             FilterTablets.insert(MakeConsoleID());
 
             if (UseHealthCheck) {
+                HealthCheckRequested = true;
                 if (UseHealthCheckCache && AppData()->FeatureFlags.GetEnableDbMetadataCache()) {
                     MetadataCacheEndpointsLookup = MakeRequestStateStorageMetadataCacheEndpointsLookup(DomainName);
                 } else {
@@ -633,7 +634,6 @@ private:
     }
 
     void SendHealthCheckRequest() {
-        HealthCheckRequested = true;
         SelfCheckResult = MakeRequest<NHealthCheck::TEvSelfCheckResult>(NHealthCheck::MakeHealthCheckID(), MakeSelfCheckRequest().release());
     }
 
@@ -656,12 +656,8 @@ private:
                 if (activeNode != 0) {
                     TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
                     auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequestProto>();
-                    i64 timeoutMs = Timeout.MilliSeconds() * 80 / 100;
-                    if (timeoutMs <= 0) {
-                        timeoutMs = 1;
-                    }
-                    SetDuration(TDuration::MilliSeconds(timeoutMs), *request->Record.mutable_operation_params()->mutable_operation_timeout());
-                    HealthCheckRequested = true;
+                    // Note: the database metadata cache service does not forward operation_timeout
+                    // to the underlying health check, so we rely on our own Timeout wakeup.
                     SelfCheckResultProto = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(cache, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
                 }
             }

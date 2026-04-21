@@ -136,22 +136,17 @@ bool ValidateRenameIndexRequest(
 
 template <typename TSettings, typename TProto>
 void FillLocalBloomNgramProto(TProto* ngram, const TSettings& ngramSettings) {
-    const auto derived = NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::BuildDerivedSettings(
-        ngramSettings.has_false_positive_probability()
-            ? ngramSettings.false_positive_probability()
-            : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability,
-        ngramSettings.ngram_size()
-            ? ngramSettings.ngram_size()
-            : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize,
-        ngramSettings.has_case_sensitive()
-            ? ngramSettings.case_sensitive()
-            : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
-    ngram->SetNGrammSize(derived.NgramSize);
-    ngram->SetCaseSensitive(derived.CaseSensitive);
-    ngram->SetFalsePositiveProbability(derived.FalsePositiveProbability);
-    ngram->SetFilterSizeBytes(derived.FilterSizeBytes);
-    ngram->SetHashesCount(derived.HashesCount);
-    ngram->SetRecordsCount(derived.RecordsCount);
+    if (ngramSettings.ngram_size()) {
+        ngram->SetNGrammSize(ngramSettings.ngram_size());
+    }
+
+    if (ngramSettings.has_case_sensitive()) {
+        ngram->SetCaseSensitive(ngramSettings.case_sensitive());
+    }
+
+    if (ngramSettings.has_false_positive_probability()) {
+        ngram->SetFalsePositiveProbability(ngramSettings.false_positive_probability());
+    }
 }
 
 bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
@@ -206,10 +201,9 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 olapIndex->SetClassName("BLOOM_FILTER");
                 auto* bloom = olapIndex->MutableBloomFilter();
                 const auto& bloomSettings = index.local_bloom_filter_index();
-                const double bloomFpp = bloomSettings.has_false_positive_probability()
-                    ? bloomSettings.false_positive_probability()
-                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
-                bloom->SetFalsePositiveProbability(bloomFpp);
+                if (bloomSettings.has_false_positive_probability()) {
+                    bloom->SetFalsePositiveProbability(bloomSettings.false_positive_probability());
+                }
                 bloom->AddColumnIds(columnId);
                 break;
             }

@@ -6,6 +6,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 {% list tabs group=lang %}
 
+- Go
+
+  This functionality is not currently supported in the Go SDK.
+
 - C++
 
   App code snippet for creating a client:
@@ -20,6 +24,23 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
+  ```
+
+- Java
+
+  This functionality is not currently supported.
+
+- Python
+
+  This functionality is not currently supported.
+
+- JavaScript
+
+  This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
   ```
 
 {% endlist %}
@@ -54,6 +75,10 @@ The complete list of extra parameters is presented below:
 
 {% list tabs group=lang %}
 
+- Go
+
+  This functionality is not currently supported in the Go SDK.
+
 - C++
 
   ```c++
@@ -63,6 +88,18 @@ The complete list of extra parameters is presented below:
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Java
+
+  This functionality is not currently supported.
+
+- Python
+
+  This functionality is not currently supported.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -108,6 +145,7 @@ message IssueLog {
 | Field | Description |
 |:----|:----|
 | `self_check_result` | enum field which contains the [database check result](#selfcheck-result) |
+| `issue_log` | A list of issues; each entry describes a problem at a particular level of the system. |
 | `issue_log.id` | A unique issue ID within this response. |
 | `issue_log.status` |  enum field which contains the [issue status](#issue-status) |
 | `issue_log.message` | Text that describes the issue. |
@@ -115,7 +153,7 @@ message IssueLog {
 | `issue_log.reason` | This is a set of elements, each of which describes an issue in the system at a certain level. |
 | `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a [rigid hierarchy](#issues-hierarchy) (as shown in the picture above). |
 | `issue_log.level` | Issue [nesting depth](#issues-hierarchy). |
-| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issuehs at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
+| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issues at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
 | `location` | Contains information about the host, where the `HealthCheck` service was called |
 
 ### Issues hierarchy {#issues-hierarchy}

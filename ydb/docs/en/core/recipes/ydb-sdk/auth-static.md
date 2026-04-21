@@ -2,7 +2,7 @@
 
 # Username and password based authentication
 
-Below are examples of the code for authentication based on a username and token in different {{ ydb-short-name }} SDKs.
+Below are examples of authentication with a username and password in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
@@ -10,76 +10,87 @@ Below are examples of the code for authentication based on a username and token 
 
   ```c++
   auto driverConfig = NYdb::TDriverConfig()
-     .SetEndpoint(endpoint)
-     .SetDatabase(database)
-     .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+    .SetEndpoint(endpoint)
+    .SetDatabase(database)
+    .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
         .User = "user",
         .Password = "password",
-     }));
+    }));
 
   NYdb::TDriver driver(driverConfig);
   ```
 
-- Go (native)
+- Go
 
-  You can pass the username and password in the connection string. For example:
+  {% list tabs %}
 
-  ```shell
-  "grpcs://login:password@localohost:2135/local"
-  ```
+  - Native SDK
 
-  You can also explicitly pass them using the `ydb.WithStaticCredentials` parameter:
+    You can pass the username and password in the connection string. For example:
 
-  {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
+    ```shell
+    "grpcs://login:password@localhost:2135/local"
+    ```
 
-- Go (database/sql)
+    You can also pass them explicitly using the `ydb.WithStaticCredentials` option:
 
-  You can pass the username and password in the connection string. For example:
+    {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
 
-  {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+  - database/sql
 
-  You can also explicitly pass the username and password at driver initialization via a connector using the `ydb.WithStaticCredentials` parameter:
+    You can pass the username and password in the connection string. For example:
 
-  {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+    {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+
+    You can also pass them explicitly when initializing the driver via a connector using the `ydb.WithStaticCredentials` option:
+
+    {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString, String username, String password) {
-      AuthProvider authProvider = new StaticCredentials(username, password);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString, String username, String password) {
+        StaticCredentials authProvider = new StaticCredentials(username, password);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work(String username, String password) {
-      Properties props = new Properties();
-      props.setProperty("username", username);
-      props.setProperty("password", password);
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work(String username, String password) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("username", username);
+        props.setProperty("password", password);
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Username and password can be passed via the special method of DriverManager
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Username and password can be passed directly
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL, username, and password as above (for example `spring.datasource.url`, `spring.datasource.username`, `spring.datasource.password`, or the pool’s equivalent settings).
+
+  {% endlist %}
+
+- JavaScript
 
   {% include [auth-static](../../_includes/nodejs/auth-static.md) %}
 

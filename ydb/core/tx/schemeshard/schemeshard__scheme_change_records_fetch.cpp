@@ -142,6 +142,15 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         Result->Record.SetHasMore(hasMore);
         Result->Record.SetSkippedEntries(skippedEntries);
 
+        // TODO(rfc-0129): this O(|TxInFlight|) scan runs on every Fetch.
+        // Caching it would require intercepting every TxInFlight mutation
+        // site (CreateTx / RemoveTx / ChangeTxState / PlanStep assignment
+        // plus 390+ FindTx callers that write through the returned
+        // pointer) to invalidate the cache. Any missed site silently
+        // returns a stale watermark, so a partial fix is worse than none.
+        // A proper fix needs a structural TxInFlight wrapper — defer to a
+        // follow-up PR. In the meantime subscriber-paced fetches keep this
+        // well under the DDL admission path's budget.
         ui64 watermarkPlanStep = 0;
         for (const auto& [opId, txState] : Self->TxInFlight) {
             if (txState.PlanStep != InvalidStepId

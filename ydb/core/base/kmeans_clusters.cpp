@@ -9,6 +9,8 @@
 #include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
+#include <algorithm>
+#include <cmath>
 #include <span>
 
 namespace NKikimr::NKMeans {
@@ -103,13 +105,15 @@ template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
     using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
+    static constexpr bool AggregateNormalized = false;
 };
 
 template <typename TCoord>
 struct TCosineDistance : TMetric<TCoord> {
-    using TSum = typename TMetric<TCoord>::TSum;
+    using TSum = double;
     // double used to avoid precision issues
     using TRes = double;
+    static constexpr bool AggregateNormalized = true;
 
     static TRes Init()
     {
@@ -384,15 +388,30 @@ public:
         auto* coords = aggregate.data();
         Y_ENSURE(IsExpectedFormat(embedding));
 
-        if (IsBitQuantized()) {
-            const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
-            for (size_t i = 0; i < Dimensions; ++i) {
-                const bool coord = data[i / 8] & (1 << (i % 8));
-                *coords++ += (TSum)coord * weight;
+        if constexpr (TMetric::AggregateNormalized) {
+            const auto norm = GetEmbeddingNorm(embedding);
+            if (IsBitQuantized()) {
+                const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+                for (size_t i = 0; i < Dimensions; ++i) {
+                    const bool coord = data[i / 8] & (1 << (i % 8));
+                    *coords++ += norm != 0 ? static_cast<TSum>(coord ? weight / norm : 0.0) : 0;
+                }
+            } else {
+                for (const auto coord : this->GetCoords(embedding.data())) {
+                    *coords++ += norm != 0 ? static_cast<TSum>(coord * (weight / norm)) : 0;
+                }
             }
         } else {
-            for (const auto coord : this->GetCoords(embedding.data())) {
-                *coords++ += (TSum)coord * weight;
+            if (IsBitQuantized()) {
+                const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+                for (size_t i = 0; i < Dimensions; ++i) {
+                    const bool coord = data[i / 8] & (1 << (i % 8));
+                    *coords++ += static_cast<TSum>(coord) * weight;
+                }
+            } else {
+                for (const auto coord : this->GetCoords(embedding.data())) {
+                    *coords++ += static_cast<TSum>(coord) * weight;
+                }
             }
         }
         NextClusterSizes.at(pos) += weight;
@@ -426,7 +445,7 @@ private:
         return std::is_same_v<TCoord, bool>;
     }
 
-    auto GetCoords(const char* coords) {
+    auto GetCoords(const char* coords) const {
         return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
     }
 
@@ -434,9 +453,73 @@ private:
         return std::span{reinterpret_cast<TCoord*>(data), Dimensions};
     }
 
+    double GetEmbeddingNorm(const TArrayRef<const char>& embedding) const {
+        double normSquared = 0;
+        if (IsBitQuantized()) {
+            const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                const bool coord = data[i / 8] & (1 << (i % 8));
+                normSquared += coord ? 1.0 : 0.0;
+            }
+        } else {
+            for (const auto coord : GetCoords(embedding.data())) {
+                const double value = static_cast<double>(coord);
+                normSquared += value * value;
+            }
+        }
+        return std::sqrt(normSquared);
+    }
+
+    double GetNormalizedScale(const TSum* embedding, ui64 count) const {
+        double maxAbsValue = 0;
+        for (size_t i = 0; i < Dimensions; ++i) {
+            const double value = static_cast<double>(embedding[i]) / static_cast<double>(count);
+            maxAbsValue = std::max(maxAbsValue, std::abs(value));
+        }
+        if (maxAbsValue == 0) {
+            return 0;
+        }
+        return static_cast<double>(std::numeric_limits<TCoord>::max()) / maxAbsValue;
+    }
+
     void Fill(TString& d, TSum* embedding, ui64& c) {
         Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(c);
+
+        if constexpr (TMetric::AggregateNormalized) {
+            if (IsBitQuantized()) {
+                ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());
+                const auto threshold = static_cast<TSum>(0.5 * static_cast<double>(c));
+                for (size_t i = 0; i < Dimensions; ++i) {
+                    if (i % 8 == 0) {
+                        data[i / 8] = 0;
+                    }
+                    const bool bitValue = embedding[i] >= threshold;
+                    if (bitValue) {
+                        data[i / 8] |= (1 << (i % 8));
+                    }
+                }
+                return;
+            }
+
+            auto data = GetData(d.MutRef().data());
+            if constexpr (std::is_floating_point_v<TCoord>) {
+                for (auto& coord : data) {
+                    coord = *embedding / count;
+                    ++embedding;
+                }
+            } else {
+                const double scale = GetNormalizedScale(embedding, c);
+                const double minValue = static_cast<double>(std::numeric_limits<TCoord>::min());
+                const double maxValue = static_cast<double>(std::numeric_limits<TCoord>::max());
+                for (auto& coord : data) {
+                    const double value = static_cast<double>(*embedding) / static_cast<double>(count);
+                    coord = static_cast<TCoord>(std::clamp(std::round(value * scale), minValue, maxValue));
+                    ++embedding;
+                }
+            }
+            return;
+        }
 
         if (IsBitQuantized()) {
             ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());

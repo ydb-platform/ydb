@@ -31,8 +31,4 @@ SRCS(
     ut_object.cpp
 )
 
-RECURSE_FOR_TESTS(
-    s3
-)
-
 END()

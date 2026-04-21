@@ -11,9 +11,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
 {% list tabs %}
 
-<<<<<<< HEAD
-- Go (native)
-=======
 - C++
 
   In the {{ ydb-short-name }} C++ SDK, retries with correct error handling is implemented by several programming interfaces:
@@ -234,7 +231,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   {% endcut %}
 
 - Go
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 
   {% list tabs %}
 
@@ -570,8 +566,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -679,5 +673,4 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   })
   ```
 
->>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

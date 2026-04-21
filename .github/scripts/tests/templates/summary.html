@@ -677,6 +677,11 @@
         return [pieces[1], pieces[2]];
     }
 
+    // Bash/zsh: wrap in single quotes; embedded ' becomes '\'' (close quote, escaped quote, reopen).
+    function bashSingleQuote(s) {
+        return "'" + s.replace(/'/g, "'\\''") + "'";
+    }
+
     function formatTestCommand(path, testName) {
         const namePieces = testName.split('.');
         let filterName = testName;
@@ -686,7 +691,7 @@
             filterName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
         }
 
-        return `./ya make -ttt {{ build_preset_params }} -F '${filterName}' ${path}`;
+        return `./ya make -ttt {{ build_preset_params }} -F ${bashSingleQuote(filterName)} ${path}`;
     }
 
     function getTestRunCommand(test) {

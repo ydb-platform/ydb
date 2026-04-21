@@ -156,6 +156,10 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         const auto centroid = DeserializeVector<float>(clusters->GetClusters().front());
         UNIT_ASSERT_VALUES_EQUAL(centroid.size(), 2);
         UNIT_ASSERT_GT(centroid[1], 0.0f);
+        const double norm = std::sqrt(
+            static_cast<double>(centroid[0]) * static_cast<double>(centroid[0]) +
+            static_cast<double>(centroid[1]) * static_cast<double>(centroid[1]));
+        UNIT_ASSERT_DOUBLES_EQUAL(norm, 1.0, 1e-6);
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(centroid[0]) / static_cast<double>(centroid[1]),
             1.0 + std::sqrt(2.0),
@@ -182,6 +186,7 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_VALUES_EQUAL(centroid.size(), 2);
         UNIT_ASSERT_UNEQUAL(centroid[1], 0);
         const auto ratio = static_cast<double>(centroid[0]) / static_cast<double>(centroid[1]);
+        UNIT_ASSERT_VALUES_EQUAL(centroid[0], 127);
         UNIT_ASSERT_GT(ratio, 2.0);
         UNIT_ASSERT_LT(ratio, 3.0);
     }

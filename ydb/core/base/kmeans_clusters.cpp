@@ -470,10 +470,21 @@ private:
         return std::sqrt(normSquared);
     }
 
-    double GetNormalizedScale(const TSum* embedding, ui64 count) const {
-        double maxAbsValue = 0;
+    double GetCentroidNorm(const TSum* embedding, ui64 count) const {
+        double normSquared = 0;
         for (size_t i = 0; i < Dimensions; ++i) {
             const double value = static_cast<double>(embedding[i]) / static_cast<double>(count);
+            normSquared += value * value;
+        }
+        return std::sqrt(normSquared);
+    }
+
+    double GetNormalizedScale(const TSum* embedding, ui64 count, double norm) const {
+        double maxAbsValue = 0;
+        for (size_t i = 0; i < Dimensions; ++i) {
+            const double value = norm != 0
+                ? static_cast<double>(embedding[i]) / (static_cast<double>(count) * norm)
+                : 0;
             maxAbsValue = std::max(maxAbsValue, std::abs(value));
         }
         if (maxAbsValue == 0) {
@@ -487,14 +498,17 @@ private:
         const auto count = static_cast<TSum>(c);
 
         if constexpr (TMetric::AggregateNormalized) {
+            const double norm = GetCentroidNorm(embedding, c);
             if (IsBitQuantized()) {
                 ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());
-                const auto threshold = static_cast<TSum>(0.5 * static_cast<double>(c));
                 for (size_t i = 0; i < Dimensions; ++i) {
                     if (i % 8 == 0) {
                         data[i / 8] = 0;
                     }
-                    const bool bitValue = embedding[i] >= threshold;
+                    const double value = norm != 0
+                        ? static_cast<double>(embedding[i]) / (static_cast<double>(c) * norm)
+                        : 0;
+                    const bool bitValue = value >= 0.5;
                     if (bitValue) {
                         data[i / 8] |= (1 << (i % 8));
                     }
@@ -505,15 +519,19 @@ private:
             auto data = GetData(d.MutRef().data());
             if constexpr (std::is_floating_point_v<TCoord>) {
                 for (auto& coord : data) {
-                    coord = *embedding / count;
+                    coord = norm != 0
+                        ? static_cast<TCoord>(static_cast<double>(*embedding) / (static_cast<double>(c) * norm))
+                        : 0;
                     ++embedding;
                 }
             } else {
-                const double scale = GetNormalizedScale(embedding, c);
+                const double scale = GetNormalizedScale(embedding, c, norm);
                 const double minValue = static_cast<double>(std::numeric_limits<TCoord>::min());
                 const double maxValue = static_cast<double>(std::numeric_limits<TCoord>::max());
                 for (auto& coord : data) {
-                    const double value = static_cast<double>(*embedding) / static_cast<double>(count);
+                    const double value = norm != 0
+                        ? static_cast<double>(*embedding) / (static_cast<double>(c) * norm)
+                        : 0;
                     coord = static_cast<TCoord>(std::clamp(std::round(value * scale), minValue, maxValue));
                     ++embedding;
                 }

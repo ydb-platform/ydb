@@ -148,7 +148,11 @@ namespace NKikimr::NBsController {
                 DDiskPerClaim.insert(std::move(nh));
             }
             TDDiskId GetPreferredPersistentBuffer(ui32 node) {
-                return std::get<1>(*PersistentBuffersPerNode[TNodeId(node)].begin());
+                const TNodeId nodeId(node);
+                const auto it = PersistentBuffersPerNode.find(nodeId);
+                Y_ABORT_UNLESS(it != PersistentBuffersPerNode.end());
+                Y_ABORT_UNLESS(!it->second.empty());
+                return std::get<1>(*it->second.begin());
             }
 
             bool AllocatePersistentBuffer(std::vector<TDDiskId>& group, const THashSet<TDDiskId>& ddisks, const std::vector<TNodeId>& preferredNodes) {

@@ -894,7 +894,7 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
         }
     };
 
-    Y_UNIT_TEST(TailSendHasActivationTime) {
+    Y_UNIT_TEST(TailSendHasMailboxScheduledTimestamp) {
         THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
@@ -923,7 +923,7 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
         const TQueueTimestamps timestamps = done.GetValueSync();
         actorSystem.Stop();
 
-        UNIT_ASSERT_C(timestamps.ActivationTimeUs > 0, "tail send must have non-zero activation time");
+        UNIT_ASSERT_C(timestamps.MailboxScheduledTimestamp > 0, "tail send must have mailbox scheduled timestamp");
         UNIT_ASSERT_C(
             timestamps.ActivationTimeUs <= timestamps.EventDeliveryTimeUs,
             "tail-send activation time must not exceed event delivery time"

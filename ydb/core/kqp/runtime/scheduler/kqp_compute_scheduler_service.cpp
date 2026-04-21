@@ -311,8 +311,6 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
         pool = std::make_shared<TPool>(poolId, KqpCounters, attrs);
         database->AddPool(pool);
 
-        // Add read query
-
         bool allowMinFairShare = (!pool->CpuLimit || *pool->CpuLimit > 0)
             && (FairShareMode >= NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
 
@@ -320,6 +318,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
         auto query = std::make_shared<TQuery>(READ_QUERY_ID, &DelayParams, allowMinFairShare, NHdrf::TStaticAttributes());
         pool->AddQuery(query);
 
+        // Add read query
         ReadQueries.emplace(poolId, query);
     }
 }

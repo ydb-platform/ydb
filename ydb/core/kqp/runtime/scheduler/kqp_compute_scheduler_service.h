@@ -27,7 +27,7 @@ public:
     void UpdateFairShare();
 
 private:
-    static constexpr NHdrf::TQueryId READ_QUERY_ID = 0;
+    static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 
     TRWMutex Mutex;
     NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex

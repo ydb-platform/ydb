@@ -28,23 +28,29 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
     operatorList.AppendValue(MakeJson(op, explainFlags));
     result["Operators"] = operatorList;
 
-    auto getChildJson = [&](const auto& child) {
+    auto getChildJson = [&](const auto& child, int childId) {
         auto childJson = GetExplainJsonRec(child, nodeCounter, explainFlags);
 
-        // Insert shuffle connections if needed
-        // (currently always needed for GraceJoin)
+        // Insert shuffle connections if needed (GraceJoin + not eliminated)
         NJson::TJsonValue connectionJson = childJson;
         if (op->Kind == EOperator::Join) {
             auto join = CastOperator<TOpJoin>(op);
             if (join->Props.JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
-                connectionJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-                connectionJson["PlanNodeType"] = "Connection";
-                connectionJson["Node Type"] = "HashShuffle";
-                connectionJson["PlanNodeId"] = nodeCounter++;
+                // TODO: this is a bit ugly, can we do anything about it?
+                bool thisShuffleEliminated =
+                    (childId == 0 && join->Props.LeftShuffleEliminated) ||
+                    (childId == 1 && join->Props.RightShuffleEliminated);
 
-                NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
-                plans.AppendValue(childJson);
-                connectionJson["Plans"] = plans;
+                if (!thisShuffleEliminated) {
+                    connectionJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+                    connectionJson["PlanNodeType"] = "Connection";
+                    connectionJson["Node Type"] = "HashShuffle";
+                    connectionJson["PlanNodeId"] = nodeCounter++;
+
+                    NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
+                    plans.AppendValue(childJson);
+                    connectionJson["Plans"] = plans;
+                }
             }
         }
 
@@ -53,8 +59,8 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
 
     if (op->Children.size()){
         NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        for (const auto& child : op->Children) {
-            plans.AppendValue(getChildJson(child));
+        for (ui32 i = 0; i < op->Children.size(); ++ i) {
+            plans.AppendValue(getChildJson(op->Children[i], i));
         }
         result["Plans"] = plans;
     }

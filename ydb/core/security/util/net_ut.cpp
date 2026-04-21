@@ -6,7 +6,6 @@ namespace NKikimr::NSecurity {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO: Add invalid swap ipv4 and ipv6 prefix
 Y_UNIT_TEST_SUITE(TNetUtilTest) {
 
     Y_UNIT_TEST(TestIsIPv4) {

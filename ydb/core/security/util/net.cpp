@@ -79,8 +79,6 @@ TMaybe<TIpWithPort> ParseIPv4(TStringBuf peername) {
         });
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 TMaybe<TIpWithPort> ParseIPv6(TStringBuf peername) {
     if (peername.empty()) {
         return Nothing();
@@ -113,6 +111,23 @@ TMaybe<TIpWithPort> ParseIPv6(TStringBuf peername) {
         });
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+TMaybe<TIpWithPort> TryParsePeername(TStringBuf peername) {
+    // ipv6:<ipv6> / ipv6:[<ipv6>]:<port>
+    if (peername.starts_with(IPV6_PREFIX)) {
+        return ParseIPv6(peername.Skip(IPV6_PREFIX.length()));
+    }
+
+    // ipv4:<ipv4> / ipv4:<ipv4>:<port>
+    if (peername.starts_with(IPV4_PREFIX)) {
+        return ParseIPv4(peername.Skip(IPV4_PREFIX.length()));
+    }
+
+    // <ipv6> / [<ipv6>]:<port> / <ipv4> / <ipv4>:<port>
+    return ParseIPv6(peername).Or([&]() { return ParseIPv4(peername); });
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,27 +149,11 @@ bool IsIPv6(TStringBuf address) {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool IsGoodPeernameFormat(TStringBuf peername) {
-    return (ParsePeername(peername) != nullptr);
+    return TryParsePeername(peername).Defined();
 }
 
 NAddr::IRemoteAddrPtr ParsePeername(TStringBuf peername) {
-    // ipv6:<ipv6> or ipv6:[<ipv6>]:<port>
-    if (peername.starts_with(IPV6_PREFIX)) {
-        return ParseIPv6(peername.Skip(IPV6_PREFIX.length()))
-            .Transform([](const TIpWithPort& ipWithPort) { return ParseAddress(ipWithPort); })
-            .GetOrElse(nullptr);
-    }
-
-    // ipv4:<ipv4> or ipv4:<ipv4>:<port>
-    if (peername.starts_with(IPV4_PREFIX)) {
-        return ParseIPv4(peername.Skip(IPV4_PREFIX.length()))
-            .Transform([](const TIpWithPort& ipWithPort) { return ParseAddress(ipWithPort); })
-            .GetOrElse(nullptr);
-    }
-
-    // <ipv6> or [<ipv6>]:<port> or <ipv4> or <ipv4>:<port>
-    return ParseIPv6(peername)
-        .Or([&]() { return ParseIPv4(peername); })
+    return TryParsePeername(peername)
         .Transform([](const TIpWithPort& addr) { return ParseAddress(addr); })
         .GetOrElse(nullptr);
 }

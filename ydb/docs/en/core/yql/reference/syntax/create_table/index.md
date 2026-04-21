@@ -14,38 +14,9 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 {% endif %}
 
-<<<<<<< HEAD
-    CREATE [TEMP | TEMPORARY] TABLE table_name (
-        column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
-        ...
-        columnN typeN,
-{% if feature_secondary_index == true %}
-        INDEX `<index_name>`
-          [GLOBAL|LOCAL]
-          [UNIQUE]
-          [SYNC|ASYNC]
-          [USING <index_type>]
-          ON ( <index_columns> )
-          [COVER ( <cover_columns> )]
-          [WITH ( <parameter_name> = <parameter_value>[, ...])]
-        ...
-{% endif %}
-{% if feature_map_tables %}
-        PRIMARY KEY ( column, ... ),
-        FAMILY column_family ( family_options, ... )
-{% else %}
-        ...
-{% endif %}
-    )
-{% if feature_map_tables %}
-    WITH ( key = value, ... )
-{% endif %}
-=======
-```yql
+ ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
-  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
-  [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
+  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
@@ -63,7 +34,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 [AS SELECT ...]
 ```
->>>>>>> 12f65b8d7f0 (Remove unique index from doc (#38520))
 
 {% if oss == true and backend_name == "YDB" %}
 

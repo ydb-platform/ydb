@@ -11,6 +11,10 @@ bool IsIPv4(TStringBuf address);
 bool IsIPv6(TStringBuf address);
 
 // Supported peername formats:
+//   <port> is a decimal port number in the inclusive range [0, 65535].
+//   Port 0 is intentionally allowed and represents an unspecified/ephemeral
+//   port in the parsed peername.
+//
 //   IPv4 part:
 //     1. <ipv4>
 //     2. <ipv4>:<port>

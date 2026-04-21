@@ -5,7 +5,6 @@
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
 #include <util/network/address.h>
-#include <util/network/ip.h>
 
 #include <functional>
 #include <tuple>

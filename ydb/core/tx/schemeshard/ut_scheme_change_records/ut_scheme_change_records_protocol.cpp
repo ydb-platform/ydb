@@ -229,14 +229,18 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> fetch2Handle;
         auto fetch2 = FetchSchemeChangeRecords(runtime, "test:sub:2", 0, 100, fetch2Handle);
-        // Should only see T1 record, not T2
-        bool foundT2 = false;
+        // Unregistering the last subscriber drops all retained records:
+        // GetMinSubscriberOrder() collapses to NextSchemeChangeOrder when
+        // Subscribers is empty, so the inline cleanup deletes everything.
+        // A fresh subscriber starts with an empty log; NextSchemeChangeOrder
+        // is preserved so future orders never collide with old ones.
         for (int i = 0; i < (int)fetch2->Record.EntriesSize(); ++i) {
-            if (fetch2->Record.GetEntries(i).GetPath() == "T2") {
-                foundT2 = true;
-            }
+            const auto& e = fetch2->Record.GetEntries(i);
+            UNIT_ASSERT_C(e.GetPath() != "T1",
+                "T1 record must be dropped when the last subscriber unregisters");
+            UNIT_ASSERT_C(e.GetPath() != "T2",
+                "T2 record must not exist (created after last subscriber unregistered)");
         }
-        UNIT_ASSERT_C(!foundT2, "T2 record should not exist (created after last subscriber unregistered)");
     }
 
     Y_UNIT_TEST(UnregisterNonexistentSubscriberReturnsError) {

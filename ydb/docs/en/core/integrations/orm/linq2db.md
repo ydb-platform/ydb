@@ -251,7 +251,7 @@ Linq To DB doesn't manage migrations. The DDL below is illustrative—apply it w
 With the [Index] attribute you can set name and columns. The provider creates a GLOBAL secondary index.
 Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; add them using a separate DDL statement after table creation.
 
-#### Option A — attribute (name + Unique)
+#### Option A — attribute (name + columns)
 
 {% list tabs group=lang %}
 

@@ -15,6 +15,7 @@ from mute.constants import (
     get_mute_window_days,
 )
 from mute.fast_unmute_comments import (
+    COMMENT_ABANDON_NOT_COMPLETED,
     COMMENT_ENTER,
     COMMENT_PROGRESS,
     COMMENT_SUCCESS,
@@ -27,6 +28,8 @@ from mute.fast_unmute_github import (
     add_label_to_issue,
     fetch_issue_closers,
     fetch_issue_node_ids,
+    fetch_issue_states,
+    issue_eligible_for_manual_fast_unmute_entry,
     remove_label_from_issue,
     reopen_issue,
     set_fast_unmute_reopen_project_status,
@@ -37,6 +40,7 @@ from mute.fast_unmute_ydb import (
     count_rows_per_issue,
     create_fast_unmute_grace_table,
     create_manual_unmute_table,
+    delete_grace_row,
     delete_row,
     expire_fast_unmute_grace,
     fetch_all_rows,
@@ -67,6 +71,90 @@ def load_config():
         'window_days': get_manual_unmute_window_days(),
         'min_runs': get_manual_unmute_min_runs(),
     }
+
+
+def _delete_fast_unmute_row_and_grace(
+    ydb_wrapper, table_path, grace_table_path, full_name, branch, build_type, *, log_prefix
+):
+    """Remove one ``fast_unmute_active`` row and best-effort matching ``fast_unmute_grace`` row."""
+    delete_row(ydb_wrapper, table_path, full_name, branch, build_type)
+    if not grace_table_path:
+        return
+    try:
+        delete_grace_row(ydb_wrapper, grace_table_path, full_name, branch, build_type)
+    except Exception as exc:
+        logging.warning(
+            '%s: grace delete %s %s %s: %s',
+            log_prefix,
+            full_name,
+            branch,
+            build_type,
+            exc,
+        )
+
+
+def abandon_fast_unmute_if_issue_not_completed(ydb_wrapper, table_path, grace_table_path):
+    """Drop fast-unmute rows when the issue is no longer CLOSED+COMPLETED on GitHub (e.g. reopened).
+
+    Clears ``fast_unmute_active`` (and matching ``fast_unmute_grace`` rows when configured),
+    removes the label, sets project Status → Muted, and posts ``COMMENT_ABANDON_NOT_COMPLETED``.
+    """
+    rows = fetch_all_rows(ydb_wrapper, table_path)
+    if not rows:
+        return
+
+    by_issue = defaultdict(list)
+    for row in rows:
+        inn = row.get('github_issue_number')
+        if inn is None:
+            continue
+        by_issue[int(inn)].append(row)
+
+    if not by_issue:
+        return
+
+    states = fetch_issue_states(list(by_issue.keys()))
+    run_url = workflow_run_url()
+    abandoned = 0
+    rows_deleted = 0
+
+    for issue_number in sorted(by_issue.keys()):
+        meta = states.get(issue_number) or {}
+        issue_id = meta.get('id')
+        state = meta.get('state') or ''
+        state_reason = meta.get('state_reason') or ''
+        if issue_eligible_for_manual_fast_unmute_entry(state, state_reason):
+            continue
+        if not issue_id:
+            logging.warning(
+                'manual_unmute_abandon: issue #%s has fast-unmute rows but no GitHub node id; skip',
+                issue_number,
+            )
+            continue
+
+        for row in by_issue[issue_number]:
+            fn, br, bt = row.get('full_name'), row.get('branch'), row.get('build_type')
+            if not fn or not br or not bt:
+                continue
+            _delete_fast_unmute_row_and_grace(
+                ydb_wrapper, table_path, grace_table_path, fn, br, bt, log_prefix='manual_unmute_abandon'
+            )
+            rows_deleted += 1
+
+        remove_label_from_issue(issue_id)
+        set_manual_unmute_project_board_status(issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_FAIL)
+        add_issue_comment(
+            issue_id,
+            COMMENT_ABANDON_NOT_COMPLETED.format(workflow_run_url=run_url),
+        )
+        abandoned += 1
+
+    if abandoned:
+        logging.info(
+            'manual_unmute_abandon: cleared %d issue(s), %d fast_unmute row(s) (issue not CLOSED+COMPLETED)',
+            abandoned,
+            rows_deleted,
+        )
 
 
 def workflow_run_url():
@@ -408,6 +496,8 @@ def sync(ydb_wrapper):
         create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
     except KeyError:
         grace_table_path = None
+
+    abandon_fast_unmute_if_issue_not_completed(ydb_wrapper, table_path, grace_table_path)
 
     enter_manual_unmute(
         ydb_wrapper,

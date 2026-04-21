@@ -289,16 +289,22 @@ def remove_label_from_issue(issue_id):
         logging.warning('Failed to remove label from issue %s: %s', issue_id, exc)
 
 
-def fetch_issue_node_ids(issue_numbers):
-    """Return {issue_number: issue_node_id}."""
+def fetch_issue_states(issue_numbers):
+    """Return ``{issue_number: {'id', 'state', 'state_reason'}}}`` from GitHub GraphQL.
+
+    ``state_reason`` mirrors GitHub's ``stateReason`` (e.g. ``COMPLETED`` when closed).
+    Issues missing from the response are omitted.
+    """
     result = {}
-    numbers = sorted({int(n) for n in issue_numbers or []})
+    numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
     if not numbers:
         return result
     chunk_size = 50
     for i in range(0, len(numbers), chunk_size):
         chunk = numbers[i : i + chunk_size]
-        subqueries = [f"n{n}: issue(number: {n}) {{ id }}" for n in chunk]
+        subqueries = [
+            f"n{n}: issue(number: {n}) {{ id state stateReason }}" for n in chunk
+        ]
         query = f"""
         query {{
             repository(owner: "{ORG_NAME}", name: "{REPO_NAME}") {{
@@ -310,6 +316,21 @@ def fetch_issue_node_ids(issue_numbers):
         repo_data = (response.get('data') or {}).get('repository') or {}
         for number in chunk:
             node = repo_data.get(f'n{number}')
-            if node and node.get('id'):
-                result[number] = node['id']
+            if not node or not node.get('id'):
+                continue
+            result[number] = {
+                'id': node['id'],
+                'state': str(node.get('state') or ''),
+                'state_reason': str(node.get('stateReason') or ''),
+            }
     return result
+
+
+def fetch_issue_node_ids(issue_numbers):
+    """Return ``{issue_number: issue_node_id}`` (same GraphQL batching as ``fetch_issue_states``)."""
+    return {n: data['id'] for n, data in fetch_issue_states(issue_numbers).items()}
+
+
+def issue_eligible_for_manual_fast_unmute_entry(state, state_reason):
+    """Same gate as YDB candidate issues: closed by human as completed."""
+    return (state or '').strip().upper() == 'CLOSED' and (state_reason or '').strip().upper() == 'COMPLETED'

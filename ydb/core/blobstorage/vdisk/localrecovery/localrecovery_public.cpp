@@ -653,6 +653,7 @@ namespace NKikimr {
 
         void HandleBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
+                // No localrecovery broker service. Continue without it.
                 LocalRecoveryTokenRequested = false;
                 SendYardInit(ctx, TDuration::Zero());
                 Become(&TThis::StateInitialize);

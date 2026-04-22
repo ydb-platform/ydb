@@ -401,8 +401,7 @@ namespace NKikimr {
 
         void HandleStartupCatchupBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
-                // This should NOT happen, but if it does, we must proceed to start scheduler to avoid being stuck.
-                Y_DEBUG_ABORT_S("Failed to acquire startup catchup token, event undelivered");
+                // No startup catchup broker service. Continue without it.
                 StartupCatchupTokenRequested = false;
                 Become(&TThis::StandardModeStateFunc);
                 StartScheduler(ctx);

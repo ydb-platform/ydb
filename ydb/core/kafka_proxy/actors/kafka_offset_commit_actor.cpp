@@ -31,7 +31,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvClo
             TString topicPath = NormalizePath(Context->DatabasePath, *topicReq.Name);
             CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *Message->GroupId);
         }
-        if (PendingResponses == 0) {
+        if (PendingResponses == 0) { // case when AlterTopic requests have already sent and returned an unsuccessful response
             SendFailedForAllPartitions(Error, ctx);
         }
     } else {
@@ -46,6 +46,7 @@ void TKafkaOffsetCommitActor::CreateConsumerGroupIfNecessary(const TString& topi
     if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
         ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);
     } else {
+        // it is enough to send a consumer addition request only once for a particular topic
         return;
     }
     PendingResponses++;
@@ -167,7 +168,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
         SendFailedForAllPartitions(GROUP_ID_NOT_FOUND, ctx);
         return;
     }
-    
+
     auto tableGeneration = parser.ColumnParser("generation").GetUint64();
     if (tableGeneration != static_cast<ui64>(Message->GenerationId)) {
         KAFKA_LOG_ERROR("Generation mismatch for group# " << Message->GroupId.value()

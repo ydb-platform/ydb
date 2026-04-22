@@ -1423,9 +1423,10 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalMinMax: {
-                    if (!dataColums.empty()) { // todo: что такое data columns? Это колонки, указанные в COVER?
+                    if (!dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            "Local min_max index does not support data columns"));
+                            TStringBuilder() << "Local min_max does't need Data columns(COVER from yql), but got "
+                            << indexColums.size() << " of these columns: [" << JoinStrings(dataColums, ", ") << "]"));
                         return IGraphTransformer::TStatus::Error;
                     }
                     if (meta->StoreType != EStoreType::Column) {
@@ -1435,7 +1436,7 @@ private:
                     }
                     if (indexColums.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            TStringBuilder() << "Local min_max is applied to 1 column only, tried to apply to "
+                            TStringBuilder() << "Local min_max is applied to 1 column only(exactly 1 column in ON (...) yql statement), tried to apply to "
                             << indexColums.size() << " columns: [" << JoinStrings(indexColums, ", ") << "]"));
                         return IGraphTransformer::TStatus::Error;
                     }

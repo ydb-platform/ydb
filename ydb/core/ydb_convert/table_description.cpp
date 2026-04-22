@@ -181,8 +181,9 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
             if (index.index_columns_size() != 1) {
                 return fail(TStringBuilder() << "Local min_max index is applied to 1 column only, got " << index.index_columns_size() << " columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]");
             }
-            if (!index.data_columns().empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
-                return fail(TStringBuilder() << "Local min_max index doesn't need data columns, got " << index.data_columns_size() << ": [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]");
+            if (!index.data_columns().empty()) {
+                return fail(TStringBuilder() << "Local min_max does't need Data columns(COVER from yql), but got "
+                            << index.data_columns().size() << " of these columns: [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]");
             }
             auto columnIdIt = nameToId.find(index.index_columns(0));
             if (columnIdIt == nameToId.end()) {
@@ -194,7 +195,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
             olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
             auto* min_max = olapIndex->MutableMinMaxIndex();
             min_max->SetColumnId(columnIdIt->second);
-            return true;
+            continue;
         }
 
         if (index.name().empty()) {
@@ -1420,9 +1421,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = TStringBuilder() << "Local min_max is applied to 1 column only, got columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]";
                 return false;
             } 
-            if (!index.data_columns().empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
+            if (!index.data_columns().empty()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Local bloom doesn't need data columns, got: [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]";
+
+                error = TStringBuilder() << "Local min_max does't need Data columns(COVER from yql), but got "
+                            << index.data_columns().size() << " of these columns: [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]";
                 return false;
             }
             if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
@@ -1485,6 +1488,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 break;
             }
+
             case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     status = Ydb::StatusIds::UNSUPPORTED;
@@ -1513,6 +1517,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 break;
             }
+
+            case Ydb::Table::TableIndex::TYPE_NOT_SET: {
+                error = TStringBuilder() << "Got empty index in modify scheme oepration";
+                return false;
+            }
+
             default:
                 status = Ydb::StatusIds::BAD_REQUEST;
                 const google::protobuf::Reflection* reflection = index.GetReflection();
@@ -1906,7 +1916,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
         case Ydb::Table::TableIndex::kLocalMinMaxIndex:
-            return returnError(Ydb::StatusIds::UNSUPPORTED, "local min_max index type is not supported in indexed table creation config"); // todo: спросить, правда ли, что этот код создает отдельную табличку для индексов, а в cs индексы сделаны без отдельной таблички поэтому надо вернуть ошибку?
+            Y_ABORT("unimplemented");
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type
             // so it's not possible to return an invalid index type error here for now

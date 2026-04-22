@@ -100,17 +100,40 @@ void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionL
     DoRequest(setup, txId, scheme);
 }
 
+void AlterTopicPartitionWriteSpeedInRequestsPerSecond(TTopicSdkTestSetup& setup, ui64& txId, ui64 writeSpeedInRequestsPerSecond) {
+    const TString topicPath = TStringBuilder() << "/Root/" << TEST_TOPIC;
+    const auto describe = DescribePath(setup.GetRuntime(), topicPath, true, true, true);
+    UNIT_ASSERT_C(describe.GetPathDescription().HasPersQueueGroup(), "DescribePath: no PersQueueGroup");
+
+    NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+    scheme.SetName(TString{TEST_TOPIC});
+    scheme.MutablePQTabletConfig()->CopyFrom(describe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig());
+    scheme.MutablePQTabletConfig()->ClearPartitionIds();
+    scheme.MutablePQTabletConfig()->ClearPartitions();
+    scheme.MutablePQTabletConfig()->ClearAllPartitions();
+    scheme.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInRequestsPerSecond(writeSpeedInRequestsPerSecond);
+
+    DoRequest(setup, txId, scheme);
+}
+
 TWriteMessage Msg(const TString& data, ui64 seqNo) {
     TWriteMessage msg(data);
     msg.SeqNo(seqNo);
     return msg;
 }
 
-TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority, bool enableTopicPartitionSplitBasedOnKllSketch) {
+TTopicSdkTestSetup CreateSetup(
+    NActors::NLog::EPriority priority,
+    bool enableTopicPartitionSplitBasedOnKllSketch,
+    bool enableTopicPartitionSplitBasedOnRps)
+{
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicAutopartitioningForReplication(true);
     if (enableTopicPartitionSplitBasedOnKllSketch) {
         ff.SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (enableTopicPartitionSplitBasedOnRps) {
+        ff.SetEnableTopicPartitionSplitBasedOnRps(true);
     }
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();

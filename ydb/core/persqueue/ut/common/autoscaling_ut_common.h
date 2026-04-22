@@ -46,11 +46,14 @@ ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TStr
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight);
 
+void AlterTopicPartitionWriteSpeedInRequestsPerSecond(TTopicSdkTestSetup& setup, ui64& txId, ui64 writeSpeedInRequestsPerSecond);
+
 TWriteMessage Msg(const TString& data, ui64 seqNo);
 
 TTopicSdkTestSetup CreateSetup(
     NActors::NLog::EPriority priority = NActors::NLog::PRI_DEBUG,
-    bool enableTopicPartitionSplitBasedOnKllSketch = false);
+    bool enableTopicPartitionSplitBasedOnKllSketch = false,
+    bool enableTopicPartitionSplitBasedOnRps = false);
 
 std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TString{TEST_TOPIC}, bool useCodec = true);
 

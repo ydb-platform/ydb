@@ -127,6 +127,7 @@ public:
             TDuration::Seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds()))
     {
         RecreateSumWrittenBytes();
+        RecreateRequests();
     }
 
     void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override  {
@@ -143,6 +144,7 @@ public:
         auto now = TInstant::Now();
 
         SumWrittenBytes->Update(size, now);
+        Requests->Update(1, now);
 
 #ifdef _win_
         NKikimr::NPQ::TUint128 sourceIdHash = decodedSourceId.size() > 0 ? (double)Hash(decodedSourceId) : 0.;
@@ -226,13 +228,22 @@ public:
             << " canSplit=" << canSplit
             << " verdict=" << (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")
         );
-        
-        if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
-            // LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
+
+        auto splitByRpsEnabled = AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnRps();
+        const auto requestsSpeedUsagePercent = Requests->GetValue() * 100.0
+            / Config.GetPartitionStrategy().GetScaleThresholdSeconds()
+            / Config.GetPartitionConfig().GetWriteSpeedInRequestsPerSecond();
+        auto shouldSplitByRps = splitByRpsEnabled
+            && requestsSpeedUsagePercent
+                >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
+        auto shouldSplitByBytes = writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
+
+        if (splitEnabled && canSplit && (shouldSplitByBytes || shouldSplitByRps)) {
+            PQ_LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-            // LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
-            //        << " writeSpeedUsagePercent: " << writeSpeedUsagePercent);
+            PQ_LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
+                << " writeSpeedUsagePercent: " << writeSpeedUsagePercent);
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }
         return NKikimrPQ::EScaleStatus::NORMAL;
@@ -241,6 +252,7 @@ public:
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
         if (config.GetPartitionStrategy().GetScaleThresholdSeconds() != SumWrittenBytes->GetDuration().Seconds()) {
             RecreateSumWrittenBytes();
+            RecreateRequests();
         }
     }
 
@@ -250,6 +262,10 @@ public:
 
     void RecreateSumWrittenBytes() {
         SumWrittenBytes.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
+    }
+
+    void RecreateRequests() {
+        Requests.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
     }
 
 private:
@@ -344,6 +360,7 @@ private:
     NPQ::TPartitioningKeysManager KeysManager;
     TLastCounter<TString> SourceIdCounter;
     TInstant LastCleanUp;
+    TMaybe<TSlidingWindow> Requests;
 };
 
 

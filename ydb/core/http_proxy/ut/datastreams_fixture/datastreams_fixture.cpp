@@ -396,6 +396,9 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     if (initParameters.EnableTopicPartitionSplitBasedOnKllSketch) {
         appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnKllSketch(true);
     }
+    if (initParameters.EnableTopicPartitionSplitBasedOnRps) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnRps(true);
+    }
     if (initParameters.EnforceUserTokenRequirement) {
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);

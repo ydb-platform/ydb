@@ -1051,6 +1051,50 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
     }
 
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_RpsBasedSplit) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, false, true);
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describeBefore = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeBefore.GetTopicDescription().GetPartitions().size(), 1);
+
+        ui64 txId = 2600;
+        AlterTopicPartitionWriteSpeedInRequestsPerSecond(setup, txId, 800);
+        ++txId;
+
+        auto tiny = TString(32, 'x');
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
+
+        for (ui32 i = 0; i < 120; ++i) {
+            UNIT_ASSERT(writeSession_1->Write(Msg(tiny, 1 + i)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(tiny, 1000 + i)));
+        }
+        Sleep(TDuration::Seconds(12));
+        auto describeAfter = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_C(
+            describeAfter.GetTopicDescription().GetPartitions().size() >= 3,
+            "expected split by incoming RPS (partitions# " << describeAfter.GetTopicDescription().GetPartitions().size() << ")"
+        );
+
+        writeSession_1->Close(TDuration::Seconds(5));
+        writeSession_2->Close(TDuration::Seconds(5));
+    }
+
     Y_UNIT_TEST(PartitionSplit_KllSketchBasedSplit_CheckBoundaries) {
         TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
         TTopicClient client = setup.MakeClient();

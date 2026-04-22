@@ -31,18 +31,18 @@ For {{ ydb-short-name }} servers, configure the following BIOS/UEFI settings:
 
 ### Operating system settings {#os}
 
-On Linux, for deployments **not** using the [Ansible role](../../deployment-options/ansible/index.md) (which configures this automatically), additionally consider:
+On Linux, for deployments **not** using the [Ansible role](../deployment-options/ansible/index.md) (which configures this automatically), run the following commands as root:
 
 ```bash
 # Force the performance cpufreq governor
-echo 'performance' | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null
 
 # Pin minimum frequency to maximum
 echo $(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq) | \
-tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
+sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq >/dev/null
 
 # Reduce PCIe ASPM power saving
-echo 'performance' > /sys/module/pcie_aspm/parameters/policy
+echo 'performance' | sudo tee /sys/module/pcie_aspm/parameters/policy >/dev/null
 ```
 
 ### Verifying current settings {#check}

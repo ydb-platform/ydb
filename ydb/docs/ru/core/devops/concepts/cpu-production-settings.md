@@ -31,18 +31,18 @@
 
 ### Настройки операционной системы {#os}
 
-Для Linux-систем при **ручном** развёртывании (при использовании [Ansible-роли](../../deployment-options/ansible/index.md) это настраивается автоматически) дополнительно рекомендуется:
+Для Linux-систем при **ручном** развёртывании (при использовании [Ansible-роли](../deployment-options/ansible/index.md) это настраивается автоматически) выполните следующие команды с правами администратора:
 
 ```bash
 # Установить governor в режим performance для всех ядер
-echo 'performance' | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null
 
 # Установить минимальную частоту равной максимальной
-echo $(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq) | \
-tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
+cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq | \
+sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq >/dev/null
 
 # Отключить энергосбережение для PCIe
-echo 'performance' > /sys/module/pcie_aspm/parameters/policy
+echo 'performance' | sudo tee /sys/module/pcie_aspm/parameters/policy >/dev/null
 ```
 
 ### Проверка текущих настроек {#check}

@@ -29,8 +29,7 @@ public:
     [[nodiscard]] TDuration GetTraceSamplePeriod() const;
     [[nodiscard]] ui32 GetSyncRequestsBatchSize() const;
     [[nodiscard]] ui64 GetStripeSize() const;
-    [[nodiscard]] TDuration GetWriteHedgingDelay() const;
-    [[nodiscard]] TDuration GetWriteRequestTimeout() const;
+    [[nodiscard]] TDuration GetWriteHandoffDelay() const;
     [[nodiscard]] TString GetDDiskPoolName() const;
     [[nodiscard]] TString GetPersistentBufferDDiskPoolName() const;
     [[nodiscard]] NProto::EWriteMode GetWriteMode() const;

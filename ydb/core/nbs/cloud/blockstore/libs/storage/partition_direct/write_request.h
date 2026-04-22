@@ -35,8 +35,7 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
         NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout);
+        TDuration hedgingDelay);
 
     virtual ~TBaseWriteRequestExecutor();
 
@@ -54,13 +53,6 @@ protected:
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void ScheduleRequestTimeoutCallback();
-    void RequestTimeoutCallback();
-
-    TVector<ELocation> GetAvailableHandOffLocations() const;
-
-    virtual void ScheduleHedging() = 0;
-
     NActors::TActorSystem* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
@@ -70,7 +62,6 @@ protected:
     const NWilson::TTraceId TraceId;
     const ui64 Lsn;
     const TDuration HedgingDelay;
-    const TDuration RequestTimeout;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

@@ -18,8 +18,8 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(3u, config.GetSyncRequestsBatchSize());
         UNIT_ASSERT_VALUES_EQUAL(524288u, config.GetStripeSize());
         UNIT_ASSERT_VALUES_EQUAL(
-            TDuration::MicroSeconds(700),
-            config.GetWriteHedgingDelay());
+            TDuration::MicroSeconds(0),
+            config.GetWriteHandoffDelay());
         UNIT_ASSERT_VALUES_EQUAL("ddp1", config.GetDDiskPoolName());
         UNIT_ASSERT_VALUES_EQUAL(
             "ddp1",
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         proto.SetTraceSamplePeriod(42);
         proto.SetSyncRequestsBatchSize(7);
         proto.SetStripeSize(8192);
-        proto.SetWriteHedgingDelay(99);
+        proto.SetWriteHandoffDelay(99);
         proto.SetVChunkSize(33554432);
 
         TStorageConfig config{std::move(proto)};
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(8192u, config.GetStripeSize());
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MicroSeconds(99),
-            config.GetWriteHedgingDelay());
+            config.GetWriteHandoffDelay());
         UNIT_ASSERT_VALUES_EQUAL(33554432, config.GetVChunkSize());
     }
 
@@ -62,8 +62,8 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(3u, config.GetSyncRequestsBatchSize());
         UNIT_ASSERT_VALUES_EQUAL(2048u, config.GetStripeSize());
         UNIT_ASSERT_VALUES_EQUAL(
-            TDuration::MicroSeconds(700),
-            config.GetWriteHedgingDelay());
+            TDuration::MicroSeconds(0),
+            config.GetWriteHandoffDelay());
         UNIT_ASSERT_VALUES_EQUAL(134217728, config.GetVChunkSize());
     }
 }

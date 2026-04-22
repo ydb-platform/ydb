@@ -6,58 +6,49 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Comma-separated list of branches to process (empty = use branches from config file)'
+        description: 'Optional: comma-separated branches instead of stable_tests_branches.json. Empty = use stable_tests_branches.json from main.'
         required: false
         default: ''
-      build_type:
-        description: 'tests_monitor / mute scripts build_type (relwithdebinfo, release-asan, …)'
+      build_types:
+        description: 'Comma-separated presets or "all" (default). Cannot request presets outside the allowed list passed to mute_update_workflow_matrix.py in this workflow. Matrix keeps only (branch, preset) where the mute file exists on origin/<branch>.'
         required: false
-        default: relwithdebinfo
+        default: all
         type: string
 
 env:
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
-  TITLE: "Update muted_ya.txt"
   REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test,automerge"
-  BUILD_TYPE: ${{ github.event.inputs.build_type || 'relwithdebinfo' }}
 
 jobs:
   setup:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
-      matrix_branches: ${{ steps.set-matrix.outputs.branches }}
+      matrix_include: ${{ steps.set-mute-matrix.outputs.matrix_include }}
     steps:
-      - name: Checkout branches config
+      - name: Checkout branch list and mute files from main
         uses: actions/checkout@v4
         with:
           ref: main
           path: config-repo
           sparse-checkout: |
-            ${{ env.BRANCHES_CONFIG_PATH }}
+            .github/config/
+            .github/scripts/tests/mute_update_workflow_matrix.py
+            .github/scripts/tests/resolve_muted_ya_path.py
           sparse-checkout-cone-mode: false
 
-      - id: set-matrix
+      - id: set-mute-matrix
         env:
-          BRANCHES_INPUT: ${{ github.event.inputs.branches }}
-          EVENT_NAME: ${{ github.event_name }}
+          INPUT_BRANCHES: ${{ github.event.inputs.branches || '' }}
+          INPUT_BUILD_TYPES: ${{ github.event.inputs.build_types || '' }}
         run: |
-          if [ "$EVENT_NAME" == "workflow_dispatch" ] && [ -n "$BRANCHES_INPUT" ]; then
-            echo "branches=$(echo "$BRANCHES_INPUT" | jq -R -s -c 'split(",") | map(gsub("^\\s+"; "") | gsub("\\s+$"; "")) | map(select(length > 0))')" >> $GITHUB_OUTPUT
-          else
-            echo "branches=$(jq -c '.' config-repo/$BRANCHES_CONFIG_PATH)" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Log branches to process
-        run: |
-          BRANCHES='${{ steps.set-matrix.outputs.branches }}'
-          echo "### Branches to process" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "$BRANCHES" | jq -r '.[]' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Branches to process: $(echo "$BRANCHES" | jq -r '.[]' | tr '\n' ' ')"
+          set -euo pipefail
+          python3 config-repo/.github/scripts/tests/mute_update_workflow_matrix.py matrix \
+            --branches-file "config-repo/${{ env.BRANCHES_CONFIG_PATH }}" \
+            --git-cwd config-repo \
+            --allowed-build-types relwithdebinfo,release-asan
 
   collect-testowners-and-sync:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
@@ -98,14 +89,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        BASE_BRANCH: ${{ fromJson(needs.setup.outputs.matrix_branches) }}
+        include: ${{ fromJson(needs.setup.outputs.matrix_include) }}
     steps:
-      - name: Set environment variables
-        run: |
-          echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> $GITHUB_ENV
-          PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
-          echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
-
       # Всегда checkout main для получения актуальных скриптов
       - name: Checkout main branch
         uses: actions/checkout@v4
@@ -124,24 +109,30 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      # Получаем base_muted_ya.txt из целевой ветки
-      - name: Get base muted_ya.txt from target branch
+      - name: Resolve mute file and fetch base from target branch
+        id: mute_gate
         run: |
-          echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
-          git fetch origin ${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}
-          git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
-          echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
-    
+          set -euo pipefail
+          python3 .github/scripts/tests/mute_update_workflow_matrix.py prepare-job \
+            --repo-root . \
+            --base-branch "${{ matrix.BASE_BRANCH }}" \
+            --build-type "${{ matrix.BUILD_TYPE }}" \
+            --pr-branch-prefix "${{ env.PR_BRANCH_PREFIX }}"
+
       - name: Collect test history data
+        if: steps.mute_gate.outputs.skip != 'true'
         run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
-      
+
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} --muted_ya_file=base_muted_ya.txt 
-      
+        if: steps.mute_gate.outputs.skip != 'true'
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} --muted_ya_file=base_muted_ya.txt
+
       - name: Update test monitor
+        if: steps.mute_gate.outputs.skip != 'true'
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
       - name: Generate new muted_ya.txt
+        if: steps.mute_gate.outputs.skip != 'true'
         run: |
           .github/scripts/tests/mute/create_new_muted_ya.py update_muted_ya \
             --branch=${{ env.BASE_BRANCH }} \
@@ -149,6 +140,7 @@ jobs:
             --build-type=${{ env.BUILD_TYPE }}
 
       - name: Check if changes exist
+        if: steps.mute_gate.outputs.skip != 'true'
         id: changes_check
         run: |
           # Compare base_muted_ya.txt with newly generated file
@@ -161,34 +153,34 @@ jobs:
           fi
 
       - name: Setup git config
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
 
       - name: Create PR branch and apply changes
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         run: |
           # Создаем PR ветку на основе целевой ветки
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
-          
-          # Копируем новый файл в PR ветку (файл остается в рабочей директории)
-          cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
-          
-          # Коммитим изменения
-          git add .github/config/muted_ya.txt
-          git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
-          
-          echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes"
+
+          OUT=$(python3 .github/scripts/tests/resolve_muted_ya_path.py --print-dedicated-relative --preset "${{ env.BUILD_TYPE }}")
+          mkdir -p "$(dirname "$OUT")"
+          cp mute_update/new_muted_ya.txt "$OUT"
+
+          git add "$OUT"
+          git commit -m "Update mute list (${{ env.BUILD_TYPE }}) for ${{ env.BASE_BRANCH }}"
+
+          echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes ($OUT)"
 
       - name: Collect PR description
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         run: |
           
           PR_BODY=''
           PR_BODY_FILE="pr_body_content.txt"
           
-          PR_BODY+=$'# Muted tests update for ${{ env.BASE_BRANCH }}\n\n'
+          PR_BODY+=$'# Muted tests update for ${{ env.BASE_BRANCH }} (build: ${{ env.BUILD_TYPE }})\n\n'
 
           if [ -s mute_update/to_delete_debug.txt ]; then
               DELETED_COUNT=$(wc -l < mute_update/to_delete_debug.txt)
@@ -237,16 +229,16 @@ jobs:
           echo "PR_BODY_PATH=$PR_BODY_FILE" >> $GITHUB_ENV
 
       - name: Upload all generated files as artifacts
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: muted-tests-all-files-${{ env.BASE_BRANCH }}
+          name: muted-tests-all-files-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
           path: |
             mute_update/
           retention-days: 7
 
       - name: Push PR branch
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         run: |
           # Retry logic for transient GitHub API timeouts
           MAX_RETRIES=5
@@ -277,7 +269,7 @@ jobs:
           done
 
       - name: Create or update PR
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         id: create_or_update_pr
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
@@ -288,18 +280,18 @@ jobs:
           python .github/scripts/create_or_update_pr.py create_or_update \
             --base_branch="${{ env.BASE_BRANCH }}" \
             --branch_for_pr="${{ env.PR_BRANCH }}" \
-            --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" \
+            --title="Update muted YA (${{ env.BUILD_TYPE }}) in ${{ env.BASE_BRANCH }}" \
             --body="${{ env.PR_BODY_PATH }}"
         
       - name: Prepare PR comment
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         id: comment_pr
         run: |
           # Читаем содержимое PR body
           PR_BODY_CONTENT=$(cat pr_body_content.txt)
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           COMPLETE_BODY=$(cat << EOF
-          Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }}
+          Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }} (build: ${{ env.BUILD_TYPE }})
 
           ${PR_BODY_CONTENT}
           EOF
@@ -309,7 +301,7 @@ jobs:
           echo "PR_COMMENT_FILE=pr_comment_final.txt" >> $GITHUB_OUTPUT
 
       - name: Add comment, reviewers and labels
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         uses: actions/github-script@v7
         env:
           LABELS: ${{ env.LABELS }}
@@ -349,7 +341,7 @@ jobs:
             });
           
       - name: Enable auto-merge (squash)
-        if: env.changes == 'true'
+        if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}

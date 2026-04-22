@@ -353,6 +353,11 @@ if __name__ == "__main__":
         required=True,
         help='build type for filtering tests',
     )
+    get_mute_details_parser.add_argument(
+        '--muted_ya_file',
+        type=str,
+        help='Path to mute list (default: .github/config/muted_ya.txt)',
+    )
     args = parser.parse_args()
     
     print(f'📋 Parsed arguments:')

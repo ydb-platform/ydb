@@ -18,6 +18,7 @@ Reads profiles from .github/config/mute_issue_and_digest_config.json
 and runs only those whose ``schedule_utc_hours`` contains the current UTC hour
 and whose ``schedule_weekdays`` contains the current ISO weekday (1=Mon … 7=Sun).
 Omitted ``schedule_weekdays`` defaults to Mon–Fri ``[1,2,3,4,5]``.
+Profiles with ``issues_and_digest: false`` are skipped (mute-update-only rows).
 ``--force`` skips both checks.
 
 Usage:
@@ -342,6 +343,8 @@ def main() -> None:
 
     active = []
     for p in profiles:
+        if not p.get("issues_and_digest", True):
+            continue
         if args.profile and make_profile_id(p["branch"], p["build_type"]) != args.profile:
             continue
         if args.force:

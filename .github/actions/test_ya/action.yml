@@ -341,6 +341,7 @@ runs:
           ".github/scripts/tests/generate-summary.py"
           ".github/scripts/tests/fail-checker.py"
           ".github/scripts/tests/transform_build_results.py"
+          ".github/scripts/tests/resolve_muted_ya_path.py"
         )
         
         # Ensure main is available (may be missing in shallow clone)
@@ -360,6 +361,9 @@ runs:
         
         # Check YDB configuration (after checkout from main)
         python3 .github/scripts/check_ydb_qa_config.py || true
+
+        eval "$(python3 .github/scripts/tests/resolve_muted_ya_path.py --preset "${{ inputs.build_preset }}" --emit-bash-env)"
+        echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE (fallback=$MUTED_YA_IS_FALLBACK)"
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
@@ -412,7 +416,7 @@ runs:
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
               MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
-              python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml .github/config/muted_ya.txt "$PREV_REPORT" > $MUTED_YAML_PATH
+              python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
               RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
             else
               RERUN_FAILED_OPT=""
@@ -490,7 +494,7 @@ runs:
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
             --test_dir="$TEST_META_INFO" \
-            -m .github/config/muted_ya.txt \
+            -m "$MUTED_YA_FILE" \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
@@ -637,21 +641,21 @@ runs:
         fi
 
     - name: show diff mute_ya.txt
-      if: inputs.build_preset == 'relwithdebinfo' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: inputs.run_tests && env.MUTED_YA_IS_FALLBACK == '0' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
-        # Use ORIGINAL_HEAD from build step (saved before any git operations)
+        # Use ORIGINAL_HEAD from build step (saved before any git operations). Skip when preset uses shared muted_ya.txt fallback.
         get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
-        file_to_check=.github/config/muted_ya.txt
+        file_to_check="$MUTED_YA_FILE"
         check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`
         if [[ ${check_result} == *"not changed" ]];then
             echo file ${file_to_check} NOT changed
         else
             echo file ${file_to_check} changed
-            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"
+            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}" --build_type "${{ inputs.build_preset }}" --muted_ya_file "$MUTED_YA_FILE"
             FILE_PATH=$PUBLIC_DIR/mute_info/2_new_muted_tests.txt
             SEPARATOR=""
             if [ -f "$FILE_PATH" ]; then

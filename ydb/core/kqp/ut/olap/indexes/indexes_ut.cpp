@@ -19,6 +19,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
 
+#include <algorithm>
+#include <iterator>
 #include <ranges>
 #include <unordered_set>
 
@@ -2673,15 +2675,14 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             const auto& indexes = schema.GetIndexes();
             const std::ranges::subrange indexesRange(indexes.begin(), indexes.end());
 
-            const auto bloomIndexNames = [&] {
-                auto namesView = indexesRange
-                    | std::ranges::views::filter([](const auto& index) {
-                          return (index.GetName() == "idx_bloom" && index.HasBloomFilter()) ||
-                              (index.GetName() == "idx_ngram" && index.HasBloomNGrammFilter());
-                      })
-                    | std::ranges::views::transform([](const auto& index) { return TString{index.GetName()}; });
-                return std::unordered_set<TString>(std::ranges::begin(namesView), std::ranges::end(namesView));
-            }();
+            std::unordered_set<TString> bloomIndexNames;
+            std::ranges::transform(
+                indexesRange | std::ranges::views::filter([](const auto& index) {
+                    return (index.GetName() == "idx_bloom" && index.HasBloomFilter()) ||
+                        (index.GetName() == "idx_ngram" && index.HasBloomNGrammFilter());
+                }),
+                std::inserter(bloomIndexNames, bloomIndexNames.end()),
+                [](const auto& index) { return TString{index.GetName()}; });
 
             UNIT_ASSERT_C(bloomIndexNames.contains("idx_bloom"), "idx_bloom should be present in table schema");
             UNIT_ASSERT_C(bloomIndexNames.contains("idx_ngram"), "idx_ngram should be present in table schema");

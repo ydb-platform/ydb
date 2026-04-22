@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/array_power2.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -185,6 +186,7 @@ public:
     }
 };
 
+<<<<<<< HEAD
 class TVectorInserter {
 private:
     TDynBitMap Values;
@@ -265,6 +267,8 @@ public:
     }
 };
 }   // namespace
+=======
+>>>>>>> 59554ea611c (Speed up building bloom_ngram index (#36689))
 
 namespace {
 
@@ -303,13 +307,11 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     if (!UseOldSizing) {
         static constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
         static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
-        static constexpr ui64 MaxChunkCount = MaxBitsSize / BitsPerUi64;
 
-        TVectorInserter maxInserter(MaxBitsSize);
-        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxInserter);
+        TArrayPower2BitsStorage maxStorage(MaxBitsSize);
+        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxStorage);
 
-        auto maxBits = maxInserter.ExtractBits();
-        const ui64 setBitsCount = maxBits.Count();
+        const ui64 setBitsCount = maxStorage.CountSetBits();
 
         const double m = static_cast<double>(MaxBitsSize);
         const double k = static_cast<double>(HashesCount);
@@ -321,26 +323,10 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         const double requestedBitsSizeDouble = std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(FalsePositiveProbability, 1.0 / k)));
         const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
         const ui32 targetSize = std::min<ui64>(MaxBitsSize, std::bit_ceil(requestedBitsSize));
-        const size_t targetChunkCount = targetSize / BitsPerUi64;
 
-        const ui64* srcChunks = maxBits.GetChunks();
-        std::vector<ui64> folded(targetChunkCount, 0);
-        for (size_t i = 0; i < MaxChunkCount; ++i) {
-            folded[i % targetChunkCount] |= srcChunks[i];
-        }
+        auto foldedStorage = targetSize < MaxBitsSize ? maxStorage.Fold(MaxBitsSize / targetSize) : std::move(maxStorage);
 
-        TDynBitMap resultBits;
-        resultBits.Reserve(targetSize);
-        for (size_t i = 0; i < targetChunkCount; ++i) {
-            ui64 chunk = folded[i];
-            const size_t base = i * BitsPerUi64;
-            while (chunk) {
-                resultBits.Set(base + CountTrailingZeroBits(chunk));
-                chunk &= chunk - 1;
-            }
-        }
-
-        TString indexData = GetBitsStorageConstructor()->SerializeToString(std::move(resultBits));
+        TString indexData = GetBitsStorageConstructor()->SerializeToString(foldedStorage);
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
     }
 
@@ -356,52 +342,29 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     }
 
     size = std::max<ui32>(16, size);
-    const auto doFillFilter = [&](auto& inserter) {
-        for (reader.Start(); reader.IsCorrect();) {
-            AFL_VERIFY(reader.GetColumnsCount() == 1);
-            for (auto&& r : reader) {
-                GetDataExtractor()->VisitAll(
-                    r.GetCurrentChunk(),
-                    [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
-                        builder.FillNGrammHashes(NGrammSize, arr, inserter);
-                    },
-                    [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
-                        auto view = data.GetScalarOptional();
-                        if (!view.has_value()) {
-                            return;
-                        }
+    TArrayPower2BitsStorage storage(size);
+    for (reader.Start(); reader.IsCorrect();) {
+        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        for (auto&& r : reader) {
+            GetDataExtractor()->VisitAll(
+                r.GetCurrentChunk(),
+                [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
+                    builder.FillNGrammHashes(NGrammSize, arr, storage);
+                },
+                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                    auto view = data.GetScalarOptional();
+                    if (!view.has_value()) {
+                        return;
+                    }
 
-                        builder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, inserter);
-                    });
-            }
-
-            reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
+                    builder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, storage);
+                });
         }
-    };
 
-    TString indexData;
-    if ((size & (size - 1)) == 0) {
-        if (size == 1024) {
-            indexData = TBitmapDetector<1024>(this, 1024).Detector(doFillFilter);
-        } else if (size == 2048) {
-            indexData = TBitmapDetector<2048>(this, 2048).Detector(doFillFilter);
-        } else if (size == 4096) {
-            indexData = TBitmapDetector<4096>(this, 4096).Detector(doFillFilter);
-        } else if (size == 4096 * 2) {
-            indexData = TBitmapDetector<4096 * 2>(this, 4096 * 2).Detector(doFillFilter);
-        } else if (size == 4096 * 4) {
-            indexData = TBitmapDetector<4096 * 4>(this, 4096 * 4).Detector(doFillFilter);
-        } else if (size == 4096 * 8) {
-            indexData = TBitmapDetector<4096 * 8>(this, 4096 * 8).Detector(doFillFilter);
-        } else if (size == 4096 * 16) {
-            indexData = TBitmapDetector<4096 * 16>(this, 4096 * 16).Detector(doFillFilter);
-        }
+        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
     }
-    if (!indexData) {
-        TVectorInserter inserter(size);
-        doFillFilter(inserter);
-        indexData = GetBitsStorageConstructor()->SerializeToString(inserter.ExtractBits());
-    }
+
+    TString indexData = GetBitsStorageConstructor()->SerializeToString(storage);
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 

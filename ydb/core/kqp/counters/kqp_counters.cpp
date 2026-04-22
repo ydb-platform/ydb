@@ -931,6 +931,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
 }
 
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetRootCounters() const {
+    return Counters;
+}
+
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {
     return KqpGroup;
 }

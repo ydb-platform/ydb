@@ -3,9 +3,12 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
+
+LWTRACE_USING(YDB_CS_SCAN);
 
 void TTxInternalScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
@@ -116,9 +119,11 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         scanDiagnosticsEvent->RequestId = requestCookie;
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
     }
+    auto orbit = std::make_shared<NLWTrace::TOrbit>();
+    LWTRACK(StartScan, *orbit, request.GetPathId().GetInternalPathId().GetRawValue(), Self->TabletID(), request.GetLockId().value_or(0), ScanId);
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), TComputeShardingPolicy(), ScanId, request.GetLockId().value_or(0), ScanGen, requestCookie,
-        Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));
+        Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}, std::move(orbit)));
 
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

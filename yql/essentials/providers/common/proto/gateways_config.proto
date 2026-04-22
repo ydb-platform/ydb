@@ -4,27 +4,10 @@ option java_package = "ru.yandex.yql.proto";
 import "yql/essentials/protos/clickhouse.proto";
 import "yql/essentials/protos/fmr.proto";
 import "yql/essentials/utils/fetch/proto/fetch_config.proto";
-
+import "yql/essentials/minikql/runtime_settings/proto/runtime_settings.proto";
+import "yql/essentials/providers/common/proto/activation/activation.proto";
 
 /////////////////////////////// common ///////////////////////////////
-
-message TActivationByHour {
-    required uint32 Hour = 1;
-    required uint32 Percentage = 2;
-}
-
-message TActivationPercentage {
-    optional uint32 Percentage = 1 [default = 0];
-    repeated TActivationByHour ByHour = 2;
-    repeated string IncludeUsers = 3;
-    repeated string ExcludeUsers = 4;
-    optional bool ExcludeRobots = 5 [default = true];
-    repeated string Tags = 6;
-    repeated string IncludeGroups = 7;
-    repeated string ExcludeGroups = 8;
-    repeated string IncludeRevisions = 9;
-    repeated string ExcludeRevisions = 10;
-}
 
 message TAttr {
     required string Name = 1;
@@ -110,6 +93,47 @@ message TFileWithMd5 {
     optional string Md5 = 2;
 }
 
+message TYtTvmToolConfig {
+    required uint32 Port = 1;
+    required string SelfAlias = 2;
+}
+
+message TYtTvmAuthConfig {
+    message TDestination {
+        required string Alias = 1;
+        required uint32 TvmId = 2;
+    }
+
+    required string TvmSecretPath = 1;
+    required uint32 SelfTvmId = 2;
+    required string DiskCacheDir = 3;
+    repeated TDestination Destinations = 4;
+}
+
+message TYtHttpClientConfig {
+    optional uint32 TimeoutMs = 1 [default = 5000];
+    optional uint32 MaxRetries = 2 [default = 3];
+
+    optional uint32 MinDelayMs = 3 [default = 2000];
+    optional double Scale = 5 [default = 2];
+    optional uint32 MaxDelayMs = 6 [default = 8000];
+    optional uint32 MaxTotalDelayTimeMs = 7 [default = 16000];
+}
+
+message TYtBlackboxConfig {
+    required string Host = 1;
+    required uint32 Port = 2;
+    required string TvmAlias = 3;
+    optional TYtHttpClientConfig HttpClientConfig = 4;
+}
+
+message TYtIdmConfig {
+    required string Host = 1;
+    required uint32 Port = 2;
+    required string TvmAlias = 3;
+    optional TYtHttpClientConfig HttpClientConfig = 4;
+}
+
 message TYtGatewayConfig {
     optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
     optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
@@ -125,6 +149,10 @@ message TYtGatewayConfig {
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
     optional string LocalChainFile = 14; // File to dump table contet in test mode
     repeated TFileWithMd5 MrJobSystemLibsWithMd5 = 15; // Paths to linux dynamic libraries required for running mrjob.
+    optional TYtTvmToolConfig TvmTool = 16;
+    optional TYtTvmAuthConfig TvmAuth = 17;
+    optional TYtBlackboxConfig Blackbox = 18;
+    optional TYtIdmConfig Idm = 19;
 
     repeated TRemoteFilePattern RemoteFilePatterns = 100;
     repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected
@@ -238,6 +266,7 @@ message TClickHouseClusterConfig {
     repeated string GroupAllowed = 14;
     optional bool ForceUseBalancer = 15 [default = false];
     optional bool JsonFormatHeader = 16 [default = false];
+    optional bool IdmOnlyAccess = 17 [default = false];
 }
 
 message TClickHouseGatewayConfig {
@@ -978,6 +1007,7 @@ message TGatewaysConfig {
     optional TStatGatewayConfig Stat = 6;
     optional TChytGatewayConfig Chyt = 7;
     optional TSolomonGatewayConfig Solomon = 8;
+
     optional TFileStorageAdditionalConfig Fs = 9;
     optional TYqlCoreConfig YqlCore = 10;
     optional TPostgresqlGatewayConfig Postgresql = 11;
@@ -996,4 +1026,5 @@ message TGatewaysConfig {
     optional TYtflowGatewayConfig Ytflow = 24;
     optional TFmrGatewayConfig Fmr = 25;
     optional TLayersConfig Layers = 26;
+    optional NProto.TRuntimeSettings RuntimeSettings = 27;
 }

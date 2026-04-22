@@ -635,6 +635,7 @@ namespace NKikimr::NBsController {
                     if (pdisk.PDiskMetrics) {
                         x->MutablePDiskMetrics()->CopyFrom(*pdisk.PDiskMetrics);
                         x->MutablePDiskMetrics()->ClearPDiskId();
+                        x->MutablePDiskMetrics()->SetUpdateTimestamp(pdisk.PDiskMetricsUpdateTimestamp.GetValue());
                     }
                 }
             }

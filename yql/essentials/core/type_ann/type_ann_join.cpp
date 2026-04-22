@@ -37,7 +37,8 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isUniversal1, isUniversal2;
+        bool isUniversal1;
+        bool isUniversal2;
         auto status = ConvertToLambda(input->ChildRef(2), ctx.Expr, isUniversal1, 1);
         status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, isUniversal2, 1));
         if (status.Level != IGraphTransformer::TStatus::Ok) {
@@ -183,7 +184,8 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool leftUnique = false, rightUnique = false;
+        bool leftUnique = false;
+        bool rightUnique = false;
         if (input->ChildrenSize() > 3U) {
             if (!EnsureTupleOfAtoms(input->Tail(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -824,7 +826,11 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        THashSet<TStringBuf> leftColumns, rightColumns, fullColumns, requiredColumns, keyColumns;
+        THashSet<TStringBuf> leftColumns;
+        THashSet<TStringBuf> rightColumns;
+        THashSet<TStringBuf> fullColumns;
+        THashSet<TStringBuf> requiredColumns;
+        THashSet<TStringBuf> keyColumns;
         if (joinKind == "RightOnly" || joinKind == "RightSemi") {
             if (!EnsureTupleSize(*input->Child(2), 0, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -1114,7 +1120,8 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isUniversal1, isUniversal2;
+        bool isUniversal1;
+        bool isUniversal2;
         if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isUniversal1)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1309,7 +1316,8 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto resourceIdentifier = TStringBuf(resourceTag.data() + BlockMapJoinIndexResourcePrefix.size(), resourceTag.size() - BlockMapJoinIndexResourcePrefix.size());
-        TStringBuf typeString, keyColumnsString;
+        TStringBuf typeString;
+        TStringBuf keyColumnsString;
         Split(resourceIdentifier, BlockMapJoinIndexResourceSeparator, typeString, keyColumnsString);
         Split(keyColumnsString, ",", keyColumns);
 

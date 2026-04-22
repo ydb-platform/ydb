@@ -38,7 +38,7 @@ public:
 class TEmptyListProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
-        CHECK(dataNode.IsList() && dataNode.AsList().size() == 0);
+        CHECK(dataNode.IsList() && dataNode.AsList().empty());
         visitor.OnEmptyList();
     }
 };
@@ -46,7 +46,7 @@ public:
 class TEmptyDictProcessor: public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
-        CHECK(dataNode.IsList() && dataNode.AsList().size() == 0);
+        CHECK(dataNode.IsList() && dataNode.AsList().empty());
         visitor.OnEmptyDict();
     }
 };
@@ -731,7 +731,7 @@ void TDataBuilder::OnBeginOptional() {
 
 void TDataBuilder::OnBeforeOptionalItem() {
     Top().Add();
-    Push(&Top().AsList()[0]);
+    Push(Top().AsList().data());
 }
 
 void TDataBuilder::OnAfterOptionalItem() {

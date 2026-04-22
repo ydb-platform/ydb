@@ -560,6 +560,21 @@ public:
                 return TStatus::Error;
             }
 
+            if (format == "csv"sv) {
+                static constexpr TStringBuf CsvRequiresExplicitSchemaColumnNames =
+                    "csv format requires SCHEMA with explicitly listed column names to determine column order"sv;
+                if (input->ChildrenSize() <= TS3ReadObject::idx_ColumnOrder) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
+                    return TStatus::Error;
+                }
+                const auto* columnOrder = input->Child(TS3ReadObject::idx_ColumnOrder);
+                // userschema can supply an empty atom list as the column-order tail (SCHEMA = ()) тАФ same as missing order.
+                if (!columnOrder->IsList() || columnOrder->ChildrenSize() == 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(columnOrder->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
+                    return TStatus::Error;
+                }
+            }
+
             // Filter
             const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TS3ReadObject::idx_FilterPredicate, structRowType, ctx);
             if (filterAnnotationStatus != TStatus::Ok) {
@@ -758,11 +773,15 @@ public:
 
                 if (name == "csvdelimiter"sv) {
                     auto& value = setting.Tail();
-                    TStringBuf delimiter;
-                    if (!ExtractSettingValue(value, "csv_delimiter"sv, format, "csv_with_names"sv, ctx, delimiter)) {
+                    if (format != "csv_with_names"sv && format != "csv"sv) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()),
+                            TStringBuilder() << "csv_delimiter can only be used with csv_with_names or csv format"));
                         return false;
                     }
-
+                    TStringBuf delimiter;
+                    if (!ExtractSettingValue(value, "csv_delimiter"sv, format, {}, ctx, delimiter)) {
+                        return false;
+                    }
                     if (delimiter.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "csv_delimiter must be single character"));
                         return false;

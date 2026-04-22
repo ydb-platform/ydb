@@ -88,6 +88,10 @@ struct TReadInfo {
         , IsInternal(isInternal)
     {}
 
+    bool ReachedLastOffset() const {
+        return LastOffset != 0 && Offset >= LastOffset;
+    }
+
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const TEvPQ::TEvBlobResponse& response,

@@ -177,9 +177,13 @@ inline simdjson_result<value> object::at_path(std::string_view json_path) noexce
   return at_pointer(json_pointer);
 }
 
-inline simdjson_result<std::vector<value>> object::at_path_with_wildcard(std::string_view json_path) noexcept {
-  std::vector<value> result;
-
+#if SIMDJSON_SUPPORTS_CONCEPTS
+template <typename Func>
+  requires std::invocable<Func, value>
+#else
+template <typename Func>
+#endif
+inline error_code object::for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept {
   auto result_pair = get_next_key_and_json_path(json_path);
   std::string_view key = result_pair.first;
   std::string_view remaining_path = result_pair.second;
@@ -189,34 +193,22 @@ inline simdjson_result<std::vector<value>> object::at_path_with_wildcard(std::st
     for (auto field : *this) {
       value val;
       SIMDJSON_TRY(field.value().get(val));
-
       if (remaining_path.empty()) {
-        result.push_back(std::move(val));
+        callback(val);
       } else {
-        auto nested_result = val.at_path_with_wildcard(remaining_path);
-
-        if (nested_result.error()) {
-          return nested_result.error();
-        }
-        // Extract and append all nested matches to our result
-        std::vector<value> nested_vec;
-        SIMDJSON_TRY(std::move(nested_result).get(nested_vec));
-
-        result.insert(result.end(),
-                     std::make_move_iterator(nested_vec.begin()),
-                     std::make_move_iterator(nested_vec.end()));
+        SIMDJSON_TRY(val.for_each_at_path_with_wildcard(remaining_path, callback));
       }
     }
-    return result;
+    return SUCCESS;
   } else {
     value val;
     SIMDJSON_TRY(find_field(key).get(val));
 
     if (remaining_path.empty()) {
-      result.push_back(std::move(val));
-      return result;
+      callback(val);
+      return SUCCESS;
     } else {
-      return val.at_path_with_wildcard(remaining_path);
+      return val.for_each_at_path_with_wildcard(remaining_path, callback);
     }
   }
 }
@@ -347,9 +339,15 @@ simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::value> simdjs
   return first.at_path(json_path);
 }
 
-simdjson_inline simdjson_result<std::vector<SIMDJSON_IMPLEMENTATION::ondemand::value>> simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::object>::at_path_with_wildcard(std::string_view json_path) noexcept {
+#if SIMDJSON_SUPPORTS_CONCEPTS
+template <typename Func>
+  requires std::invocable<Func, SIMDJSON_IMPLEMENTATION::ondemand::value>
+#else
+template <typename Func>
+#endif
+simdjson_inline error_code simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::object>::for_each_at_path_with_wildcard(std::string_view json_path, Func&& callback) noexcept {
   if (error()) { return error(); }
-  return first.at_path_with_wildcard(json_path);
+  return first.for_each_at_path_with_wildcard(json_path, std::forward<Func>(callback));
 }
 
 inline simdjson_result<bool> simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::object>::reset() noexcept {

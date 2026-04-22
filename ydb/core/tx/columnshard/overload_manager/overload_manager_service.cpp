@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NColumnShard::NOverload {
 

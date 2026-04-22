@@ -53,9 +53,9 @@ public:
     }
 
 public:
-    const bool EnableSQSMigrationTopicCreation_;
-    const bool EnableSQSMigrationCompatibility_;
-    const bool EnableSQSMigrationFinished_;
+    bool EnableSQSMigrationTopicCreation_;
+    bool EnableSQSMigrationCompatibility_;
+    bool EnableSQSMigrationFinished_;
 };
 
 template <typename TDerived>
@@ -289,7 +289,7 @@ protected:
     }
 
     TString GetDatabaseName() const {
-        return Cfg().GetRoot();
+        return Cfg().GetRoot() == "/Root/SQS" ? "/Root" : Cfg().GetRoot();
     }
 
     TString GetTopicName() const {
@@ -668,6 +668,7 @@ private:
         QueueExists_ = ev->Get()->QueueExists;
         QueueVersion_ = ev->Get()->QueueVersion;
         TablesFormat_ = ev->Get()->TablesFormat;
+        UserSettings_ = ev->Get()->Settings;
         Shards_   = ev->Get()->Shards;
         IsFifo_ = ev->Get()->Fifo;
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
@@ -679,6 +680,11 @@ private:
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
         TopicCreated_ = ev->Get()->TopicCreated;
+
+        FeatureFlags_.EnableSQSMigrationCompatibility_ =
+            FeatureFlags_.EnableSQSMigrationCompatibility_ || UserSettings_.MigrationCompatibility;
+        FeatureFlags_.EnableSQSMigrationFinished_ =
+            FeatureFlags_.EnableSQSMigrationFinished_ || UserSettings_.MigrationFinished;
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
@@ -929,6 +935,7 @@ protected:
 
     bool UserExists_ = false;
     bool QueueExists_ = false;
+    TSqsEvents::TUserSettings UserSettings_;
     ui64     Shards_;
     TMaybe<bool> IsFifo_;
     TMaybe<ui64> QueueVersion_;

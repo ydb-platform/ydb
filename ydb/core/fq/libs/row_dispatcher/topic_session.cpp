@@ -33,6 +33,7 @@ struct TTopicSessionMetrics {
             const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
             ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
             PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
+            PartitionGroup = PartitionGroup->GetSubgroup("host", "");   // This partition report metrics only on one host. 
         }
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");

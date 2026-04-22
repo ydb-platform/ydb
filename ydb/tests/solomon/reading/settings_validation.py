@@ -14,6 +14,10 @@ def extract_issue_messages(issue):
 
 
 class TestSettingsValidation(SolomonReadingTestBase):
+    @classmethod
+    def setup_class(cls):
+        super().setup_class("settings_validation")
+
     def check_query_error(self, query, error_msg):
         result, error = self.execute_query(query)
 

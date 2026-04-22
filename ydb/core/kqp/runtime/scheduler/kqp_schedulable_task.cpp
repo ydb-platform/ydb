@@ -10,11 +10,11 @@ TSchedulableTask::TSchedulableTask(const TQueryPtr& query)
     : Query(query)
 {
     Y_ENSURE(query);
-    ++Query->Demand;
+    ++Query->CpuDemand;
 }
 
 TSchedulableTask::~TSchedulableTask() {
-    --Query->Demand;
+    --Query->CpuDemand;
 }
 
 void TSchedulableTask::RegisterForResume(const TActorId& actorId) {
@@ -41,10 +41,10 @@ bool TSchedulableTask::TryIncreaseUsage() {
         poolOrQuery = Query.get();
     }
 
-    ui64 newUsage = poolOrQuery->Usage.load();
+    ui64 newUsage = poolOrQuery->CpuUsage.load();
 
     while (!increased && newUsage < fairShare) {
-        increased = poolOrQuery->Usage.compare_exchange_weak(newUsage, newUsage + 1);
+        increased = poolOrQuery->CpuUsage.compare_exchange_weak(newUsage, newUsage + 1);
     }
 
     if (!increased) {
@@ -53,7 +53,7 @@ bool TSchedulableTask::TryIncreaseUsage() {
 
     for (TTreeElement* parent = poolOrQuery; parent; parent = parent->GetParent()) {
         if (parent != poolOrQuery) {
-            ++parent->Usage;
+            ++parent->CpuUsage;
         }
     }
 
@@ -64,24 +64,24 @@ bool TSchedulableTask::TryIncreaseUsage() {
 
 void TSchedulableTask::IncreaseUsage() {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
-        ++parent->Usage;
+        ++parent->CpuUsage;
     }
 }
 
 void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedResume) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
-        --parent->Usage;
+        --parent->CpuUsage;
         if (forcedResume) {
-            parent->BurstUsageResume += burstUsage.MicroSeconds();
+            parent->CpuBurstUsageResume += burstUsage.MicroSeconds();
         } else {
-            parent->BurstUsage += burstUsage.MicroSeconds();
+            parent->CpuBurstUsage += burstUsage.MicroSeconds();
         }
     }
 }
 
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
-        auto usage = Query->GetParent()->Usage.load(std::memory_order_relaxed);
+        auto usage = Query->GetParent()->CpuUsage.load(std::memory_order_relaxed);
         auto fairShare = snapshot->FairShare;
         return fairShare >= usage ? (fairShare - usage) : 0;
     }
@@ -89,22 +89,9 @@ size_t TSchedulableTask::GetSpareUsage() const {
     return 0;
 }
 
-void TSchedulableTask::IncreaseExtraUsage() {
-    for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
-        ++parent->UsageExtra;
-    }
-}
-
-void TSchedulableTask::DecreaseExtraUsage(const TDuration& burstUsageExtra) {
-    for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
-        --parent->UsageExtra;
-        parent->BurstUsageExtra += burstUsageExtra.MicroSeconds();
-    }
-}
-
 void TSchedulableTask::IncreaseBurstThrottle(const TDuration& burstThrottle) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
-        parent->BurstThrottle += burstThrottle.MicroSeconds();
+        parent->CpuBurstThrottle += burstThrottle.MicroSeconds();
     }
 }
 
@@ -116,7 +103,7 @@ void TSchedulableTask::IncreaseThrottle() {
     Query->UpdateActualDemand();
 
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
-        ++parent->Throttle;
+        ++parent->CpuThrottle;
     }
 }
 
@@ -125,7 +112,7 @@ void TSchedulableTask::DecreaseThrottle() {
         (*Iterator)->second = false;
     }
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
-        --parent->Throttle;
+        --parent->CpuThrottle;
     }
 }
 

@@ -56,6 +56,15 @@ std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicat
     return std::nullopt;
 }
 
+std::optional<ui64> TMessageIdDeduplicator::CheckMessageId(const TString& deduplicationId) {
+    Compact(); // remove obsolete messages
+    auto* message = MapFindPtr(Messages, deduplicationId);
+    if (message) {
+        return *message;
+    }
+    return std::nullopt;
+}
+
 size_t TMessageIdDeduplicator::Compact() {
     const auto now = TimeProvider->Now();
     size_t removed = 0;

@@ -6,7 +6,6 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <util/datetime/cputimer.h>
 #include <util/system/thread.h>
 
 using namespace NKikimr;

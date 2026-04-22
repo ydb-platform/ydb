@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     hide_field_printer.cpp
+    security_printer.cpp
     size_printer.cpp
     stream_helper.cpp
     token_field_printer.cpp

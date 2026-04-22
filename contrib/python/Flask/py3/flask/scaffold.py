@@ -106,7 +106,12 @@ class Scaffold:
         self.static_url_path = static_url_path
 
         package_name = import_name
-        self.module_loader = pkgutil.find_loader(import_name)
+        try:
+            spec = importlib.util.find_spec(import_name)
+            self.module_loader = spec.loader if spec is not None else None
+        except (ImportError, AttributeError, TypeError, ValueError) as ex:
+            msg = "Error while finding loader for {!r} ({}: {})"
+            raise ImportError(msg.format(import_name, type(ex), ex)) from ex
         if self.module_loader and not self.module_loader.is_package(import_name):
             package_name = package_name.rsplit('.', 1)[0]
         self._builtin_resource_prefix = package_name.replace('.', '/')

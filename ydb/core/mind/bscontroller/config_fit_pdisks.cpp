@@ -319,13 +319,13 @@ namespace NKikimr {
                     // no, we haven't; see if it is mentioned in static configuration
                     ui32 staticSlotUsage = 0;
                     Schema::PDisk::Guid::Type guid{};
-                    std::optional<NKikimrBlobStorage::TPDiskMetrics> staticMetrics;
+                    const NKikimrBlobStorage::TPDiskMetrics *staticMetrics = nullptr;
                     if (auto pdiskIdOptional = NKikimr::NBsController::FindStaticPDisk(disk, state)) {
                         // yes, take some data from static configuration
                         pdiskId = *pdiskIdOptional;
                         guid = GetGuidAndValidateStaticPDisk(pdiskId, disk, state, staticSlotUsage);
-                        if (auto it = state.StaticPDisks.find(pdiskId); it != state.StaticPDisks.end()) {
-                            staticMetrics = it->second.PDiskMetrics;
+                        if (auto it = state.StaticPDisks.find(pdiskId); it != state.StaticPDisks.end() && it->second.PDiskMetrics) {
+                            staticMetrics = &it->second.PDiskMetrics.value();
                         }
                     } else if (auto info = state.DrivesSerials.Find(disk.Serial); info && info->Guid) {
                         pdiskId = FindFirstEmptyPDiskId(state.PDisks, disk.NodeId);
@@ -347,8 +347,9 @@ namespace NKikimr {
 
                     // Preserve metrics from static PDisk
                     if (staticMetrics) {
+                        newPDisk->PersistedMetrics.CopyFrom(*staticMetrics);
                         newPDisk->Metrics.CopyFrom(*staticMetrics);
-                        newPDisk->MetricsDirty = true;
+                        newPDisk->MetricsCommitted = true;
                     }
 
                     // Set PDiskId and Guid in DrivesSerials

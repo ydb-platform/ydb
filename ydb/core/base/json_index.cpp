@@ -50,126 +50,241 @@ void AppendKey(TString& prefix, TStringBuf key) {
     prefix += key;
 }
 
-}  // namespace
-
-TResult::TResult(const TQueries& queries)
-    : Result(queries)
+// Appends NUL, binary JSON entry type byte, and scalar payload (matches index token layout).
+void AppendLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {},
+    const double* numberPayload = nullptr)
 {
+    out.push_back(0);
+    out.push_back(static_cast<char>(type));
+    switch (type) {
+        case NBinaryJson::EEntryType::String:
+            out += stringPayload;
+            break;
+        case NBinaryJson::EEntryType::Number:
+            Y_ENSURE(numberPayload, "Number payload required");
+            out += TStringBuf(reinterpret_cast<const char*>(numberPayload), sizeof(double));
+            break;
+        case NBinaryJson::EEntryType::BoolFalse:
+        case NBinaryJson::EEntryType::BoolTrue:
+        case NBinaryJson::EEntryType::Null:
+            Y_ENSURE(!numberPayload, "No number payload for bool/null literal");
+            break;
+        case NBinaryJson::EEntryType::Container:
+            Y_ENSURE(false, "Container is not a scalar literal");
+    }
 }
 
-TResult::TResult(TQueries&& queries)
-    : Result(std::move(queries))
+bool IsLiteralType(EJsonPathItemType type) {
+    switch (type) {
+        case EJsonPathItemType::StringLiteral:
+        case EJsonPathItemType::NumberLiteral:
+        case EJsonPathItemType::BooleanLiteral:
+        case EJsonPathItemType::NullLiteral:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsPredicateType(EJsonPathItemType type) {
+    switch (type) {
+        case EJsonPathItemType::UnaryNot:
+        case EJsonPathItemType::BinaryAnd:
+        case EJsonPathItemType::BinaryOr:
+        case EJsonPathItemType::BinaryLess:
+        case EJsonPathItemType::BinaryLessEqual:
+        case EJsonPathItemType::BinaryGreater:
+        case EJsonPathItemType::BinaryGreaterEqual:
+        case EJsonPathItemType::BinaryEqual:
+        case EJsonPathItemType::BinaryNotEqual:
+        case EJsonPathItemType::StartsWithPredicate:
+        case EJsonPathItemType::LikeRegexPredicate:
+        case EJsonPathItemType::IsUnknownPredicate:
+        case EJsonPathItemType::ExistsPredicate:
+            return true;
+        default:
+            return false;
+    }
+}
+
+TCollectResult MergeBooleanOperands(TCollectResult left, TCollectResult right,
+    TCollectResult::ETokensMode incompatibleMode, TCollectResult::ETokensMode combinedMode)
 {
+    if (left.IsError()) {
+        return left;
+    }
+    if (right.IsError()) {
+        return right;
+    }
+
+    auto& leftTokens = left.GetTokens();
+    auto& rightTokens = right.GetTokens();
+
+    bool hasMix = false;
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (left.GetTokensMode() == incompatibleMode || right.GetTokensMode() == incompatibleMode) {
+            hasMix = true;
+        }
+    }
+
+    leftTokens.reserve(leftTokens.size() + rightTokens.size());
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    if (leftTokens.size() > 1) {
+        left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : combinedMode);
+    }
+    return left;
 }
 
-TResult::TResult(TString&& query)
-    : Result(TQueries{std::move(query)})
-{
+TCollectResult MergeComparisonPathResults(TCollectResult left, TCollectResult right) {
+    if (left.IsError()) {
+        return left;
+    }
+    if (right.IsError()) {
+        return right;
+    }
+
+    auto& leftTokens = left.GetTokens();
+    auto& rightTokens = right.GetTokens();
+
+    bool hasMix = false;
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (left.GetTokensMode() == TCollectResult::ETokensMode::Or ||
+            right.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+            hasMix = true;
+        }
+    }
+
+    leftTokens.reserve(leftTokens.size() + rightTokens.size());
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    if (leftTokens.size() > 1) {
+        left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
+    }
+    left.Finish();
+    return left;
 }
 
-TResult::TResult(const TString& query)
-    : Result(TQueries{query})
-{
-}
+class TQueryCollector {
+    enum class EMode {
+        // Main path from the context item ($): accumulate index tokens along the query
+        // Predicate operators are disallowed when the callable is JSON_EXISTS (existence vs. boolean result)
+        Context = 0,
 
-TResult::TResult(TResult::TError&& issue)
-    : Result(std::move(issue))
-{
-}
+        // Body of a filter (? ...): the current node is @
+        // Predicates are allowed here, including for JSON_EXISTS
+        Filter = 1,
 
-const TResult::TQueries& TResult::GetQueries() const {
-    return std::get<TQueries>(Result);
-}
+        // Subexpression under a predicate (exists(...) argument or path side of a comparison)
+        // Nested predicate syntax (AND/OR, further comparisons, etc.) is rejected
+        Predicate = 2,
 
-TResult::TQueries& TResult::GetQueries() {
-    return std::get<TQueries>(Result);
-}
+        // Comparison RHS: scalar literals (string, number, bool, null)
+        // Also supports unary arithmetic operations (+, -) for numbers
+        Literal = 3
+    };
 
-const TResult::TError& TResult::GetError() const {
-    return std::get<TResult::TError>(Result);
-}
+public:
+    TQueryCollector(const TJsonPathPtr path, ECallableType callableType)
+        : Reader(path)
+        , CallableType(callableType)
+    {
+    }
 
-bool TResult::IsError() const {
-    return std::holds_alternative<TResult::TError>(Result);
-}
+    TCollectResult Collect() {
+        return Collect(Reader.ReadFirst(), EMode::Context);
+    }
 
-bool TResult::IsDone() const {
-    return Done;
-}
+private:
+    TCollectResult Collect(const TJsonPathItem& item, EMode mode);
 
-void TResult::MarkDone() {
-    Done = true;
-}
+    TCollectResult CollectEqualOperands(const TJsonPathItem& leftItem, const TJsonPathItem& rightItem);
+    TCollectResult CollectArithmeticOperand(const TJsonPathItem& item, EMode mode);
 
-TQueryCollector::TQueryCollector(const TJsonPathPtr path)
-    : Reader(path)
-{
-}
+    TCollectResult ContextObject(EMode mode);
 
-TResult TQueryCollector::Collect() {
-    return Collect(Reader.ReadFirst());
-}
+    TCollectResult MemberAccess(const TJsonPathItem& item, EMode mode);
+    TCollectResult WildcardMemberAccess(const TJsonPathItem& item, EMode mode);
 
-TResult TQueryCollector::Collect(const TJsonPathItem& item) {
+    TCollectResult ArrayAccess(const TJsonPathItem& item, EMode mode);
+
+    TCollectResult UnaryArithmeticOp(const TJsonPathItem& item, EMode mode);
+    TCollectResult BinaryArithmeticOp(const TJsonPathItem& item, EMode mode);
+
+    TCollectResult BinaryAnd(const TJsonPathItem& item, EMode mode);
+    TCollectResult BinaryOr(const TJsonPathItem& item, EMode mode);
+    TCollectResult BinaryEqual(const TJsonPathItem& item, EMode mode);
+    TCollectResult BinaryComparisonOp(const TJsonPathItem& item, EMode mode);
+
+    TCollectResult Methods(const TJsonPathItem& item, EMode mode);
+    TCollectResult Predicates(const TJsonPathItem& item, EMode mode);
+
+    TCollectResult FilterObject(const TJsonPathItem& item, EMode mode);
+    TCollectResult FilterPredicate(const TJsonPathItem& item, EMode mode);
+
+    TCollectResult Literal(const TJsonPathItem& item, EMode mode);
+    TCollectResult Variable(const TJsonPathItem& item, EMode mode);
+
+    std::optional<double> EvaluteNumericLiteral(const TJsonPathItem& item);
+    bool ArePredicatesAllowed(EMode mode) const;
+
+private:
+    TJsonPathReader Reader;
+    ECallableType CallableType;
+    TVector<TString> FilterObjectPrefixes;
+};
+
+TCollectResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
+    const bool isUnaryOp = item.Type == EJsonPathItemType::UnaryMinus || item.Type == EJsonPathItemType::UnaryPlus;
+    if (mode == EMode::Literal && !IsLiteralType(item.Type) && !isUnaryOp) {
+        return TCollectResult(TIssue("Expected a literal expression"));
+    }
+
+    if (mode == EMode::Predicate && IsPredicateType(item.Type)) {
+        return TCollectResult(TIssue("Predicates are not allowed in this context"));
+    }
+
     switch (item.Type) {
         case EJsonPathItemType::MemberAccess:
-            return MemberAccess(item);
+            return MemberAccess(item, mode);
         case EJsonPathItemType::WildcardMemberAccess:
-            return Finalize(item);
+            return WildcardMemberAccess(item, mode);
         case EJsonPathItemType::ContextObject:
-            return ContextObject();
+            return ContextObject(mode);
         case EJsonPathItemType::Variable:
-            return Variable(item);
-        case EJsonPathItemType::NumberLiteral:
-            return NumberLiteral(item);
+            return Variable(item, mode);
         case EJsonPathItemType::ArrayAccess:
-            return ArrayAccess(item);
         case EJsonPathItemType::WildcardArrayAccess:
-            return WildcardArrayAccess(item);
         case EJsonPathItemType::LastArrayIndex:
-            return LastArrayIndex(item);
+            return ArrayAccess(item, mode);
         case EJsonPathItemType::UnaryMinus:
-            return UnaryMinus(item);
         case EJsonPathItemType::UnaryPlus:
-            return UnaryPlus(item);
+            return UnaryArithmeticOp(item, mode);
         case EJsonPathItemType::BinaryAdd:
-            return BinaryAdd(item);
         case EJsonPathItemType::BinarySubstract:
-            return BinarySubstract(item);
         case EJsonPathItemType::BinaryMultiply:
-            return BinaryMultiply(item);
         case EJsonPathItemType::BinaryDivide:
-            return BinaryDivide(item);
         case EJsonPathItemType::BinaryModulo:
-            return BinaryModulo(item);
+            return BinaryArithmeticOp(item, mode);
         case EJsonPathItemType::BinaryAnd:
-            return BinaryAnd(item);
+            return BinaryAnd(item, mode);
         case EJsonPathItemType::BinaryOr:
-            return BinaryOr(item);
-        case EJsonPathItemType::UnaryNot:
-            return UnaryNot(item);
+            return BinaryOr(item, mode);
+        case EJsonPathItemType::NumberLiteral:
         case EJsonPathItemType::BooleanLiteral:
-            return BooleanLiteral(item);
         case EJsonPathItemType::NullLiteral:
-            return NullLiteral();
         case EJsonPathItemType::StringLiteral:
-            return StringLiteral(item);
+            return Literal(item, mode);
         case EJsonPathItemType::FilterObject:
-            return FilterObject(item);
+            return FilterObject(item, mode);
         case EJsonPathItemType::FilterPredicate:
-            return FilterPredicate(item);
-        case EJsonPathItemType::BinaryLess:
-            return BinaryLess(item);
-        case EJsonPathItemType::BinaryLessEqual:
-            return BinaryLessEqual(item);
-        case EJsonPathItemType::BinaryGreater:
-            return BinaryGreater(item);
-        case EJsonPathItemType::BinaryGreaterEqual:
-            return BinaryGreaterEqual(item);
+            return FilterPredicate(item, mode);
         case EJsonPathItemType::BinaryEqual:
-            return BinaryEqual(item);
+            return BinaryEqual(item, mode);
+        case EJsonPathItemType::BinaryLess:
+        case EJsonPathItemType::BinaryLessEqual:
+        case EJsonPathItemType::BinaryGreater:
+        case EJsonPathItemType::BinaryGreaterEqual:
         case EJsonPathItemType::BinaryNotEqual:
-            return BinaryNotEqual(item);
+            return BinaryComparisonOp(item, mode);
         case EJsonPathItemType::AbsMethod:
         case EJsonPathItemType::FloorMethod:
         case EJsonPathItemType::CeilingMethod:
@@ -177,248 +292,312 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item) {
         case EJsonPathItemType::TypeMethod:
         case EJsonPathItemType::SizeMethod:
         case EJsonPathItemType::KeyValueMethod:
-            return Finalize(item);
+            return Methods(item, mode);
+        case EJsonPathItemType::UnaryNot:
         case EJsonPathItemType::StartsWithPredicate:
-            return StartsWithPredicate(item);
-        case EJsonPathItemType::IsUnknownPredicate:
-            return IsUnknownPredicate(item);
-        case EJsonPathItemType::ExistsPredicate:
-            return ExistsPredicate(item);
         case EJsonPathItemType::LikeRegexPredicate:
-            return LikeRegexPredicate(item);
+        case EJsonPathItemType::IsUnknownPredicate:
+        case EJsonPathItemType::ExistsPredicate:
+            return Predicates(item, mode);
     }
 }
 
-TResult TQueryCollector::EvaluateLiteral(const TJsonPathItem& item) {
+TCollectResult TQueryCollector::Literal(const TJsonPathItem& item, EMode mode) {
+    if (mode != EMode::Literal) {
+        return TCollectResult(TIssue("Literal expressions are not allowed in this context"));
+    }
+
     TString value;
-    value.push_back(0);
-    value.push_back((char)GetEntryType(item));
-
     switch (item.Type) {
-        case EJsonPathItemType::StringLiteral: {
-            value += item.GetString();
+        case EJsonPathItemType::StringLiteral:
+            AppendLiteral(value, GetEntryType(item), item.GetString(), nullptr);
             break;
-        }
-
         case EJsonPathItemType::NumberLiteral: {
             double number = item.GetNumber();
-            value += TStringBuf((char*)&number, sizeof(double));
+            AppendLiteral(value, GetEntryType(item), {}, &number);
             break;
         }
-
         case EJsonPathItemType::BooleanLiteral:
         case EJsonPathItemType::NullLiteral:
+            AppendLiteral(value, GetEntryType(item), {}, nullptr);
             break;
         default:
-            return TResult(TIssue("Expected a literal expression"));
+            return TCollectResult(TIssue("Expected a literal expression"));
     }
 
-    return TResult(value);
+    return TCollectResult(std::move(value));
 }
 
-TResult TQueryCollector::Finalize(const TJsonPathItem& item) {
-    auto input = Collect(Reader.ReadInput(item));
-    input.MarkDone();
-    return input;
+TCollectResult TQueryCollector::ContextObject(EMode mode) {
+    Y_UNUSED(mode);
+    return TCollectResult("");
 }
 
-TResult TQueryCollector::FinalizeEmpty(const TJsonPathItem& item) {
-    auto input = Collect(Reader.ReadInput(item));
-    if (input.IsError() || input.GetQueries().empty()) {
-        return input;
+TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    if (!result.CanCollect()) {
+        return result;
     }
 
-    auto result = TResult("");
-    result.MarkDone();
+    auto& tokens = result.GetTokens();
+    Y_ENSURE(tokens.size() <= 1, "Expected at most one result, but got " << tokens.size());
+
+    // There is no context or filter object, so we can't collect any more
+    if (tokens.empty()) {
+        return {};
+    }
+
+    auto& token = tokens.front();
+    AppendKey(token, item.GetString());
     return result;
 }
 
-TResult TQueryCollector::ContextObject() {
-    return TResult(TResult::TQueries{TString{}});
+TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    result.Finish();
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
+    }
+    return result;
 }
 
-TResult TQueryCollector::MemberAccess(const TJsonPathItem& item) {
-    auto input = Collect(Reader.ReadInput(item));
-    if (input.IsError() || input.IsDone() || input.GetQueries().empty()) {
-        return input;
+TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
+    }
+    return result;
+}
+
+TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
+    if (mode == EMode::Literal) {
+        auto val = EvaluteNumericLiteral(item);
+        if (!val) {
+            return TCollectResult(TIssue("Expected a numeric literal expression"));
+        }
+
+        TString value;
+        double number = *val;
+        AppendLiteral(value, NBinaryJson::EEntryType::Number, {}, &number);
+        return TCollectResult(std::move(value));
     }
 
-    // TODO: Handle multiple queries
-    auto& query = input.GetQueries()[0];
-    AppendKey(query, item.GetString());
-    return input;
+    auto result = Collect(Reader.ReadInput(item), mode);
+    result.Finish();
+    return result;
 }
 
-TResult TQueryCollector::ArrayAccess(const TJsonPathItem& item) {
-    return Collect(Reader.ReadInput(item));
-}
+TCollectResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
 
-TResult TQueryCollector::WildcardArrayAccess(const TJsonPathItem& item) {
-    return Collect(Reader.ReadInput(item));
-}
-
-TResult TQueryCollector::LastArrayIndex(const TJsonPathItem& item) {
-    return Collect(Reader.ReadInput(item));
-}
-
-TResult TQueryCollector::UnaryMinus(const TJsonPathItem& item) {
-    return Finalize(item);
-}
-
-TResult TQueryCollector::UnaryPlus(const TJsonPathItem& item) {
-    return Finalize(item);
-}
-
-TResult TQueryCollector::BinaryAdd(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinarySubstract(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryMultiply(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryDivide(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryModulo(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryAnd(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryOr(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::UnaryNot(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryLess(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryLessEqual(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryGreater(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryGreaterEqual(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryNotEqual(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::NullLiteral() {
-    return TResult(TResult::TQueries{});
-}
-
-TResult TQueryCollector::BooleanLiteral(const TJsonPathItem&) {
-    return TResult(TResult::TQueries{});
-}
-
-TResult TQueryCollector::NumberLiteral(const TJsonPathItem&) {
-    return TResult(TResult::TQueries{});
-}
-
-TResult TQueryCollector::StringLiteral(const TJsonPathItem&) {
-    return TResult(TResult::TQueries{});
-}
-
-TResult TQueryCollector::FilterObject(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-// TODO: Add support for filters and JSON_VALUE
-// Do not emit specific posting keys for the predicates: JsonExists/SqlExists treats any non-empty jsonpath
-// result as true, including a single boolean false from the predicate, so index + residual
-// JSON_EXISTS would return wrong rows. We just emit an empty query to indicate that the predicate
-// is present to read all json documents.
-TResult TQueryCollector::StartsWithPredicate(const TJsonPathItem& item) {
-    return FinalizeEmpty(item);
-}
-
-TResult TQueryCollector::IsUnknownPredicate(const TJsonPathItem& item) {
-    return FinalizeEmpty(item);
-}
-
-TResult TQueryCollector::ExistsPredicate(const TJsonPathItem& item) {
-    return FinalizeEmpty(item);
-}
-
-TResult TQueryCollector::LikeRegexPredicate(const TJsonPathItem& item) {
-    return FinalizeEmpty(item);
-}
-
-TResult TQueryCollector::Variable(const TJsonPathItem&) {
-    return TResult(TIssue("Variables are not supported at the moment"));
-}
-
-TVector<TString> BuildSearchTerms(const TString& jsonPathStr) {
-    TIssues issues;
-    const TJsonPathPtr path = ParseJsonPath(jsonPathStr, issues, 1);
-    if (!issues.Empty()) {
-        return {};
+    auto leftCollectResult = CollectArithmeticOperand(leftItem, mode);
+    if (leftCollectResult.IsError()) {
+        return leftCollectResult;
     }
 
-    auto result = TQueryCollector(path).Collect();
-    if (result.IsError()) {
-        return {};
+    auto rightCollectResult = CollectArithmeticOperand(rightItem, mode);
+    if (rightCollectResult.IsError()) {
+        return rightCollectResult;
     }
 
-    return result.GetQueries();
+    auto& leftTokens = leftCollectResult.GetTokens();
+    auto& rightTokens = rightCollectResult.GetTokens();
+
+    bool hasMix = false;
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (leftCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
+            rightCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+            hasMix = true;
+        }
+    }
+
+    leftTokens.reserve(leftTokens.size() + rightTokens.size());
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    if (leftTokens.size() > 1) {
+        leftCollectResult.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
+    }
+    leftCollectResult.Finish();
+    return leftCollectResult;
+}
+
+TCollectResult TQueryCollector::BinaryAnd(const TJsonPathItem& item, EMode mode) {
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+    auto leftCollectResult = Collect(leftItem, mode);
+    auto rightCollectResult = Collect(rightItem, mode);
+    return MergeBooleanOperands(std::move(leftCollectResult), std::move(rightCollectResult),
+        TCollectResult::ETokensMode::Or, TCollectResult::ETokensMode::And);
+}
+
+TCollectResult TQueryCollector::BinaryOr(const TJsonPathItem& item, EMode mode) {
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+    auto leftCollectResult = Collect(leftItem, mode);
+    auto rightCollectResult = Collect(rightItem, mode);
+    return MergeBooleanOperands(std::move(leftCollectResult), std::move(rightCollectResult),
+        TCollectResult::ETokensMode::And, TCollectResult::ETokensMode::Or);
+}
+
+TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mode) {
+    if (!ArePredicatesAllowed(mode)) {
+        return TCollectResult(TIssue("Predicates are not allowed in this context"));
+    }
+
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+
+    const bool leftIsLiteral = IsLiteralType(leftItem.Type) || EvaluteNumericLiteral(leftItem).has_value();
+    const bool rightIsLiteral = IsLiteralType(rightItem.Type) || EvaluteNumericLiteral(rightItem).has_value();
+
+    if (!leftIsLiteral && rightIsLiteral) {
+        return CollectEqualOperands(leftItem, rightItem);
+    }
+
+    if (leftIsLiteral && !rightIsLiteral) {
+        return CollectEqualOperands(rightItem, leftItem);
+    }
+
+    if (!leftIsLiteral && !rightIsLiteral) {
+        auto leftCollectResult = CollectArithmeticOperand(leftItem, EMode::Predicate);
+        auto rightCollectResult = CollectArithmeticOperand(rightItem, EMode::Predicate);
+        return MergeComparisonPathResults(std::move(leftCollectResult), std::move(rightCollectResult));
+    }
+
+    return TCollectResult(TIssue("Comparison is not allowed between literals on both sides"));
+}
+
+TCollectResult TQueryCollector::BinaryComparisonOp(const TJsonPathItem& item, EMode mode) {
+    if (!ArePredicatesAllowed(mode)) {
+        return TCollectResult(TIssue("Predicates are not allowed in this context"));
+    }
+
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+
+    auto leftCollectResult = CollectArithmeticOperand(leftItem, EMode::Predicate);
+    auto rightCollectResult = CollectArithmeticOperand(rightItem, EMode::Predicate);
+    return MergeComparisonPathResults(std::move(leftCollectResult), std::move(rightCollectResult));
+}
+
+TCollectResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mode) {
+    Y_UNUSED(item);
+    Y_UNUSED(mode);
+    if (FilterObjectPrefixes.empty()) {
+        return TCollectResult(TIssue("'@' is only allowed inside filters"));
+    }
+    return TCollectResult(TString(FilterObjectPrefixes.back()));
+}
+
+TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode mode) {
+    auto inpuTCollectResult = Collect(Reader.ReadInput(item), mode);
+    if (inpuTCollectResult.IsError()) {
+        return inpuTCollectResult;
+    }
+
+    const auto& tokens = inpuTCollectResult.GetTokens();
+
+    // If input path is already finished (e.g. $.a.*) or has multiple tokens,
+    // we can't apply the filter to narrow down
+    if (inpuTCollectResult.IsFinished() || tokens.size() != 1) {
+        inpuTCollectResult.Finish();
+        return inpuTCollectResult;
+    }
+
+    FilterObjectPrefixes.push_back(tokens.front());
+    const auto& predicateItem = Reader.ReadFilterPredicate(item);
+    auto predicateResult = Collect(predicateItem, EMode::Filter);
+    FilterObjectPrefixes.pop_back();
+
+    if (predicateResult.IsError()) {
+        return predicateResult;
+    }
+
+    predicateResult.Finish();
+    return predicateResult;
+}
+
+TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    result.Finish();
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
+    }
+    return result;
+}
+
+TCollectResult TQueryCollector::Predicates(const TJsonPathItem& item, EMode mode) {
+    if (!ArePredicatesAllowed(mode)) {
+        return TCollectResult(TIssue("Predicates are not allowed in this context"));
+    }
+
+    auto result = Collect(Reader.ReadInput(item), EMode::Predicate);
+    result.Finish();
+    return result;
+}
+
+TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftItem, const TJsonPathItem& rightItem) {
+    auto pathResult = Collect(leftItem, EMode::Predicate);
+    if (pathResult.IsError()) {
+        return pathResult;
+    }
+
+    auto literalResult = Collect(rightItem, EMode::Literal);
+    if (literalResult.IsError()) {
+        return literalResult;
+    }
+
+    auto& pathTokens = pathResult.GetTokens();
+    auto& literalTokens = literalResult.GetTokens();
+    if (!pathResult.IsFinished() && pathTokens.size() == 1 && literalTokens.size() == 1) {
+        pathTokens.front() += literalTokens.front();
+    }
+
+    pathResult.Finish();
+    return pathResult;
+}
+
+TCollectResult TQueryCollector::CollectArithmeticOperand(const TJsonPathItem& item, EMode mode) {
+    if (IsLiteralType(item.Type) || EvaluteNumericLiteral(item).has_value()) {
+        return TCollectResult(TCollectResult::TTokens{});
+    }
+    return Collect(item, mode);
+}
+
+TCollectResult TQueryCollector::Variable(const TJsonPathItem& item, EMode mode) {
+    Y_UNUSED(item);
+    Y_UNUSED(mode);
+    return TCollectResult(TIssue("Variables are not supported at the moment"));
+}
+
+std::optional<double> TQueryCollector::EvaluteNumericLiteral(const TJsonPathItem& item) {
+    switch (item.Type) {
+        case EJsonPathItemType::NumberLiteral:
+            return item.GetNumber();
+        case EJsonPathItemType::UnaryMinus: {
+            auto val = EvaluteNumericLiteral(Reader.ReadInput(item));
+            return val ? std::optional<double>(-*val) : std::nullopt;
+        }
+        case EJsonPathItemType::UnaryPlus:
+            return EvaluteNumericLiteral(Reader.ReadInput(item));
+        default:
+            return std::nullopt;
+    }
+}
+
+bool TQueryCollector::ArePredicatesAllowed(EMode mode) const {
+    switch (mode) {
+        case EMode::Context:
+            // JSON_EXISTS returns true for any non-empty result, including a single
+            // boolean false from the predicate with a context object.
+            // There is a context object if the tokens are not empty
+            return CallableType != ECallableType::JsonExists;
+        case EMode::Filter:
+            return true;
+        case EMode::Predicate:
+        case EMode::Literal:
+            return false;
+    }
 }
 
 void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens);
@@ -429,22 +608,19 @@ void TokenizeBinaryJson(NBinaryJson::TEntryCursor element, const TString& prefix
         return;
     }
     TString token = prefix;
-    token.push_back(0);
-    // Value always comes last in the token and we may want range queries on value,
-    // so we just store element type and data.
-    token.push_back((char)element.GetType());
     switch (element.GetType()) {
     case NBinaryJson::EEntryType::String:
-        token += element.GetString();
+        AppendLiteral(token, element.GetType(), element.GetString(), nullptr);
         break;
     case NBinaryJson::EEntryType::Number: {
         double number = element.GetNumber();
-        token += TStringBuf((char*)&number, sizeof(double));
+        AppendLiteral(token, element.GetType(), {}, &number);
         break;
     }
     case NBinaryJson::EEntryType::BoolFalse:
     case NBinaryJson::EEntryType::BoolTrue:
     case NBinaryJson::EEntryType::Null:
+        AppendLiteral(token, element.GetType(), {}, nullptr);
         break;
     case NBinaryJson::EEntryType::Container:
         Y_ENSURE(false, "Unreachable");
@@ -482,6 +658,67 @@ void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString
     }
 }
 
+}  // namespace
+
+TCollectResult::TCollectResult()
+    : Result(TTokens{})
+{
+}
+
+TCollectResult::TCollectResult(TTokens&& tokens)
+    : Result(std::move(tokens))
+{
+}
+
+TCollectResult::TCollectResult(TString&& token)
+    : Result(TTokens{std::move(token)})
+{
+}
+
+TCollectResult::TCollectResult(TCollectResult::TError&& issue)
+    : Result(std::move(issue))
+{
+}
+
+const TCollectResult::TTokens& TCollectResult::GetTokens() const {
+    Y_ENSURE(!IsError(), "Result is not a query");
+    return std::get<TTokens>(Result);
+}
+
+TCollectResult::TTokens& TCollectResult::GetTokens() {
+    Y_ENSURE(!IsError(), "Result is not a query");
+    return std::get<TTokens>(Result);
+}
+
+const TCollectResult::TError& TCollectResult::GetError() const {
+    Y_ENSURE(IsError(), "Result is not an error");
+    return std::get<TCollectResult::TError>(Result);
+}
+
+bool TCollectResult::IsError() const {
+    return std::holds_alternative<TCollectResult::TError>(Result);
+}
+
+bool TCollectResult::IsFinished() const {
+    return Finished;
+}
+
+bool TCollectResult::CanCollect() const {
+    return !IsError() && !IsFinished();
+}
+
+void TCollectResult::Finish() {
+    Finished = true;
+}
+
+TCollectResult::ETokensMode TCollectResult::GetTokensMode() const {
+    return TokensMode;
+}
+
+void TCollectResult::SetTokensMode(ETokensMode mode) {
+    TokensMode = mode;
+}
+
 TVector<TString> TokenizeBinaryJson(const TStringBuf binaryJson) {
     TVector<TString> tokens;
     if (!binaryJson.size()) {
@@ -502,6 +739,10 @@ TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
     error = "";
     auto buffer = std::get<NKikimr::NBinaryJson::TBinaryJson>(json);
     return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
+}
+
+TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType) {
+    return TQueryCollector(path, callableType).Collect();
 }
 
 }  // namespace NJsonIndex

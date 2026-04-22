@@ -8,7 +8,13 @@ namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NYT::NApi::IClientPtr CreateApiClient(const TClientContext& context);
+struct TApiClients
+{
+    NApi::IClientPtr Light;
+    NApi::IClientPtr Heavy;
+};
+
+TApiClients CreateApiClients(const TClientContext& context);
 
 ////////////////////////////////////////////////////////////////////////////////
 

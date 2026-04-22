@@ -19,6 +19,8 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/util/evlog/log.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -39,6 +41,8 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
+    YDB_ACCESSOR_DEF(TString, PrevCategoryName);
+    YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
 
 public:
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
@@ -133,12 +137,90 @@ private:
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    NLWTrace::TOrbit DataSourceOrbit;
+    TMonotonic LastProbeTimestamp;
+    TMonotonic SourcesAheadQueueEnterTime;
+    ui32 SourcesAhead = 0;
+    TMonotonic SourceCreatedTimestamp;
+    TDuration TotalExecutionDuration;
+    ui64 TotalBytesRead = 0;
     std::unique_ptr<TFetchedResult> StageResult;
     virtual ui32 GetRecordsCountVirtual() const;
 
 public:
 
     ui64 GetReservedMemory() const;
+
+    TDuration GetAndResetWaitDuration() {
+        const TMonotonic now = TMonotonic::Now();
+        const TDuration result = LastProbeTimestamp ? (now - LastProbeTimestamp) : TDuration::Zero();
+        LastProbeTimestamp = now;
+        return result;
+    }
+
+    void SetSourcesAheadQueueEnterTime(const TMonotonic t) {
+        SourcesAheadQueueEnterTime = t;
+    }
+
+    TDuration GetSourcesAheadQueueWaitDuration() const {
+        if (!SourcesAhead || !SourcesAheadQueueEnterTime) {
+            return TDuration::Zero();
+        }
+        return TMonotonic::Now() - SourcesAheadQueueEnterTime;
+    }
+
+    void SetSourcesAhead(const ui32 count) {
+        SourcesAhead = count;
+    }
+
+    ui32 GetSourcesAhead() const {
+        return SourcesAhead;
+    }
+
+    ui32 GetFilteredRowsCount() const {
+        if (!HasStageResult() || GetStageResult().IsEmpty()) {
+            return 0;
+        }
+        const auto& notAppliedFilter = GetStageResult().GetNotAppliedFilter();
+        return notAppliedFilter ? notAppliedFilter->GetFilteredCount().value_or(GetStageResult().GetBatch()->num_rows())
+                                : GetStageResult().GetBatch()->num_rows();
+    }
+
+    void AddExecutionDuration(const TDuration d) {
+        TotalExecutionDuration += d;
+    }
+
+    void AddBytesRead(const ui64 bytes) {
+        TotalBytesRead += bytes;
+    }
+
+    void OnStartProcessing();
+
+    TDuration GetTotalDuration() const {
+        return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
+    }
+
+    TDuration GetTotalExecutionDuration() const {
+        return TotalExecutionDuration;
+    }
+
+    ui64 GetTotalBytesRead() const {
+        return TotalBytesRead;
+    }
+
+    ui64 ExtractTotalBytesRead() {
+        const ui64 result = TotalBytesRead;
+        TotalBytesRead = 0;
+        return result;
+    }
+
+    NLWTrace::TOrbit& GetDataSourceOrbit() {
+        return DataSourceOrbit;
+    }
+
+    const NLWTrace::TOrbit& GetDataSourceOrbit() const {
+        return DataSourceOrbit;
+    }
 
     const TPortionDataAccessor& GetPortionAccessor() const;
 
@@ -213,6 +295,15 @@ public:
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
+        static std::shared_ptr<ISnapshotSchema> defaultValue;
+        return defaultValue;
+    }
+
+    virtual ui64 GetUsedRawBytesOptional() const {
+        return 0;
+    }
 
     virtual TString GetColumnStorageId(const ui32 /*columnId*/) const;
 
@@ -301,6 +392,20 @@ public:
     TFetchedResult& MutableStageResult();
 
     virtual std::optional<ui64> GetPortionIdOptional() const = 0;
+
+    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
+
+    ui64 GetRawPathId() const {
+        return GetPathId().GetRawValue();
+    }
+
+    ui64 GetTabletId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId();
+    }
+
+    ui64 GetTxId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

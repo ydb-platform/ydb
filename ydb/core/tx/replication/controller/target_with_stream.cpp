@@ -261,18 +261,18 @@ void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
     // nop
 }
 
-void TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
+bool TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
     auto* stats = GetStatsImpl();
     auto* counters = GetCountersImpl();
     if (!stats && !counters) {
-        return;
+        return false;
     }
 
     if (!HasWorker(workerId)) {
         if (stats) {
             stats->RemoveWorker(workerId);
         }
-        return;
+        return false;
     }
 
     for (const auto& item : newStats.GetValues()) {
@@ -283,6 +283,7 @@ void TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWo
             counters->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
         }
     }
+    return true;
 }
 
 const TReplication::ITargetStats* TTargetWithStream::GetStats() {

@@ -441,8 +441,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         co_return;
     }
 
-    auto checkSchema = [&]() -> ui32 {
-        auto tableInfo = FindUserTable(tableId.PathId);
+    auto checkSchema = [&](TUserTable::TCPtr tableInfo) -> ui32 {
         if (!tableInfo) {
             state.Result = makeError(NKikimrDataEvents::TEvLockRowsResult::STATUS_SCHEME_ERROR, TStringBuilder()
                 << "Table '" << tableId << "' doesn't exist at shard " << TabletID());
@@ -567,7 +566,8 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
             }
 
             // Schema may have changed, must recheck on every iteration
-            ui32 localTid = checkSchema();
+            auto userTablePtr = FindUserTable(tableId.PathId);
+            ui32 localTid = checkSchema(userTablePtr);
             if (!localTid) {
                 Y_ENSURE(state.Result);
                 return ETxLockRows::Rollback;
@@ -620,8 +620,11 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 // changes, including undecided volatile transactions.
                 auto observer = MakeIntrusive<TLockRowsTxObserver>(*this);
 
-                // Probe the key until the first persistently committed version
-                auto row = txc.DB.SelectRowVersion(localTid, key, /* readFlags */ 0, /* tx map */ nullptr, observer);
+                ui32 uniqueColumnCount = userTablePtr->UniqueIndexKeySize;
+                TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(key, uniqueColumnCount);
+
+                // Probe the key or unique prefix until the first persistently committed version
+                auto row = txc.DB.SelectRowVersionByKeyPrefix(localTid, uniqueKey, observer);
 
                 // Handle page fault by restarting or rescheduling
                 if (row.Ready == NTable::EReady::Page) {
@@ -651,10 +654,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                             typedKey.emplace_back(key[i].Data(), key[i].Size(), typeId);
                         }
                     }
-
                     GetConflictsCache().GetTableCache(localTid).AddUncommittedWrite(key, txId, txc.DB);
                     txc.DB.LockRowTx(localTid, newLockMode, typedKey, txId);
-                    SysLocksTable().SetWriteLock(tableId, key);
+                    SysLocksTable().SetWriteLock(tableId, uniqueKey);
                     advanced = true;
                 };
 
@@ -767,7 +769,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     // do that for different (related) locks. When implementing
                     // safepoints we would need to group all locks from the same
                     // transaction, not just having the same LockId.
-                    runtimeLock = SysLocksTable().AddRuntimeLock(tableId, key);
+                    runtimeLock = SysLocksTable().AddRuntimeLock(tableId, uniqueKey);
                     Y_ENSURE(runtimeLock.IsValid());
                     if (!runtimeLock.IsOwner()) {
                         if (skipLocked) {
@@ -978,6 +980,19 @@ void TDataShard::StartLockRowsBrokenWatcher(TLockRowsRequestId requestId, TTable
             UpdateProposeQueueSize();
         }
     }
+}
+
+TConstArrayRef<TCell> GetUniqueIndexKey(TConstArrayRef<TCell> cells, ui32 count) {
+    if (!count || count >= cells.size()) {
+        return cells;
+    }
+    for (ui32 i = 0; i < count; i++) {
+        if (cells[i].IsNull()) {
+            // Unique keys with NULL never conflict with anything - original key should be used
+            return cells;
+        }
+    }
+    return cells.Slice(0, count);
 }
 
 } // namespace NKikimr::NDataShard

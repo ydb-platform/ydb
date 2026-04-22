@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         UNIT_ASSERT(jobResult.Error.Defined());
         auto error = *jobResult.Error;
         UNIT_ASSERT_EQUAL(error.Reason, EFmrErrorReason::RestartQuery);
-        UNIT_ASSERT(error.ErrorMessage.Contains("Error reading chunk: test_table_id_test_part_id:0"));
+        UNIT_ASSERT(error.ErrorMessage.Contains("Failed to get group test_table_id_test_part_id and chunkId 0 from table data service"));
     }
 
     Y_UNIT_TEST(RunMergeTask) {

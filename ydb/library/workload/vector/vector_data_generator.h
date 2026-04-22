@@ -21,6 +21,7 @@ class TWorkloadVectorFilesDataInitializer : public TWorkloadVectorDataInitialize
 private:
     TString DataFiles;
     TString EmbeddingColumnName = "embedding";
+    TString Format;
 
 public:
     TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params);

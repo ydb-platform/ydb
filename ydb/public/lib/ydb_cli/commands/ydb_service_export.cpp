@@ -32,6 +32,7 @@ namespace {
     bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::ColumnTable,
             NScheme::ESchemeEntryType::View,
             NScheme::ESchemeEntryType::Topic,
         }, entry.Type);
@@ -155,7 +156,7 @@ void TCommandExportToYt::Config(TConfig& config) {
     config.Opts->AddLongOption("token", tokenHelp)
         .RequiredArgument("TOKEN");
 
-    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
@@ -278,7 +279,7 @@ void TCommandExportBase::Config(TConfig& config) {
     {
         TStringBuilder codecHelp;
         codecHelp << "Codec used to compress data. Available options: ";
-        if (config.HelpCommandVerbosiltyLevel >= 2) {
+        if (config.HelpCommandVerbosityLevel >= 2) {
             codecHelp << Endl
                 << "    - " << colors.BoldColor() << "zstd" << colors.OldColor() << Endl
                 << "    - " << colors.BoldColor() << "zstd-N" << colors.OldColor() << " (N is compression level in range [1, 22], e.g. zstd-3)" << Endl;
@@ -294,7 +295,7 @@ void TCommandExportBase::Config(TConfig& config) {
     {
         TStringBuilder help;
         help << "Include index data or not";
-        if (config.HelpCommandVerbosiltyLevel >= 2) {
+        if (config.HelpCommandVerbosityLevel >= 2) {
             help << Endl << "    By default, only index metadata is uploaded and indexes are built during import — it"
                  << Endl << "    saves space and reduces export time, but it can potentially increase the import time."
                  << Endl << "    Index data can be uploaded and downloaded back during import.";
@@ -499,7 +500,7 @@ void TCommandExportToS3::Config(TConfig& config) {
                 continue;
             }
             storageClassChoices.emplace_back(ToString(value));
-            if (config.HelpCommandVerbosiltyLevel >= 2) {
+            if (config.HelpCommandVerbosityLevel >= 2) {
                 storageClassHelp << Endl << "    - " << value;
             } else {
                 if (first) {
@@ -537,7 +538,7 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("destination-prefix", "Destination prefix for export in bucket")
         .RequiredArgument("PREFIX").StoreResult(&CommonDestinationPrefix);
 
-    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
@@ -612,7 +613,7 @@ void TCommandExportToNfs::Config(TConfig& config) {
             "Use the full path to the mounted directory. Example: /mnt/export/path.")
         .Required().RequiredArgument("PATH").StoreResult(&CommonDestinationPrefix);
 
-    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 

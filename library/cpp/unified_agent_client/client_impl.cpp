@@ -324,8 +324,10 @@ namespace NUnifiedAgent::NPrivate {
         , MakeGrpcCallTimer(nullptr)
         , ForceCloseTimer(nullptr)
         , PollTimer(nullptr)
+        , GrpcCallWatchdogTimer(nullptr)
         , GrpcInflightMessages(0)
         , GrpcInflightBytes(0)
+        , LastGrpcCallActivityUsec(0)
         , InflightBytes(0)
         , CloseRequested(false)
         , EventsBatchSize(0)
@@ -445,6 +447,13 @@ namespace NUnifiedAgent::NPrivate {
                 }
                 Poll();
             }, &AsyncJoiner));
+        GrpcCallWatchdogTimer = MakeHolder<TGrpcTimer>(Client->GetCompletionQueue(),
+            MakeIOCallback([this](EIOStatus status) {
+                if (status == EIOStatus::Error) {
+                    return;
+                }
+                CheckGrpcCallInactivity();
+            }, &AsyncJoiner));
         EventNotification = MakeHolder<TGrpcNotification>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 Y_ABORT_UNLESS(status == EIOStatus::Ok);
@@ -458,9 +467,11 @@ namespace NUnifiedAgent::NPrivate {
         EventNotificationTriggered = false;
         PollerLastEventTimestamp = Now();
         PollingStatus = EPollingStatus::Inactive;
+        TouchGrpcCallActivity();
 
         ++Client->GetCounters()->ActiveSessionsCount;
         MakeGrpcCallTimer->Set(Now());
+        ScheduleGrpcCallWatchdog();
         YLOG_DEBUG(Sprintf("started, sessionId [%s]", OriginalSessionId.GetOrElse("").c_str()));
 
         Started = true;
@@ -475,9 +486,48 @@ namespace NUnifiedAgent::NPrivate {
         Y_ABORT_UNLESS(!ActiveGrpcCall);
         ActiveGrpcCall = MakeIntrusive<TGrpcCall>(*this);
         ActiveGrpcCall->Start();
+        TouchGrpcCallActivity();
         ++Counters->GrpcCalls;
         if (CloseStarted) {
             ActiveGrpcCall->BeginClose(false);
+        }
+    }
+
+    void TClientSession::TouchGrpcCallActivity() {
+        LastGrpcCallActivityUsec.store(Now().MicroSeconds());
+    }
+
+    void TClientSession::ScheduleGrpcCallWatchdog() {
+        const auto timeout = Client->GetParameters().GrpcCallInactivityTimeout;
+        if (timeout == TDuration::Zero()) {
+            return;
+        }
+        const auto tick = timeout < TDuration::Seconds(1) ? timeout : TDuration::Seconds(1);
+        GrpcCallWatchdogTimer->Set(Now() + tick);
+    }
+
+    void TClientSession::CheckGrpcCallInactivity() {
+        with_lock(Lock) {
+            if (Closed || !Started) {
+                return;
+            }
+            const auto timeout = Client->GetParameters().GrpcCallInactivityTimeout;
+            if (timeout == TDuration::Zero()) {
+                return;
+            }
+            if (ActiveGrpcCall &&
+                !CloseStarted &&
+                Counters->InflightMessages.Val() > 0 &&
+                (Now() - TInstant::MicroSeconds(LastGrpcCallActivityUsec.load())) >= timeout)
+            {
+                YLOG_ERR(Sprintf(
+                    "grpc call inactivity timeout reached [%s], cancelling active call for reconnect",
+                    timeout.ToString().c_str()));
+                ++Counters->GrpcCallsClosedByInactivity;
+                ActiveGrpcCall->BeginClose(true);
+                TouchGrpcCallActivity();
+            }
+            ScheduleGrpcCallWatchdog();
         }
     }
 
@@ -593,6 +643,7 @@ namespace NUnifiedAgent::NPrivate {
         if (!CloseStarted) {
             CloseStarted = true;
             YLOG_DEBUG("close started");
+            TouchGrpcCallActivity();
         }
         const auto force = deadline == TInstant::Zero();
         if (force && !ForcedCloseStarted) {
@@ -856,6 +907,7 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TClientSession::Acknowledge(ui64 seqNo) {
+        TouchGrpcCallActivity();
         size_t messagesCount = 0;
         size_t bytesCount = 0;
         size_t skippedMessagesCount = 0;
@@ -893,6 +945,7 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TClientSession::OnGrpcCallInitialized(const TString& sessionId, ui64 lastSeqNo) {
+        TouchGrpcCallActivity();
         SessionId = sessionId;
         Acknowledge(lastSeqNo);
         NextIndex = TrimmedCount;
@@ -947,6 +1000,7 @@ namespace NUnifiedAgent::NPrivate {
         MakeGrpcCallTimer->Cancel();
         ForceCloseTimer->Cancel();
         PollTimer->Cancel();
+        GrpcCallWatchdogTimer->Cancel();
         if (!ForkInProgressLocal && WriteQueue.size() > 0) {
             const auto stats = PurgeWriteQueue();
             ++Counters->ErrorsCount;
@@ -1104,6 +1158,7 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TGrpcCall::EndAccept(EIOStatus status) {
+        Session.TouchGrpcCallActivity();
         Y_ABORT_UNLESS(AcceptPending);
         AcceptPending = false;
         if (CheckHasError(status, "EndAccept")) {
@@ -1116,6 +1171,7 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TGrpcCall::EndRead(EIOStatus status) {
+        Session.TouchGrpcCallActivity();
         ReadPending = false;
         if (FinishDone) {
             Session.OnGrpcCallFinished();
@@ -1172,6 +1228,7 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TGrpcCall::EndWrite(EIOStatus status) {
+        Session.TouchGrpcCallActivity();
         WritePending = false;
         if (CheckHasError(status, "EndWrite")) {
             return;
@@ -1183,6 +1240,7 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TGrpcCall::EndFinish(EIOStatus status) {
+        Session.TouchGrpcCallActivity();
         FinishDone = true;
         const auto finishStatus = status == EIOStatus::Error
             ? grpc::Status(grpc::UNKNOWN, "finish error")
@@ -1251,6 +1309,7 @@ namespace NUnifiedAgent {
         , Log(TLoggerOperator<TGlobalLog>::Log())
         , LogRateLimitBytes(Nothing())
         , GrpcReconnectDelay(TDuration::MilliSeconds(50))
+        , GrpcCallInactivityTimeout(DefaultGrpcCallInactivityTimeout)
         , GrpcSendDelay(DefaultGrpcSendDelay)
         , EnableForkSupport(false)
         , GrpcMaxMessageSize(DefaultGrpcMaxMessageSize)
@@ -1269,6 +1328,7 @@ namespace NUnifiedAgent {
     const size_t TClientParameters::DefaultMaxInflightBytes = 10_MB;
     const size_t TClientParameters::DefaultGrpcMaxMessageSize = 1_MB;
     const TDuration TClientParameters::DefaultGrpcSendDelay = TDuration::MilliSeconds(10);
+    const TDuration TClientParameters::DefaultGrpcCallInactivityTimeout = TDuration::Seconds(30);
 
     TClientPtr MakeClient(const TClientParameters& parameters) {
 

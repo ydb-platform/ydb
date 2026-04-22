@@ -196,7 +196,7 @@ public:
     TCallback(TIntrusivePtr<NYT::NDetail::TBindStateBase>&& bindState, TTypedInvokeFunction invokeFunction)
         : TCallbackBase(std::move(bindState))
     {
-        UntypedInvoke = reinterpret_cast<TUntypedInvokeFunction>(invokeFunction);
+        UntypedInvoke_ = reinterpret_cast<TUntypedInvokeFunction>(invokeFunction);
     }
 
     template <class R2, class... TArgs2>
@@ -230,8 +230,8 @@ public:
 
     R operator()(TArgs... args) const
     {
-        auto invokeFunction = reinterpret_cast<TTypedInvokeFunction>(UntypedInvoke);
-        return invokeFunction(std::forward<TArgs>(args)..., BindState.Get());
+        auto invokeFunction = reinterpret_cast<TTypedInvokeFunction>(UntypedInvoke_);
+        return invokeFunction(std::forward<TArgs>(args)..., BindState_.Get());
     }
 
     R Run(TArgs... args) const
@@ -248,7 +248,7 @@ private:
         return TCallback<R2(TArgs2...)>(
             New<TBindState>(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-                BindState->Location,
+                BindState_->Location,
 #endif
                 *this),
             &TBindState::Run);

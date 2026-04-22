@@ -1,6 +1,6 @@
 items:
 - name: Описание
-  href: ../postgresql/intro.md
+  href: intro.md
 - name: Выполнение запросов
   href: connect.md
 - name: Интероперабельность PostgreSQL и {{ydb-name}}

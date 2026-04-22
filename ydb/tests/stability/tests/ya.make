@@ -5,7 +5,7 @@ PY3TEST()
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-    ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
+    ENV(NEMESIS_BINARY="ydb/tests/stability/nemesis/nemesis")
 
     PY_SRCS(
         all_workloads.py
@@ -46,7 +46,7 @@ PY3TEST()
             ydb/tests/stress/streaming
             ydb/tests/stress/kv_volume
             ydb/tests/stress/topic_sqs
-            ydb/tests/tools/nemesis/driver
+            ydb/tests/stability/nemesis
         )
     ENDIF()
 

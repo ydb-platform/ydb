@@ -343,7 +343,7 @@ void FillSpec(NYT::TNode& spec,
         if (auto val = settings->IntermediateAccount.Get(cluster)) {
             spec["intermediate_data_account"] = *val;
         }
-        else if (auto tmpFolder = GetTablesTmpFolder(*settings, cluster)) {
+        else if (auto tmpFolder = GetTablesTmpFolder(*settings, cluster, execCtx.Session_->UseSecureTmp_, execCtx.Session_->OperationOptions_)) {
             auto attrs = entry->Tx->Get(tmpFolder + "/@", NYT::TGetOptions().AttributeFilter(NYT::TAttributeFilter().AddAttribute(TString("account"))));
             if (attrs.HasKey("account")) {
                 spec["intermediate_data_account"] = attrs["account"];

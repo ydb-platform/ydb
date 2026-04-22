@@ -191,7 +191,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                               std::move(compressedMessages),
                                                               stream);
 
-                queue.ApplyCallbackToEventImpl(data, std::move(accumulator), deferred);
+                queue.ApplyCallbackToEventImpl(std::move(data), std::move(accumulator), deferred);
             } else {
                 moveToReadyQueue(std::move(front));
             }
@@ -2760,7 +2760,7 @@ bool TReadSessionEventsQueue<UseMigrationProtocol>::HasDataEventCallback() const
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>& data,
+void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>&& data,
                                                                              TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
                                                                              TDeferredActions<UseMigrationProtocol>& deferred)
 {

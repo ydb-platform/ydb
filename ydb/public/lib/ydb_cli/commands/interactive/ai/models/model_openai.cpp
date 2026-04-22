@@ -4,6 +4,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -82,34 +83,48 @@ protected:
         }
 
         parser = parser.GetKey("choices").GetElement(0).GetKey("message");
-        auto conversationPart = parser.GetValue();
+        NJson::TJsonValue conversationPart;
+        conversationPart["role"] = "assistant";
 
         const auto& content = parser.MaybeKey("content");
         const bool hasContent = content && !content->IsNull();
         if (hasContent) {
             result.Text = Strip(content->GetString());
+            conversationPart["content"] = result.Text;
         }
 
-        const auto& tollCalls = parser.MaybeKey("tool_calls");
-        const bool hasToolsCalls = tollCalls && !tollCalls->IsNull();
+        const auto& toolCalls = parser.MaybeKey("tool_calls");
+        const bool hasToolsCalls = toolCalls && !toolCalls->IsNull();
         if (hasToolsCalls) {
-            tollCalls->Iterate([&](TJsonParser toolCall) {
-                auto function = toolCall.GetKey("function");
+            auto& conversationPartToolCalls = conversationPart["tool_calls"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+            toolCalls->Iterate([&](TJsonParser toolCall) {
+                auto& conversationPartToolCall = conversationPartToolCalls.emplace_back();
+                conversationPartToolCall["type"] = "function";
+                const auto function = toolCall.GetKey("function");
+
+                const auto& arguments = function.GetKey("arguments").GetString();
+                auto& conversationPartToolCallFunction = conversationPartToolCall["function"];
+                conversationPartToolCallFunction["arguments"] = arguments;
 
                 NJson::TJsonValue argumentsJson;
                 try {
-                    NJson::ReadJsonTree(function.GetKey("arguments").GetString(), &argumentsJson, /* throwOnError */ true);
+                    NJson::ReadJsonTree(arguments, &argumentsJson, /* throwOnError */ true);
                 } catch (const std::exception& e) {
+                    YDB_CLI_LOG(Notice, "Tool call arguments is not valid JSON: '" << arguments << "', reason: " << e.what());
                     throw yexception() << "Tool call arguments is not valid JSON, reason: " << e.what();
                 }
 
                 auto name = function.GetKey("name").GetString();
+                conversationPartToolCallFunction["name"] = name;
                 if (!ValidateToolName(name)) {
                     throw yexception() << "Invalid tool name requested: " << name;
                 }
 
+                auto id = toolCall.GetKey("id").GetString();
+                conversationPartToolCall["id"] = id;
+
                 result.ToolCalls.push_back({
-                    .Id = toolCall.GetKey("id").GetString(),
+                    .Id = std::move(id),
                     .Name = std::move(name),
                     .Parameters = std::move(argumentsJson),
                 });

@@ -1,6 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
-#include <ydb/core/tx/schemeshard/schemeshard_index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/string/strip.h>
@@ -254,31 +254,53 @@ ColumnFamilies {
         return TPartitionConfigMerger::ApplyChanges(result, src, changes, columns, nullptr, false, errDescr);
     }
 
+    void AddBloomPrefix(NKikimrSchemeOp::TPartitionConfig& config, ui32 prefixLen, double fpp = NKikimr::NTable::DefaultBloomFilterFpp) {
+        auto* entry = config.AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(prefixLen);
+        entry->SetFalsePositiveProbability(fpp);
+    }
+
     Y_UNIT_TEST(BloomFilterPrefixMerge) {
         // Existing [3, 1], delta adds [1, 2] -> result should be [1, 2, 3] (merged, sorted, deduped)
         NKikimrSchemeOp::TPartitionConfig src;
-        src.AddByKeyFilterPrefixes(3);
-        src.AddByKeyFilterPrefixes(1);
+        AddBloomPrefix(src, 3);
+        AddBloomPrefix(src, 1);
 
         NKikimrSchemeOp::TPartitionConfig changes;
-        changes.AddByKeyFilterPrefixes(1);
-        changes.AddByKeyFilterPrefixes(2);
+        AddBloomPrefix(changes, 1);
+        AddBloomPrefix(changes, 2);
 
         NKikimrSchemeOp::TPartitionConfig result;
         TString errDescr;
         UNIT_ASSERT(ApplyBloomChanges(result, src, changes, errDescr));
         UNIT_ASSERT_VALUES_EQUAL(result.ByKeyFilterPrefixesSize(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(0), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(1), 2);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(2), 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(2).GetPrefixLength(), 3);
+    }
+
+    Y_UNIT_TEST(BloomFilterPrefixMergeFpp) {
+        // New FPP wins on conflict: existing prefix 1 with fpp=0.01, delta adds prefix 1 with fpp=0.05
+        NKikimrSchemeOp::TPartitionConfig src;
+        AddBloomPrefix(src, 1, 0.01);
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        AddBloomPrefix(changes, 1, 0.05);
+
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString errDescr;
+        UNIT_ASSERT(ApplyBloomChanges(result, src, changes, errDescr));
+        UNIT_ASSERT_VALUES_EQUAL(result.ByKeyFilterPrefixesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+        UNIT_ASSERT_DOUBLES_EQUAL(result.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.05, 1e-9);
     }
 
     Y_UNIT_TEST(BloomFilterDisableClearsPrefixes) {
         // Existing config has prefixes [1, 2], delta disables EnableFilterByKey -> prefixes cleared
         NKikimrSchemeOp::TPartitionConfig src;
         src.SetEnableFilterByKey(true);
-        src.AddByKeyFilterPrefixes(1);
-        src.AddByKeyFilterPrefixes(2);
+        AddBloomPrefix(src, 1);
+        AddBloomPrefix(src, 2);
 
         NKikimrSchemeOp::TPartitionConfig changes;
         changes.SetEnableFilterByKey(false);
@@ -296,7 +318,7 @@ ColumnFamilies {
 
         NKikimrSchemeOp::TPartitionConfig changes;
         changes.SetEnableFilterByKey(false);
-        changes.AddByKeyFilterPrefixes(1);
+        AddBloomPrefix(changes, 1);
 
         NKikimrSchemeOp::TPartitionConfig result;
         TString errDescr;

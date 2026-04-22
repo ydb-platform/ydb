@@ -45,14 +45,44 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
             CancelAfter = GetDuration(operationParams->cancel_after());
         }
     }
+
+    NACLib::TUserContextBuilder builder;
+    auto token = GetUserToken();
+    if (token != nullptr) {
+        builder.WithUserSID(token->GetUserSID());
+    }
+    if (ctx->GetWilsonTraceId()) {
+        builder.WithUserTraceId(ctx->GetWilsonTraceId());
+    }
+
+    UserCtx = builder.Build();
 }
 
-TEvKqp::TEvQueryRequest::TEvQueryRequest(const TString& userSID) : TEvQueryRequest()
+TEvKqp::TEvQueryRequest::TEvQueryRequest(NACLib::TUserContext::TPtr userCtx) : TEvQueryRequest()
 {
-    NACLib::TUserToken::TUserTokenInitFields fields {
-        .UserSID = userSID
-    };
-    Token_ = new NACLib::TUserToken(fields);
+    UserCtx = userCtx;
+    if (userCtx != nullptr) {
+        NACLib::TUserToken::TUserTokenInitFields fields {
+            .UserSID = userCtx->GetUserSID()
+        };
+        Token_ = new NACLib::TUserToken(fields);
+    }
+}
+
+NACLib::TUserContext::TPtr TEvKqp::TEvQueryRequest::GetUserCtx()
+{
+    if (UserCtx != nullptr) {
+        return UserCtx;
+    }
+
+    NACLib::TUserContextBuilder builder;
+    auto token = GetUserToken();
+    if (token != nullptr) {
+        builder.WithUserSID(token->GetUserSID());
+    }
+
+    UserCtx = builder.Build();
+    return UserCtx;
 }
 
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {

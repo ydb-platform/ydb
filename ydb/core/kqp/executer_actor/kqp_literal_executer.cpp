@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
@@ -84,7 +83,7 @@ public:
         : Request(std::move(request))
         , Counters(counters)
         , OwnerActor(owner)
-        , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {}, nullptr)
+        , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, Counters, {}, nullptr)
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
@@ -141,25 +140,11 @@ public:
             (transactions_count, Request.Transactions.size()),
             (trace_id, TraceId()));
 
+        TasksGraph.BuildLiteralTasks();
+
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions.at(txIdx);
-
-            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
-                KQP_STLOG_D(KQPLIT, "Stage AST",
-                    (stage_id, stageInfo.Id),
-                    (ast, stage.GetProgramAst()),
-                    (trace_id, TraceId()));
-
-                YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
-                YQL_ENSURE(stageInfo.InputsCount == 0);
-
-                TasksGraph.AddTask(stageInfo, TKqpTasksGraph::TTaskType::LITERAL);
-            }
-
             ResponseEv->InitTxResult(tx.Body);
-            TasksGraph.BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
         }
 
         if (TerminateIfTimeout()) {
@@ -276,7 +261,7 @@ public:
             }
             fakeComputeActorStats.SetDurationUs(elapsedMicros);
 
-            Stats->UpdateTaskStats(0, fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
+            Stats->UpdateTaskStats(0, 0, fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();

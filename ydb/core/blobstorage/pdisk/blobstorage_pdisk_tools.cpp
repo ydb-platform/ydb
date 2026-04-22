@@ -164,7 +164,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
         NPDisk::TPDiskStreamCypher cypher(true);
         cypher.SetKey(key);
         bool isOk = false;
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         for (ui32 recordIdx = 0; recordIdx < NPDisk::ReplicationFactor; ++recordIdx) {
             ui64 recordSectorOffset = recordIdx * NPDisk::FormatSectorSize;
             ui8 *formatSector = formatRaw->Data() + recordSectorOffset;

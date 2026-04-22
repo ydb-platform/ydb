@@ -202,7 +202,7 @@ class TestPqRowDispatcher(TestYdsBase):
             PRAGMA config.flags("TimeOrderRecoverDelay", "-10");
             PRAGMA config.flags("TimeOrderRecoverAhead", "10");
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL))
                 MATCH_RECOGNIZE(
                     ORDER BY CAST(time as Timestamp)
@@ -354,8 +354,8 @@ class TestPqRowDispatcher(TestYdsBase):
         data = [
             '{"time": 101, "data": "hello1", "event": "event1", "nested": {"xyz": "key"}}',
             '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}']
-        filter = "time > 101;"
         expected = ['102']
+        filter = "time > 101;"
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`time` > 101)')
         filter = 'data = "hello2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`data` = \\"hello2\\")')
@@ -383,6 +383,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
+        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -441,6 +445,12 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
+        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` IN (\\"hello2\\", \\"hello3\\")) IS NOT DISTINCT FROM TRUE)')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):
@@ -780,6 +790,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(108, 110)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(110, 112)], "partition_key2")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(112, 114)], "partition_key3")
@@ -798,6 +811,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
 
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(116, 118)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(118, 120)], "partition_key2")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(120, 122)], "partition_key3")
@@ -815,6 +831,9 @@ class TestPqRowDispatcher(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
         kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
         kikimr.compute_plane.wait_bootstrap(node_index)
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(124, 126)], "partition_key1")
         write_stream(self.input_topic, [Rf'''{{"time": {c}}}''' for c in range(126, 128)], "partition_key2")

@@ -43,12 +43,13 @@ public:
         Node() = default;
         Node(Node&&) = default;
         Node(ui32 id, ui64 tabletId);
-        Node(ui32 id, ui64 tabletId, const TString& from, const TString& to);
+        Node(ui32 id, ui64 tabletId, const TString& from, const TString& to, TInstant creationTime);
 
         ui32 Id;
         ui64 TabletId;
         TString From;
         TString To;
+        TInstant CreationTime;
 
         // Direct parents of this node
         std::vector<Node*> DirectParents;

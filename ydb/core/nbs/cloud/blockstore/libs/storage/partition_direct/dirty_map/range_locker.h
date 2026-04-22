@@ -1,5 +1,7 @@
 #pragma once
 
+#include "location.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -18,7 +20,9 @@ struct ILockableRanges
 
     virtual void LockPBuffer(ui64 lsn) = 0;
     virtual void UnlockPBuffer(ui64 lsn) = 0;
-    virtual TLockRangeHandle LockDDiskRange(TBlockRange64 range) = 0;
+    virtual TLockRangeHandle LockDDiskRange(
+        TBlockRange64 range,
+        TLocationMask mask) = 0;
     virtual void UnLockDDiskRange(TLockRangeHandle handle) = 0;
 };
 
@@ -37,13 +41,18 @@ public:
 private:
     friend class TBlocksDirtyMap;
     friend class TRangeLockAccess;
+    friend class TDDiskDataCopier;
 
     TRangeLock(ILockableRanges* lockableRanges, ui64 lsn);
-    TRangeLock(ILockableRanges* lockableRanges, TBlockRange64 range);
+    TRangeLock(
+        ILockableRanges* lockableRanges,
+        TBlockRange64 range,
+        TLocationMask mask);
 
     ILockableRanges* LockableRanges;
     ui64 Lsn = 0;
     TBlockRange64 Range;
+    TLocationMask Mask;
 
     ILockableRanges::TLockRangeHandle LockRange{};
     bool Armed = false;

@@ -76,7 +76,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     const TActorId Sender;
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 
     TString SerializedMiniKQLProgram;
     TString SerializedMiniKQLParams;
@@ -251,7 +251,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 IEngineFlat::EProtocol::V1,
                 functionRegistry,
                 *TAppData::RandomProvider, *TAppData::TimeProvider,
-                UserSID,
+                UserCtx,
                 nullptr, poolCounters
             );
             proxySettings.EvaluateResultType = true;
@@ -265,9 +265,9 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             for (auto &key : proxyEngine->GetDbKeys()) {
                 key->Status = TKeyDesc::EStatus::Ok;
 
-                auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-                partitions->push_back(TKeyDesc::TPartitionInfo(TabletId));
-                key->Partitioning = partitions;
+                TVector<TKeyDesc::TPartitionInfo> partitions;
+                partitions.push_back(TKeyDesc::TPartitionInfo(TabletId));
+                key->Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
 
                 for (const auto &x : key->Columns) {
                     key->ColumnInfos.push_back({x.Column, x.ExpectedType, 0, TKeyDesc::EStatus::Ok}); // type-check
@@ -299,7 +299,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                     IEngineFlat::EProtocol::V1,
                     functionRegistry,
                     *TAppData::RandomProvider, *TAppData::TimeProvider,
-                    UserSID,
+                    UserCtx,
                     &host, poolCounters
                 );
                 TAutoPtr<IEngineFlat> engine = CreateEngineFlat(engineSettings);
@@ -367,11 +367,11 @@ public:
             TActorId sender,
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory,
-            const TString& userSID)
+            NACLib::TUserContext::TPtr userCtx)
         : Sender(sender)
         , SourceProgram(program)
         , Factory(factory)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     {}
 };
 

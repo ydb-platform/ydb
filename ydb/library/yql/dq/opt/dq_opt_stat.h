@@ -74,11 +74,11 @@ public:
         };
 
         void AddEquality(const NNodes::TCoMember& member) {
-            Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EEquality);
+            Data.emplace_back(member, TColumnStatisticsUsedMember::EEquality);
         }
 
         void AddInequality(const NNodes::TCoMember& member) {
-            Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EInequality);
+            Data.emplace_back(member, TColumnStatisticsUsedMember::EInequality);
         }
 
         TVector<TColumnStatisticsUsedMember> Data{};

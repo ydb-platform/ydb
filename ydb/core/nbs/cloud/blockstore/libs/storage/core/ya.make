@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    config.cpp
     request_info.cpp
     tablet.cpp
     tablet_schema.cpp
@@ -11,7 +10,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/model
     ydb/core/nbs/cloud/storage/core/libs/common
     ydb/core/nbs/cloud/storage/core/protos

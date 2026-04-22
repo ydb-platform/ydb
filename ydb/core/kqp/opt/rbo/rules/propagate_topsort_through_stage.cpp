@@ -108,7 +108,7 @@ bool NeedsToStripAliasFromSort(const TIntrusivePtr<IOperator>& input) {
     return input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->NeedsMap();
 }
 
-bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, const TKqpOptimizeContext& kqpCtx, ui32& sortDirection) {
+bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, ui32& sortDirection) {
     if (input->GetKind() != EOperator::Source) {
         return false;
     }
@@ -128,8 +128,14 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         return false;
     }
 
-    const auto tablePath = TExprBase(read->TableCallable).Cast<TKqpTable>().Path().StringValue();
-    const auto metadataPtr = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, tablePath).Metadata;
+    const auto tablePath = TExprBase(read->GetTable()).Cast<TKqpTable>().Path().StringValue();
+    auto& kqpCtx = ctx.KqpCtx;
+    auto table = kqpCtx.Tables->EnsureTableExists(kqpCtx.Cluster, tablePath, read->Pos, ctx.ExprCtx);
+    if (!table) {
+        return false;
+    }
+
+    auto metadataPtr = table->Metadata;
     if (!metadataPtr) {
         return false;
     }
@@ -178,11 +184,11 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
         const auto propagatedSort = MakeIntrusive<TOpSort>(map->GetInput(), sort->Pos, sort->Props, sortElements, sort->LimitCond, EOpPhase::Intermediate);
         const auto newMap = MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements, map->Project, map->Ordered);
         return MakeIntrusive<TOpSort>(newMap, sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, EOpPhase::Final);
-    } else if (CanPushSortToOlapRead(sort, sortInput, ctx.KqpCtx, sortDirecion)) {
+    } else if (CanPushSortToOlapRead(sort, sortInput, ctx, sortDirecion)) {
         auto read = CastOperator<TOpRead>(sortInput);
         const auto limitCond = sort->LimitCond->Node->ChildPtr(1);
         return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
-                                      static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
+                                      read->GetRanges(), read->OriginalPredicate, static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
     }
 
     return input;

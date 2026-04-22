@@ -80,7 +80,7 @@ TTestInfo::TTestInfo(std::vector<TTiming>&& timings)
         Min = std::min(Min, timing.Server);
         totalServer += timing.Server.MillisecondsFloat();
 
-        TDuration rtt = timing.Total - timing.Server; 
+        TDuration rtt = timing.Total - timing.Server;
         RttMax = std::max(RttMax, rtt);
         RttMin = std::min(RttMin, rtt);
         totalRtt += rtt.MillisecondsFloat();
@@ -337,7 +337,7 @@ TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(NQuery::TExecuteQuerySettings& 
 
 TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& benchmarkSettings, bool explainOnly) {
     NQuery::TExecuteQuerySettings settings;
-    settings.StatsMode(NQuery::EStatsMode::Full);
+    settings.StatsMode(benchmarkSettings.StatsMode);
     settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
     if (benchmarkSettings.WithProgress) {
         settings.StatsCollectPeriod(std::chrono::milliseconds(3000));

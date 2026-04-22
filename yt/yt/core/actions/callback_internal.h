@@ -98,8 +98,8 @@ protected:
      */
     using TUntypedInvokeFunction = void(*)();
 
-    TIntrusivePtr<TBindStateBase> BindState;
-    TUntypedInvokeFunction UntypedInvoke;
+    TIntrusivePtr<TBindStateBase> BindState_;
+    TUntypedInvokeFunction UntypedInvoke_;
 
 private:
     TCallbackBase& operator=(const TCallbackBase&) = delete;

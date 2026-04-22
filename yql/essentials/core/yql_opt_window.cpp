@@ -3,6 +3,7 @@
 #include "yql_expr_type_annotation.h"
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_window_stream_transformers.h>
 #include <yql/essentials/core/yql_window_features.h>
 
 #include <yql/essentials/core/sql_types/window_frame_bounds.h>
@@ -17,97 +18,24 @@ namespace NYql {
 
 using namespace NNodes;
 
-using NWindow::TCoreWinFrameCollectorBounds;
 using NWindow::TNumberAndDirection;
 using NWindow::EDirection;
 using NWindow::TInputRow;
 using NWindow::TInputRowWindowFrame;
 using NWindow::TCoreWinFramesCollectorParams;
 
-using THandle = TExprNodeCoreWinFrameCollectorBounds::THandle;
+using THandle = TRangeFrameCollectorBounds::THandle;
 
 namespace {
 
 constexpr TStringBuf SessionStartMemberName = "_yql_window_session_start";
 constexpr TStringBuf SessionParamsMemberName = "_yql_window_session_params";
 
-const TItemExprType* GetSortedColumnType(const TExprNode::TPtr& sortTraits, TExprContext& ctx) {
-    YQL_ENSURE(sortTraits->IsCallable("SortTraits"));
-
-    auto sortKeyLambda = sortTraits->ChildPtr(2);
-    YQL_ENSURE(sortKeyLambda->IsLambda());
-    const TTypeAnnotationNode* sortKeyType = sortKeyLambda->GetTypeAnn();
-    YQL_ENSURE(sortKeyType);
-    return ctx.MakeType<TItemExprType>(SortedColumnMemberName, sortKeyType);
-}
-
-bool ShouldAddSortedColumn(ESortOrder sortOrder) {
-    return sortOrder != ESortOrder::Unimportant;
-}
-
-TExprNode::TPtr PushSortedColumnInsideStream(const TExprNode::TPtr& partitionsByKeys, TExprContext& ctx) {
-    YQL_ENSURE(partitionsByKeys->IsCallable("PartitionsByKeys"));
-    YQL_ENSURE(partitionsByKeys->ChildrenSize() == 5);
-
-    auto pos = partitionsByKeys->Pos();
-    auto stream = partitionsByKeys->ChildPtr(0);
-    auto keySelector = partitionsByKeys->ChildPtr(1);
-    auto sortDirection = partitionsByKeys->ChildPtr(2);
-    auto sortKeySelector = partitionsByKeys->ChildPtr(3);
-    auto handler = partitionsByKeys->ChildPtr(4);
-
-    // If sortKeySelector is Void, nothing to do.
-    if (sortKeySelector->IsCallable("Void")) {
-        return partitionsByKeys;
-    }
-
-    // Add sorted column to the input stream using Map.
-    auto rowArg = ctx.NewArgument(pos, "row");
-    auto addMemberBody = ctx.Builder(pos)
-        .Callable("AddMember")
-            .Add(0, rowArg)
-            .Atom(1, SortedColumnMemberName)
-            .Apply(2, ctx.DeepCopyLambda(*sortKeySelector))
-                .With(0, rowArg)
-            .Seal()
-        .Seal()
-        .Build();
-
-    auto addMemberLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}), std::move(addMemberBody));
-
-    auto streamWithSortedColumn = ctx.Builder(pos)
-        .Callable("OrderedMap")
-            .Add(0, stream)
-            .Add(1, addMemberLambda)
-        .Seal()
-        .Build();
-
-#if 0  // TODO(atarasov5): Decide what to do with double lambda computation here and in non numeric range pipeline.
-    // Create new sortKeySelector that just extracts the sorted column.
-    auto newSortKeySelector = ctx.Builder(pos)
-        .Lambda()
-            .Param("item")
-            .Callable("Member")
-                .Arg(0, "item")
-                .Atom(1, SortedColumnMemberName)
-            .Seal()
-        .Seal()
-        .Build();
-#else // #if 0
-    auto newSortKeySelector = sortKeySelector;
-#endif // #if 0
-
-    // Build new PartitionsByKeys with modified arguments.
-    return ctx.Builder(pos)
-        .Callable("PartitionsByKeys")
-            .Add(0, streamWithSortedColumn)
-            .Add(1, keySelector)
-            .Add(2, sortDirection)
-            .Add(3, newSortKeySelector)
-            .Add(4, handler)
-        .Seal()
-        .Build();
-}
+struct TExpandContext {
+    TExprContext& Ctx;
+    TTypeAnnotationContext& Types;
+    TWindowSortedColumnPusher SortedColumnPusher;
+};
 
 EFrameBoundsType FrameBoundsType(const TWindowFrameSettings::TRowFrame& settings) {
     auto first = settings.first;
@@ -775,15 +703,6 @@ TWinFramesCollectorBuildResult BuildWinFramesCollector(TPositionHandle pos,
         .Build();
 
     return {.Queue = std::move(unboundedQueue), .WinFramesCollector = std::move(winFramesCollector)};
-}
-
-TWinFramesCollectorBuildResult BuildWinFramesCollector(TPositionHandle pos,
-                                                       TExprNode::TPtr stream,
-                                                       const TTypeAnnotationNode& itemType,
-                                                       const TExprNodeCoreWinFrameCollectorParams& params,
-                                                       TExprNode::TPtr dependsOn,
-                                                       TExprContext& ctx) {
-    return BuildWinFramesCollector(pos, stream, ExpandType(pos, itemType, ctx), params, dependsOn, ctx);
 }
 
 TExprNode::TPtr BuildQueue(TPositionHandle pos,
@@ -2038,8 +1957,8 @@ struct TQueueParams {
 
 TChain1MapTraits::TPtr ProcessRowFrameAggregateTraitNewPipeline(const TRawTrait& trait,
                                                                 TStringBuf name,
-                                                                TExprNodeCoreWinFrameCollectorBounds& bounds,
-                                                                TExprNodeCoreWinFrameCollectorBounds& incrementalBounds) {
+                                                                TRangeFrameCollectorBounds& bounds,
+                                                                TRangeFrameCollectorBounds& incrementalBounds) {
     switch (GetFrameTypeNew(trait.FrameSettings)) {
         case EFrameBoundsNewType::INCREMENTAL: {
             auto last = trait.FrameSettings.GetRowFrame().second;
@@ -2073,14 +1992,16 @@ TChain1MapTraits::TPtr ProcessRowFrameAggregateTraitNewPipeline(const TRawTrait&
 
 TChain1MapTraits::TPtr ProcessRangeFrameAggregateTraitNewPipeline(const TRawTrait& trait,
                                                                   TStringBuf name,
-                                                                  TExprNodeCoreWinFrameCollectorBounds& bounds,
-                                                                  TExprNodeCoreWinFrameCollectorBounds& incrementalBounds) {
+                                                                  TRangeFrameCollectorBounds& bounds,
+                                                                  TRangeFrameCollectorBounds& incrementalBounds,
+                                                                  TExpandContext& expandContext) {
     switch (GetFrameTypeNew(trait.FrameSettings)) {
         case EFrameBoundsNewType::INCREMENTAL: {
             auto last = trait.FrameSettings.GetRangeFrame().GetLast();
             MKQL_ENSURE(!last.IsInf(), "Last offset required.");
             auto getIncrementalHandle = [&]() -> TMaybe<THandle> {
-                return incrementalBounds.AddRangeIncremental(last);
+                const auto& sortedColumnNames = expandContext.SortedColumnPusher.GetRangeSortedColumnNames(trait.FrameSettings.GetRangeFrame());
+                return incrementalBounds.AddRangeIncremental(last, sortedColumnNames.second);
             };
             TMaybe<THandle> handle = getIncrementalHandle();
             return new TChain1MapTraitsIncremental(name, trait, handle);
@@ -2094,7 +2015,8 @@ TChain1MapTraits::TPtr ProcessRangeFrameAggregateTraitNewPipeline(const TRawTrai
             auto first = trait.FrameSettings.GetRangeFrame().GetFirst();
             auto last = trait.FrameSettings.GetRangeFrame().GetLast();
             YQL_ENSURE(!first.IsInf(), "First offset must be defined.");
-            auto handle = bounds.AddRange({first, last});
+            auto handle = bounds.AddRange({first, last},
+                                          expandContext.SortedColumnPusher.GetRangeSortedColumnNames(trait.FrameSettings.GetRangeFrame()));
             return new TChain1MapTraitsGeneric(name, trait, handle);
         }
         case EFrameBoundsNewType::EMPTY: {
@@ -2146,7 +2068,7 @@ TChain1MapTraits::TPtr ProcessRowFrameAggregateTraitOldPipeline(TQueueParams& qu
 
 TChain1MapTraits::TPtr ProcessLeadLag(const TRawTrait& trait,
                                       TStringBuf name,
-                                      TExprNodeCoreWinFrameCollectorBounds& bounds,
+                                      TRangeFrameCollectorBounds& bounds,
                                       ui64 currentRowIndex,
                                       TTypeAnnotationContext& types) {
     YQL_ENSURE(!trait.UpdateLambda);
@@ -2170,7 +2092,8 @@ TChain1MapTraits::TPtr ProcessLeadLag(const TRawTrait& trait,
 TChain1MapTraits::TPtr ProcessPartitionBaseTraits(const TRawTrait& trait,
                                                   TStringBuf name,
                                                   const TMaybe<TString>& partitionRowsColumn,
-                                                  TExprNodeCoreWinFrameCollectorBounds* incrementalBounds) {
+                                                  TRangeFrameCollectorBounds* incrementalBounds,
+                                                  TExpandContext& expandContext) {
     YQL_ENSURE(!trait.UpdateLambda);
     YQL_ENSURE(!trait.DefaultValue);
 
@@ -2182,7 +2105,8 @@ TChain1MapTraits::TPtr ProcessPartitionBaseTraits(const TRawTrait& trait,
             return {};
         }
         YQL_ENSURE(trait.FrameSettings.IsLeftInf() && trait.FrameSettings.IsRightCurrent());
-        return incrementalBounds->AddRangeIncremental(trait.FrameSettings.GetRangeFrame().GetLast());
+        return incrementalBounds->AddRangeIncremental(trait.FrameSettings.GetRangeFrame().GetLast(),
+                                                      expandContext.SortedColumnPusher.GetRangeSortedColumnNames(trait.FrameSettings.GetRangeFrame()).second);
     };
 
     if (trait.CalculateLambda->IsCallable("RowNumber")) {
@@ -2204,31 +2128,31 @@ TChain1MapTraits::TPtr ProcessPartitionBaseTraits(const TRawTrait& trait,
 
 TChain1MapTraits::TPtr ProcessFrameIndependedTraits(const TRawTrait& trait,
                                                     TStringBuf name,
-                                                    TExprNodeCoreWinFrameCollectorBounds& bounds,
-                                                    TExprNodeCoreWinFrameCollectorBounds& incrementalBounds,
+                                                    TRangeFrameCollectorBounds& bounds,
+                                                    TRangeFrameCollectorBounds& incrementalBounds,
                                                     const TMaybe<TString>& partitionRowsColumn,
                                                     ui64 currentRowIndex,
-                                                    TTypeAnnotationContext& types) {
+                                                    TExpandContext& expandContext) {
     YQL_ENSURE(!trait.UpdateLambda);
     YQL_ENSURE(!trait.DefaultValue);
     if (trait.CalculateLambdaLead.Defined()) {
-        return ProcessLeadLag(trait, name, bounds, currentRowIndex, types);
+        return ProcessLeadLag(trait, name, bounds, currentRowIndex, expandContext.Types);
     } else {
-        return ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, &incrementalBounds);
+        return ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, &incrementalBounds, expandContext);
     }
 }
 
 TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForNonNumericRange(const TExprNode::TPtr& frames,
                                                                      const TStructExprType& rowType,
                                                                      const TMaybe<TString>& partitionRowsColumn,
-                                                                     TExprContext& ctx) {
+                                                                     TExpandContext& expandContext) {
     TVector<TChain1MapTraits::TPtr> result;
-    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, rowType, ctx);
+    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, rowType, expandContext.Ctx);
     for (const auto& item : traits.RawTraits) {
         TStringBuf name = item.first;
         const TRawTrait& trait = item.second;
         if (!trait.InitLambda) {
-            result.push_back(ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, nullptr));
+            result.push_back(ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, nullptr, expandContext));
             continue;
         }
         YQL_ENSURE(trait.FrameSettings.GetFrameType() == EFrameType::FrameByRange);
@@ -2239,18 +2163,17 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForNonNumericRange(const TExpr
 }
 
 TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForRowsAndNumericRanges(TQueueParams& queueParams,
-                                                                          TExprNodeCoreWinFrameCollectorBounds& bounds,
-                                                                          TExprNodeCoreWinFrameCollectorBounds& incrementalBounds,
+                                                                          TRangeFrameCollectorBounds& bounds,
+                                                                          TRangeFrameCollectorBounds& incrementalBounds,
                                                                           const TExprNode::TPtr& frames,
                                                                           const TMaybe<TString>& partitionRowsColumn,
                                                                           const TStructExprType& rowType,
-                                                                          TExprContext& ctx,
-                                                                          TTypeAnnotationContext& typeCtx) {
+                                                                          TExpandContext& expandContext) {
     queueParams = {};
 
     TVector<TChain1MapTraits::TPtr> result;
 
-    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, rowType, ctx);
+    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, rowType, expandContext.Ctx);
 
     if (traits.LagQueueItemType->Cast<TStructExprType>()->GetSize()) {
         YQL_ENSURE(traits.QueueParams.MaxUnboundedPrecedingLag > 0);
@@ -2271,17 +2194,17 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForRowsAndNumericRanges(TQueue
         const TRawTrait& trait = item.second;
 
         if (!trait.InitLambda) {
-            result.push_back(ProcessFrameIndependedTraits(trait, name, bounds, incrementalBounds, partitionRowsColumn, currentRowIndex, typeCtx));
+            result.push_back(ProcessFrameIndependedTraits(trait, name, bounds, incrementalBounds, partitionRowsColumn, currentRowIndex, expandContext));
             continue;
         }
 
-        if (IsWindowNewPipelineEnabled(typeCtx)) {
+        if (IsWindowNewPipelineEnabled(expandContext.Types)) {
             if (trait.FrameSettings.GetFrameType() == EFrameType::FrameByRows) {
                 result.push_back(ProcessRowFrameAggregateTraitNewPipeline(trait, name, bounds, incrementalBounds));
             } else {
                 YQL_ENSURE(trait.FrameSettings.GetFrameType() == EFrameType::FrameByRange);
-                YQL_ENSURE(IsRangeWindowFrameEnabled(typeCtx));
-                result.push_back(ProcessRangeFrameAggregateTraitNewPipeline(trait, name, bounds, incrementalBounds));
+                YQL_ENSURE(IsRangeWindowFrameEnabled(expandContext.Types));
+                result.push_back(ProcessRangeFrameAggregateTraitNewPipeline(trait, name, bounds, incrementalBounds, expandContext));
             }
         } else {
             YQL_ENSURE(trait.FrameSettings.GetFrameType() == EFrameType::FrameByRows);
@@ -2365,24 +2288,6 @@ TExprNode::TPtr SelectMembers(TPositionHandle pos, const T& members, const TExpr
     return ctx.NewCallable(pos, "AsStruct", std::move(structItems));
 }
 
-template<typename T>
-TExprNode::TPtr RemoveMembers(TPositionHandle pos, const T& members, const TExprNode::TPtr& structNode, TExprContext& ctx) {
-    return ctx.Builder(pos)
-            .Callable("RemoveMembers")
-                .Add(0, structNode)
-                .List(1)
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        size_t i = 0;
-                        for (auto name : members) {
-                            parent.Atom(i++, name);
-                        }
-                        return parent;
-                    })
-                .Seal()
-            .Seal()
-            .Build();
-}
-
 TExprNode::TPtr HandleLaggingItems(TPositionHandle pos,
                                    const TExprNode::TPtr& rowArg,
                                    const TExprNode::TPtr& tupleOfOutputAndState,
@@ -2460,7 +2365,7 @@ TExprNode::TPtr HandleLaggingItems(TPositionHandle pos,
         .Build();
 }
 TExprNode::TPtr ReplaceAllShiftedElements(TPositionHandle pos, const TExprNode::TPtr& rowArg,  const TExprNodeList& laggingStructItems, TSet<TStringBuf> laggingNames, TExprContext& ctx) {
-    auto otherOutput = RemoveMembers(pos, laggingNames, rowArg, ctx);
+    auto otherOutput = RemoveMembers(pos, rowArg, laggingNames, ctx);
     auto laggingOutput = ctx.NewCallable(pos, "AsStruct", TExprNodeList(laggingStructItems));
     return ctx.Builder(pos)
         .Callable("FlattenMembers")
@@ -3253,8 +3158,10 @@ TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNo
     TExprNodeList nonCompactAggregatingFullFrames;
     TExprNodeList otherFrames;
 
+    bool seenWinFilter = false;
     for (auto& winOn : frames->ChildrenList()) {
-        if (!IsNonCompactFullFrame(*winOn, ctx)) {
+        seenWinFilter = seenWinFilter || TCoWinFilter::Match(winOn.Get());
+        if (seenWinFilter || !IsNonCompactFullFrame(*winOn, ctx)) {
             otherFrames.push_back(winOn);
             continue;
         }
@@ -3342,26 +3249,6 @@ TSplitResult SplitFramesByType(const TExprNode::TPtr& frames, TExprContext& ctx,
     };
 }
 
-ESortOrder ExtractAndVerifyRangeSortOrder(const TExprNode::TPtr& frames, TExprContext& ctx) {
-    TMaybe<ESortOrder> sortOrder;
-    for (auto& winOn : frames->ChildrenList()) {
-        if (TCoWinOnRange::Match(winOn.Get())) {
-            auto settings = TWindowFrameSettings::Parse(*winOn, ctx);
-            if (settings.GetFrameType() != EFrameType::FrameByRange) {
-                continue;
-            }
-            auto currentSortOrder = settings.GetRangeFrame().GetSortOrder();
-            if (!sortOrder) {
-                sortOrder = currentSortOrder;
-            } else {
-                YQL_ENSURE(*sortOrder == currentSortOrder, "All Range frames must have the same SortOrder");
-            }
-        }
-    }
-
-    return sortOrder.GetOrElse(ESortOrder::Unimportant);
-}
-
 const TStructExprType* ApplyFramesToType(const TStructExprType& inputType, const TStructExprType& finalOutputType, const TExprNode& frames, TExprContext& ctx) {
     TVector<const TItemExprType*> resultItems = inputType.GetItems();
     for (auto& frame : frames.ChildrenList()) {
@@ -3381,7 +3268,27 @@ const TStructExprType* ApplyFramesToType(const TStructExprType& inputType, const
     return ctx.MakeType<TStructExprType>(resultItems);
 }
 
-bool NeedPartitionRows(const TExprNode::TPtr& frames, const TStructExprType& rowType, TExprContext& ctx) {
+bool NeedPartitionRows(const TExprNode::TPtr& frames, const TStructExprType& rowType, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (CanPushdownFiltersOverWindow(&types)) {
+        // other branch does the same, but less efficiently and doesn't support WinFilter
+        for (auto& frame : frames->ChildrenList()) {
+            YQL_ENSURE(TCoWinOnBase::Match(frame.Get()));
+            if (TCoWinFilter::Match(frame.Get())) {
+                continue;
+            }
+            for (size_t i = 1; i < frame->ChildrenSize(); ++i) {
+                auto item = frame->ChildPtr(i);
+                YQL_ENSURE(item->IsList());
+                YQL_ENSURE(item->ChildrenSize() >= 2);
+                auto trait = item->ChildPtr(1);
+                if (trait->IsCallable({"CumeDist","NTile","PercentRank"})) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     if (frames->ChildrenSize() == 0) {
         return false;
     }
@@ -3488,12 +3395,12 @@ TExprNode::TPtr RemoveRowsColumn(TPositionHandle pos, const TExprNode::TPtr& inp
 
 TExprNode::TPtr ProccessAllIncrementalShifts(TPositionHandle pos,
                                              const TExprNode::TPtr& stream,
-                                             const TExprNodeCoreWinFrameCollectorBounds& incrementalBounds,
+                                             const TRangeFrameCollectorBounds& incrementalBounds,
                                              TExprNode::TPtr streamDependsOn,
                                              const TVector<TChain1MapTraits::TPtr>& traits,
                                              TMaybe<ESortOrder> sortOrder,
                                              TExprContext& ctx) {
-    TExprNodeCoreWinFrameCollectorParams params(incrementalBounds.AsBase(), sortOrder.GetOrElse(ESortOrder::Unimportant), TString(SortedColumnMemberName));
+    TExprNodeCoreWinFrameCollectorParams params(incrementalBounds.AsBase(), sortOrder.GetOrElse(ESortOrder::Unimportant));
     auto processedItemType = ctx.Builder(pos)
         .Callable("StreamItemType")
             .Callable(0, "TypeOf")
@@ -3521,9 +3428,9 @@ TExprNode::TPtr ProcessRowsAndNumericRangeFrames(TPositionHandle pos,
                                                  const TExprNode::TPtr& dependsOn,
                                                  const TExprNode::TPtr& frames,
                                                  const TMaybe<TString>& partitionRowsColumn,
-                                                 TMaybe<ESortOrder> sortOrder,
-                                                 TExprContext& ctx,
-                                                 TTypeAnnotationContext& typeCtx)
+                                                 const TExprNode::TPtr& originalSortKey,
+                                                 ESortOrder sortOrder,
+                                                 TExpandContext& expandContext)
 {
     if (frames->ChildrenSize() == 0) {
         return input;
@@ -3532,14 +3439,22 @@ TExprNode::TPtr ProcessRowsAndNumericRangeFrames(TPositionHandle pos,
     TExprNode::TPtr dataQueue;
     TQueueParams queueParams;
     // Deduplicate all same bounds.
-    TExprNodeCoreWinFrameCollectorBounds bounds(/*dedup=*/true);
-    TExprNodeCoreWinFrameCollectorBounds incrementalBounds(/*dedup=*/true);
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraitsForRowsAndNumericRanges(queueParams, bounds, incrementalBounds, frames, partitionRowsColumn, rowType, ctx, typeCtx);
+    TRangeFrameCollectorBounds bounds;
+    TRangeFrameCollectorBounds incrementalBounds;
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraitsForRowsAndNumericRanges(queueParams, bounds, incrementalBounds, frames, partitionRowsColumn, rowType, expandContext);
+    processed = expandContext.SortedColumnPusher.GetStreamWithSortedColumns(processed, originalSortKey);
+    auto processedItemType = expandContext.Ctx.Builder(pos)
+                                .Callable("StreamItemType")
+                                    .Callable(0, "TypeOf")
+                                        .Add(0, processed)
+                                    .Seal()
+                                .Seal()
+                                .Build();
 
-    if (IsWindowNewPipelineEnabled(typeCtx)) {
+    if (IsWindowNewPipelineEnabled(expandContext.Types)) {
         if (!bounds.Empty()) {
-            TExprNodeCoreWinFrameCollectorParams params(bounds.AsBase(), sortOrder.GetOrElse(ESortOrder::Unimportant), TString(SortedColumnMemberName));
-            auto WinFramesCollectorResult = BuildWinFramesCollector(pos, processed, rowType, params, dependsOn, ctx);
+            TExprNodeCoreWinFrameCollectorParams params(bounds.AsBase(), sortOrder);
+            auto WinFramesCollectorResult = BuildWinFramesCollector(pos, processed, processedItemType, params, dependsOn, expandContext.Ctx);
             dataQueue = WinFramesCollectorResult.Queue;
             processed = WinFramesCollectorResult.WinFramesCollector;
         }
@@ -3547,26 +3462,26 @@ TExprNode::TPtr ProcessRowsAndNumericRangeFrames(TPositionHandle pos,
         YQL_ENSURE(bounds.Empty(), "Bounds should be filled only inside new pipeline.");
         if (queueParams.DataQueueNeeded) {
             ui64 queueSize = (queueParams.DataOutpace == Max<ui64>()) ? Max<ui64>() : (queueParams.DataOutpace + queueParams.DataLag + 2);
-            dataQueue = BuildQueue(pos, rowType, queueSize, queueParams.DataLag, dependsOn, ctx);
-            processed = ctx.Builder(pos)
+            dataQueue = BuildQueue(pos, processedItemType, queueSize, queueParams.DataLag, dependsOn, expandContext.Ctx);
+            processed = expandContext.Ctx.Builder(pos)
                 .Callable("PreserveStream")
                     .Add(0, processed)
                     .Add(1, dataQueue)
-                    .Add(2, BuildUint64(pos, queueParams.DataOutpace, ctx))
+                    .Add(2, BuildUint64(pos, queueParams.DataOutpace, expandContext.Ctx))
                 .Seal()
                 .Build();
         }
     }
 
-    bool haveLagQueue = !IsWindowNewPipelineEnabled(typeCtx) && queueParams.LagQueueSize != 0;
-    ui64 lagQueueSize = IsWindowNewPipelineEnabled(typeCtx) ? 0: queueParams.LagQueueSize;
+    bool haveLagQueue = !IsWindowNewPipelineEnabled(expandContext.Types) && queueParams.LagQueueSize != 0;
+    ui64 lagQueueSize = IsWindowNewPipelineEnabled(expandContext.Types) ? 0: queueParams.LagQueueSize;
 
-    processed = ctx.Builder(pos)
+    processed = expandContext.Ctx.Builder(pos)
         .Callable("OrderedMap")
             .Callable(0, "Chain1Map")
                 .Add(0, std::move(processed))
-                .Add(1, BuildChain1MapInitLambda(pos, traits, dataQueue, lagQueueSize, queueParams.LagQueueItemType, ctx, typeCtx))
-            .Add(2, BuildChain1MapUpdateLambda(pos, traits, dataQueue, haveLagQueue, ctx, typeCtx))
+                .Add(1, BuildChain1MapInitLambda(pos, traits, dataQueue, lagQueueSize, queueParams.LagQueueItemType, expandContext.Ctx, expandContext.Types))
+            .Add(2, BuildChain1MapUpdateLambda(pos, traits, dataQueue, haveLagQueue, expandContext.Ctx, expandContext.Types))
             .Seal()
             .Lambda(1)
                 .Param("pair")
@@ -3578,15 +3493,15 @@ TExprNode::TPtr ProcessRowsAndNumericRangeFrames(TPositionHandle pos,
         .Seal()
         .Build();
 
-    if (IsWindowNewPipelineEnabled(typeCtx)) {
+    if (IsWindowNewPipelineEnabled(expandContext.Types)) {
         if (!incrementalBounds.Empty()) {
-            processed = ProccessAllIncrementalShifts(pos, processed, incrementalBounds, dependsOn, traits, sortOrder, ctx);
+            processed = ProccessAllIncrementalShifts(pos, processed, incrementalBounds, dependsOn, traits, sortOrder, expandContext.Ctx);
         }
     } else {
         YQL_ENSURE(incrementalBounds.Empty(), "Incremental bounds should be filled only inside new pipeline.");
     }
-
-    return WrapWithWinContext(processed, ctx);
+    processed = expandContext.SortedColumnPusher.ClearStreamFromSortedColumns(processed);
+    return WrapWithWinContext(processed, expandContext.Ctx);
 }
 
 TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
@@ -3595,22 +3510,21 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
                                              const TExprNode::TPtr& sortKey,
                                              const TExprNode::TPtr& frames,
                                              const TMaybe<TString>& partitionRowsColumn,
-                                             TExprContext& ctx,
-                                             TTypeAnnotationContext& typeCtx) {
+                                             TExpandContext& expandContext) {
     if (frames->ChildrenSize() == 0) {
         return input;
     }
 
     TExprNode::TPtr processed = input;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraitsForNonNumericRange(frames, rowType,  partitionRowsColumn, ctx);
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraitsForNonNumericRange(frames, rowType,  partitionRowsColumn, expandContext);
 
     // same processing as in WinOnRows
-    processed = ctx.Builder(pos)
+    processed = expandContext.Ctx.Builder(pos)
         .Callable("OrderedMap")
             .Callable(0, "Chain1Map")
                 .Add(0, std::move(processed))
-                .Add(1, BuildChain1MapInitLambda(pos, traits, nullptr, 0, nullptr, ctx, typeCtx))
-                .Add(2, BuildChain1MapUpdateLambda(pos, traits, nullptr, false, ctx, typeCtx))
+                .Add(1, BuildChain1MapInitLambda(pos, traits, nullptr, 0, nullptr, expandContext.Ctx, expandContext.Types))
+                .Add(2, BuildChain1MapUpdateLambda(pos, traits, nullptr, false, expandContext.Ctx, expandContext.Types))
             .Seal()
             .Lambda(1)
                 .Param("pair")
@@ -3621,11 +3535,11 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
             .Seal()
         .Seal()
         .Build();
-    processed = WrapWithWinContext(processed, ctx);
+    processed = WrapWithWinContext(processed, expandContext.Ctx);
 
     TExprNode::TPtr sortKeyLambda = sortKey;
     if (sortKey->IsCallable("Void")) {
-        sortKeyLambda = ctx.Builder(sortKey->Pos())
+        sortKeyLambda = expandContext.Ctx.Builder(sortKey->Pos())
             .Lambda()
                 .Param("row")
                 .Callable("Void")
@@ -3634,7 +3548,7 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
             .Build();
     }
 
-    auto processedItemType = ctx.Builder(pos)
+    auto processedItemType = expandContext.Ctx.Builder(pos)
         .Callable("StreamItemType")
             .Callable(0, "TypeOf")
                 .Add(0, processed)
@@ -3642,7 +3556,7 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
         .Seal()
         .Build();
 
-    auto variantType = ctx.Builder(pos)
+    auto variantType = expandContext.Ctx.Builder(pos)
         .Callable("VariantType")
             .Callable(0, "StructType")
                 .List(0)
@@ -3660,7 +3574,7 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
         .Build();
 
     // split rows by groups with equal sortKey
-    processed = ctx.Builder(pos)
+    processed = expandContext.Ctx.Builder(pos)
         .Callable("Condense1")
             .Add(0, processed)
             .Lambda(1)
@@ -3732,7 +3646,7 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
         .Seal()
         .Build();
 
-    processed = ctx.Builder(pos)
+    processed = expandContext.Ctx.Builder(pos)
         .Callable("OrderedMap")
             .Add(0, processed)
             .Lambda(1)
@@ -3745,13 +3659,13 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
         .Seal()
         .Build();
 
-    auto lastRowArg = ctx.NewArgument(pos, "lastRow");
-    auto currentRowArg = ctx.NewArgument(pos, "currentRow");
+    auto lastRowArg = expandContext.Ctx.NewArgument(pos, "lastRow");
+    auto currentRowArg = expandContext.Ctx.NewArgument(pos, "currentRow");
     auto currentRow = currentRowArg;
 
     for (auto& trait : traits) {
         TStringBuf name = trait->GetName();
-        currentRow = ctx.Builder(pos)
+        currentRow = expandContext.Ctx.Builder(pos)
             .Callable("AddMember")
                 .Callable(0, "RemoveMember")
                     .Add(0, currentRow)
@@ -3766,10 +3680,10 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
             .Build();
     }
 
-    auto overwriteWithLastRowLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, { currentRowArg, lastRowArg }), std::move(currentRow));
+    auto overwriteWithLastRowLambda = expandContext.Ctx.NewLambda(pos, expandContext.Ctx.NewArguments(pos, { currentRowArg, lastRowArg }), std::move(currentRow));
 
     // processed is currently stream of groups (=Variant<row, List<row>>>) with equal sort keys
-    processed = ctx.Builder(pos)
+    processed = expandContext.Ctx.Builder(pos)
         .Callable("OrderedFlatMap")
             .Add(0, processed)
             .Lambda(1)
@@ -3817,6 +3731,50 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
     return processed;
 }
 
+TExprNode::TPtr ApplyWinFilters(const TExprNode::TPtr& input, const TExprNodeList& filters, TExprContext& ctx) {
+    TExprNode::TPtr processed = input;
+    for (auto f : filters) {
+        YQL_ENSURE(TCoWinFilter::Match(f.Get()));
+        TCoWinFilter frame(f);
+        processed = ctx.Builder(frame.Pos())
+            .Callable("Filter")
+                .Add(0, processed)
+                .Lambda(1)
+                    .Param("row")
+                    .Apply(frame.Predicate().Ptr())
+                        .With(0)
+                            .Callable("CastStruct")
+                                .Arg(0, "row")
+                                .Add(1, frame.ItemType().Ptr())
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+    return processed;
+}
+
+TExprNode::TPtr ProcessNonFilterFrames(TPositionHandle pos, const TExprNode::TPtr& input,
+                                       const TExprNode::TPtr& frames,
+                                       const TStructExprType& outputRowType,
+                                       const TExprNode::TPtr& topLevelStreamArg,
+                                       const TMaybe<TString>& partitionRowsColumn,
+                                       const TExprNode::TPtr& sortKey,
+                                       const TExprNode::TPtr& sortTraits,
+                                       const TStructExprType*& rowType,
+                                       TExprContext& ctx, TTypeAnnotationContext& types)
+{
+    TExprNode::TPtr processed = input;
+    auto splitResult = SplitFramesByType(frames, ctx, types);
+    TExpandContext expandContext{.Ctx = ctx, .Types = types, .SortedColumnPusher = TWindowSortedColumnPusher(sortTraits, ctx, splitResult.NumericRangesAndRows)};
+
+    processed = ProcessRangeNonNumericFrames(pos, processed, *rowType, sortKey, splitResult.NonNumericRanges, partitionRowsColumn, expandContext);
+    rowType = ApplyFramesToType(*rowType, outputRowType, *splitResult.NonNumericRanges, ctx);
+    return ProcessRowsAndNumericRangeFrames(pos, processed, *rowType, topLevelStreamArg, splitResult.NumericRangesAndRows, partitionRowsColumn, sortKey, expandContext.SortedColumnPusher.SortOrder(), expandContext);
+}
+
 TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
                                            const TExprNode::TPtr& inputList,
                                            const TExprNode::TPtr& keyColumns,
@@ -3839,18 +3797,15 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
     TExprNode::TPtr sessionInit;
     TExprNode::TPtr sessionUpdate;
     ExtractSessionWindowParams(pos, sessionTraits, sessionKey, sessionKeyType, sessionParamsType, sessionSortTraits, sessionInit, sessionUpdate, ctx);
-    auto splitResult = SplitFramesByType(frames, ctx, types);
-    auto sortOrderForNumeric = ExtractAndVerifyRangeSortOrder(splitResult.NumericRangesAndRows, ctx);
     const auto originalRowType = inputList->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
     TVector<const TItemExprType*> rowItems = originalRowType->GetItems();
     if (sessionKeyType) {
         YQL_ENSURE(sessionParamsType);
         rowItems.push_back(ctx.MakeType<TItemExprType>(SessionStartMemberName, sessionKeyType));
         rowItems.push_back(ctx.MakeType<TItemExprType>(SessionParamsMemberName, sessionParamsType));
     }
-    if (ShouldAddSortedColumn(sortOrderForNumeric)) {
-        rowItems.push_back(GetSortedColumnType(sortTraits, ctx));
-    }
+
     auto rowType = ctx.MakeType<TStructExprType>(rowItems);
 
     auto keySelector = BuildKeySelector(pos, *rowType->Cast<TStructExprType>(), keyColumns, ctx);
@@ -3900,7 +3855,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
     TExprNode::TPtr processed = topLevelStreamArg;
 
     TMaybe<TString> partitionRowsColumn;
-    if (NeedPartitionRows(frames, *rowType, ctx)) {
+    if (NeedPartitionRows(frames, *rowType, ctx, types)) {
         partitionRowsColumn = AllocatePartitionRowsColumn(outputRowType);
         input = AddPartitionRowsColumn(pos, input, fullKeyColumns, *partitionRowsColumn, ctx, types);
     }
@@ -3908,21 +3863,26 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
     // All RANGE frames (even simplest RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     // will require additional memory to store TableRow()'s - so we want to start with minimum size of row
     // (i.e. process range frames first)
-    processed = ProcessRangeNonNumericFrames(pos, processed, *rowType, originalSortKey, splitResult.NonNumericRanges, partitionRowsColumn, ctx, types);
-    rowType = ApplyFramesToType(*rowType, outputRowType, *splitResult.NonNumericRanges, ctx);
-    processed = ProcessRowsAndNumericRangeFrames(pos, processed, *rowType, topLevelStreamArg, splitResult.NumericRangesAndRows, partitionRowsColumn, sortOrderForNumeric, ctx, types);
+    if (CanPushdownFiltersOverWindow(&types)) {
+        TVector<TExprNodeList> frameChunks = SplitByWinFilter(frames->ChildrenList());
+        for (auto chunk : frameChunks) {
+            YQL_ENSURE(!chunk.empty());
+            if (TCoWinFilter::Match(chunk.front().Get())) {
+                processed = ApplyWinFilters(processed, chunk, ctx);
+            } else {
+                auto nonFilterFrames = ctx.NewList(frames->Pos(), std::move(chunk));
+                processed = ProcessNonFilterFrames(pos, processed, nonFilterFrames, outputRowType, topLevelStreamArg, partitionRowsColumn, sortKey, sortTraits, rowType, ctx, types);
+            }
+        }
+    } else {
+        processed = ProcessNonFilterFrames(pos, processed, frames, outputRowType, topLevelStreamArg, partitionRowsColumn, sortKey, sortTraits, rowType, ctx, types);
+    }
 
     auto topLevelStreamProcessingLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {topLevelStreamArg}), std::move(processed));
 
     YQL_CLOG(INFO, Core) << "Expanded compact CalcOverWindow";
     auto res = BuildPartitionsByKeys(pos, input, keySelector, sortOrder, sortKey, topLevelStreamProcessingLambda, sessionKey,
         sessionInit, sessionUpdate, sessionColumns, ctx);
-
-
-    if (ShouldAddSortedColumn(sortOrderForNumeric)) {
-        res = PushSortedColumnInsideStream(res, ctx);
-        res = RemoveRowsColumn(pos, res, TString(SortedColumnMemberName), ctx);
-    }
 
     if (partitionRowsColumn) {
         res = RemoveRowsColumn(pos, res, *partitionRowsColumn, ctx);
@@ -4046,6 +4006,10 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
         TExprNodeList newFrames;
         for (auto frameNode : calc.Frames().Ref().Children()) {
             YQL_ENSURE(TCoWinOnBase::Match(frameNode.Get()));
+            if (TCoWinFilter::Match(frameNode.Get())) {
+                newFrames.push_back(frameNode);
+                continue;
+            }
             TExprNodeList winOnArgs = { frameNode->ChildPtr(0) };
             for (ui32 i = 1; i < frameNode->ChildrenSize(); ++i) {
                 auto kvTuple = frameNode->ChildPtr(i);
@@ -4100,14 +4064,105 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
         .Done().Ptr();
 }
 
-bool IsUnbounded(const NNodes::TCoFrameBound& bound) {
-    if (bound.Ref().ChildrenSize() < 2) {
-        return false;
+TExprNode::TPtr BuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNodeList& calcs, TExprContext& ctx) {
+    if (calcs.empty()) {
+        return input;
     }
-    if (auto maybeAtom = bound.Bound().Maybe<TCoAtom>()) {
-        return maybeAtom.Cast().Value() == "unbounded";
+
+    TExprNode::TPtr result;
+    if (calcs.size() == 1) {
+        TCoCalcOverWindowTuple calc(calcs[0]);
+        if (calc.SessionSpec().Maybe<TCoVoid>()) {
+            YQL_ENSURE(calc.SessionColumns().Size() == 0);
+            result = Build<TCoCalcOverWindow>(ctx, pos)
+                .Input(input)
+                .Keys(calc.Keys())
+                .SortSpec(calc.SortSpec())
+                .Frames(calc.Frames())
+                .Done().Ptr();
+        } else {
+            result = Build<TCoCalcOverSessionWindow>(ctx, pos)
+                .Input(input)
+                .Keys(calc.Keys())
+                .SortSpec(calc.SortSpec())
+                .Frames(calc.Frames())
+                .SessionSpec(calc.SessionSpec())
+                .SessionColumns(calc.SessionColumns())
+                .Done().Ptr();
+        }
+    } else {
+        result = Build<TCoCalcOverWindowGroup>(ctx, pos)
+            .Input(input)
+            .Calcs(ctx.NewList(pos, TExprNodeList(calcs)))
+            .Done().Ptr();
     }
-    return false;
+
+    return result;
+}
+
+TExprNode::TPtr MakeRowsUPCRFrameSpec(TPositionHandle pos, const TExprNode::TPtr& sortSpec, TExprContext& ctx, TTypeAnnotationContext& types) {
+    return ctx.Builder(pos)
+        .List()
+            .List(0)
+                .Atom(0, "begin", TNodeFlags::Default)
+                .Callable(1, "Void")
+                .Seal()
+            .Seal()
+            .List(1)
+                .Atom(0, "end", TNodeFlags::Default)
+                .Callable(1, "Int32")
+                    .Atom(0, "0", TNodeFlags::Default)
+                .Seal()
+            .Seal()
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                if (!IsWindowNewPipelineEnabled(types)) {
+                    return parent;
+                }
+                parent
+                    .List(2)
+                        .Atom(0, "sortSpec", TNodeFlags::Default)
+                        .Add(1, sortSpec)
+                    .Seal();
+                return parent;
+            })
+        .Seal()
+        .Build();
+}
+
+bool HasWinFilters(const TCoCalcOverWindowTuple& calc) {
+    return AnyOf(calc.Frames().Ref().Children(), [](const TExprNode::TPtr& frame) { return TCoWinFilter::Match(frame.Get()); });
+}
+
+TVector<TExprNodeList> SplitByWinFilter(const TExprNodeList& framesOrCalcs) {
+    if (framesOrCalcs.empty()) {
+        return {};
+    }
+    bool isFilter = false;
+    const bool isCalcs = TCoCalcOverWindowTuple::Match(framesOrCalcs.front().Get());
+    TExprNodeList currentItems;
+    TVector<TExprNodeList> result;
+    for (auto curr : framesOrCalcs) {
+        bool currHasFilter;
+        if (isCalcs) {
+            TCoCalcOverWindowTuple calc(curr);
+            currHasFilter = HasWinFilters(calc);
+        } else {
+            YQL_ENSURE(TCoWinOnBase::Match(curr.Get()));
+            currHasFilter = TCoWinFilter::Match(curr.Get());
+        }
+        if (currHasFilter != isFilter) {
+            isFilter = !isFilter;
+            if (!currentItems.empty()) {
+                result.emplace_back(std::move(currentItems));
+                currentItems = {};
+            }
+        }
+        currentItems.push_back(curr);
+    }
+    if (!currentItems.empty()) {
+        result.emplace_back(currentItems);
+    }
+    return result;
 }
 
 TExprNode::TPtr ZipWithSessionParamsLambda(TPositionHandle pos, const TExprNode::TPtr& partitionKeySelector,

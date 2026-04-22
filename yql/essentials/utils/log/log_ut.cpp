@@ -93,7 +93,11 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Levels) {
     YQL_LOG(DEBUG) << "debug message";
     YQL_LOG(TRACE) << "trace message";
 
-    TString fatalStr, errorStr, warnStr, infoStr, _;
+    TString fatalStr;
+    TString errorStr;
+    TString warnStr;
+    TString infoStr;
+    TString _;
     Split(out.Str(), '\n', fatalStr, errorStr, warnStr, infoStr, _);
 
     {
@@ -136,8 +140,16 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Components) {
     YQL_CLOG(INFO, Performance) << "performance message";
     YQL_CLOG(INFO, Perf) << "perf message";
 
-    TString defaultStr, coreStr, sqlStr, commonStr, ytStr,
-        kikimrStr, rtmrStr, performanceStr, perfStr, _;
+    TString defaultStr;
+    TString coreStr;
+    TString sqlStr;
+    TString commonStr;
+    TString ytStr;
+    TString kikimrStr;
+    TString rtmrStr;
+    TString performanceStr;
+    TString perfStr;
+    TString _;
     Split(out.Str(), '\n', defaultStr, coreStr, sqlStr,
           commonStr, ytStr,
           kikimrStr, rtmrStr,
@@ -211,7 +223,9 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Conditional) {
     YQL_CLOG_IF(INFO, Perf, true) << "perf info message";
     YQL_CLOG_IF(INFO, Perf, false) << "perf info message";
 
-    TString defaultStr, perfStr, _;
+    TString defaultStr;
+    TString perfStr;
+    TString _;
     Split(out.Str(), '\n', defaultStr, perfStr, _);
 
     {
@@ -250,7 +264,12 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Contexts) {
     UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
     YQL_LOG(INFO) << "level0 - end";
 
-    TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString row3Str;
+    TString row4Str;
+    TString row5Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
 
     {
@@ -320,7 +339,12 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(UnknownSessionContexts) {
         YQL_LOG(INFO) << "level0 - end";
     }
 
-    TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString row3Str;
+    TString row4Str;
+    TString row5Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
     {
         TLogRow logRow = ParseLogRow(row1Str);
@@ -391,7 +415,12 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(SessionContexts) {
         YQL_LOG(INFO) << "level0 - end";
     }
 
-    TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString row3Str;
+    TString row4Str;
+    TString row5Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
     {
         TLogRow logRow = ParseLogRow(row1Str);
@@ -442,7 +471,9 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ThrowWithContext) {
         UNIT_ASSERT_STRINGS_EQUAL(e.AsStrBuf(), "some message");
 
         TString throwedLogCtx = ThrowedLogContextPath();
-        TStringBuf file, line, context;
+        TStringBuf file;
+        TStringBuf line;
+        TStringBuf context;
         TStringBuf(throwedLogCtx).Split(".cpp:", file, line);
         line.Split(':', line, context);
 
@@ -491,7 +522,12 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ContextOverride) {
     }
     UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
 
-    TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString row3Str;
+    TString row4Str;
+    TString row5Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
 
     {
@@ -553,7 +589,10 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Profiling) {
     }
     UNIT_ASSERT(isExecuted);
 
-    TString row1Str, row2Str, row3Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString row3Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, row3Str, _);
 
     {
@@ -602,7 +641,9 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ProfilingFuncs) {
     Func1(1, 2);
     Func2(1, 2);
 
-    TString row1Str, row2Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, _);
 
     {
@@ -652,7 +693,10 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Limit1) {
     YQL_CLOG(INFO, Core) << "message2";
     YQL_CLOG(INFO, Core) << "message3";
 
-    TString row1Str, row2Str, row3Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString row3Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, row3Str, _);
 
     {
@@ -694,7 +738,11 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Limit2) {
     YQL_CLOG(INFO, Core) << "message2";
     YQL_CLOG(WARN, Core) << "message3";
 
-    TString row1Str, row2Str, row3Str, row4Str, _;
+    TString row1Str;
+    TString row2Str;
+    TString row3Str;
+    TString row4Str;
+    TString _;
     Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, _);
 
     {

@@ -1274,7 +1274,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
 }
 
 TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 6, ctx)) {
+    if (!EnsureMinArgsCount(*input, 6, ctx)) {
         return TStatus::Error;
     }
 

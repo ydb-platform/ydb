@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 

@@ -50,7 +50,7 @@ private:
 
 namespace NYql::NJsonPath {
 
-const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
+TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
     if (!IsUtf(path)) {
         issues.AddIssue(TPosition(1, 1, "jsonpath"), "JsonPath must be UTF-8 encoded string");
         issues.back().SetCode(TIssuesIds::JSONPATH_PARSE_ERROR, TSeverityIds::S_ERROR);
@@ -91,13 +91,13 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     return ast;
 }
 
-const TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr& ast) {
+TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr& ast) {
     TJsonPathBuilder builder;
     ast->Accept(builder);
     return builder.ShrinkAndGetResult();
 }
 
-const TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
+TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t maxParseErrors) {
     const auto ast = ParseJsonPathAst(path, issues, maxParseErrors);
     if (!issues.Empty()) {
         return {};

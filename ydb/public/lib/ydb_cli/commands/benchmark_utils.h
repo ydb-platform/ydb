@@ -110,6 +110,7 @@ struct TQueryBenchmarkSettings {
     std::optional<TString> PlanFileName;
     bool WithProgress = false;
     ETxMode TxMode = ETxMode::SerializableRW;
+    NQuery::EStatsMode StatsMode = NQuery::EStatsMode::Full;
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
     // Maximum number of rows to store per result index.
     // Used both for CompareWithExpected and for output.

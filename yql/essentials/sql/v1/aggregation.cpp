@@ -117,7 +117,7 @@ protected:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name_));
-            if (IsOverWindow() || IsOverWindowDistinct()) {
+            if (src && (IsOverWindow() || IsOverWindowDistinct())) {
                 src->AddTmpWindowColumn(Name_);
             }
         }
@@ -387,7 +387,7 @@ private:
             suffix = "";
         }
 
-        bool isOverState = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
+        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
 
         ui32 adjustArgsCount;
         if (isFactory) {
@@ -581,7 +581,7 @@ private:
             suffix = "";
         }
 
-        bool isOverState = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
+        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
         bool isMany = (suffix == "MergeManyFinalize");
 
         if (isFactory) {
@@ -617,7 +617,7 @@ private:
                 Intervals_ = Y("Cast", exprs.back(), Q("Uint32"));
             }
         } else {
-            if (exprs.size() >= 1) {
+            if (!exprs.empty()) {
                 const auto integer = exprs.back()->IsIntegerLiteral();
                 if (!integer) {
                     ctx.Error(Pos_) << "Aggregation function factory " << Name_ << " should have second interger argument";
@@ -943,7 +943,7 @@ private:
             suffix = "";
         }
 
-        bool isOverState = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
+        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
         bool isMany = (suffix == "MergeManyFinalize");
 
         ui32 adjustArgsMinCount;
@@ -1131,7 +1131,7 @@ private:
             suffix = "";
         }
 
-        bool isOverState = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
+        bool isOverState = !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
         bool isMany = (suffix == "MergeManyFinalize");
 
         ui32 adjustArgsCount;

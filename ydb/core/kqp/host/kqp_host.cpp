@@ -1592,7 +1592,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetFromConfig(SessionCtx->Config());
+            .SetFromConfig(SessionCtx->Config())
+            .SetYqlSelect(settings.YqlSelect);
         auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         if (!compileResult.QueryExpr) {
             return nullptr;
@@ -1679,7 +1680,8 @@ private:
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
                 .SetUsePgParser(settings.UsePgParser)
-                .SetFromConfig(SessionCtx->Config());
+                .SetFromConfig(SessionCtx->Config())
+                .SetYqlSelect(settings.YqlSelect);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
 
             if (compileResult.NeedToSplit) {

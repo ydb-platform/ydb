@@ -31,7 +31,7 @@ PEERDIR(
     contrib/libs/fmt
     contrib/libs/jwt-cpp
     library/cpp/json/writer
-    ydb/core/security/certificate_check
+    ydb/core/security/certificate_check/test_utils
     ydb/public/api/client/yc_public/iam
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/table

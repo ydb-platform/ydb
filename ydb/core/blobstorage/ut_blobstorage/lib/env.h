@@ -442,6 +442,7 @@ struct TEnvironmentSetup {
                         auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
+                        drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
                         auto& ns = config->NameserviceConfig;
@@ -573,7 +574,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
-
+                ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL
 
                 {

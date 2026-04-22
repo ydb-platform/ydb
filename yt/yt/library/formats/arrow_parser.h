@@ -9,10 +9,10 @@ namespace NYT::NFormats {
 
 struct TArrowParserOptions
 {
-    //! If true, Arrow internal allocations are capped at a fixed limit per
-    //! single allocation. Enable this in fuzz tests to convert OOM into
-    //! a catchable exception instead of a process kill.
-    bool EnableMemoryLimit = false;
+    //! Caps Arrow internal allocations and record-batch size checks.
+    //! std::nullopt means no limit. Set to a reasonable value (e.g. 512 MB) in
+    //! fuzz tests to convert OOM into a catchable exception.
+    std::optional<i64> MaxAllocationBytes;
 };
 
 std::unique_ptr<IParser> CreateParserForArrow(

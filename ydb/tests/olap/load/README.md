@@ -762,7 +762,7 @@ class LogWorkloadBase(WorkloadTestBase):
     def test_workload_log_column(self):
         command_args_template = (
             f"--endpoint {YdbCluster.ydb_endpoint} --database /{YdbCluster.ydb_database} "
-            "workload log run bulk_upsert --rows 2000 --threads 10 "
+            "workload log run bulk-upsert --rows 2000 --threads 10 "
             "--timestamp_deviation 180 --seconds 600 --path log_workload_column_test"
         )
         
@@ -969,7 +969,7 @@ class LogWorkloadBase(WorkloadTestBase):
         
         command_args_template = (
             f"--endpoint {YdbCluster.ydb_endpoint} --database /{YdbCluster.ydb_database} "
-            "workload log run bulk_upsert --rows 2000 --threads 10 "
+            "workload log run bulk-upsert --rows 2000 --threads 10 "
             "--timestamp_deviation 180 --seconds 600 --path log_workload_column_test"
         )
         

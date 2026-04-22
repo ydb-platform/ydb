@@ -56,14 +56,20 @@ def test(case):
     cfg = yql_utils.get_program_cfg(None, case, DATA_PATH)
     files = {}
     diff_tool = None
-    scan_udfs = False
+    scan_udfs = os.getenv('YQL_UDF_NO_SCAN') != 'yes'
+    # check for purecalc-only UDFs (TODO: replace with YQL_UDF_NO_SCAN macro)
+    if project_path.startswith('robot/rthub/yql/udfs') or project_path.startswith('robot/zora'):
+        scan_udfs = False
+
     for item in cfg:
         if item[0] == 'file':
             files[item[1]] = item[2]
-        if item[0] == 'diff_tool':
+        elif item[0] == 'diff_tool':
             diff_tool = item[1:]
-        if item[0] == 'scan_udfs':
+        elif item[0] == 'scan_udfs':
             scan_udfs = True
+        elif item[0] == 'disable_scan_udfs':
+            scan_udfs = False
 
     in_tables = yql_utils.get_input_tables(None, cfg, DATA_PATH, def_attr=yql_utils.KSV_ATTR)
 

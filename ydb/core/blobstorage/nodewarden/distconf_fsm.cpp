@@ -2,6 +2,8 @@
 #include "distconf_quorum.h"
 #include "distconf_invoke.h"
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::UpdateQuorums() {
@@ -718,8 +720,8 @@ namespace NKikimr::NStorage {
                 configToPropose->SetGeneration(propositionBase->GetGeneration() + 1);
             } else {
                 Y_VERIFY_S(propositionBase->GetGeneration() < configToPropose->GetGeneration(),
-                    "PropositionBase# " << SingleLineProto(*propositionBase)
-                    << " ConfigToPropose# " << SingleLineProto(*configToPropose));
+                    "PropositionBase# " << NKikimr::SecureDebugString(*propositionBase)
+                    << " ConfigToPropose# " << NKikimr::SecureDebugString(*configToPropose));
             }
 
             configToPropose->MutablePrevConfig()->CopyFrom(*propositionBase);
@@ -744,8 +746,8 @@ namespace NKikimr::NStorage {
             }
             if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
                 return TStringBuilder() << "incorrect config proposed: " << *error
-                    << " Base# " << SingleLineProto(*propositionBase)
-                    << " Proposed# " << SingleLineProto(*configToPropose);
+                    << " Base# " << NKikimr::SecureDebugString(*propositionBase)
+                    << " Proposed# " << NKikimr::SecureDebugString(*configToPropose);
             }
         } else if (auto error = ValidateConfig(*configToPropose)) {
             return TStringBuilder() << "incorrect config proposed: " << *error;

@@ -25,7 +25,24 @@ public:
             return false;
         }
 
-        Apply_ = Y("YqlAgg", Factory(), Options(), TypeStub(), ExtractorBody(ctx));
+        Apply_ = Y();
+
+        if (IsWindow()) {
+            Apply_ = L(std::move(Apply_), "YqlAggWin");
+        } else {
+            Apply_ = L(std::move(Apply_), "YqlAgg");
+        }
+
+        Apply_ = L(std::move(Apply_), Factory());
+
+        if (IsWindow()) {
+            Apply_ = L(std::move(Apply_), Q(WindowName_));
+        }
+
+        Apply_ = L(std::move(Apply_), Options());
+        Apply_ = L(std::move(Apply_), TypeStub());
+        Apply_ = L(std::move(Apply_), ExtractorBody(ctx));
+
         return true;
     }
 
@@ -37,9 +54,21 @@ public:
         return new TYqlAggregation(*this);
     }
 
+    void SetWindowName(TString name) {
+        WindowName_ = std::move(name);
+    }
+
 private:
     TNodePtr Factory() const {
-        TNodePtr factory = Y("YqlAggFactory", Name());
+        TNodePtr factory = Y();
+
+        if (IsWindow()) {
+            factory = L(std::move(factory), "YqlWinFactory");
+        } else {
+            factory = L(std::move(factory), "YqlAggFactory");
+        }
+
+        factory = L(std::move(factory), Name());
         for (TNodePtr arg : Args | std::views::drop(1)) {
             factory = L(std::move(factory), std::move(arg));
         }
@@ -54,7 +83,7 @@ private:
 
     TNodePtr Options() const {
         TNodePtr options = Y();
-        if (Mode == EAggregateMode::Distinct) {
+        if (IsDistinct()) {
             options = L(std::move(options), Q(Y(Q("distinct"))));
         }
         return Q(std::move(options));
@@ -68,7 +97,18 @@ private:
         return Aggregation_->GetExtractorBody(/*many=*/false, ctx);
     }
 
+    bool IsDistinct() const {
+        return Mode == EAggregateMode::Distinct ||
+               Mode == EAggregateMode::OverWindowDistinct;
+    }
+
+    bool IsWindow() const {
+        return Mode == EAggregateMode::OverWindow ||
+               Mode == EAggregateMode::OverWindowDistinct;
+    }
+
     const TAggregationPtr Aggregation_;
+    TString WindowName_;
     TNodePtr Apply_;
 };
 
@@ -77,18 +117,12 @@ bool IsSupported(EAggregationType type) {
            type == COUNT;
 }
 
-bool IsSupported(EAggregateMode mode) {
-    return mode == EAggregateMode::Normal ||
-           mode == EAggregateMode::Distinct;
-}
-
 bool IsSupported(const TVector<TNodePtr>& args) {
     return args.size() == 1;
 }
 
 bool IsSupported(TYqlAggregationArgs& args) {
     return IsSupported(args.Type) &&
-           IsSupported(args.Mode) &&
            IsSupported(args.Args);
 }
 
@@ -98,6 +132,13 @@ TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args) 
     }
 
     return TNonNull(TNodePtr(new TYqlAggregation(std::move(position), std::move(args))));
+}
+
+TNodePtr WrapYqlAggregationOverWindow(TNodePtr node, TString windowName) {
+    auto* x = dynamic_cast<TYqlAggregation*>(node.Get());
+    YQL_ENSURE(x, "YqlAggregation expected");
+    x->SetWindowName(std::move(windowName));
+    return node;
 }
 
 } // namespace NSQLTranslationV1

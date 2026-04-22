@@ -361,6 +361,10 @@ private:
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
         prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
         prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
+        // For NEW RBO YqlSelect is force.
+        if (EnableNewRBO) {
+            prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        }
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -645,11 +649,12 @@ private:
 
     NJson::TJsonValue CollectMeta() {
         NJson::TJsonValue meta;
-        meta.AppendValue("metadata");
         NJson::TJsonValue parameters;
         if (QueryId.QueryParameterTypes) {
+            NProtobufJson::TProto2JsonConfig config;
+            config.SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
             for (const auto& [name, typedValue] : *QueryId.QueryParameterTypes) {
-                parameters[name] = Base64Encode(typedValue.SerializeAsString());
+                NProtobufJson::Proto2Json(typedValue, parameters[name], config);
             }
         }
         meta["parameters"] = parameters;

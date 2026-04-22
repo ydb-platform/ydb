@@ -39,8 +39,9 @@ TIntrusivePtr<TOpLimit> EmitFinalAndIntermediateLimits(const TIntrusivePtr<TOpLi
     const auto limitCond = limit->GetLimitCond();
     const auto pos = limit->Pos;
     const auto props = limit->Props;
+    const auto offset = limit->GetOffsetCond();
     const auto intermediateLimit = MakeIntrusive<TOpLimit>(limit->GetInput(), pos, props, limitCond, EOpPhase::Intermediate);
-    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, props, limitCond, EOpPhase::Final);
+    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, props, limitCond, offset, EOpPhase::Final);
 }
 
 } // namespace
@@ -77,7 +78,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
             auto read = CastOperator<TOpRead>(limitInput);
             const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
             newOperator = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda,
-                                                 limitCond, read->Props, read->Pos);
+                                                 limitCond, read->GetRanges(), read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
         }
     }
 

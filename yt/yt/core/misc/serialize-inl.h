@@ -2050,6 +2050,26 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
     };
 };
 
+template <class T, class C>
+struct TSerializerTraits<NThreading::TAtomicObject<T>, C, void>
+{
+    struct TSerializer
+    {
+        static void Save(C& context, const NThreading::TAtomicObject<T>& object)
+        {
+            object.Read([&] (const T& value) {
+                TDefaultSerializer::Save(context, value);
+            });
+        }
+        static void Load(C& context, NThreading::TAtomicObject<T>& object)
+        {
+            object.Transform([&] (T& value) {
+                TDefaultSerializer::Load(context, value);
+            });
+        }
+    };
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

@@ -35,6 +35,14 @@ void IOperator::ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TInt
     Y_ENSURE(false, "Did not find a child to replace");
 }
 
+NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
+{
+    Y_UNUSED(explainFlags);
+    auto res = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+    res["Name"] = GetExplainName();
+    return res;
+}
+
 /**
  * EmptySource operator methods
  */
@@ -64,32 +72,8 @@ TOpRead::TOpRead(TExprNode::TPtr node)
 }
 
 TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos)
-    : IOperator(EOperator::Source, pos)
-    , Alias(alias)
-    , Columns(columns)
-    , OutputIUs(outputIUs)
-    , StorageType(storageType)
-    , TableCallable(tableCallable)
-    , OlapFilterLambda(olapFilterLambda) {
-}
-
-TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
-                 TPositionHandle pos)
-    : IOperator(EOperator::Source, pos, props)
-    , Alias(alias)
-    , Columns(columns)
-    , OutputIUs(outputIUs)
-    , StorageType(storageType)
-    , TableCallable(tableCallable)
-    , OlapFilterLambda(olapFilterLambda)
-    , Limit(limit) {
-}
-
-TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
-                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const ESortDir sortDir,
-                 const TPhysicalOpProps& props, TPositionHandle pos)
+                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , Columns(columns)
@@ -98,6 +82,8 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , TableCallable(tableCallable)
     , OlapFilterLambda(olapFilterLambda)
     , Limit(limit)
+    , Ranges(ranges)
+    , OriginalPredicate(originalPredicate)
     , SortDir(sortDir) {
 }
 
@@ -148,10 +134,17 @@ TString TOpRead::ToString(TExprContext& ctx) {
     if (OlapFilterLambda) {
         res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
     }
+    if (Ranges) {
+        res << " Ranges: (" << PrintRBOExpression(Ranges, ctx) << ")";
+    }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
         res << ")";
     }
+    if (OriginalPredicate.has_value()) {
+        res << " Original predicate: (" << PrintRBOExpression(OriginalPredicate->Node, ctx) << ")";
+    }
+
     return res;
 }
 
@@ -541,6 +534,10 @@ TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> ri
                  const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {}
 
+TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
+                 const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters)
+    : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {}
+
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
     TVector<TInfoUnit> res;
 
@@ -566,6 +563,12 @@ TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
         result.push_back(leftKey);
         result.push_back(rightKey);
     }
+
+    for (const auto & f : JoinFilters) {
+        auto filterIUs = f.GetInputIUs(true, true);
+        result.insert(result.end(), filterIUs.begin(), filterIUs.end());
+    }
+
     return result;
 }
 
@@ -582,6 +585,18 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
             k.second = renameMap.at(k.second);
         }
     }
+
+    if (JoinFilters.size()) {
+        Y_ENSURE(false, "Join filters unsupported at this stage");
+    }
+}
+
+TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
+    TVector<std::reference_wrapper<TExpression>> result;
+    for (auto & expr : JoinFilters) {
+        result.push_back(expr);
+    }
+    return result;
 }
 
 const THashMap<NKqp::EJoinAlgoType, TString> AlgoNames = {
@@ -606,6 +621,13 @@ TString TOpJoin::ToString(TExprContext& ctx) {
         auto [x,y] = JoinKeys[i];
         res << x.GetFullName() + "=" + y.GetFullName();
         if (i != JoinKeys.size() - 1) {
+            res << ", ";
+        }
+    }
+    res << "], Filters: [";
+    for (size_t i = 0; i < JoinFilters.size(); i++) {
+        res << JoinFilters[i].ToString();
+        if (i != JoinFilters.size() - 1) {
             res << ", ";
         }
     }
@@ -639,9 +661,24 @@ TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TE
     , LimitPhase(limitPhase) {
 }
 
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, input)
+    , LimitCond(limitCond)
+    , OffsetCond(offsetCond)
+    , LimitPhase(limitPhase) {
+}
+
 TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase)
     : IUnaryOperator(EOperator::Limit, pos, props, input)
     , LimitCond(limitCond)
+    , LimitPhase(limitPhase) {
+}
+
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+                   const std::optional<TExpression> offsetCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, props, input)
+    , LimitCond(limitCond)
+    , OffsetCond(offsetCond)
     , LimitPhase(limitPhase) {
 }
 
@@ -660,6 +697,9 @@ TString TOpLimit::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder builder;
     builder << "Limit: " << LimitCond.ToString() << " ";
+    if (OffsetCond.has_value()) {
+        builder << "Offset: " << OffsetCond->ToString() << " ";
+    }
     builder << "Phase: " << ToStringPhase(LimitPhase);
     return builder;
 }
@@ -931,7 +971,12 @@ void TOpRoot::PlanToStringRec(TIntrusivePtr<IOperator> op, TExprContext& ctx, TS
         tabString << "  ";
     }
 
-    builder << tabString << op->ToString(ctx) << "\n";
+    builder << tabString << op->ToString(ctx);
+    if (op->Props.StageId.has_value()) {
+        builder << " StageId: " << *op->Props.StageId;
+    }
+    builder << "\n";
+
     if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata) && op->Props.Metadata.has_value()) {
         builder << tabString << " ";
         builder << op->Props.Metadata->ToString(printOptions) << "\n";

@@ -102,7 +102,8 @@ TAlignedDeviceHandler::TAlignedDeviceHandler(
           .DiskId = DiskId,
           .BlockSize = BlockSize,
           .BlockCount = params.BlockCount,
-          .BlocksPerStripe = params.BlocksPerStripeCount}))
+          .BlocksPerStripe = params.BlocksPerStripeCount,
+          .VChunkSize = params.VChunkSize}))
 {
     Y_ABORT_UNLESS(MaxBlockCount > 0);
     Y_ABORT_UNLESS(MaxBlockCountForZeroBlocksRequest > 0);

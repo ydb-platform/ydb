@@ -165,7 +165,7 @@ template <>
 Y_FORCE_INLINE std::array<ui8, 8> BitToByteExpand(ui8 x) {
     std::array<ui8, 8> result;
     ui64 expanded = ReplicateEachBitEightTimes(x);
-    memcpy(&result[0], &expanded, sizeof(expanded));
+    memcpy(result.data(), &expanded, sizeof(expanded));
     return result;
 }
 

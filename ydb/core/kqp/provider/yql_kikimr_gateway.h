@@ -20,6 +20,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -73,11 +74,9 @@ struct TIndexDescription {
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = 0;
-        ui32 HashesCount = 0;
-        ui32 FilterSizeBytes = 0;
-        ui32 RecordsCount = 0;
-        bool CaseSensitive = true;
+        std::optional<ui32> NgramSize;
+        std::optional<double> FalsePositiveProbability;
+        std::optional<bool> CaseSensitive;
     };
 
     enum class EType : ui32 {
@@ -1446,7 +1445,7 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) = 0;
 

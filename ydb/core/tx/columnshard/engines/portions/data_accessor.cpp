@@ -358,6 +358,24 @@ ui64 TPortionDataAccessor::GetIndexRawBytes(const std::set<ui32>& entityIds, con
     return sum;
 }
 
+ui64 TPortionDataAccessor::GetIndexBlobBytes(const std::set<ui32>& entityIds, const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetDataSize();
+    };
+    AggregateIndexChunksData(aggr, GetIndexesVerified(), &entityIds, validation);
+    return sum;
+}
+
+ui64 TPortionDataAccessor::GetIndexBlobBytes(const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetDataSize();
+    };
+    AggregateIndexChunksData(aggr, GetIndexesVerified(), nullptr, validation);
+    return sum;
+}
+
 ui64 TPortionDataAccessor::GetIndexRawBytes(const bool validation /*= true*/) const {
     ui64 sum = 0;
     const auto aggr = [&](const TIndexChunk& r) {
@@ -769,15 +787,15 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
     return builder.Finish();
 }
 
-std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess(
-    const TString& internalPathId) const {
+
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
     chunks.reserve(Blobs.size());
     ui64 recordsCount = 0;
     for (auto& blob : Blobs) {
-        chunks.push_back(blob.BuildDeserializeChunk(Loader, internalPathId));
+        chunks.push_back(blob.BuildDeserializeChunk(Loader));
         if (!!blob.GetData()) {
             recordsCount += blob.GetExpectedRowsCountVerified();
         } else {
@@ -793,7 +811,7 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPrepare
 }
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembleBlobInfo::BuildDeserializeChunk(
-    const std::shared_ptr<TColumnLoader>& loader, const TString& internalPathId) const {
+    const std::shared_ptr<TColumnLoader>& loader) const {
     if (DefaultRowsCount) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "build_trivial");
         Y_ABORT_UNLESS(!Data);
@@ -801,7 +819,7 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembl
     } else {
         AFL_VERIFY(ExpectedRowsCount);
         return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
-            *ExpectedRowsCount, loader, Data, internalPathId, false, GetAdditionalAccessorData());
+            *ExpectedRowsCount, loader, Data, false, GetAdditionalAccessorData());
     }
 }
 
@@ -818,13 +836,13 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TPortionDataAccessor::TPreparedBatchData::AssembleToGeneralContainer(
-    const std::set<ui32>& sequentialColumnIds, const TString& internalPathId) const {
+    const std::set<ui32>& sequentialColumnIds) const {
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Columns) {
         //        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("column", i.GetField()->ToString())("column_id", i.GetColumnId());
         if (sequentialColumnIds.contains(i.GetColumnId())) {
-            columns.emplace_back(i.AssembleForSeqAccess(internalPathId));
+            columns.emplace_back(i.AssembleForSeqAccess());
         } else {
             auto conclusion = i.AssembleAccessor();
             if (conclusion.IsFail()) {

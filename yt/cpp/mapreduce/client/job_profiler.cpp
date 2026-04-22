@@ -111,7 +111,7 @@ private:
 
     void SymbolizeAndWriteProfile(NYTProf::NProto::Profile* profile)
     {
-        Symbolize(profile, /*filesOnly*/ true);
+        Symbolize(profile, { .SymbolizeExistingFunctions = false });
         AddBuildInfo(profile, TBuildInfo::GetDefault());
 
         if (RunExternalSymbolizer_) {

@@ -69,12 +69,15 @@ namespace NKikimr::NDDisk {
             TChunkSpaceOccupation(TChunksQueue& ownerChunksQueue, ui32 chunkIdx, ui32 first, ui32 last);
 
             TString ToString() const;
+            ui32 VerifyFreeSpace();
         };
 
         ui32 SectorsInChunk;
         std::unordered_map<ui32, TChunkSpaceOccupation> FreeSpaceMap;
         TChunksQueue ChunksPriorityQueue;
         ui32 FreeSpace = 0;
+
+        ui32 VerifyFreeSpace();
 
     public:
         std::vector<ui32> OwnedChunks;
@@ -88,6 +91,7 @@ namespace NKikimr::NDDisk {
         ui32 GetFreeSpace() const {
             return FreeSpace;
         }
+        std::vector<std::vector<std::tuple<ui32, ui32>>> DescribeFreeSpace();
         TString ToString() const;
 
     };

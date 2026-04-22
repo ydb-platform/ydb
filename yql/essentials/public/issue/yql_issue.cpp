@@ -131,7 +131,8 @@ void ProgramLinesWithErrors(
     std::sort(rows.begin(), rows.end());
 
     auto prog = StringSplitter(programText).Split('\n');
-    auto progIt = prog.begin(), progEnd = prog.end();
+    auto progIt = prog.begin();
+    auto progEnd = prog.end();
     ui32 progRow = 1;
 
     for (ui32 row : rows) {
@@ -282,7 +283,8 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
         GetNext(s, ':', file);
         GetNext(s, ':', row);
         GetNext(s, ':', column);
-        ui32 rowValue, columnValue;
+        ui32 rowValue;
+        ui32 columnValue;
         if (file && row && column && TryFromString(*row, rowValue) && TryFromString(*column, columnValue)) {
             message = StripStringLeft(s);
             return TPosition(columnValue, rowValue, TString(*file));

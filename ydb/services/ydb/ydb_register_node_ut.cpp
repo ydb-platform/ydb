@@ -9,8 +9,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
-#include <ydb/core/security/certificate_check/cert_auth_processor.h>
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
@@ -161,7 +159,7 @@ void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const 
 void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const EStatus& expectedStatus) {
     UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
 }
 
 void CheckAccessDeniedRegisterNode(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
@@ -303,7 +301,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_AllowOnlyDefaultGr
 
         CheckGood(RegisterNode(config));
         CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), "Cannot authorize node. Access denied");
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -347,7 +345,7 @@ Y_UNIT_TEST(ServerWithIssuerVerification_ClientWithSameIssuer) {
 
         CheckGood(RegisterNode(config));
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -390,9 +388,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -431,9 +429,9 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -472,9 +470,9 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -519,9 +517,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvideIncorrectCerts) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -615,7 +613,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
 
 void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& clientServerCert) {
     const auto timeout = TDuration::Seconds(2);
-    const auto expectedStatus = EStatus::CLIENT_DEADLINE_EXCEEDED;
+    const auto expectedStatus = EStatus::TRANSPORT_UNAVAILABLE;
 
     for (bool enforceUserToken : {true, false}) {
         TKikimrServerForTestNodeRegistration server({
@@ -757,9 +755,9 @@ Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -799,9 +797,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
         config.UseSecureConnection(caCert.Certificate.c_str())
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
     }
 }
 
@@ -837,9 +835,10 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
         config.UseSecureConnection(caCert.Certificate.c_str())
             .SetEndpoint(location);
 
-        CheckGood(RegisterNode(config));
+        CheckAccessDeniedRegisterNode(RegisterNode(config), "Cannot authorize node. Access denied");
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
+
     }
 }
 
@@ -879,7 +878,7 @@ Y_UNIT_TEST(ServerWithCertVerification_AuthNotRequired) {
         .SetEndpoint(location);
 
     CheckGood(RegisterNode(secureConnectionConfig));
-    CheckGood(RegisterNode(insecureConnectionConfig)); // without token and cert // EnforceUserToken = false
+    CheckAccessDeniedRegisterNode(RegisterNode(insecureConnectionConfig), "Cannot authorize node. Access denied"); // without token and cert // EnforceUserToken = false
     CheckAccessDenied(RegisterNode(insecureConnectionConfig.SetAuthToken("invalid token")), "Unknown token");
     CheckAccessDeniedRegisterNode(RegisterNode(enemyConnectionConfig), "Client certificate failed verification");
 }

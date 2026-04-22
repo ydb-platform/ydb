@@ -3387,7 +3387,8 @@ public:
             }
 
             TVector<NSQLTranslation::TParsedToken> comments;
-            TParsedTokenList parsedTokens, stmtTokens;
+            TParsedTokenList parsedTokens;
+            TParsedTokenList stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
@@ -3402,8 +3403,8 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
-            if (!message) {
+            google::protobuf::Message* message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            if (!message || IsEmptyQuery(message)) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
                     finalFormattedQuery << "\n";
@@ -3470,6 +3471,10 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
         throw yexception() << issues.ToString();
+    }
+
+    if (parsedSettings.PgParser) {
+        return query;
     }
 
     auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);

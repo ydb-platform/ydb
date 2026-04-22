@@ -233,7 +233,7 @@ namespace {
                 ExtractRow(Row, Owner->RowType, row, *engineCtx.Env);
 
                 if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) {
-                    engineCtx.Host->EraseRow(Owner->TableId, row, Owner->UserSID);
+                    engineCtx.Host->EraseRow(Owner->TableId, row, Owner->UserCtx);
                 }
             }
 
@@ -241,12 +241,12 @@ namespace {
             const NUdf::TUnboxedValue Row;
         };
 
-        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, const TString& userSID)
+        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, NACLib::TUserContext::TPtr userCtx)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
             , Row(row)
-            , UserSID(userSID)
+            , UserCtx(userCtx)
         {
         }
 
@@ -262,7 +262,7 @@ namespace {
         const TTableId TableId;
         TTupleType* const RowType;
         IComputationNode* const Row;
-        const TString UserSID;
+        NACLib::TUserContext::TPtr UserCtx;
     };
 
     class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> {
@@ -316,7 +316,7 @@ namespace {
                         }
                     }
 
-                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands, Owner->UserSID);
+                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands, Owner->UserCtx);
                 }
             }
 
@@ -326,14 +326,14 @@ namespace {
         };
 
         TUpdateRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row,
-            TStructLiteral* updateStruct, IComputationNode* update, const TString& userSID)
+            TStructLiteral* updateStruct, IComputationNode* update, NACLib::TUserContext::TPtr userCtx)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
             , Row(row)
             , UpdateStruct(updateStruct)
             , Update(update)
-            , UserSID(userSID)
+            , UserCtx(userCtx)
         {
         }
 
@@ -352,7 +352,7 @@ namespace {
         IComputationNode* const Row;
         TStructLiteral* const UpdateStruct;
         IComputationNode* const Update;
-        const TString UserSID;
+        NACLib::TUserContext::TPtr UserCtx;
     };
 
     IComputationNode* WrapAsDummy(TComputationMutables& mutables) {
@@ -742,7 +742,7 @@ namespace {
         return ctx.NodeFactory.CreateImmutableNode(std::move(result));
     }
 
-    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, const TString& userSID) {
+    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, NACLib::TUserContext::TPtr userCtx) {
         MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -750,10 +750,10 @@ namespace {
         auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1));
 
         return new TEraseRowWrapper(ctx.Mutables, tableId, tupleType,
-            LocateNode(ctx.NodeLocator, callable, 1), userSID);
+            LocateNode(ctx.NodeLocator, callable, 1), userCtx);
     }
 
-    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host, const TString& userSID) {
+    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host, NACLib::TUserContext::TPtr userCtx) {
         MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -793,7 +793,7 @@ namespace {
         }
 
         return new TUpdateRowWrapper(ctx.Mutables, tableId, tupleType,
-            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2), userSID);
+            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2), userCtx);
     }
 
     IComputationNode* WrapMergedTakeResults(TCallable& callable, TIncomingResults::const_iterator resultIt,
@@ -836,9 +836,9 @@ namespace {
     }
 }
 
-TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, const TString& userSID ) {
+TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, NACLib::TUserContext::TPtr userCtx) {
     auto builtins = GetBuiltinFactory();
-    return [builtins, &execData, validateOnly, userSID]
+    return [builtins, &execData, validateOnly, userCtx]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const TEngineFlatSettings& settings = execData.Settings;
         const TFlatEngineStrings& strings = execData.Strings;
@@ -878,11 +878,11 @@ TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, b
         }
 
         if (nameStr == strings.EraseRow) {
-            return WrapEraseRow(callable, ctx, userSID);
+            return WrapEraseRow(callable, ctx, userCtx);
         }
 
         if (nameStr == strings.UpdateRow) {
-            return WrapUpdateRow(callable, ctx, settings.Host, userSID);
+            return WrapUpdateRow(callable, ctx, settings.Host, userCtx);
         }
 
         if (nameStr == strings.AcquireLocks) {

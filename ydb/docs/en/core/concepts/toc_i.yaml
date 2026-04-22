@@ -19,26 +19,19 @@ items:
 - name: Bridge mode
   href: bridge.md
 - name: Query execution
-  href: query_execution.md
+  href: query_execution/index.md
+  include:
+    path: query_execution/toc_p.yaml
+    mode: link
 - name: Transactions
   href: transactions.md
-- name: Secondary indexes
-  href: secondary_indexes.md
-- name: Vector search
-  href: vector_search.md
-- name: Spilling
-  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
 - name: Time to live and eviction
   href: ttl.md
-- name: Scan queries
-  href: scan_query.md
 - name: Database limits
   href: limits-ydb.md
-- name: Multi-Version Concurrency Control (MVCC)
-  href: mvcc.md
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication
@@ -47,9 +40,3 @@ items:
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
-- name: Query optimizer
-  href: optimizer.md
-- name: Federated query
-  include:
-    path: federated_query/toc_p.yaml
-    mode: link

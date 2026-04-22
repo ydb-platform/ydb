@@ -12,6 +12,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
@@ -101,7 +102,8 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     using namespace NOlap::NReader;
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_READER));
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_SCAN));
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_DATA_SOURCE));
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
     StartInstant = TMonotonic::Now();
     Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);

@@ -32,8 +32,8 @@ Core concepts for organizing, scaling, and managing data.
 
 ### Integration with External Systems
 
-  - [Federated Queries](../federated_query/index.md): Run queries on data in external systems (S3, ClickHouse, Postgres).
-  - [Working with S3 via External Tables](../federated_query/s3/external_table.md): Read and write Parquet/CSV data in Object Storage.
+  - [Federated Queries](../query_execution/federated_query/index.md): Run queries on data in external systems (S3, ClickHouse, Postgres).
+  - [Working with S3 via External Tables](../query_execution/federated_query/s3/external_table.md): Read and write Parquet/CSV data in Object Storage.
 
 ## Data Processing and Transformation (ETL/ELT)
 
@@ -54,7 +54,7 @@ Query language and integration with orchestration tools.
 
 Tools for application developers.
 
-  - [{{ydb-short-name}} SDK Overview](../../reference/ydb-sdk/index.md): Native SDKs for Go, Python, Java, C++, Node.js.
+  - [{{ydb-short-name}} SDK Overview](../../reference/ydb-sdk/index.md): Native SDKs for Go, Python, Java, C++, JavaScript.
   - [JDBC driver](../../reference/languages-and-apis/jdbc-driver/index.md): Standard connectivity for the Java ecosystem.
   - [{{ydb-short-name}} CLI](../../reference/ydb-cli/index.md): Command-line tool for administration and query execution.
 
@@ -79,7 +79,7 @@ Administration, monitoring, security, and optimization.
 ### Performance Management
 
   - [Query Plan Analysis (EXPLAIN)](../../dev/query-plans-optimization.md): How to understand query execution plans and identify bottlenecks.
-  - [Cost-Based Optimizer](../optimizer.md): Overview of how the query planner works.
+  - [Cost-Based Optimizer](../query_execution/optimizer.md): Overview of how the query planner works.
 
 ### Monitoring and Diagnostics
 

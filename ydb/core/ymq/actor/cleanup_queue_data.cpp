@@ -109,7 +109,7 @@ namespace NKikimr::NSQS {
                 .Build()
             .Build();
 
-        RunYqlQuery(SelectQueuesQuery, std::move(params), true, sendAfter, Cfg().GetRoot(), ctx);
+        RunYqlQuery(SelectQueuesQuery, std::move(params), true, sendAfter, ctx);
     }
 
     void TCleanupQueueDataActor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -192,7 +192,7 @@ namespace NKikimr::NSQS {
                 .Build()
             .Build();
 
-        RunYqlQuery(LockQueueQuery, std::move(params), false, runAfter, Cfg().GetRoot(), ctx);
+        RunYqlQuery(LockQueueQuery, std::move(params), false, runAfter, ctx);
     }
 
     void TCleanupQueueDataActor::UpdateLock(const TActorContext& ctx) {
@@ -222,7 +222,7 @@ namespace NKikimr::NSQS {
 
         NYdb::TParams params = paramsBuilder.Build();
 
-        RunYqlQuery(UpdateLockQueueQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
+        RunYqlQuery(UpdateLockQueueQuery, std::move(params), false, TDuration::Zero(), ctx);
     }
 
     void TCleanupQueueDataActor::ContinueRemoveData(NYdb::TResultSetParser& parser, const TActorContext& ctx) {
@@ -289,7 +289,7 @@ namespace NKikimr::NSQS {
                 .Build()
             .Build();
 
-        RunYqlQuery(RemoveQueueFromListQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
+        RunYqlQuery(RemoveQueueFromListQuery, std::move(params), false, TDuration::Zero(), ctx);
     }
 
     std::optional<std::pair<TString, bool>> TCleanupQueueDataActor::GetNextTable() const {
@@ -323,7 +323,7 @@ namespace NKikimr::NSQS {
                 .Build()
             .Build();
 
-        RunYqlQuery(RemoveDataQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
+        RunYqlQuery(RemoveDataQuery, std::move(params), false, TDuration::Zero(), ctx);
     }
 
     void TCleanupQueueDataActor::ClearNextTable(const TActorContext& ctx) {

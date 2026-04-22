@@ -213,6 +213,40 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(TraceIds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedDynamoDBStreamsFormat(true)
+            .EnableChangefeedDebeziumJsonFormat(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const char* format : TVector<const char*>{"Proto", "Json", "DebeziumJson"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  TraceIds: true
+                }
+            )", format, format));
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/Table/Stream%s", format)), {
+                NLs::StreamTraceIds(true),
+            });
+        }
+    }
+
     Y_UNIT_TEST(ResolvedTimestamps) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
@@ -1606,6 +1640,66 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable/Stream/streamImpl"), {
             NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(CreateCdcStreamOnIndexedMigratedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+        )");
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "Tenant");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "Tenant", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("Tenant"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        TestCreateCdcStream(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Tenant/Table"), {
+            NLs::PathExist,
         });
     }
 

@@ -2,6 +2,8 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NOlap::NStorageOptimizer {
 
 std::vector<std::shared_ptr<TColumnEngineChanges>> IOptimizerPlanner::GetOptimizationTasks(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
@@ -17,6 +19,17 @@ IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::Ad
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
     RemovePortions.emplace_back(portion);
     return*this;
+}
+
+ui64 IOptimizerPlanner::GetBadPortionsLimit() const {
+    if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
+        return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();
+    }
+    return 2 * GetNodePortionsCountLimit();
+}
+
+std::shared_ptr<IOptimizerPlannerConstructor> IOptimizerPlannerConstructor::BuildDefault() {
+    return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
 }
 
 } // namespace NKikimr::NOlap

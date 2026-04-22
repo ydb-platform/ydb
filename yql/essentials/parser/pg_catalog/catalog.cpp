@@ -789,7 +789,7 @@ public:
                     for (const auto& procId : *procIdPtr) {
                         auto procPtr = Procs_.FindPtr(procId);
                         Y_ENSURE(procPtr);
-                        if (procPtr->ArgTypes.size() < 1) {
+                        if (procPtr->ArgTypes.empty()) {
                             continue;
                         }
 
@@ -937,7 +937,7 @@ public:
         for (const auto id : *transFuncIdsPtr) {
             auto procPtr = Procs_.FindPtr(id);
             Y_ENSURE(procPtr);
-            if (procPtr->ArgTypes.size() >= 1 &&
+            if (!procPtr->ArgTypes.empty() &&
                 IsCompatibleTo(LastAggregation_.TransTypeId, procPtr->ArgTypes[0], Types_)) {
                 Y_ENSURE(!LastAggregation_.TransFuncId);
                 LastAggregation_.TransFuncId = id;
@@ -975,7 +975,7 @@ public:
             auto procPtr = Procs_.FindPtr(LastAggregation_.TransFuncId);
             Y_ENSURE(procPtr);
             LastAggregation_.ArgTypes = procPtr->ArgTypes;
-            Y_ENSURE(LastAggregation_.ArgTypes.size() >= 1);
+            Y_ENSURE(!LastAggregation_.ArgTypes.empty());
             Y_ENSURE(IsCompatibleTo(LastAggregation_.TransTypeId, LastAggregation_.ArgTypes[0], Types_));
             LastAggregation_.ArgTypes.erase(LastAggregation_.ArgTypes.begin());
         }
@@ -1461,7 +1461,7 @@ ui32 FindOperator(const THashMap<TString, TVector<ui32>>& operatorsByName, const
     Y_ENSURE(operIdsPtr);
     TVector<TString> strArgs;
     Split(signature.substr(pos1 + 1, pos2 - pos1 - 1), ",", strArgs);
-    Y_ENSURE(strArgs.size() >= 1 && strArgs.size() <= 2);
+    Y_ENSURE(!strArgs.empty() && strArgs.size() <= 2);
     TVector<ui32> argTypes;
     for (const auto& str : strArgs) {
         auto typePtr = typeByName.FindPtr(str);
@@ -1765,7 +1765,7 @@ struct TCatalog: public IExtensionSqlBuilder {
             Y_ENSURE(inFuncIdPtr->size() == 1);
             auto inFuncPtr = State->Procs.FindPtr(inFuncIdPtr->at(0));
             Y_ENSURE(inFuncPtr);
-            Y_ENSURE(inFuncPtr->ArgTypes.size() >= 1); // may have mods
+            Y_ENSURE(!inFuncPtr->ArgTypes.empty()); // may have mods
             Y_ENSURE(inFuncPtr->ArgTypes[0] == cstringId);
             typePtr->InFuncId = inFuncIdPtr->at(0);
 
@@ -1784,7 +1784,7 @@ struct TCatalog: public IExtensionSqlBuilder {
                 Y_ENSURE(receiveFuncIdPtr->size() == 1);
                 auto receiveFuncPtr = State->Procs.FindPtr(receiveFuncIdPtr->at(0));
                 Y_ENSURE(receiveFuncPtr);
-                Y_ENSURE(receiveFuncPtr->ArgTypes.size() >= 1);
+                Y_ENSURE(!receiveFuncPtr->ArgTypes.empty());
                 Y_ENSURE(receiveFuncPtr->ArgTypes[0] == internalId); // mutable StringInfo
                 typePtr->ReceiveFuncId = receiveFuncIdPtr->at(0);
             }
@@ -2119,7 +2119,7 @@ struct TCatalog: public IExtensionSqlBuilder {
     }
 
     void PrepareOper(ui32 extensionIndex, const TString& name, const TVector<ui32>& args) final {
-        Y_ENSURE(args.size() >= 1 && args.size() <= 2);
+        Y_ENSURE(!args.empty() && args.size() <= 2);
         Y_ENSURE(extensionIndex);
         auto lowerName = to_lower(name);
         auto operIdPtr = State->OperatorsByName.FindPtr(lowerName);
@@ -2764,32 +2764,32 @@ ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui3
 }
 
 [[noreturn]] void ThrowOperatorNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for operator " << name << " with given argument type(s): "
+    throw TOperatorNotFoundException() << "Unable to find an overload for operator " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowOperatorAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for operator " << name << " with given argument type(s): "
+    throw TOperatorAmbiguityException() << "Ambiguity for operator " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types: "
+    throw TProcNotFoundException() << "Unable to find an overload for proc " << name << " with given argument types: "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for proc " << name << " with given argument type(s): "
+    throw TProcAmbiguityException() << "Ambiguity for proc " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
+    throw TAggregateNotFoundException() << "Unable to find an overload for aggregate " << name << " with given argument types: "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for aggregate " << name << " with given argument type(s): "
+    throw TAggregateAmbiguityException() << "Ambiguity for aggregate " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
@@ -3125,7 +3125,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
 }
 
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc, bool& castsNeeded) {
-    Y_ENSURE(0 != typeIds.size());
+    Y_ENSURE(!typeIds.empty());
 
     const auto& catalog = TCatalog::Instance();
 
@@ -3460,7 +3460,8 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
     TStringBuf realName = name;
     TMaybe<ui32> aggId;
-    TStringBuf left, right;
+    TStringBuf left;
+    TStringBuf right;
     if (realName.TrySplit('#', left, right)) {
         aggId = FromString<ui32>(right);
         realName = left;

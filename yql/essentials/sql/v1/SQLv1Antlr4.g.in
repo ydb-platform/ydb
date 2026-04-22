@@ -6,7 +6,7 @@ options {
 
 // Input is a list of statements.
 sql_query: sql_stmt_list | PRAGMA ANSI DIGITS ansi_sql_stmt_list;
-sql_stmt_list: SEMICOLON* sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON* EOF;
+sql_stmt_list: SEMICOLON* (sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON*)? EOF;
 ansi_sql_stmt_list: SEMICOLON* EOF;
 
 lambda_body: SEMICOLON* (lambda_stmt SEMICOLON+)* RETURN expr SEMICOLON*;
@@ -918,6 +918,7 @@ table_setting_value:
     | split_boundaries
     | ttl_tier_list ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
     | bool_value
+    | real
 ;
 
 ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;

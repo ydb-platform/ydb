@@ -12,56 +12,8 @@ from ydb.issues import GenericError
 
 class SolomonReadingTestBase(object):
     @classmethod
-    def setup_class(cls):
-        cls.basic_reading_timestamps = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
-        cls.basic_reading_values = [0, 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11]
-
-        cls.listing_paging_metrics_size = 2500
-
-        cls.listing_batching_metrics_sizes = [1100, 600]
-
-        cls.data_paging_timeseries_size = 25000
-        cls.data_paging_timestamps, cls.data_paging_values = cls._generate_data_paging_timeseries(cls.data_paging_timeseries_size)
-
+    def setup_class(cls, test_name):
         cleanup_emulator()
-
-        add_solomon_metrics("settings_validation", "settings_validation", "my_service", {"metrics": [
-            {
-                "labels"        : {"test_type": "setting_validation"},
-                "type"          : "DGAUGE",
-                "timestamps"    : [1000000],
-                "values"        : [0]
-            }
-        ]})
-
-        add_solomon_metrics("basic_reading", "basic_reading", "my_service", {"metrics": [
-            {
-                "labels"        : {"test_type": "basic_reading_test"},
-                "type"          : "DGAUGE",
-                "timestamps"    : cls.basic_reading_timestamps,
-                "values"        : cls.basic_reading_values
-            }
-        ]})
-
-        add_solomon_metrics("listing_paging", "listing_paging", "my_service", {"metrics": [
-            *cls._generate_listing_paging_test_metrics(cls.listing_paging_metrics_size)
-        ]})
-
-        add_solomon_metrics("listing_batching", "listing_batching", "my_service", {"metrics": [
-            *cls._generate_listing_batching_test_metrics(*cls.listing_batching_metrics_sizes)
-        ]})
-
-        add_solomon_metrics("data_paging", "data_paging", "my_service", {"metrics": [
-            {
-                "labels"        : {"test_type": "data_paging_test"},
-                "type"          : "DGAUGE",
-                "timestamps"    : cls.data_paging_timestamps,
-                "values"        : cls.data_paging_values
-            }
-        ]})
-
-        cls.solomon_http_endpoint = os.environ.get("SOLOMON_HTTP_ENDPOINT")
-        cls.solomon_grpc_endpoint = os.environ.get("SOLOMON_GRPC_ENDPOINT")
 
         config = KikimrConfigGenerator(
             extra_feature_flags={"enable_external_data_sources": True}
@@ -92,6 +44,85 @@ class SolomonReadingTestBase(object):
                 }
             ]
         }
+
+        if test_name == "settings_validation":
+            add_solomon_metrics("settings_validation", "settings_validation", "my_service", {"metrics": [
+                {
+                    "labels"        : {"test_type": "setting_validation"},
+                    "type"          : "DGAUGE",
+                    "timestamps"    : [1000000],
+                    "values"        : [0]
+                }
+            ]})
+
+        elif test_name == "basic_reading":
+            cls.basic_reading_timestamps = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+            cls.basic_reading_values = [0, 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11]
+
+            add_solomon_metrics("basic_reading", "basic_reading", "my_service", {"metrics": [
+                {
+                    "labels"        : {"test_type": "basic_reading_test"},
+                    "type"          : "DGAUGE",
+                    "timestamps"    : cls.basic_reading_timestamps,
+                    "values"        : cls.basic_reading_values
+                }
+            ]})
+
+        elif test_name == "listing_paging":
+            cls.listing_paging_metrics_size = 2500
+
+            add_solomon_metrics("listing_paging", "listing_paging", "my_service", {"metrics": [
+                *cls._generate_listing_paging_test_metrics(cls.listing_paging_metrics_size)
+            ]})
+
+        elif test_name == "listing_batching":
+            cls.listing_batching_metrics_sizes = [1100, 600]
+
+            add_solomon_metrics("listing_batching", "listing_batching", "my_service", {"metrics": [
+                *cls._generate_listing_batching_test_metrics(*cls.listing_batching_metrics_sizes)
+            ]})
+
+        elif test_name == "data_paging":
+            cls.data_paging_timeseries_size = 25000
+            cls.data_paging_timestamps, cls.data_paging_values = cls._generate_data_paging_timeseries(cls.data_paging_timeseries_size)
+
+            add_solomon_metrics("data_paging", "data_paging", "my_service", {"metrics": [
+                {
+                    "labels"        : {"test_type": "data_paging_test"},
+                    "type"          : "DGAUGE",
+                    "timestamps"    : cls.data_paging_timestamps,
+                    "values"        : cls.data_paging_values
+                }
+            ]})
+
+        elif test_name == "backpressure_test":
+            cls.backpressure_test_metrics_size = 100
+
+            config.yaml_config["query_service_config"]["solomon"]["default_settings"].extend([
+                {
+                    "name": "MaxDataInflightBytes",
+                    "value": 1
+                },
+                {
+                    "name": "MetricsQueuePrefetchSize",
+                    "value": 1
+                },
+                {
+                    "name": "MetricsQueueBatchCountLimit",
+                    "value": 1
+                },
+                {
+                    "name": "ComputeActorBatchSize",
+                    "value": 1
+                }
+            ])
+
+            add_solomon_metrics("backpressure_test", "backpressure_test", "my_service", {"metrics": [
+                *cls._generate_backpressure_test_metrics(cls.backpressure_test_metrics_size)
+            ]})
+
+        cls.solomon_http_endpoint = os.environ.get("SOLOMON_HTTP_ENDPOINT")
+        cls.solomon_grpc_endpoint = os.environ.get("SOLOMON_GRPC_ENDPOINT")
 
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
@@ -168,3 +199,17 @@ class SolomonReadingTestBase(object):
         timestamps = [i * 5 for i in range(size)]
         values = [i for i in range(size)]
         return timestamps, values
+
+    @staticmethod
+    def _generate_backpressure_test_metrics(size):
+        backpressure_test_metrics = [
+            {
+                "labels"        : {"test_type": "backpressure_test", "test_label": str(i)},
+                "type"          : "DGAUGE",
+                "timestamps"    : [0],
+                "values"        : [0]
+            }
+            for i in range(size)
+        ]
+
+        return backpressure_test_metrics

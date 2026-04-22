@@ -29,6 +29,7 @@
 namespace NMVP {
 
 inline constexpr TStringBuf SOURCE_META = "meta";
+inline constexpr TDuration SUPPORT_LINKS_REQUEST_TIMEOUT = TDuration::Seconds(10);
 
 class TMetaSupportLinksGetHandlerActor : private THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
 public:
@@ -62,7 +63,7 @@ public:
     {}
 
     void Bootstrap() {
-        Become(&TMetaSupportLinksGetHandlerActor::StateWork, GetTimeout(Request, TDuration::Seconds(60)), new NActors::TEvents::TEvWakeup());
+        Become(&TMetaSupportLinksGetHandlerActor::StateWork, GetTimeout(Request, SUPPORT_LINKS_REQUEST_TIMEOUT), new NActors::TEvents::TEvWakeup());
 
         if (!ValidateAndInitEntityType()) {
             ReplyBadRequestAndDie();

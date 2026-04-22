@@ -9,40 +9,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TDropPropose {
-public:
-    TDropPropose() {}
-    virtual ~TDropPropose() {}
-
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-                         const TString& workingDir, const TString& name);
-};
-
-class TPQDropTopicActor : public TPQGrpcSchemaBase<TPQDropTopicActor, NKikimr::NGRpcService::TEvPQDropTopicRequest>, public TDropPropose {
-using TBase = TPQGrpcSchemaBase<TPQDropTopicActor, TEvPQDropTopicRequest>;
-
-public:
-     TPQDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request);
-    ~TPQDropTopicActor() = default;
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-};
-
-class TDropTopicActor : public TPQGrpcSchemaBase<TDropTopicActor, NKikimr::NGRpcService::TEvDropTopicRequest>, public TDropPropose {
-using TBase = TPQGrpcSchemaBase<TDropTopicActor, TEvDropTopicRequest>;
-
-public:
-     TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* request);
-     TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
-    ~TDropTopicActor() = default;
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-};
-
 class TPQDescribeTopicActor : public TPQGrpcSchemaBase<TPQDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest>
                             , public TCdcStreamCompatible
 {
@@ -367,58 +333,6 @@ public:
 
 private:
     TString LocalCluster;
-};
-
-
-class TAlterTopicActor : public TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>
-                       , public TCdcStreamCompatible
-{
-    using TBase = TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>;
-
-public:
-    TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest *request);
-    TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-    void ModifyPersqueueConfig(TAppData* appData,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-};
-
-
-class TAlterTopicActorInternal : public TPQInternalSchemaActor<TAlterTopicActorInternal, NKikimr::NGRpcProxy::V1::TAlterTopicRequest,
-                                                               TEvPQProxy::TEvAlterTopicResponse>
-                               , public TUpdateSchemeActorBase<TAlterTopicActorInternal>
-                               , public TCdcStreamCompatible
-{
-    using TUpdateSchemeBase = TUpdateSchemeActorBase<TAlterTopicActorInternal>;
-    using TRequest = NKikimr::NGRpcProxy::V1::TAlterTopicRequest;
-    using TActorBase = TPQInternalSchemaActor<TAlterTopicActorInternal, TRequest, TEvPQProxy::TEvAlterTopicResponse>;
-
-public:
-    TAlterTopicActorInternal(NKikimr::NGRpcProxy::V1::TAlterTopicRequest&& request,
-                             NThreading::TPromise<TAlterTopicResponse>&& promise,
-                             bool notExistsOk);
-
-    void Bootstrap(const NActors::TActorContext& ctx) override;
-    void ModifyPersqueueConfig(TAppData* appData,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;
-
-    void StateWork(TAutoPtr<IEventHandle>& ev) {
-        TActorBase::StateWork(ev);
-    }
-
-protected:
-    bool RespondOverride(Ydb::StatusIds::StatusCode status, bool notFound) override;
-
-private:
-    NThreading::TPromise<TAlterTopicResponse> Promise;
-    bool MissingOk;
 };
 
 class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,

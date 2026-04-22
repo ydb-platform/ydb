@@ -126,9 +126,7 @@ TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const 
 }
 
 
-TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId,
-                                            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets,
-                                            std::optional<i32> generationId) {
+TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets) {
     Cerr << ">>>>> TOffsetCommitRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
@@ -148,9 +146,6 @@ TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString gr
             topic.Partitions.push_back(partition);
         }
         request.Topics.push_back(topic);
-    }
-    if (generationId.has_value()) {
-        request.GenerationId = *generationId;
     }
 
     return WriteAndRead<TOffsetCommitResponseData>(header, request);

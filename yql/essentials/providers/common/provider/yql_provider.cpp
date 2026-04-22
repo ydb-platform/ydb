@@ -21,7 +21,8 @@ namespace NYql::NCommon {
 using namespace NNodes;
 
 namespace {
-constexpr std::array<std::string_view, 8> FormatsForInput = {
+constexpr std::array<std::string_view, 9> FormatsForInput = {
+    "csv"sv,
     "csv_with_names"sv,
     "tsv_with_names"sv,
     "json_list"sv,

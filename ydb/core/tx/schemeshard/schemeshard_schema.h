@@ -140,6 +140,7 @@ struct Schema : NIceDb::Schema {
         struct IsTemporary : Column<11, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {}; // deprecated
         struct IncrementalBackupConfig : Column<13, NScheme::NTypeIds::String> {};
+        struct DetailedMetricsSettings : Column<15, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -156,7 +157,8 @@ struct Schema : NIceDb::Schema {
             ReplicationConfig,
             IsTemporary,
             OwnerActorId,
-            IncrementalBackupConfig
+            IncrementalBackupConfig,
+            DetailedMetricsSettings
         >;
     };
 
@@ -176,7 +178,8 @@ struct Schema : NIceDb::Schema {
         struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
         struct IsTemporary :         Column<12, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {}; // deprecated
-        struct IncrementalBackupConfig :   Column<14, NScheme::NTypeIds::String> {};
+        struct IncrementalBackupConfig : Column<14, NScheme::NTypeIds::String> {};
+        struct DetailedMetricsSettings : Column<16, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -194,7 +197,8 @@ struct Schema : NIceDb::Schema {
             ReplicationConfig,
             IsTemporary,
             OwnerActorId,
-            IncrementalBackupConfig
+            IncrementalBackupConfig,
+            DetailedMetricsSettings
         >;
     };
 
@@ -512,10 +516,23 @@ struct Schema : NIceDb::Schema {
         struct Parent:          Column<10, NScheme::NTypeIds::Uint32> {};
         // Adjacent parent partition for merge operation
         struct AdjacentParent:  Column<11, NScheme::NTypeIds::Uint32> {};
+        struct CreationTimestampSeconds: Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PqId>;
-        using TColumns = TableColumns<PathId, PqId, ShardIdx, AlterVersion, GroupId, RangeBegin, RangeEnd,
-                                      CreateVersion, Status, Parent, AdjacentParent>;
+        using TColumns = TableColumns<
+            PathId,
+            PqId,
+            ShardIdx,
+            AlterVersion,
+            GroupId,
+            RangeBegin,
+            RangeEnd,
+            CreateVersion,
+            Status,
+            Parent,
+            AdjacentParent,
+            CreationTimestampSeconds
+        >;
     };
 
     struct RtmrVolumes : Table<20> {
@@ -595,6 +612,7 @@ struct Schema : NIceDb::Schema {
         struct TableName : Column<2, NScheme::NTypeIds::Utf8> {};
         struct YTSettings : Column<3, NScheme::NTypeIds::String> {};
         struct S3Settings : Column<6, NScheme::NTypeIds::String> {};
+        struct FSSettings : Column<14, NScheme::NTypeIds::String> {};
         struct TableDescription : Column<7, NScheme::NTypeIds::String> {};
         struct ChangefeedUnderlyingTopics : Column<13, NScheme::NTypeIds::String> {};
         struct NumberOfRetries : Column<8, NScheme::NTypeIds::Uint32> {};
@@ -620,7 +638,8 @@ struct Schema : NIceDb::Schema {
             NeedToBill,
             EnableChecksums,
             EnablePermissions,
-            ChangefeedUnderlyingTopics
+            ChangefeedUnderlyingTopics,
+            FSSettings
         >;
     };
 
@@ -631,6 +650,7 @@ struct Schema : NIceDb::Schema {
         struct TableName : Column<3, NScheme::NTypeIds::Utf8> {};
         struct YTSettings : Column<4, NScheme::NTypeIds::String> {};
         struct S3Settings : Column<7, NScheme::NTypeIds::String> {};
+        struct FSSettings : Column<15, NScheme::NTypeIds::String> {};
         struct TableDescription : Column<8, NScheme::NTypeIds::String> {};
         struct ChangefeedUnderlyingTopics : Column<14, NScheme::NTypeIds::String> {};
         struct NumberOfRetries : Column<9, NScheme::NTypeIds::Uint32> {};
@@ -657,7 +677,8 @@ struct Schema : NIceDb::Schema {
             NeedToBill,
             EnableChecksums,
             EnablePermissions,
-            ChangefeedUnderlyingTopics
+            ChangefeedUnderlyingTopics,
+            FSSettings
         >;
     };
 
@@ -1823,6 +1844,7 @@ struct Schema : NIceDb::Schema {
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
+        struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1836,7 +1858,8 @@ struct Schema : NIceDb::Schema {
             AwsRegion,
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
-            UserSIDs
+            UserSIDs,
+            TraceIds
         >;
     };
 
@@ -1852,6 +1875,7 @@ struct Schema : NIceDb::Schema {
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
+        struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1865,7 +1889,8 @@ struct Schema : NIceDb::Schema {
             AwsRegion,
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
-            UserSIDs
+            UserSIDs,
+            TraceIds
         >;
     };
 

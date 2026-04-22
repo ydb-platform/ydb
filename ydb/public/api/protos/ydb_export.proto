@@ -39,7 +39,7 @@ message ExportToYtSettings {
 
     string host = 1 [(required) = true];
     uint32 port = 2;
-    string token = 3 [(required) = true];
+    string token = 3 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 4 [(size).ge = 1];
     string description = 5 [(length).le = 128];
     uint32 number_of_retries = 6;
@@ -110,8 +110,8 @@ message ExportToS3Settings {
     string endpoint = 1 [(required) = true];
     Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
-    string access_key = 4 [(required) = true];
-    string secret_key = 5 [(required) = true];
+    string access_key = 4 [(required) = true, (Ydb.sensitive) = true];
+    string secret_key = 5 [(required) = true, (Ydb.sensitive) = true];
     repeated Item items = 6;
     string description = 7 [(length).le = 128];
     uint32 number_of_retries = 8;

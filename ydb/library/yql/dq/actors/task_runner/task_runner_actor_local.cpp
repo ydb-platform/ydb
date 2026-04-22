@@ -628,11 +628,14 @@ private:
         const bool isHardLimit = dynamic_cast<const THardMemoryLimitException*>(&e) != nullptr;
         TStringBuilder err;
         err << "Mkql memory limit exceeded";
-        if (isHardLimit) {
-            err << ", hard limit: " << MemoryQuota->GetHardMemoryLimit();
+        if (MemoryQuota) {
+            if (isHardLimit) {
+                err << ", hard limit: " << MemoryQuota->GetHardMemoryLimit();
+            } else {
+                err << ", limit: " << MemoryQuota->GetMkqlMemoryLimit();
+            }
         } else {
-            err << ", limit: " << (MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : -1)
-                << ", canAllocateExtraMemory: " << (MemoryQuota ? MemoryQuota->GetCanAllocateExtraMemory() : 0);
+            err << ", quota manager NOT assigned";
         }
         LOG_E("TMemoryLimitExceededException: " << err);
         TIssue issue(err);

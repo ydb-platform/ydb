@@ -32,6 +32,7 @@ namespace NYdb {
             bool Direct;
             ui32 Codec = 0;
             bool UseTransactions = false;
+            bool TrackProducerIdInTx = true;
             bool UseAutoPartitioning = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;

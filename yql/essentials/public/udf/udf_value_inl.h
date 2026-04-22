@@ -898,6 +898,7 @@ inline bool TUnboxedValuePod::IsSpecial() const {
 inline TStringRef TUnboxedValuePod::AsStringRef() const& {
     switch (Raw.GetMarkers()) {
         case EMarkers::Embedded:
+            Y_DEBUG_ABORT_UNLESS(Raw.Embedded.Size <= TUnboxedValuePod::InternalBufferSize);
             return {Raw.Embedded.Buffer, Raw.Embedded.Size};
         case EMarkers::String:
             return {Raw.String.Value->Data() + (Raw.String.Offset & 0xFFFFFF), Raw.String.Size};

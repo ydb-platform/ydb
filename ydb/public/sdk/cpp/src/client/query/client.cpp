@@ -14,8 +14,10 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/observation.h>
 #include <ydb/public/sdk/cpp/src/client/query/impl/exec_query.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/trace/trace.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -23,6 +25,7 @@
 
 namespace NYdb::inline Dev::NQuery {
 
+using TQueryObservation = NObservability::TRequestObservation;
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
 
@@ -67,6 +70,10 @@ public:
     {
         SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector("Query"));
         SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Query"));
+
+        if (auto traceProvider = Connections_->GetTraceProvider()) {
+            Tracer_ = traceProvider->GetTracer("ydb-cpp-sdk-query");
+        }
     }
 
     ~TImpl() {
@@ -77,6 +84,7 @@ public:
         QuerySizeHistogram_.Set(collector.QuerySize);
         ParamsSizeHistogram_.Set(collector.ParamsSize);
         RetryOperationStatCollector_ = collector.RetryOperationStatCollector;
+        OperationStatCollector_ = collector.OperationStatCollector;
     }
 
     TAsyncExecuteQueryIterator StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
@@ -94,8 +102,22 @@ public:
     {
         CollectQuerySize(query);
         CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
+
+        auto obs = MakeObservation("ExecuteQuery");
+
         return TExecQueryImpl::ExecuteQuery(
-            Connections_, DbDriverState_, query, txControl, params, settings, session);
+            Connections_, DbDriverState_, query, txControl, params, settings, session)
+            .Apply([obs](TAsyncExecuteQueryResult future) {
+                try {
+                    auto result = future.GetValue();
+                    obs->SetPeerEndpoint(result.GetEndpoint());
+                    obs->End(result.GetStatus());
+                    return result;
+                } catch (...) {
+                    obs->EndWithClientInternalError();
+                    throw;
+                }
+            });
     }
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script, const std::optional<TParams>& params, const TExecuteScriptSettings& settings) {
@@ -162,20 +184,27 @@ public:
 
         auto promise = NThreading::NewPromise<TStatus>();
 
-        auto responseCb = [promise, session]
+        auto obs = MakeObservation("Rollback");
+
+        auto responseCb = [promise, session, obs]
             (Ydb::Query::RollbackTransactionResponse* response, TPlainStatus status) mutable {
                 try {
+                    obs->SetPeerEndpoint(status.Endpoint);
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
                         NYdb::NIssue::IssuesFromMessage(response->issues(), opIssues);
                         TStatus rollbackTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
                             status.Endpoint, std::move(status.Metadata)});
 
+                        obs->End(rollbackTxStatus.GetStatus());
+
                         promise.SetValue(std::move(rollbackTxStatus));
                     } else {
+                        obs->End(status.Status);
                         promise.SetValue(TStatus(std::move(status)));
                     }
                 } catch (...) {
+                    obs->EndWithClientInternalError();
                     promise.SetException(std::current_exception());
                 }
             };
@@ -203,21 +232,28 @@ public:
 
         auto promise = NThreading::NewPromise<TCommitTransactionResult>();
 
-        auto responseCb = [promise, session]
+        auto obs = MakeObservation("Commit");
+
+        auto responseCb = [promise, session, obs]
             (Ydb::Query::CommitTransactionResponse* response, TPlainStatus status) mutable {
                 try {
+                    obs->SetPeerEndpoint(status.Endpoint);
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
                         NYdb::NIssue::IssuesFromMessage(response->issues(), opIssues);
                         TStatus commitTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
                             status.Endpoint, std::move(status.Metadata)});
 
+                        obs->End(commitTxStatus.GetStatus());
+
                         TCommitTransactionResult commitTxResult(std::move(commitTxStatus));
                         promise.SetValue(std::move(commitTxResult));
                     } else {
+                        obs->End(status.Status);
                         promise.SetValue(TCommitTransactionResult(TStatus(std::move(status))));
                     }
                 } catch (...) {
+                    obs->EndWithClientInternalError();
                     promise.SetException(std::current_exception());
                 }
             };
@@ -425,10 +461,12 @@ public:
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings) {
         class TQueryClientGetSessionCtx : public NSessionPool::IGetSessionCtx {
         public:
-            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TCreateSessionSettings& settings)
+            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TCreateSessionSettings& settings,
+                std::shared_ptr<TQueryObservation> observation)
                 : Promise(NThreading::NewPromise<TCreateSessionResult>())
                 , Client(client)
                 , RpcSettings(TRpcRequestSettings::Make(settings))
+                , Observation(std::move(observation))
             {}
 
             TAsyncCreateSessionResult GetFuture() {
@@ -437,6 +475,9 @@ public:
 
             void ReplyError(TStatus status) override {
                 TSession session;
+                if (Observation) {
+                    Observation->End(status.GetStatus());
+                }
                 ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
             }
 
@@ -449,14 +490,22 @@ public:
                     )
                 );
 
+                if (Observation) {
+                    Observation->End(EStatus::SUCCESS);
+                }
                 ScheduleReply(std::move(val));
             }
 
             void ReplyNewSession() override {
                 Client->CreateAttachedSession(RpcSettings).Subscribe(
-                    [promise{std::move(Promise)}](TAsyncCreateSessionResult future) mutable
+                    [promise{std::move(Promise)}, obs = Observation](TAsyncCreateSessionResult future) mutable
                 {
-                    promise.SetValue(future.ExtractValue());
+                    auto val = future.ExtractValue();
+                    if (obs) {
+                        obs->SetPeerEndpoint(val.GetEndpoint());
+                        obs->End(val.GetStatus());
+                    }
+                    promise.SetValue(std::move(val));
                 });
             }
 
@@ -481,9 +530,11 @@ public:
             NThreading::TPromise<TCreateSessionResult> Promise;
             std::shared_ptr<TQueryClient::TImpl> Client;
             const TRpcRequestSettings RpcSettings;
+            std::shared_ptr<TQueryObservation> Observation;
         };
 
-        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings);
+        auto obs = MakeObservation("GetSession");
+        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings, obs);
         auto future = ctx->GetFuture();
         SessionPool_.GetSession(std::move(ctx));
 
@@ -552,6 +603,20 @@ public:
     }
 
 private:
+    std::shared_ptr<TQueryObservation> MakeObservation(const std::string& operationName) {
+        return std::make_shared<TQueryObservation>(
+            "Query",
+            &OperationStatCollector_,
+            Tracer_,
+            operationName,
+            DbDriverState_->DiscoveryEndpoint,
+            DbDriverState_->Database,
+            DbDriverState_->Log
+        );
+    }
+
+    std::shared_ptr<NTrace::ITracer> Tracer_;
+    NSdkStats::TStatCollector::TClientOperationStatCollector OperationStatCollector_;
     NSdkStats::TStatCollector::TClientRetryOperationStatCollector RetryOperationStatCollector_;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram_;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram_;

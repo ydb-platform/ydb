@@ -32,14 +32,6 @@ public:
         return Max_;
     }
 
-    T& Min() {
-        return Min_;
-    }
-
-    T& Max() {
-        return Max_;
-    }
-
     bool operator==(const TWindowFrame&) const = default;
 
 private:
@@ -48,14 +40,38 @@ private:
 };
 
 // Hash function for TWindowFrame.
-template <typename T>
-struct TWindowFrameHash {
+template <typename T, typename THash = THash<typename TWindowFrame<T>::TBoundType>>
+class TWindowFrameHash {
+public:
+    explicit TWindowFrameHash(THash boundHash = THash())
+        : BoundHash_(std::move(boundHash))
+    {
+    }
+
     size_t operator()(const TWindowFrame<T>& frame) const {
-        TNumberAndDirectionHash<typename T::TNumberType> boundHash;
-        size_t hash = boundHash(frame.Min());
-        hash = CombineHashes(hash, boundHash(frame.Max()));
+        size_t hash = BoundHash_(frame.Min());
+        hash = CombineHashes(hash, BoundHash_(frame.Max()));
         return hash;
     }
+
+private:
+    THash BoundHash_;
+};
+
+template <typename T, typename TComparator = TEqualTo<typename TWindowFrame<T>::TBoundType>>
+class TWindowFrameComparator {
+public:
+    explicit TWindowFrameComparator(TComparator comparator = TComparator{})
+        : Comparator_(comparator)
+    {
+    }
+
+    bool operator()(const TWindowFrame<T>& left, const TWindowFrame<T>& right) const {
+        return Comparator_(left.Min(), right.Min()) && Comparator_(left.Max(), right.Max());
+    }
+
+private:
+    TComparator Comparator_;
 };
 
 template <typename T>
@@ -100,7 +116,7 @@ public:
 //
 // Unbounded values are represented using TNumberAndDirection with TUnbounded type,
 // indicating infinite extent in the specified direction (Left for PRECEDING, Right for FOLLOWING).
-template <typename TRangeElement>
+template <typename TRangeElement, bool WithSortedColumnNames>
 class TCoreWinFrameCollectorBounds {
 public:
     // Handle that identifies a window frame specification.
@@ -133,8 +149,26 @@ public:
 
     TCoreWinFrameCollectorBounds() = default;
 
-    THandle AddRange(const TInputRangeWindowFrame<TRangeElement>& range) {
-        RangeIntervals_.push_back(range);
+    using TSortColumnName = TString;
+    using TSortColumnNameView = TStringBuf;
+
+    using TSortColumnNames = std::pair<TSortColumnName, TSortColumnName>;
+    using TSortColumnNamesView = std::pair<TSortColumnNameView, TSortColumnNameView>;
+
+    using TRangeInterval = std::conditional_t<WithSortedColumnNames, std::pair<TInputRangeWindowFrame<TRangeElement>, TSortColumnNames>, TInputRangeWindowFrame<TRangeElement>>;
+    using TRangeIncremental = std::conditional_t<WithSortedColumnNames, std::pair<TInputRange<TRangeElement>, TSortColumnName>, TInputRange<TRangeElement>>;
+
+    THandle AddRange(TInputRangeWindowFrame<TRangeElement> range, TSortColumnNamesView sortColumnNames)
+        requires WithSortedColumnNames
+    {
+        RangeIntervals_.push_back({std::move(range), TSortColumnNames(sortColumnNames.first, sortColumnNames.second)});
+        return THandle(RangeIntervals_.size() - 1, /*isRange=*/true, /*isIncremental=*/false);
+    }
+
+    THandle AddRange(TInputRangeWindowFrame<TRangeElement> range)
+        requires(!WithSortedColumnNames)
+    {
+        RangeIntervals_.push_back(std::move(range));
         return THandle(RangeIntervals_.size() - 1, /*isRange=*/true, /*isIncremental=*/false);
     }
 
@@ -143,8 +177,17 @@ public:
         return THandle(RowIntervals_.size() - 1, /*isRange=*/false, /*isIncremental=*/false);
     }
 
-    THandle AddRangeIncremental(const TInputRange<TRangeElement>& delta) {
-        RangeIncrementals_.push_back(delta);
+    THandle AddRangeIncremental(TInputRange<TRangeElement> delta, TSortColumnNameView sortColumnName)
+        requires WithSortedColumnNames
+    {
+        RangeIncrementals_.push_back({std::move(delta), TSortColumnName(sortColumnName)});
+        return THandle(RangeIncrementals_.size() - 1, /*isRange=*/true, /*isIncremental=*/true);
+    }
+
+    THandle AddRangeIncremental(TInputRange<TRangeElement> delta)
+        requires(!WithSortedColumnNames)
+    {
+        RangeIncrementals_.push_back(std::move(delta));
         return THandle(RangeIncrementals_.size() - 1, /*isRange=*/true, /*isIncremental=*/true);
     }
 
@@ -153,7 +196,7 @@ public:
         return THandle(RowIncrementals_.size() - 1, /*isRange=*/false, /*isIncremental=*/true);
     }
 
-    const TVector<TInputRangeWindowFrame<TRangeElement>>& RangeIntervals() const {
+    const auto& RangeIntervals() const {
         return RangeIntervals_;
     }
 
@@ -161,7 +204,7 @@ public:
         return RowIntervals_;
     }
 
-    const TVector<TInputRange<TRangeElement>>& RangeIncrementals() const {
+    const auto& RangeIncrementals() const {
         return RangeIncrementals_;
     }
 
@@ -174,9 +217,9 @@ public:
     }
 
 private:
-    TVector<TInputRangeWindowFrame<TRangeElement>> RangeIntervals_;
+    TVector<TRangeInterval> RangeIntervals_;
     TVector<TInputRowWindowFrame> RowIntervals_;
-    TVector<TInputRange<TRangeElement>> RangeIncrementals_;
+    TVector<TRangeIncremental> RangeIncrementals_;
     TVector<TInputRow> RowIncrementals_;
 };
 

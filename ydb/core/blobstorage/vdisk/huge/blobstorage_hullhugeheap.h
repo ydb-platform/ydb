@@ -155,7 +155,7 @@ namespace NKikimr {
         public:
             TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize, TControlWrapper chunksSoftLocking)
                 : VDiskLogPrefix(std::move(vdiskLogPrefix))
-                , ConstMask(BuildConstMask(vdiskLogPrefix, slotsInChunk))
+                , ConstMask(BuildConstMask(VDiskLogPrefix, slotsInChunk))
                 , ChunksSoftLocking(chunksSoftLocking)
                 , SlotsInChunk(slotsInChunk)
                 , SlotSize(slotSize)

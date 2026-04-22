@@ -31,7 +31,7 @@ namespace NMonitoring {
                 , TimePrecision_(timePrecision)
                 , Compression_(compression)
                 , Version_(version)
-                , MetricName_(Version_ >= SV1_02 ? LabelNamesPool_.PutIfAbsent(metricNameLabel) : nullptr)
+                , MetricName_(Version_ == SV1_02 ? LabelNamesPool_.PutIfAbsent(metricNameLabel) : nullptr)
             {
                 MetricsMergingMode_ = mergingMode;
 
@@ -96,10 +96,15 @@ namespace NMonitoring {
                 header.Version = Version_;
                 header.TimePrecision = EncodeTimePrecision(TimePrecision_);
                 header.Compression = EncodeCompression(Compression_);
-                header.LabelNamesSize = static_cast<ui32>(
-                    LabelNamesPool_.BytesSize() + LabelNamesPool_.Count());
-                header.LabelValuesSize = static_cast<ui32>(
-                    LabelValuesPool_.BytesSize() + LabelValuesPool_.Count());
+                if (Version_ == SV1_03) {
+                    header.LabelNamesSize = static_cast<ui32>(LabelNamesPool_.Count());
+                    header.LabelValuesSize = static_cast<ui32>(LabelValuesPool_.Count());
+                } else {
+                    header.LabelNamesSize = static_cast<ui32>(
+                        LabelNamesPool_.BytesSize() + LabelNamesPool_.Count());
+                    header.LabelValuesSize = static_cast<ui32>(
+                        LabelValuesPool_.BytesSize() + LabelValuesPool_.Count());
+                }
                 header.MetricCount = Metrics_.size();
                 header.PointsCount = pointsCount;
                 Out_->Write(&header, sizeof(header));
@@ -111,13 +116,21 @@ namespace NMonitoring {
                 }
 
                 // (2) write string pools
-                auto strPoolWrite = [this](TStringBuf str, ui32, ui32) {
-                    Out_->Write(str);
-                    Out_->Write('\0');
-                };
-
-                LabelNamesPool_.ForEach(strPoolWrite);
-                LabelValuesPool_.ForEach(strPoolWrite);
+                if (Version_ == SV1_03) {
+                    auto strPoolWrite = [this](TStringBuf str, ui32, ui32) {
+                        WriteVarUInt32(Out_, static_cast<ui32>(str.size()));
+                        Out_->Write(str);
+                    };
+                    LabelNamesPool_.ForEach(strPoolWrite);
+                    LabelValuesPool_.ForEach(strPoolWrite);
+                } else {
+                    auto strPoolWrite = [this](TStringBuf str, ui32, ui32) {
+                        Out_->Write(str);
+                        Out_->Write('\0');
+                    };
+                    LabelNamesPool_.ForEach(strPoolWrite);
+                    LabelValuesPool_.ForEach(strPoolWrite);
+                }
 
                 // (3) write common time
                 WriteTime(CommonTime_);
@@ -137,7 +150,7 @@ namespace NMonitoring {
                     Out_->Write(&flagsByte, sizeof(flagsByte));
 
                     // v1.2 format addition — metric name
-                    if (Version_ >= SV1_02) {
+                    if (Version_ == SV1_02) {
                         const auto it = FindIf(metric.Labels, [&](const auto& l) {
                             return l.Key == MetricName_;
                         });
@@ -318,5 +331,14 @@ namespace NMonitoring {
     ) {
         Y_ENSURE(!metricNameLabel.empty(), "metricNameLabel can't be empty");
         return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_02, metricNameLabel);
+    }
+
+    IMetricEncoderPtr EncoderSpackV13(
+        IOutputStream* out,
+        ETimePrecision timePrecision,
+        ECompression compression,
+        EMetricsMergingMode mergingMode
+    ) {
+        return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_03, "");
     }
 }

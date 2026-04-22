@@ -113,21 +113,26 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
 
     class TKeysBuilder {
     public:
-        TKeysBuilder() = default;
+        TKeysBuilder(uint32_t cols = 1): Cols(cols)
+        { }
 
         TKeysBuilder&& Add(i32 key) && {
             Cells.push_back(TCell::Make(key));
-            ++Rows;
+            return std::move(*this);
+        }
+
+        TKeysBuilder&& AddNull() && {
+            Cells.emplace_back();
             return std::move(*this);
         }
 
         TSerializedCellMatrix Build() && {
-            return TSerializedCellMatrix(TSerializedCellMatrix::Serialize(Cells, Rows, 1));
+            return TSerializedCellMatrix(TSerializedCellMatrix::Serialize(Cells, Cells.size()/Cols, Cols));
         }
 
     private:
         TVector<TCell> Cells;
-        size_t Rows = 0;
+        const size_t Cols;
     };
 
     class TLockRowsHelper {
@@ -1622,6 +1627,216 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
 
         // Uncommitted: none left
         UNIT_ASSERT_VALUES_EQUAL(pipe.GetOpenTxs(tableId).size(), 0u);
+    }
+
+    Y_UNIT_TEST_TWIN(UniqueIndexBasic, OnAdd) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(1)
+            .SetUseRealThreads(false);
+        serverSettings.FeatureFlags.SetEnableAddUniqueIndex(true);
+        serverSettings.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
+        auto [runtime, server, sender] = TestCreateServer(pm, serverSettings);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        if (OnAdd) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSchemeExec(runtime, R"(
+                    CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk));
+                )"),
+                "SUCCESS");
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSchemeExec(runtime, R"(
+                    ALTER TABLE `/Root/table` ADD INDEX idx GLOBAL UNIQUE ON (uniq);
+                )", "/Root"),
+                "SUCCESS");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSchemeExec(runtime, R"(
+                    CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+                )"),
+                "SUCCESS");
+        }
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Unique indexes should have UniqueIndexKeySize = number of unique key columns
+
+        // Lock (1, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Try locking (1, 2) by lock 2 - should conflict
+        auto req2 = sendRequestWithUniq(lock2, TKeysBuilder(2).Add(1).Add(2).Build());
+        lockRows.ExpectNoResult();
+
+        // Try locking (1, 2) by lock 1 - should be OK, the same lock is already taken
+        auto req3 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req3);
+
+        // Try waiting for lock 2 some more
+        lockRows.ExpectNoResult();
+
+        // Destroy lock 1 handle, it must rollback all changes
+        lock1.Reset();
+
+        // Try waiting for lock 2 result now
+        lockRows.ExpectResult(req2);
+    }
+
+    Y_UNIT_TEST(UniqueIndexNulls) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockHandle lock2(234, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Lock (null, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).AddNull().Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Try locking (null, 2) by lock 2 - should not conflict
+        auto req2 = sendRequestWithUniq(lock2, TKeysBuilder(2).AddNull().Add(2).Build());
+        lockRows.ExpectResult(req2);
+    }
+
+    Y_UNIT_TEST(UniqueIndexOverUncommittedThenCommit) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Write an uncommitted row (1, 101)
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (uniq, pk) VALUES (1, 101);
+                SELECT uniq, pk FROM `/Root/table` WHERE uniq = 1;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 101 } }");
+
+        // Lock (1, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Commit the previous transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
+
+        // Lock (2, 1) by lock 1 (lock must be broken now)
+        auto req2 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(2).Add(1).Build());
+        lockRows.ExpectResult(req2, NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+    }
+
+    Y_UNIT_TEST(UniqueIndexUncommittedOverLock) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (uniq int, pk int, PRIMARY KEY (uniq, pk), INDEX idx GLOBAL UNIQUE ON (uniq));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table/idx/indexImplTable");
+        const auto shards = GetTableShards(server, sender, "/Root/table/idx/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TTestPipe pipe(runtime, shards.at(0));
+
+        TLockHandle lock1(123, runtime.GetActorSystem(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        auto sendRequestWithUniq = [&](const TLockHandle& lock, TSerializedCellMatrix keys) {
+            return lockRows.SendRequest(lock, tableId, keys, [&](auto* req) {
+                req->Record.AddColumnIds(2);
+            });
+        };
+
+        // Lock (1, 1) by lock 1
+        auto req1 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(1).Add(1).Build());
+        lockRows.ExpectResult(req1);
+
+        // Write an uncommitted row (1, 101)
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (uniq, pk) VALUES (1, 101);
+                SELECT uniq, pk FROM `/Root/table` WHERE uniq = 1;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 101 } }");
+
+        // Lock (2, 1) by lock 1 (lock not broken yet)
+        auto req2 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(2).Add(1).Build());
+        lockRows.ExpectResult(req2);
+
+        // Commit the previous transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
+
+        // Lock (3, 1) by lock 1 (lock must be broken now)
+        auto req3 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(3).Add(1).Build());
+        lockRows.ExpectResult(req3, NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)

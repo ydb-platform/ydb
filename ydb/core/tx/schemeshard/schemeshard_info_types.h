@@ -714,6 +714,38 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TableDescription.MutableTTLSettings();
     }
 
+    /**
+     * Determine if the detailed metrics settings are configured for the given table.
+     *
+     * @return True, if the detailed metrics settings are configured for the given table
+     */
+    bool HasDetailedMetricsSettings() const {
+        return TableDescription.HasDetailedMetricsSettings()
+            && (TableDescription.GetDetailedMetricsSettings().GetStatusCase()
+                    == NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured)
+            && (TableDescription.GetDetailedMetricsSettings().HasConfigured());
+    }
+
+    /**
+     * Return the detailed metrics settings for the given table.
+     *
+     * @warning This function should be called only if HasDetailedMetricsSettings() returns true.
+     *
+     * @return The detailed metrics settings for the given table
+     */
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings::TConfigured& GetDetailedMetricsSettings() const {
+        return TableDescription.GetDetailedMetricsSettings().GetConfigured();
+    }
+
+    /**
+     * Return the modifiable version of the detailed metrics settings for the given table.
+     *
+     * @return The modifiable version of the detailed metrics settings for the given table
+     */
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::TConfigured& MutableDetailedMetricsSettings() {
+        return *TableDescription.MutableDetailedMetricsSettings()->MutableConfigured();
+    }
+
     ui32 GetTTLColumnId() const {
         if (!IsTTLEnabled()) {
             return Max<ui32>();
@@ -1274,6 +1306,7 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         TSet<ui32> ChildPartitionIds;
 
         TShardIdx ShardIdx;
+        TInstant CreationTimestamp;
 
         void SetStatus(const TActorContext& ctx, ui32 value) {
             if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&
@@ -2885,6 +2918,7 @@ struct TCdcStreamSettings {
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
     OPTION(bool, UserSIDs);
+    OPTION(bool, TraceIds);
 
     #undef OPTION
 };
@@ -2933,6 +2967,7 @@ struct TCdcStreamInfo
             .WithSchemaChanges(desc.GetSchemaChanges())
             .WithAwsRegion(desc.GetAwsRegion())
             .WithUserSIDs(desc.GetUserSIDs())
+            .WithTraceIds(desc.GetTraceIds())
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -2958,6 +2993,7 @@ struct TCdcStreamInfo
             scanProgress.SetShardsCompleted(DoneShards.size());
         }
         desc.SetUserSIDs(UserSIDs);
+        desc.SetTraceIds(TraceIds);
     }
 
     void FinishAlter() {
@@ -3858,6 +3894,21 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
+
+/**
+ * Check if the given detailed metrics settings (for a table) are valid.
+ *
+ * @param[in] forCreate Indicates if this is for CREATE TABLE (ALTER TABLE otherwise)
+ * @param[in] metricsSettings The detailed metrics settings to validate
+ * @param[out] errorString Receives the error message, if the metrics settings are not valid
+ *
+ * @return Indicates if the detailed metrics settings are valid
+ */
+bool ValidateTableDetailedMetricsSettings(
+    bool forCreate,
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings& metricsSettings,
+    TString& errorString
+);
 
 TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& settings, const bool allowNonDeleteTiers);
 

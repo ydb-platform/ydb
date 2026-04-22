@@ -63,6 +63,13 @@ struct TOrderBy {
     TVector<TSortSpecificationPtr> Keys;
 };
 
+struct TWindow {
+    TString Name;
+    TVector<TNodePtr> PartitionBy;
+    TMaybe<TOrderBy> OrderBy;
+    TFrameSpecificationPtr Frame;
+};
+
 struct TYqlTableRefArgs {
     TString Service;
     TString Cluster;
@@ -81,6 +88,7 @@ struct TYqlSetItemArgs {
     TMaybe<TNodePtr> Where;
     TMaybe<TGroupBy> GroupBy;
     TMaybe<TNodePtr> Having;
+    TMap<TString, TWindow> Windows;
     TMaybe<TOrderBy> OrderBy;
     TMaybe<TNodePtr> Limit;
     TMaybe<TNodePtr> Offset;

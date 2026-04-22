@@ -22,7 +22,7 @@ TNode* BuildCallableTypePayload(const TVector<TStringBuf>& argNames,
         TStructLiteralBuilder itemBuilder(env);
         auto name = argNames[i];
         auto flags = argFlags[i];
-        bool hasName = name.size() > 0;
+        bool hasName = !name.empty();
         if (startedNames) {
             MKQL_ENSURE(hasName, "Named arguments already started");
         } else {

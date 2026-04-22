@@ -45,8 +45,6 @@ items:
       href: commands/explain-plan.md
     - name: Streaming table reads
       href: commands/readtable.md
-    - name: Scan queries
-      href: commands/scan-query.md
   - name: Importing and exporting data
     include: { mode: link, path: export-import/toc_p.yaml }
   - name: Working with topics

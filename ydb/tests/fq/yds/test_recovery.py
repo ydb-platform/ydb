@@ -150,9 +150,10 @@ class TestRecovery(TestYdsBase):
         ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         logging.debug("Uuid = {}".format(kikimr.uuid))
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
         master_node_index = self.get_graph_master_node_id(query_id)
         logging.debug("Master node {}".format(master_node_index))
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
         self.write_stream([f'{{"time" = {i};}}' for i in range(100, 115, 2)])
 
@@ -282,6 +283,10 @@ class TestRecovery(TestYdsBase):
         kikimr.compute_plane.kikimr_cluster.nodes[master_node_index].stop()
         kikimr.compute_plane.kikimr_cluster.nodes[master_node_index].start()
         kikimr.compute_plane.wait_bootstrap(master_node_index)
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1
+        )
         master_node_index = self.get_graph_master_node_id(query_id)
 
         logging.debug("New master node {}".format(master_node_index))

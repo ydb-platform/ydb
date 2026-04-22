@@ -496,6 +496,19 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
     TSet<TStringBuf> payloadFields;
     TExprNodeList newCalcs;
     auto calcs = ExtractCalcsOverWindow(node, ctx);
+    for (auto& calcNode : calcs) {
+        // exclude all columns used in WinFilter predicates from drop list
+        TCoCalcOverWindowTuple calc(calcNode);
+        for (const auto& winOnRows : calc.Frames().Ref().ChildrenList()) {
+            if (TCoWinFilter::Match(winOnRows.Get())) {
+                TCoWinFilter winFilter(winOnRows);
+                auto structType = winFilter.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (const auto& item : structType->GetItems()) {
+                    toDrop.erase(item->GetName());
+                }
+            }
+        }
+    }
     bool dropped = false;
     for (auto& calcNode : calcs) {
         TCoCalcOverWindowTuple calc(calcNode);
@@ -546,6 +559,17 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
         TExprNodeList newFrames;
         for (const auto& winOnRows : calc.Frames().Ref().ChildrenList()) {
             YQL_ENSURE(TCoWinOnBase::Match(winOnRows.Get()));
+            if (TCoWinFilter::Match(winOnRows.Get())) {
+                TCoWinFilter winFilter(winOnRows);
+                auto structType = winFilter.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (const auto& item : structType->GetItems()) {
+                    if (!payloadFields.contains(item->GetName())) {
+                        usedFields.insert(item->GetName());
+                    }
+                }
+                newFrames.push_back(winOnRows);
+                continue;
+            }
 
             TExprNodeList newFrameItems;
             newFrameItems.push_back(winOnRows->ChildPtr(0));

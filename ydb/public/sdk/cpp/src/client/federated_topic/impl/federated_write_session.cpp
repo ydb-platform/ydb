@@ -160,7 +160,7 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
                     }
                 }
 
-                self->ClientEventsQueue->PushEvent(std::move(ev));
+                self->ClientEventsQueue->PushEvent(ev);
                 self->IssueTokenIfAllowed();
             }
         })

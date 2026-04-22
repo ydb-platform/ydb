@@ -42,7 +42,10 @@ inline ui8 CompressByte(ui8 x, ui8 m) {
     // MASKED VALUES:    --10--1-
     // RESULT:           00000101
     // TODO: should be replaced by PEXT instruction from BMI2 instruction set
-    ui8 mk, mp, mv, t;
+    ui8 mk;
+    ui8 mp;
+    ui8 mv;
+    ui8 t;
     x = x & m;    // Clear irrelevant bits.
     mk = ~m << 1; // We will count 0's to right.
     for (ui8 i = 0; i < 3; i++) {

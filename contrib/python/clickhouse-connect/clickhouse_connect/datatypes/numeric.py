@@ -7,9 +7,10 @@ from math import nan, isnan, isinf
 
 from clickhouse_connect.datatypes.base import TypeDef, ArrayType, ClickHouseType
 from clickhouse_connect.driver.common import array_type, write_array, decimal_size, decimal_prec, first_value
-from clickhouse_connect.driver.ctypes import numpy_conv, data_conv
+from clickhouse_connect.driver import ctypes as driver_ctypes
+from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.options import pd, np
+from clickhouse_connect.driver import options
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
 
@@ -78,7 +79,7 @@ class UInt64(IntBase):
         fmt = self.read_format(ctx)
         if ctx.use_numpy:
             np_type = '<q' if fmt == 'signed' else '<u8'
-            return numpy_conv.read_numpy_array(source, np_type, num_rows)
+            return driver_ctypes.numpy_conv.read_numpy_array(source, np_type, num_rows)
         arr_type = 'q' if fmt == 'signed' else 'Q'
         return source.read_array(arr_type, num_rows)
 
@@ -91,9 +92,9 @@ class UInt64(IntBase):
         if fmt == 'string':
             return [str(x) for x in column]
         if ctx.use_extended_dtypes and self.nullable:
-            return pd.array(column, dtype='Int64' if fmt == 'signed' else 'UInt64')
+            return options.pd.array(column, dtype='Int64' if fmt == 'signed' else 'UInt64')
         if ctx.use_numpy and self.nullable and (not ctx.use_none):
-            return np.array(column, dtype='<q' if fmt == 'signed' else '<u8')
+            return options.np.array(column, dtype='<q' if fmt == 'signed' else '<u8')
         return column
 
 
@@ -175,7 +176,7 @@ class Float(ArrayType, registered=False):
         if self.read_format(ctx) == 'string':
             return [str(x) for x in column]
         if ctx.use_numpy and self.nullable and (not ctx.use_none):
-            return np.array(column, dtype=self.np_type)
+            return options.np.array(column, dtype=self.np_type)
         return column
 
     def _active_null(self, ctx: QueryContext):
@@ -245,8 +246,8 @@ class BFloat16(ArrayType):
         self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any
     ):
         if ctx.use_numpy:
-            arr16 = numpy_conv.read_numpy_array(source, "<u2", num_rows)
-            return (arr16.astype(np.uint32) << np.uint32(16)).view(np.float32)
+            arr16 = driver_ctypes.numpy_conv.read_numpy_array(source, "<u2", num_rows)
+            return (arr16.astype(options.np.uint32) << options.np.uint32(16)).view(options.np.float32)
 
         raw = source.read_array(self._array_type, num_rows)
         return [struct.unpack("<f", struct.pack("<I", v << 16))[0] for v in raw]
@@ -257,8 +258,8 @@ class BFloat16(ArrayType):
         null_map = source.read_bytes(num_rows)
 
         if ctx.use_numpy:
-            arr16 = numpy_conv.read_numpy_array(source, "<u2", num_rows)
-            floats = (arr16.astype(np.uint32) << np.uint32(16)).view(np.float32)
+            arr16 = driver_ctypes.numpy_conv.read_numpy_array(source, "<u2", num_rows)
+            floats = (arr16.astype(options.np.uint32) << options.np.uint32(16)).view(options.np.float32)
             return data_conv.build_nullable_column(
                 floats, null_map, self._active_null(ctx)
             )
@@ -269,9 +270,9 @@ class BFloat16(ArrayType):
 
     def _finalize_column(self, column, ctx: QueryContext):
         if ctx.use_extended_dtypes and self.nullable:
-            return pd.array(column, dtype="Float32")
-        if ctx.use_numpy and not isinstance(column, np.ndarray):
-            return np.array(column, dtype=self.np_type)
+            return options.pd.array(column, dtype="Float32")
+        if ctx.use_numpy and not isinstance(column, options.np.ndarray):
+            return options.np.array(column, dtype=self.np_type)
         return column
 
     def _active_null(self, ctx: QueryContext):
@@ -295,7 +296,7 @@ class Bool(ClickHouseType):
 
     def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
         if ctx.use_numpy:
-            return np.array(column)
+            return options.np.array(column)
         return column
 
     def _write_column_binary(self, column, dest, ctx):

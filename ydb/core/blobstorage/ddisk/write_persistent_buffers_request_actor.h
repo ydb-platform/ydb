@@ -4,6 +4,9 @@
 
 #include "ddisk.h"
 
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
+
 namespace NKikimr::NDDisk {
     class TWritePersistentBuffersRequestActor : public TActor<TWritePersistentBuffersRequestActor> {
         struct TReadInflight {
@@ -34,6 +37,7 @@ namespace NKikimr::NDDisk {
             ui64 Cookie;
             std::unordered_map<ui64, TPersistentBufferInflight> Inflights;
             ui32 Received = 0;
+            NWilson::TSpan Span;
         };
 
         std::unordered_map<ui64, ui64> InflightParts;

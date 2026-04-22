@@ -37,6 +37,37 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
 }
 
 bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+    for (auto&& rename : schemaUpdate.GetMoveIndexes()) {
+        const auto* sourceIndex = GetByName(rename.GetSourceName());
+        if (!sourceIndex) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown index for rename: " << rename.GetSourceName());
+            return false;
+        }
+
+        const ui32 sourceIndexId = sourceIndex->GetId();
+        if (auto&& destinationIndex = GetByName(rename.GetDestinationName())) {
+            if (!rename.GetReplaceDestination()) {
+                errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "Index already exists: " << rename.GetDestinationName());
+                return false;
+            }
+
+            AFL_VERIFY(IndexesByName.erase(rename.GetDestinationName()));
+            AFL_VERIFY(Indexes.erase(destinationIndex->GetId()));
+        }
+
+        NKikimrSchemeOp::TOlapIndexDescription renamedProto;
+        sourceIndex->SerializeToProto(renamedProto);
+        renamedProto.SetName(rename.GetDestinationName());
+
+        TOlapIndexSchema renamedIndex;
+        renamedIndex.DeserializeFromProto(renamedProto);
+
+        AFL_VERIFY(IndexesByName.erase(rename.GetSourceName()));
+        AFL_VERIFY(Indexes.erase(sourceIndexId));
+        Y_ABORT_UNLESS(IndexesByName.emplace(rename.GetDestinationName(), sourceIndexId).second);
+        Y_ABORT_UNLESS(Indexes.emplace(sourceIndexId, std::move(renamedIndex)).second);
+    }
+
     for (auto&& index : schemaUpdate.GetUpsertIndexes()) {
         auto* currentIndex = MutableByName(index.GetName());
         if (currentIndex) {

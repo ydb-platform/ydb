@@ -3,6 +3,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/core/log.h>
 

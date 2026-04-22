@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/persqueue
     ydb/library/persqueue/topic_parser
     ydb/library/cloud_permissions
     ydb/public/api/protos
@@ -25,6 +26,7 @@ PEERDIR(
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/metadata
+    ydb/services/persqueue_v1/actors/schema
 )
 
 SRCS(
@@ -34,7 +36,6 @@ SRCS(
     commit_offset_actor.cpp
     distributed_commit_helper.h
     distributed_commit_helper.cpp
-    distributed_commit_helper_sql.cpp
     events.h
     persqueue_utils.h
     persqueue_utils.cpp

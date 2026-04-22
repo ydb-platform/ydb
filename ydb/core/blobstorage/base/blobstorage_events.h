@@ -622,4 +622,23 @@ namespace NKikimr {
         TEvInterpilePutResult() = default;
     };
 
+    struct TEvNodeWardenListLocalDDisks
+        : TEventLocal<TEvNodeWardenListLocalDDisks, TEvBlobStorage::EvNodeWardenListLocalDDisks>
+    {
+        TEvNodeWardenListLocalDDisks() = default;
+    };
+
+    struct TEvNodeWardenListLocalDDisksResult
+        : TEventLocal<TEvNodeWardenListLocalDDisksResult, TEvBlobStorage::EvNodeWardenListLocalDDisksResult>
+    {
+        struct TDDiskInfo {
+            TActorId DDiskId;
+            TActorId PersistentBufferId;
+        };
+
+        std::vector<TDDiskInfo> Infos;
+
+        TEvNodeWardenListLocalDDisksResult() = default;
+    };
+
 } // NKikimr

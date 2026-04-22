@@ -24,7 +24,7 @@ SELECT
     previous_state_filtered, 
     state_change_date_filtered, 
     days_in_state_filtered,
-    String::ReplaceAll(owner, 'TEAM:@ydb-platform/', '') as owner_team
+    COALESCE(effective_owner_team, String::ReplaceAll(owner, 'TEAM:@ydb-platform/', '')) AS owner_team
 FROM `test_results/analytics/tests_monitor`
 WHERE date_window >= CurrentUtcDate() - 1 * Interval("P1D") -- for init table better take 30* Interval("P1D")
 and ( branch = 'main' or branch like 'stable-%' or branch like 'stream-nb-2%')

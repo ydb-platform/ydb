@@ -383,9 +383,6 @@ runs:
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
-        MUTED_YAML_PATH="$PUBLIC_DIR/muted_tests.yaml"
-        python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml .github/config/muted_ya.txt > $MUTED_YAML_PATH
-
         BUILD_FAILED=0
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
@@ -405,12 +402,17 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
+          PREV_REPORT="$CURRENT_REPORT"
+          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
+              MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
+              python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml .github/config/muted_ya.txt "$PREV_REPORT" > $MUTED_YAML_PATH
               RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
             else
               RERUN_FAILED_OPT=""
@@ -418,8 +420,6 @@ runs:
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
-          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           monitor_memory() {
               set +x

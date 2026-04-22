@@ -18,7 +18,7 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
         return data.child_data[0];
     } else {
         auto buffers = data.buffers;
-        MKQL_ENSURE(buffers.size() >= 1, "Missing nullable bitmap");
+        MKQL_ENSURE(!buffers.empty(), "Missing nullable bitmap");
         buffers[0] = nullptr;
         return arrow::ArrayData::Make(data.type, data.length, buffers, data.child_data, data.dictionary, 0, data.offset);
     }

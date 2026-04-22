@@ -74,11 +74,18 @@ constexpr std::array<ELocation, 5> PBufferLocations{
     ELocation::HOPBuffer0,
     ELocation::HOPBuffer1};
 
+constexpr std::array<ELocation, 2> HandOffPBuffersLocations{
+    ELocation::HOPBuffer0,
+    ELocation::HOPBuffer1,
+};
+
 bool IsDDisk(ELocation location);
 bool IsPBuffer(ELocation location);
 
 ELocation TranslateDDiskToPBuffer(ELocation location);
 ELocation TranslatePBufferToDDisk(ELocation location);
+
+size_t GetLocationIndex(ELocation location);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -105,6 +112,8 @@ public:
     TLocationMask() = default;
 
     static TLocationMask MakeEmpty();
+
+    static TLocationMask MakeOne(ELocation location);
 
     static TLocationMask Make(
         bool primary0,
@@ -148,8 +157,10 @@ public:
     [[nodiscard]] size_t Count() const;
     [[nodiscard]] bool HasDDisk() const;
     [[nodiscard]] bool OnlyDDisk() const;
+    [[nodiscard]] bool OnlyDDiskAndNotEmpty() const;
     [[nodiscard]] bool HasPBuffer() const;
     [[nodiscard]] bool OnlyPBuffer() const;
+    [[nodiscard]] bool OnlyPBufferAndNotEmpty() const;
     [[nodiscard]] std::optional<ELocation> GetLocation(size_t tryNumber) const;
 
     bool operator==(const TLocationMask& other) const;
@@ -175,6 +186,26 @@ struct TRoute
 
     bool operator==(const TRoute& other) const;
     bool operator<(const TRoute& other) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+class THolderForLocation
+{
+public:
+    [[nodiscard]] const T& operator[](ELocation location) const
+    {
+        return Data[GetLocationIndex(location)];
+    }
+
+    [[nodiscard]] T& operator[](ELocation location)
+    {
+        return Data[GetLocationIndex(location)];
+    }
+
+private:
+    std::array<T, 10> Data;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

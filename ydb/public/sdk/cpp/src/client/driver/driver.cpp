@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/driver/constants.h>
@@ -46,6 +47,7 @@ public:
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     std::string GetGRpcLoadBalancingPolicy() const override { return GRpcLoadBalancingPolicy; }
+    EGrpcCompressionAlgorithm GetGRpcCompressionAlgorithm() const override { return GRpcCompressionAlgorithm; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     uint64_t GetMemoryQuota() const override { return MemoryQuota; }
     uint64_t GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
@@ -53,6 +55,9 @@ public:
     uint64_t GetMaxMessageSize() const override { return MaxMessageSize; }
     const TLog& GetLog() const override { return Log; }
     std::shared_ptr<IExecutor> GetExecutor() const override { return Executor; }
+    std::string GetBuildInfoExtra() const override { return BuildInfoExtra; }
+    std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const override { return MetricRegistry; }
+    std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const override { return TraceProvider; }
 
     std::string Endpoint;
     size_t NetworkThreadsNum = 2;
@@ -77,6 +82,7 @@ public:
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
     std::string GRpcLoadBalancingPolicy = "round_robin";
+    EGrpcCompressionAlgorithm GRpcCompressionAlgorithm = EGrpcCompressionAlgorithm::None;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
     uint64_t MaxInboundMessageSize = 0;
@@ -84,6 +90,9 @@ public:
     uint64_t MaxMessageSize = 0;
     TLog Log; // Null by default.
     std::shared_ptr<IExecutor> Executor;
+    std::string BuildInfoExtra;
+    std::shared_ptr<NMetrics::IMetricRegistry> MetricRegistry;
+    std::shared_ptr<NTrace::ITraceProvider> TraceProvider;
 };
 
 TDriverConfig::TDriverConfig(const std::string& connectionString)
@@ -213,6 +222,11 @@ TDriverConfig& TDriverConfig::SetGRpcLoadBalancingPolicy(const std::string& poli
     return *this;
 }
 
+TDriverConfig& TDriverConfig::SetGRpcCompressionAlgorithm(EGrpcCompressionAlgorithm algorithm) {
+    Impl_->GRpcCompressionAlgorithm = algorithm;
+    return *this;
+}
+
 TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     Impl_->SocketIdleTimeout = timeout;
     return *this;
@@ -240,6 +254,97 @@ TDriverConfig& TDriverConfig::SetLog(std::unique_ptr<TLogBackend>&& log) {
 
 TDriverConfig& TDriverConfig::SetExecutor(std::shared_ptr<IExecutor> executor) {
     Impl_->Executor = executor;
+    return *this;
+}
+
+namespace {
+
+constexpr size_t MaxBuildInfoExtraLength = 512;
+
+bool IsNameChar(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+}
+
+bool IsVersionPartChar(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+}
+
+bool IsNonEmptyAlnum(std::string_view s) {
+    if (s.empty()) {
+        return false;
+    }
+    for (char c : s) {
+        if (!IsVersionPartChar(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Expected format: <name>/<X>.<Y>.<Z>
+// name: [a-z0-9-]+, X/Y/Z: [a-z0-9]+
+bool IsValidBuildInfoSegment(std::string_view segment) {
+    auto slash = segment.find('/');
+    if (slash == std::string_view::npos || slash == 0) {
+        return false;
+    }
+
+    auto name = segment.substr(0, slash);
+    for (char c : name) {
+        if (!IsNameChar(c)) {
+            return false;
+        }
+    }
+
+    auto version = segment.substr(slash + 1);
+    auto dot1 = version.find('.');
+    if (dot1 == std::string_view::npos) {
+        return false;
+    }
+    auto dot2 = version.find('.', dot1 + 1);
+    if (dot2 == std::string_view::npos) {
+        return false;
+    }
+    if (version.find('.', dot2 + 1) != std::string_view::npos) {
+        return false;
+    }
+
+    return IsNonEmptyAlnum(version.substr(0, dot1))
+        && IsNonEmptyAlnum(version.substr(dot1 + 1, dot2 - dot1 - 1))
+        && IsNonEmptyAlnum(version.substr(dot2 + 1));
+}
+
+} // anonymous namespace
+
+TDriverConfig& TDriverConfig::AppendBuildInfo(std::string_view segment) {
+    if (segment.empty()) {
+        return *this;
+    }
+    if (!IsValidBuildInfoSegment(segment)) {
+        throw TContractViolation(TStringBuilder() << "Invalid build info segment '" << segment
+            << "'. Expected format: <name>/<X>.<Y>.<Z>"
+               " (name: [a-z0-9-]+, X/Y/Z: [a-z0-9]+)");
+    }
+    auto& extra = Impl_->BuildInfoExtra;
+    size_t newLength = extra.size() + (extra.empty() ? 0 : 1) + segment.size();
+    if (newLength > MaxBuildInfoExtraLength) {
+        throw TContractViolation(TStringBuilder() << "Build info extra exceeds maximum length of "
+            << MaxBuildInfoExtraLength << " bytes");
+    }
+    if (!extra.empty()) {
+        extra += ';';
+    }
+    extra += segment;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetMetricRegistry(std::shared_ptr<NMetrics::IMetricRegistry> registry) {
+    Impl_->MetricRegistry = std::move(registry);
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetTraceProvider(std::shared_ptr<NTrace::ITraceProvider> provider) {
+    Impl_->TraceProvider = std::move(provider);
     return *this;
 }
 
@@ -291,11 +396,14 @@ TDriverConfig TDriver::GetConfig() const {
     config.SetGRpcKeepAliveTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->GRpcKeepAliveTimeout_));
     config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
     config.SetGRpcLoadBalancingPolicy(Impl_->GRpcLoadBalancingPolicy_);
+    config.SetGRpcCompressionAlgorithm(Impl_->GRpcCompressionAlgorithm_);
     config.SetSocketIdleTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->SocketIdleTimeout_));
     config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
     config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);
     config.SetMaxMessageSize(Impl_->MaxMessageSize_);
     config.Impl_->Log = Impl_->Log;
+    config.SetMetricRegistry(Impl_->GetExternalMetricRegistry());
+    config.SetTraceProvider(Impl_->GetTraceProvider());
 
     return config;
 }

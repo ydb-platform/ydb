@@ -18,10 +18,10 @@ message TMetaConfig {
             optional string Title = 2;
             // Source-specific URL. Can be absolute or relative, depending on source.
             optional string Url = 3;
-            // Grafana search tag filter (for source=grafana/dashboard/search).
-            optional string Tag = 4;
-            // Grafana folder UID filter (for source=grafana/dashboard/search).
-            optional string Folder = 5;
+            // Grafana search tag filters (for source=grafana/dashboard/search).
+            repeated string Tag = 4;
+            // Grafana folder UID filters (for source=grafana/dashboard/search).
+            repeated string Folder = 5;
         }
         // Support links resolved for cluster entity.
         repeated TSupportLinkEntry Cluster = 1;

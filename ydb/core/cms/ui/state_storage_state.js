@@ -250,7 +250,7 @@ class StateStorageState {
     loadDistconfStatus() {
         this.cleanup();
         $.ajax({
-            url: '/actors/nodewarden?page=distconf',
+            url: 'actors/nodewarden?page=distconf',
             type: "POST",
             data: '{"GetStateStorageConfig": {"NodesState": true}}',
             dataType: "json",

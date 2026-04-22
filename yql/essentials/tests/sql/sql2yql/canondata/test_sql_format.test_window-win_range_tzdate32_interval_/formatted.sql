@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: TzDate32('2024-01-01,Europe/Moscow'), count: 2|>,

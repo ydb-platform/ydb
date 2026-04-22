@@ -53,11 +53,11 @@ public:
         , CurrentCounter(0)
     {
         Index3 = std::make_unique<NIndexes::NBloomNGramm::TIndexMeta>(0, "", "", false, 0, NIndexes::TReadDataExtractorContainer(),
-            2, 131072, 3, 100500, Constructor, false);
+            0.1, 3, Constructor, false);
         Index4 = std::make_unique<NIndexes::NBloomNGramm::TIndexMeta>(0, "", "", false, 0, NIndexes::TReadDataExtractorContainer(),
-            2, 131072, 4, 100500, Constructor, false);
+            0.1, 4, Constructor, false);
         Index5 = std::make_unique<NIndexes::NBloomNGramm::TIndexMeta>(0, "", "", false, 0, NIndexes::TReadDataExtractorContainer(),
-            2, 131072, 5, 100500, Constructor, false);
+            0.1, 5, Constructor, false);
     }
 
 private:

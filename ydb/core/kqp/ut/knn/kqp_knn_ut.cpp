@@ -531,68 +531,6 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         DoVectorKnnPushdownTest(EVectorType::Int8);
     }
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST_TWIN(VectorSearchKnnPushdownFollower, StaleRO) {
-        const TString tableName = "/Root/TestTable";
-
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetEnableForceFollowers(true)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        auto runtime = kikimr.GetTestServer().GetRuntime();
-
-        auto db = kikimr.GetTableClient();
-        auto session = CreateTableForVectorSearch(db, false, "data", true); // singlePartition = true for followers
-
-        // Setup observer to verify VectorTopK pushdown
-        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
-            auto& read = ev->Get()->Record;
-            UNIT_ASSERT(read.HasVectorTopK());
-            UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 3u);
-        });
-
-        // Enable followers on the table
-        {
-            const TString alterTable(Q_(Sprintf(R"(
-                ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:1");
-            )", tableName.c_str())));
-
-            auto result = session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        // Verify followers are configured
-        {
-            auto result = session.DescribeTable(tableName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-            const auto& table = result.GetTableDescription();
-            UNIT_ASSERT(table.GetReadReplicasSettings()->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetReadReplicasSettings()->GetReadReplicasCount(), 1);
-        }
-
-        // Perform read
-        VerifyVectorSearchResults<false>(kikimr, session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), false);
-
-        if (StaleRO) {
-            // from leader - should NOT read
-            CheckTableReads(session, tableName, false, false);
-            // from followers - should read
-            CheckTableReads(session, tableName, true, true);
-        } else {
-            // from leader - should read
-            CheckTableReads(session, tableName, false, true);
-            // from followers - should NOT read
-            CheckTableReads(session, tableName, true, false);
-        }
-
-        // Observer is automatically removed when it goes out of scope
-        observer.Remove();
-    }
-
     Y_UNIT_TEST(VectorSearchKnnPushdownAllocatorBound) {
         auto serverSettings = TKikimrSettings()
             .SetUseRealThreads(false);
@@ -663,7 +601,6 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         UNIT_ASSERT_VALUES_EQUAL(rowCount, 3u);
     }
 
->>>>>>> 604e164ae35 (fix unbind allocator when extracting top k vector (#38589))
 }
 
 }

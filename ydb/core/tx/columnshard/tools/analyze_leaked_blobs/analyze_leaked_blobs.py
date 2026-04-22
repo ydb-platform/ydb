@@ -669,20 +669,69 @@ class HistoryAnalyzer:
         self.stats.blobs_in_closed_intervals = blobs_in_closed_intervals
 
     def draw_what_makes_sense(self) -> None:
-        if self.stats.internals_count > 0:
-            self._draw_intervals_by_generation_range(current_only=False)
-        if self.stats.current_intervals_count > 0 and self.stats.blobs_in_current_intervals > 0:
-            self._draw_current_interval_beginning_distribution()
-            self._draw_intervals_by_generation_range(current_only=True)
-            self._draw_blobs_count_by_generation(only_current_intervals=True)
-        if self.stats.blobs_in_intervals > 0:
-            self._draw_blobs_count_by_group()
-            self._draw_blobs_count_by_channel()
-            self._draw_blobs_count_by_generation(only_current_intervals=False)
-            self._draw_generation_rate()
-        if self.stats.closed_intervals_count > 0 and self.stats.blobs_in_closed_intervals > 0:
-            self._draw_interval_generation_distribution()
+        # when current intervals started?
+        self._draw_current_interval_beginning_distribution()
+        # is there a correlation between the interval generation range and its blobs generation range?
+        self._draw_blobs_range_over_interval_range(current_only=False)
+        self._draw_blobs_range_over_interval_range(current_only=True)
+        # how wide are the intervals? (in generations)
+        self._draw_intervals_by_generation_range(current_only=False)
+        self._draw_intervals_by_generation_range(current_only=True)
+        # how far do blobs appear from the start/end of the interval? (in generations)
+        self._draw_blobs_count_by_generation_gap(current_only=True)
+        self._draw_blobs_count_by_generation_gap(current_only=False)
+        # many some particular groups or channels are leaking blobs?
+        self._draw_blobs_count_by_group()
+        self._draw_blobs_count_by_channel()
+        # how many generations pass in a day?
+        self._draw_generation_rate()
     
+    def _draw_blobs_range_over_interval_range(self, current_only: bool) -> None:
+        blobs_over_interval_ratios: list[float] = []
+        for i in self.intervals:
+            if current_only and not i.current_interval or not i.has_blobs():
+                continue
+            interval_generation_range = i.to_generation - i.from_generation
+            assert interval_generation_range > 0
+            first, last = i.get_blob_generation_range()
+            blobs_generation_range = last - first + 1
+            assert blobs_generation_range > 0
+            ratio = blobs_generation_range / interval_generation_range
+            blobs_over_interval_ratios.append(ratio)
+        if not blobs_over_interval_ratios:
+            return
+
+        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
+
+        fig, ax = plt.subplots(figsize=(13, 6))
+        bins_count = min(50, max(10, int(len(blobs_over_interval_ratios) ** 0.5)))
+        ax.hist(
+            blobs_over_interval_ratios,
+            bins=bins_count,
+            color="tab:red",
+            alpha=0.8,
+            label="intervals with blobs",
+        )
+        ax.set_xlabel("Blobs generation range / interval generation range")
+        ax.set_ylabel("Intervals count")
+        ax.set_title(
+            "Distribution of Blobs/Interval Generation Range"
+            + (" (Current Intervals)" if current_only else " (All Intervals)")
+        )
+        ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
+        ax.legend(loc="upper right")
+        fig.tight_layout()
+        fig.savefig(
+            self.folder_for_plots
+            / (
+                "current_blobs_range_over_interval_range.png"
+                if current_only
+                else "blobs_range_over_interval_range.png"
+            ),
+            dpi=140,
+        )
+        plt.close(fig)
+
     def _draw_blobs_count_by_group(self) -> None:
         group_to_blobs_count: dict[int, int] = defaultdict(int)
         for i in self.intervals:
@@ -723,7 +772,9 @@ class HistoryAnalyzer:
         for i in self.intervals:
             if i.has_blobs():
                 channel_to_blobs_count[i.channel] += len(i.blobs)
-
+        if not channel_to_blobs_count:
+            return
+        
         x_channels = list(range(EXPECTED_CHANNELS_PER_TABLET))
         y_blobs_count = channel_to_blobs_count
 
@@ -779,7 +830,7 @@ class HistoryAnalyzer:
             linewidth=2,
             marker="o",
             markersize=3,
-            label="running intervals count",
+            label="running intervals count by interval generation range",
         )
         # Long-tail ranges hide the head on linear scale.
         # Log X keeps tiny ranges visible while preserving full domain.
@@ -868,12 +919,12 @@ class HistoryAnalyzer:
         )
         plt.close(fig)
 
-    def _draw_blobs_count_by_generation(self, only_current_intervals: bool) -> None:
+    def _draw_blobs_count_by_generation_gap(self, current_only: bool) -> None:
         # (generation gap from the start of the interval, blobs_count)
         gap_from_start_to_blobs_count: dict[int, int] = defaultdict(int)
         gap_from_end_to_blobs_count: dict[int, int] = defaultdict(int)
         for i in self.intervals:
-            if only_current_intervals and not i.current_interval:
+            if current_only and not i.current_interval:
                 continue
             for blob in i.blobs:
                 gen_gap_from_start = blob.generation - i.from_generation
@@ -881,6 +932,9 @@ class HistoryAnalyzer:
                 assert gen_gap_from_start >= 0 and gen_gap_from_end >= 0
                 gap_from_start_to_blobs_count[gen_gap_from_start] += 1
                 gap_from_end_to_blobs_count[gen_gap_from_end] += 1
+        
+        if not gap_from_start_to_blobs_count:
+            return
         
         sorted_start_gaps = sorted(gap_from_start_to_blobs_count.items(), key=lambda x: x[0])
         sorted_end_gaps = sorted(gap_from_end_to_blobs_count.items(), key=lambda x: x[0])
@@ -920,90 +974,13 @@ class HistoryAnalyzer:
         )
         ax.set_xlabel("Distance to start/end (generation) of interval")
         ax.set_ylabel("Running blobs count")
-        ax.set_title(f"Running Blobs Count by Distance to Start/End of Interval{' (only current intervals)' if only_current_intervals else ''}")
+        ax.set_title(f"Running Blobs Count by Distance to Start/End of Interval{' (only current intervals)' if current_only else ''}")
         ax.set_xscale("log")
         ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.5)
         ax.legend(loc="upper left")
         fig.tight_layout()
         fig.savefig(
-            self.folder_for_plots / f"blobs_count_by_generation_gap_{'current' if only_current_intervals else 'all'}.png",
-            dpi=140,
-        )
-        plt.close(fig)
-
-
-    def _draw_interval_generation_distribution(self) -> None:
-        # (generation_range, blobs_count)
-        intervals: list[tuple[int, int]] = []
-        for i in self.intervals:
-            if not i.has_blobs():
-                continue
-            first, last = i.get_blob_generation_range()
-            intervals.append((last - first, len(i.blobs)))
-        assert intervals
-
-        gen_range_to_data: dict[int, list[int]] = defaultdict(lambda: [0, 0]) # [intervals_count, blobs_count]
-        for gen_range, blobs_count in intervals:
-            gen_range_to_data[gen_range][0] += 1
-            gen_range_to_data[gen_range][1] += blobs_count
-        sorted_ranges = sorted(gen_range_to_data.items(), key=lambda x: x[0])
-        x_gen_ranges = [gen_range for gen_range, _ in sorted_ranges]
-        y_intervals_count = [intervals_count for _, [intervals_count, _] in sorted_ranges]
-        y_intervals_count_running = []
-        y_blobs_count_running = []
-        intervals_running = 0
-        blobs_running = 0
-        for _, [intervals_count, blobs_count] in sorted_ranges:
-            intervals_running += intervals_count
-            blobs_running += blobs_count
-            y_intervals_count_running.append(intervals_running)
-            y_blobs_count_running.append(blobs_running)
-
-        import matplotlib.pyplot as plt  # type: ignore[reportMissingImports]
-
-        fig, ax_left = plt.subplots(figsize=(13, 6))
-        ax_right = ax_left.twinx()
-        intervals_line = ax_left.plot(
-            x_gen_ranges,
-            y_intervals_count,
-            color="tab:purple",
-            linewidth=2,
-            marker="o",
-            markersize=3,
-            label="intervals count",
-        )[0]
-        running_intervals_line = ax_left.plot(
-            x_gen_ranges,
-            y_intervals_count_running,
-            color="tab:orange",
-            linewidth=2,
-            marker="o",
-            markersize=3,
-            label="running intervals count",
-        )[0]
-        running_blobs_line = ax_right.plot(
-            x_gen_ranges,
-            y_blobs_count_running,
-            color="tab:green",
-            linewidth=2,
-            marker="o",
-            markersize=3,
-            label="running blobs count",
-        )[0]
-        ax_left.set_xlabel("Blob generation range (max - min)")
-        ax_left.set_ylabel("Intervals count", color="tab:purple")
-        ax_right.set_ylabel("Blobs count", color="tab:green")
-        ax_left.tick_params(axis="y", labelcolor="tab:purple")
-        ax_right.tick_params(axis="y", labelcolor="tab:green")
-        ax_left.set_title("Intervals by Blob Generation Range")
-        ax_left.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
-        ax_left.legend(
-            handles=[intervals_line, running_intervals_line, running_blobs_line],
-            loc="upper left",
-        )
-        fig.tight_layout()
-        fig.savefig(
-            self.folder_for_plots / "interval_generation_range_distribution.png",
+            self.folder_for_plots / f"blobs_count_by_generation_gap_{'current' if current_only else 'all'}.png",
             dpi=140,
         )
         plt.close(fig)
@@ -1014,7 +991,8 @@ class HistoryAnalyzer:
         for i in self.intervals:
             if i.current_interval:
                 current_intervals.append((i.beginning_ms, len(i.blobs)))
-        assert current_intervals
+        if not current_intervals:
+            return
 
         current_intervals.sort(key=lambda x: x[0])
         oldest = month_from_ms(current_intervals[0][0])

@@ -469,6 +469,7 @@ namespace NActors {
         TActorSystem* SingleSys() const;
         TActorSystem* GetAnyNodeActorSystem();
         TActorSystem* GetActorSystem(ui32 nodeIdx);
+        void CleanupActorSystems();
         template <typename TEvent>
         TEvent* GrabEdgeEventIf(TAutoPtr<IEventHandle>& handle, std::function<bool(const TEvent&)> predicate, TDuration simTimeout = TDuration::Max()) {
             handle.Destroy();
@@ -838,7 +839,6 @@ namespace NActors {
 
         void InitNodes();
         void CleanupNodes();
-        void CleanupActorSystems();
         virtual void InitNodeImpl(TNodeDataBase*, size_t);
 
         static bool AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev);

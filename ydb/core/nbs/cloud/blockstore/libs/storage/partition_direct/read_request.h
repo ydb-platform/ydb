@@ -12,7 +12,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO incapsulate me. You should use TMultiSourceReadCoordinator
+class TReadSingleLocationRequestExecutor;
+
 class TReadRequestExecutor
     : public std::enable_shared_from_this<TReadRequestExecutor>
 {
@@ -31,17 +32,20 @@ public:
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
 
-    ~TReadRequestExecutor();
-
     void Run();
-
-    NThreading::TFuture<TResponse> GetFuture() const;
+    NThreading::TFuture<TResponse> GetFuture();
 
 private:
-    void OnReadResponse(const TDBGReadBlocksResponse& response);
-    void Reply(NProto::TError error);
+    struct TSubRequest
+    {
+        std::shared_ptr<TReadSingleLocationRequestExecutor> Executor;
+        // TReadRangeHint Hint;
+        size_t SglistOffset;   // Смещение в байтах
+    };
 
-    NActors::TActorSystem const* ActorSystem;
+    void OnSubRequestComplete(size_t index);
+
+    NActors::TActorSystem* const ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TReadHint ReadHint;
@@ -49,10 +53,9 @@ private:
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
 
-    size_t TryNumber = 0;
-
-    NThreading::TPromise<TResponse> Promise =
-        NThreading::NewPromise<TResponse>();
+    TVector<TSubRequest> SubRequests;
+    std::atomic<size_t> CompletedCount{0};
+    NThreading::TPromise<TResponse> Promise;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

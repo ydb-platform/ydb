@@ -1,7 +1,6 @@
 #include "vchunk.h"
 
 #include "flush_request.h"
-#include "multi_source_read_coordinator.h"
 #include "range_translate.h"
 #include "read_request.h"
 #include "write_request.h"
@@ -314,7 +313,7 @@ void TVChunk::DoReadBlocksLocal(
         "SourceCount",
         static_cast<i64>(readHint.RangeHints.size()));
 
-    auto coordinator = std::make_shared<TMultiSourceReadCoordinator>(
+    auto coordinator = std::make_shared<TReadRequestExecutor>(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,

@@ -1,6 +1,5 @@
 #include "ddisk_data_copier.h"
 
-#include "multi_source_read_coordinator.h"
 #include "read_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -158,7 +157,7 @@ void TDDiskDataCopier::StartCopyRange()
     auto callContext = MakeIntrusive<TCallContext>(requestId);
     callContext->RootTraceId = copyRangeState->Span.GetTraceId();
 
-    auto readExecutor = std::make_shared<TMultiSourceReadCoordinator>(
+    auto readExecutor = std::make_shared<TReadRequestExecutor>(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,

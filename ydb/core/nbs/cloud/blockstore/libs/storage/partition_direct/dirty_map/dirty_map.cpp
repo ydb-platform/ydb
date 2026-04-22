@@ -79,7 +79,8 @@ public:
         Map[end] = item;
     }
 
-    [[nodiscard]] const TOverlappingItem* BestWithEndAtLeast(ui64 threshold) const
+    [[nodiscard]] const TOverlappingItem* BestWithEndAtLeast(
+        ui64 threshold) const
     {
         auto it = Map.lower_bound(threshold);
         return (it != Map.end()) ? it->second : nullptr;

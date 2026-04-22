@@ -1348,7 +1348,6 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto readHint =
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 100));
 
-
         UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
 
         UNIT_ASSERT_VALUES_EQUAL(

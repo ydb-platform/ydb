@@ -1,5 +1,6 @@
 #include "read_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -22,7 +23,158 @@ TReadHint ArmLocks(TReadHint readHint)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+using TReadResponse = TReadRequestExecutor::TResponse;
+
+class TReadSingleLocationRequestExecutor
+    : public std::enable_shared_from_this<TReadSingleLocationRequestExecutor>
+{
+public:
+    TReadSingleLocationRequestExecutor(
+        NActors::TActorSystem* actorSystem,
+        const TVChunkConfig& vChunkConfig,
+        IDirectBlockGroupPtr directBlockGroup,
+        TReadHint readHint,
+        TCallContextPtr callContext,
+        std::shared_ptr<TReadBlocksLocalRequest> request,
+        NWilson::TTraceId traceId);
+
+    ~TReadSingleLocationRequestExecutor();
+
+    void Run();
+
+    NThreading::TFuture<TReadResponse> GetFuture() const;
+
+private:
+    void OnReadResponse(const TDBGReadBlocksResponse& response);
+    void Reply(NProto::TError error);
+
+    NActors::TActorSystem const* ActorSystem;
+    const TVChunkConfig VChunkConfig;
+    const IDirectBlockGroupPtr DirectBlockGroup;
+    const TReadHint ReadHint;
+    const TCallContextPtr CallContext;
+    const std::shared_ptr<TReadBlocksLocalRequest> Request;
+    const NWilson::TTraceId TraceId;
+
+    size_t TryNumber = 0;
+
+    NThreading::TPromise<TReadResponse> Promise =
+        NThreading::NewPromise<TReadResponse>();
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TReadRequestExecutor::TReadRequestExecutor(
+    NActors::TActorSystem* actorSystem,
+    const TVChunkConfig& vChunkConfig,
+    IDirectBlockGroupPtr directBlockGroup,
+    TReadHint readHint,
+    TCallContextPtr callContext,
+    std::shared_ptr<TReadBlocksLocalRequest> request,
+    NWilson::TTraceId traceId)
+    : ActorSystem(actorSystem)
+    , VChunkConfig(vChunkConfig)
+    , DirectBlockGroup(std::move(directBlockGroup))
+    , CallContext(std::move(callContext))
+    , Request(std::move(request))
+    , TraceId(std::move(traceId))
+    , Promise(NThreading::NewPromise<TResponse>())
+{
+    SubRequests.reserve(readHint.RangeHints.size());
+
+    for (auto& hint: readHint.RangeHints) {
+        // Вычислить смещение в Sglist
+        const size_t offsetBlocks = hint.RequestRelativeRange.Start;
+        const size_t offsetBytes = offsetBlocks * DefaultBlockSize;
+        const size_t sizeBytes =
+            hint.RequestRelativeRange.Size() * DefaultBlockSize;
+
+        // Создать подбуфер для этого подзапроса
+        auto subRequest = std::make_shared<TReadBlocksLocalRequest>(
+            Request->Headers.Clone(hint.VChunkRange));
+
+        // Создать подбуфер Sglist для данного диапазона
+        {
+            auto guard = Request->Sglist.Acquire();
+            if (guard) {
+                const TSgList& fullSgList = guard.Get();
+                TSgList subSgList =
+                    CreateSgListSubRange(fullSgList, offsetBytes, sizeBytes);
+                subRequest->Sglist =
+                    Request->Sglist.Create(std::move(subSgList));
+            }
+        }
+
+        // Создать TReadHint с одним hint
+        TReadHint singleHint;
+        singleHint.RangeHints.push_back(std::move(hint));
+
+        // Создать executor для этого hint
+        auto executor = std::make_shared<TReadSingleLocationRequestExecutor>(
+            ActorSystem,
+            VChunkConfig,
+            DirectBlockGroup,
+            std::move(singleHint),
+            CallContext,
+            subRequest,
+            NWilson::TTraceId(TraceId));
+
+        SubRequests.push_back(TSubRequest{
+            .Executor = std::move(executor),
+            .SglistOffset = offsetBytes});
+    }
+}
+
+void TReadRequestExecutor::Run()
+{
+    for (size_t i = 0; i < SubRequests.size(); ++i) {
+        auto future = SubRequests[i].Executor->GetFuture();
+        future.Subscribe(
+            [self = shared_from_this(),
+             i](const NThreading::TFuture<TResponse>& f)
+            {
+                Y_UNUSED(f);
+                self->OnSubRequestComplete(i);
+            });
+
+        SubRequests[i].Executor->Run();
+    }
+}
+
+void TReadRequestExecutor::OnSubRequestComplete(size_t index)
+{
+    const auto& response = SubRequests[index].Executor->GetFuture().GetValue();
+
+    if (HasError(response.Error)) {
+        // Первая ошибка - завершить весь запрос
+        if (Promise.TrySetValue(response)) {
+            // Успешно установили ошибку
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "TReadRequestExecutor: SubRequest %zu failed: %s",
+                index,
+                FormatError(response.Error).c_str());
+        }
+        return;
+    }
+
+    // Проверить, все ли подзапросы завершены
+    if (++CompletedCount == SubRequests.size()) {
+        // Все успешно
+        Promise.SetValue(TResponse{.Error = MakeError(S_OK)});
+    }
+}
+
+NThreading::TFuture<TReadRequestExecutor::TResponse>
+TReadRequestExecutor::GetFuture()
+{
+    return Promise.GetFuture();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     NActors::TActorSystem* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
@@ -39,13 +191,13 @@ TReadRequestExecutor::TReadRequestExecutor(
     , TraceId(std::move(traceId))
 {}
 
-TReadRequestExecutor::~TReadRequestExecutor()
+TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 {
     if (!Promise.IsReady()) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor. Reply not sent %s %s",
+            "TReadSingleLocationRequestExecutor. Reply not sent %s %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
 
@@ -53,7 +205,7 @@ TReadRequestExecutor::~TReadRequestExecutor()
     }
 }
 
-void TReadRequestExecutor::Run()
+void TReadSingleLocationRequestExecutor::Run()
 {
     Y_ABORT_UNLESS(ReadHint.RangeHints.size() == 1);
 
@@ -68,7 +220,7 @@ void TReadRequestExecutor::Run()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor %s %s",
+            "TReadSingleLocationRequestExecutor %s %s",
             hint.VChunkRange.Print().c_str(),
             error.c_str());
 
@@ -79,7 +231,7 @@ void TReadRequestExecutor::Run()
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadRequestExecutor. Reading from location %s",
+        "TReadSingleLocationRequestExecutor. Reading from location %s",
         ToString(*location).c_str());
 
     auto onReadResponse = [self = shared_from_this()]   //
@@ -104,13 +256,13 @@ void TReadRequestExecutor::Run()
     future.Subscribe(std::move(onReadResponse));
 }
 
-NThreading::TFuture<TReadRequestExecutor::TResponse>
-TReadRequestExecutor::GetFuture() const
+NThreading::TFuture<TReadResponse>
+TReadSingleLocationRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();
 }
 
-void TReadRequestExecutor::OnReadResponse(
+void TReadSingleLocationRequestExecutor::OnReadResponse(
     const TDBGReadBlocksResponse& response)
 {
     if (!HasError(response.Error)) {
@@ -121,7 +273,8 @@ void TReadRequestExecutor::OnReadResponse(
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadRequestExecutor: OnReadResponse failed %d trying. Error: %s",
+        "TReadSingleLocationRequestExecutor: OnReadResponse failed %d trying. "
+        "Error: %s",
         TryNumber,
         FormatError(response.Error).c_str());
 
@@ -129,9 +282,9 @@ void TReadRequestExecutor::OnReadResponse(
     Run();
 }
 
-void TReadRequestExecutor::Reply(NProto::TError error)
+void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
 {
-    Promise.TrySetValue(TResponse{.Error = std::move(error)});
+    Promise.TrySetValue(TReadResponse{.Error = std::move(error)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

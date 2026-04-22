@@ -3493,7 +3493,35 @@
 
 - C++
 
-  Функциональность на данный момент не поддерживается.
+  Подтверждение обработки вне сессии чтения производится с помощью метода `NYdb::NTopic::TTopicClient::CommitOffset`:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/topic/client.h>
+
+  NYdb::NTopic::TTopicClient topicClient(driver);
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset).GetValueSync());
+  ```
+
+  Если в момент подтверждения существует активная сессия чтения (например через `CreateReadSession`), рекомендуется передать её идентификатор с помощью опции `ReadSessionId` в `NYdb::NTopic::TCommitOffsetSettings`. Это позволяет серверу не прерывать текущую сессию чтения:
+
+  ```cpp
+  // Получение идентификатора сессии чтения
+  std::string sessionId = readSession->GetSessionId();
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset,
+      NYdb::NTopic::TCommitOffsetSettings()
+          .ReadSessionId(sessionId)
+  ).GetValueSync());
+  ```
 
 - Go
 

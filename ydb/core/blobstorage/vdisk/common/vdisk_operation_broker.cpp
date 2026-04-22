@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <list>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace NKikimr {
 
@@ -25,7 +24,7 @@ namespace NKikimr {
             struct TEntry {
                 TActorId VDiskServiceId;
                 ui32 PDiskId = 0;
-                std::unordered_set<TActorId> ActorIds;
+                TActorId OwnerActorId;
             };
 
             TControlWrapper MaxInProgressCount;
@@ -33,19 +32,7 @@ namespace NKikimr {
             std::unordered_map<TActorId, TEntry> Active;
             std::unordered_map<ui32, ui32> ActivePerPDisk;
             std::list<TEntry> WaitQueue;
-
-            static TString JoinActorIds(const std::unordered_set<TActorId>& actorIds) {
-                TStringBuilder sb;
-                bool first = true;
-                for (const auto& actorId : actorIds) {
-                    if (!first) {
-                        sb << ", ";
-                    }
-                    first = false;
-                    sb << actorId;
-                }
-                return sb;
-            }
+            std::unordered_map<TActorId, std::list<TEntry>::iterator> WaitingIndex;
 
             static TString MakePDiskActorPageUrl(ui32 nodeId, ui32 pdiskId) {
                 return Sprintf("/node/%" PRIu32 "/actors/pdisks/pdisk%09" PRIu32, nodeId, pdiskId);
@@ -101,15 +88,33 @@ namespace NKikimr {
             }
 
             auto FindWaiting(const TActorId& vdiskServiceId) {
-                return std::find_if(WaitQueue.begin(), WaitQueue.end(), [&vdiskServiceId](const auto& item) {
-                    return item.VDiskServiceId == vdiskServiceId;
-                });
+                if (const auto it = WaitingIndex.find(vdiskServiceId); it != WaitingIndex.end()) {
+                    return it->second;
+                }
+                return WaitQueue.end();
+            }
+
+            auto EnqueueWaiting(TEntry&& entry) {
+                WaitQueue.emplace_back(std::move(entry));
+                const auto it = std::prev(WaitQueue.end());
+                WaitingIndex.emplace(it->VDiskServiceId, it);
+                return it;
+            }
+
+            TEntry DequeueWaiting(std::list<TEntry>::iterator it) {
+                TEntry entry = std::move(*it);
+                WaitingIndex.erase(entry.VDiskServiceId);
+                WaitQueue.erase(it);
+                return entry;
+            }
+
+            void EraseWaiting(std::list<TEntry>::iterator it) {
+                WaitingIndex.erase(it->VDiskServiceId);
+                WaitQueue.erase(it);
             }
 
             void Activate(TEntry&& entry) {
-                for (const auto& actorId : entry.ActorIds) {
-                    this->Send(actorId, new TEvVDiskOperationToken);
-                }
+                this->Send(entry.OwnerActorId, new TEvVDiskOperationToken);
                 ++ActivePerPDisk[entry.PDiskId];
                 Active.emplace(entry.VDiskServiceId, std::move(entry));
             }
@@ -133,8 +138,9 @@ namespace NKikimr {
                     progress = false;
                     for (auto it = WaitQueue.begin(); it != WaitQueue.end() && (!nodeLimit || Active.size() < nodeLimit); ) {
                         if (CanActivate(it->PDiskId)) {
-                            auto entry = std::move(*it);
-                            it = WaitQueue.erase(it);
+                            auto next = std::next(it);
+                            auto entry = DequeueWaiting(it);
+                            it = next;
                             Activate(std::move(entry));
                             progress = true;
                         } else {
@@ -175,7 +181,7 @@ namespace NKikimr {
 
                 if (const auto it = Active.find(vdiskServiceId); it != Active.end()) {
                     Y_ABORT_UNLESS(it->second.PDiskId == pdiskId);
-                    it->second.ActorIds.insert(actorId);
+                    Y_ABORT_UNLESS(it->second.OwnerActorId == actorId);
                     this->Send(actorId, new TEvVDiskOperationToken);
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
@@ -208,7 +214,7 @@ namespace NKikimr {
 
                 if (const auto it = FindWaiting(vdiskServiceId); it != WaitQueue.end()) {
                     Y_ABORT_UNLESS(it->PDiskId == pdiskId);
-                    it->ActorIds.insert(actorId);
+                    Y_ABORT_UNLESS(it->OwnerActorId == actorId);
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvAcquireVDiskOperationToken"
@@ -222,8 +228,7 @@ namespace NKikimr {
                     return;
                 }
 
-                TEntry item{vdiskServiceId, pdiskId, {actorId}};
-                WaitQueue.emplace_back(std::move(item));
+                EnqueueWaiting(TEntry{vdiskServiceId, pdiskId, actorId});
 
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                     "TEvAcquireVDiskOperationToken"
@@ -245,11 +250,9 @@ namespace NKikimr {
 
                 if (const auto it = Active.find(vdiskServiceId); it != Active.end()) {
                     Y_ABORT_UNLESS(it->second.PDiskId == pdiskId);
-                    it->second.ActorIds.erase(actorId);
-                    if (it->second.ActorIds.empty()) {
-                        Deactivate(it);
-                        ProcessQueue();
-                    }
+                    Y_ABORT_UNLESS(it->second.OwnerActorId == actorId);
+                    Deactivate(it);
+                    ProcessQueue();
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvReleaseVDiskOperationToken"
@@ -265,10 +268,8 @@ namespace NKikimr {
 
                 if (const auto it = FindWaiting(vdiskServiceId); it != WaitQueue.end()) {
                     Y_ABORT_UNLESS(it->PDiskId == pdiskId);
-                    it->ActorIds.erase(actorId);
-                    if (it->ActorIds.empty()) {
-                        WaitQueue.erase(it);
-                    }
+                    Y_ABORT_UNLESS(it->OwnerActorId == actorId);
+                    EraseWaiting(it);
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvReleaseVDiskOperationToken"
@@ -340,7 +341,7 @@ namespace NKikimr {
                                             TABLEH() {str << "VDisk page";}
                                             TABLEH() {str << "PDisk page";}
                                             TABLEH() {str << "PDiskId";}
-                                            TABLEH() {str << "ActorIds";}
+                                            TABLEH() {str << "OwnerActorId";}
                                         }
                                     }
                                     TABLEBODY() {
@@ -350,7 +351,7 @@ namespace NKikimr {
                                                 TABLED() { RenderActorPageLink(str, MakeVDiskActorPageUrl(vdiskServiceId), "page"); }
                                                 TABLED() { RenderActorPageLink(str, MakePDiskActorPageUrl(vdiskServiceId.NodeId(), entry.PDiskId), "page"); }
                                                 TABLED() {str << entry.PDiskId;}
-                                                TABLED() {str << JoinActorIds(entry.ActorIds);}
+                                                TABLED() {str << entry.OwnerActorId;}
                                             }
                                         }
                                     }
@@ -371,7 +372,7 @@ namespace NKikimr {
                                             TABLEH() {str << "VDisk page";}
                                             TABLEH() {str << "PDisk page";}
                                             TABLEH() {str << "PDiskId";}
-                                            TABLEH() {str << "ActorIds";}
+                                            TABLEH() {str << "OwnerActorId";}
                                         }
                                     }
                                     TABLEBODY() {
@@ -381,7 +382,7 @@ namespace NKikimr {
                                                 TABLED() { RenderActorPageLink(str, MakeVDiskActorPageUrl(item.VDiskServiceId), "page"); }
                                                 TABLED() { RenderActorPageLink(str, MakePDiskActorPageUrl(item.VDiskServiceId.NodeId(), item.PDiskId), "page"); }
                                                 TABLED() {str << item.PDiskId;}
-                                                TABLED() {str << JoinActorIds(item.ActorIds);}
+                                                TABLED() {str << item.OwnerActorId;}
                                             }
                                         }
                                     }

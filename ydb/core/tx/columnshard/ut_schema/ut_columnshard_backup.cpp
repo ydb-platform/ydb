@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
             Cerr << "waiting " << title << Endl;
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
-        AFL_VERIFY(checker());
+        UNIT_ASSERT(checker());
     }
 
     Y_UNIT_TEST_DUO(ProposeBackup, Reboot) {
@@ -169,14 +169,14 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         col3.SetName("field");
         col3.SetType("Utf8");
         table.MutableSelf();
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
         
         if (Reboot) {
@@ -263,14 +263,14 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         col3.SetName("field");
         col3.SetType("Utf8");
         table.MutableSelf();
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
         
         if (Reboot) {
@@ -350,14 +350,14 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         col3.SetName("field");
         col3.SetType("Utf8");
         table.MutableSelf();
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
         
         if (Reboot) {
@@ -424,10 +424,10 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         col3.SetType("Utf8");
         table.MutableSelf();
 
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId, Reboot);
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
         
         TestWaitCondition(runtime, "export",
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         col3.SetType("Utf8");
         table.MutableSelf();
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         
         // Reboot immediately after propose - this should test serialization
@@ -498,7 +498,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
         
         // Wait for export to complete
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         
         table.MutableSelf();
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         
         // Multiple reboots to stress test serialization
@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
         
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        UNIT_ASSERT(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false, true);
         
         if (Reboot) {

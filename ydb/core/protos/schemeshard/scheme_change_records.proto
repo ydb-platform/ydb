@@ -38,6 +38,17 @@ message TEvRegisterSubscriberResult {
 }
 
 // A single scheme change log entry describing one DDL sub-operation.
+//
+// Under parent-level persistence, the record represents one user-level
+// TModifyScheme. `Body` (fetched via TEvFetchSchemeChangeRecordBodies)
+// is the source of truth for replay. The fields below carry best-effort
+// metadata for filtering/display:
+//   - `OperationType`, `PathId`, `ObjectType`, `SchemaVersion`, `UserSID`:
+//     advisory; may be zero/unset if the user-level op does not target
+//     a single identifiable path. Subscribers should consult `Body` for
+//     authoritative operation details.
+//   - `Path`: best-effort joined path (WorkingDir + target name from the
+//     body's typed sub-message), for human display.
 message TSchemeChangeRecord {
     uint64 Order = 1;
     uint64 TxId = 2;

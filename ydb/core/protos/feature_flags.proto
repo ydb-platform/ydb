@@ -277,4 +277,5 @@ message TFeatureFlags {
 
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
+    optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
 }

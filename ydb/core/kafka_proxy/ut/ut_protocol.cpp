@@ -5282,20 +5282,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             i32 committedOffset = partition.GetPartitionConsumerStats()->GetCommittedOffset();
             UNIT_ASSERT_VALUES_EQUAL(lastReadOffset, committedOffset);
         }
-        auto event =  MakeHolder<TEvPersQueue::TEvStatus>(consumerName, true);
-        NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
-        auto record = kikimrClient.Ls(fullTopicName)->Record.GetPathDescription().GetPersQueueGroup();
-        auto tabletId = record.GetPartitions(0).GetTabletId();
-
-        auto* runtime = testServer.KikimrServer->GetRuntime();
-        TActorId pipeClient = runtime->ConnectToPipe(tabletId, runtime->AllocateEdgeActor(), 0, GetPipeConfigWithRetries());
-        runtime->SendToPipe(tabletId, runtime->AllocateEdgeActor(), event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
-        Sleep(TDuration::Seconds(30));
         auto counters = testServer.KikimrServer->GetRuntime()->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, "topics", false);
-        TStringStream countersStr;
-        dbGroup->OutputPlainText(countersStr);
-        TString countersString = countersStr.Str();
         auto group = dbGroup->GetSubgroup("host", "")
                                 ->GetSubgroup("database", "/Root")
                                 ->GetSubgroup("cloud_id", "somecloud")
@@ -5303,11 +5291,23 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                                 ->GetSubgroup("database_id", "root")
                                 ->GetSubgroup("topic", "topic")
                                 ->GetSubgroup("consumer", "my-consumer");
-        auto read_lag = group->GetNamedCounter("name", "topic.read.lag_messages", false)->Val();
-        auto committed_lag = group->GetNamedCounter("name", "topic.committed_lag_messages", false)->Val();
-        Cerr << ">>>>> COUNTERS: " << countersString << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(committed_lag, 2);
-        UNIT_ASSERT_VALUES_EQUAL(read_lag, 2);
+        auto read_lag_counter = group->GetNamedCounter("name", "topic.read.lag_messages", false);
+        auto committed_lag_counter = group->GetNamedCounter("name", "topic.committed_lag_messages", false);
+        i64 desired_read_lag = 2;
+        i64 desired_committed_lag = 2;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (TInstant::Now() < deadline) {
+            if (committed_lag_counter->Val() == desired_committed_lag && read_lag_counter->Val() == desired_read_lag) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        TStringStream countersStr;
+        dbGroup->OutputPlainText(countersStr);
+        Cerr << ">>>>> COUNTERS: " << countersStr.Str() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(committed_lag_counter->Val(), desired_committed_lag);
+        UNIT_ASSERT_VALUES_EQUAL(read_lag_counter->Val(), desired_read_lag);
     }
 
     Y_UNIT_TEST(ProduceMetrics) {

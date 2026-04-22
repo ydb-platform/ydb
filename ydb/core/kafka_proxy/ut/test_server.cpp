@@ -54,6 +54,7 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(settings.EnableQuoting);
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
+    appConfig.MutablePQConfig()->SetBalancerWakeupIntervalSec(1);
     appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
     appConfig.MutablePQConfig()->AddNonChargeableUser(NON_CHARGEABLE_USER);
     appConfig.MutablePQConfig()->AddNonChargeableUser(NON_CHARGEABLE_USER_X);

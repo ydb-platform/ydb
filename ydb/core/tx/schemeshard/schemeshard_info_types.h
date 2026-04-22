@@ -770,20 +770,132 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 private:
     using TPartitionsVec = TVector<TTableShardInfo>;
 
-    struct TSortByNextCondErase {
-        bool operator()(
-            const std::pair<TInstant, ui32>& left,
-            const std::pair<TInstant, ui32>& right
-        ) const {
-            return left.first > right.first;
+    // Indexed min-heap keyed by TShardIdx.
+    // Pos map enables O(log N) targeted Erase (O(1) position lookup + O(log N) sift).
+    class TCondEraseSchedule {
+    public:
+        using TEntry = std::pair<TInstant, TShardIdx>;
+
+        void Push(TInstant t, const TShardIdx& shardIdx) {
+            const ui32 i = Heap.size();
+            Heap.push_back({t, shardIdx});
+            Pos[shardIdx] = i;
+            SiftUp(i);
         }
+
+        // Batch load: call PushRaw for each entry, then BuildHeap once — O(N) total.
+        void PushRaw(TInstant t, const TShardIdx& shardIdx) {
+            Heap.push_back({t, shardIdx});
+        }
+        void BuildHeap() {
+            std::make_heap(Heap.begin(), Heap.end(), TGreater{});
+            Pos.clear();
+            Pos.reserve(Heap.size());
+            for (ui32 i = 0; i < Heap.size(); ++i) {
+                Pos[Heap[i].second] = i;
+            }
+        }
+
+        void Pop() {
+            Y_ABORT_UNLESS(!Heap.empty());
+            Pos.erase(Heap[0].second);
+            if (Heap.size() > 1) {
+                Heap[0] = std::move(Heap.back());
+                Pos[Heap[0].second] = 0;
+            }
+            Heap.pop_back();
+            if (!Heap.empty()) {
+                SiftDown(0);
+            }
+        }
+
+        // O(log N) targeted removal; no-op if shardIdx not present.
+        void Erase(const TShardIdx& shardIdx) {
+            auto posIt = Pos.find(shardIdx);
+            if (posIt == Pos.end()) {
+                return;
+            }
+            const ui32 i = posIt->second;
+            Pos.erase(posIt);
+            const ui32 last = Heap.size() - 1;
+            if (i < last) {
+                Heap[i] = std::move(Heap[last]);
+                Pos[Heap[i].second] = i;
+                Heap.pop_back();
+                SiftUp(i);
+                SiftDown(i);
+            } else {
+                Heap.pop_back();
+            }
+        }
+
+        bool Empty() const { return Heap.empty(); }
+        const TEntry& Top() const { return Heap[0]; }
+        const TVector<TEntry>& Container() const { return Heap; }
+
+        bool IsValidHeap() const {
+            if (Pos.size() != Heap.size()) {
+                return false;
+            }
+            for (ui32 i = 0; i < Heap.size(); ++i) {
+                auto it = Pos.find(Heap[i].second);
+                if (it == Pos.end() || it->second != i) {
+                    return false;
+                }
+            }
+            return std::is_heap(Heap.begin(), Heap.end(), TGreater{});
+        }
+
+    private:
+        struct TGreater {
+            bool operator()(const TEntry& a, const TEntry& b) const {
+                return a.first > b.first;
+            }
+        };
+
+        void SwapAt(ui32 i, ui32 j) {
+            std::swap(Heap[i], Heap[j]);
+            Pos[Heap[i].second] = i;
+            Pos[Heap[j].second] = j;
+        }
+
+        void SiftUp(ui32 i) {
+            while (i > 0) {
+                const ui32 p = (i - 1) >> 1;
+                if (Heap[p].first <= Heap[i].first) {
+                    break;
+                }
+                SwapAt(i, p);
+                i = p;
+            }
+        }
+
+        void SiftDown(ui32 i) {
+            const ui32 n = Heap.size();
+            while (true) {
+                ui32 best = i;
+                const ui32 l = 2*i + 1, r = l + 1;
+                if (l < n && Heap[l].first < Heap[best].first) {
+                    best = l;
+                }
+                if (r < n && Heap[r].first < Heap[best].first) {
+                    best = r;
+                }
+                if (best == i) {
+                    break;
+                }
+                SwapAt(i, best);
+                i = best;
+            }
+        }
+
+        TVector<TEntry> Heap;
+        THashMap<TShardIdx, ui32> Pos;
     };
 
     TPartitionsVec Partitions;
     THashMap<TShardIdx, ui64> Shard2PartitionIdx; // shardIdx -> index in Partitions
-    TPriorityQueue<std::pair<TInstant, ui32>,
-                   TVector<std::pair<TInstant, ui32>>,
-                   TSortByNextCondErase> CondEraseSchedule;
+    TCondEraseSchedule CondEraseSchedule;
     THashMap<TShardIdx, TActorId> InFlightCondErase; // shard to pipe client
     mutable TMaybe<ui32> TTLColumnId;
     THashSet<TOperationId> SplitOpsInFlight;
@@ -823,7 +935,7 @@ public:
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
-        // CondEraseSchedule stores ui32 partition indices, which are valid in
+        // CondEraseSchedule entries store TShardIdx keys, which are valid in
         // the copied Partitions vector without any fixup.
         return TTableInfo::TPtr(new TTableInfo(other));
     }
@@ -930,15 +1042,13 @@ public:
 #endif
 
     void SetPartitioning(TVector<TTableShardInfo>&& newPartitioning);
+    // Like SetPartitioning but also removes shards absent from new partitioning.
+    void UpdatePartitioning(TVector<TTableShardInfo>&& newPartitioning);
 
-    // Verify internal consistency of partitioning data structures.
-    // O(N) — for temporary post-deploy validation only; remove once stable.
+    // O(N) consistency check across Partitions, PartitionStore, Stats, and CondEraseSchedule.
     void VerifyConsistency() const;
 
-    // In-place split/merge: replaces the contiguous src shard range with dst
-    // shards without rebuilding the full newPartitioning vector.  Avoids O(N)
-    // TString copies that SetPartitioning requires when called from HandleReply.
-    // addedShards is derived internally from dstPartitions.
+    // In-place split/merge: replaces the contiguous src shard range with dst shards.
     void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const THashSet<TShardIdx>& removedShards, ui64 splitFirstIdx);
 
     const TVector<TTableShardInfo>& GetPartitions() const {
@@ -1213,10 +1323,13 @@ public:
     }
 
     const TTableShardInfo* GetScheduledCondEraseShard() const {
-        if (CondEraseSchedule.empty()) {
+        if (CondEraseSchedule.Empty()) {
             return nullptr;
         }
-        return &Partitions[CondEraseSchedule.top().second];
+        const TShardIdx& shardIdx = CondEraseSchedule.Top().second;
+        auto it = Shard2PartitionIdx.find(shardIdx);
+        Y_ABORT_UNLESS(it != Shard2PartitionIdx.end());
+        return &Partitions[it->second];
     }
 
     const auto& GetInFlightCondErase() const {
@@ -1232,7 +1345,7 @@ public:
         Y_ENSURE(shardInfo && shardIdx == shardInfo->ShardIdx);
 
         InFlightCondErase[shardIdx] = TActorId();
-        CondEraseSchedule.pop();
+        CondEraseSchedule.Pop();
     }
 
     void RescheduleCondErase(const TShardIdx& shardIdx) {
@@ -1241,7 +1354,7 @@ public:
         auto it = FindPartition(shardIdx);
         Y_ENSURE(it != Partitions.end());
 
-        CondEraseSchedule.push({it->NextCondErase, (ui32)(it - Partitions.begin())});
+        CondEraseSchedule.Push(it->NextCondErase, shardIdx);
         InFlightCondErase.erase(shardIdx);
     }
 

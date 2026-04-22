@@ -13,6 +13,7 @@
 #include <limits>
 #include <type_traits>
 #include <utility>
+#include <cstddef>
 
 namespace NActors {
     namespace NFlatEventDetail {
@@ -71,12 +72,6 @@ namespace NActors {
             Fixed,
             Bytes,
             Array,
-        };
-
-        struct TPayloadBinding {
-            size_t RefOffset = 0;
-            size_t PayloadIndex = 0;
-            ui32 PayloadId = 0;
         };
 
     public:
@@ -638,17 +633,30 @@ namespace NActors {
 
         TString ToString() const override {
             return TStringBuilder() << TypeName<TEv>() << " { version# " << Version
-                << " header# " << HeaderStorage.size() << " payloads# " << Payloads.size() << " }";
+                << " header# " << HeaderSize << " payloads# " << Payloads.size() << " }";
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* serializer) const override {
             AssertInitializedDebug();
+            if (!HasPayloads()) {
+                return SerializeHeaderOnlyToArcadiaStream(serializer);
+            }
             const auto payloads = BuildWirePayloads();
             return SerializeToArcadiaStreamImpl(serializer, payloads);
         }
 
         std::optional<TRope> SerializeToRope(IRcBufAllocator* allocator) const override {
             AssertInitializedDebug();
+            if (!HasPayloads()) {
+                TRcBuf headerBuf = allocator->AllocRcBuf(HeaderSize, 0, 0);
+                if (!headerBuf) {
+                    return {};
+                }
+                if (HeaderSize) {
+                    std::memcpy(headerBuf.GetDataMut(), HeaderData(), HeaderSize);
+                }
+                return TRope(std::move(headerBuf));
+            }
             const auto payloads = BuildWirePayloads();
             const ui32 headerSize = CalculateSerializedHeaderSizeImpl(payloads);
 
@@ -705,12 +713,22 @@ namespace NActors {
 
         ui32 CalculateSerializedSizeCached() const override {
             AssertInitializedDebug();
+            if (!HasPayloads()) {
+                return HeaderSize;
+            }
             const auto payloads = BuildWirePayloads();
             return CalculateSerializedSizeImpl(payloads, 0);
         }
 
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
             AssertInitializedDebug();
+            if (!HasPayloads()) {
+                TEventSerializationInfo info;
+                if (allowExternalDataChannel && HeaderSize) {
+                    info.Sections.push_back(TEventSectionInfo{0, HeaderSize, 0, 0, true, false});
+                }
+                return info;
+            }
             const auto payloads = BuildWirePayloads();
             return CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(), payloads, 0);
         }
@@ -729,8 +747,8 @@ namespace NActors {
             using TLatestScheme = typename TVersions::TLatestScheme;
 
             THolder<TEv> holder(new TEv());
-            holder->HeaderStorage = TString::Uninitialized(TLatestScheme::HeaderSize);
-            std::memset(holder->HeaderStorage.Detach(), 0, TLatestScheme::HeaderSize);
+            holder->ResetHeaderStorage(TLatestScheme::HeaderSize);
+            std::memset(holder->MutableHeaderData(), 0, TLatestScheme::HeaderSize);
             holder->Payloads.resize(TLatestScheme::PayloadFieldCount);
             holder->Version = TVersions::VersionCount;
             WriteUnaligned<ui16>(holder->MutableHeaderData(), holder->Version);
@@ -754,8 +772,8 @@ namespace NActors {
             Y_ENSURE(!wirePayloads.empty(), "Flat event payload set is empty");
 
             THolder<TEv> holder(new TEv());
-            holder->HeaderStorage = wirePayloads.front().template ExtractUnderlyingContainerOrCopy<TString>();
-            holder->Version = ValidateHeaderStorage(holder->HeaderStorage);
+            holder->AssignHeaderStorage(wirePayloads.front());
+            holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
 
             holder->DispatchCurrentVersion([&]<class TScheme>() {
                 Y_ENSURE(wirePayloads.size() == 1 + TScheme::PayloadFieldCount,
@@ -892,21 +910,23 @@ namespace NActors {
         TEventFlat() = default;
 
     private:
+        static constexpr size_t InlineHeaderCapacity = 64;
+
         template <class TValue>
         static size_t CheckedFieldBytes(size_t count) {
             Y_ENSURE(count <= std::numeric_limits<size_t>::max() / sizeof(TValue), "Flat event field is too large");
             return count * sizeof(TValue);
         }
 
-        static ui16 ValidateHeaderStorage(const TString& header) {
-            Y_ENSURE(header.size() >= sizeof(ui16), "Flat event header is too short");
-            return ReadUnaligned<ui16>(header.data());
+        static ui16 ValidateHeaderStorage(const char* header, size_t size) {
+            Y_ENSURE(size >= sizeof(ui16), "Flat event header is too short");
+            return ReadUnaligned<ui16>(header);
         }
 
         template <class TScheme>
         void ValidateStateForScheme() const {
-            Y_ENSURE(HeaderStorage.size() == TScheme::HeaderSize,
-                "Unexpected flat event header size " << HeaderStorage.size() << ", expected " << TScheme::HeaderSize);
+            Y_ENSURE(HeaderSize == TScheme::HeaderSize,
+                "Unexpected flat event header size " << HeaderSize << ", expected " << TScheme::HeaderSize);
             Y_ENSURE(Payloads.size() == TScheme::PayloadFieldCount,
                 "Unexpected number of flat payload slots " << Payloads.size() << ", expected " << TScheme::PayloadFieldCount);
 
@@ -937,10 +957,37 @@ namespace NActors {
             return totalPayloadSize >= 4096;
         }
 
+        bool HasPayloads() const {
+            return !Payloads.empty();
+        }
+
+        bool SerializeHeaderOnlyToArcadiaStream(TChunkSerializer* serializer) const {
+            const char* data = HeaderData();
+            size_t len = HeaderSize;
+            while (len) {
+                void* chunkData = nullptr;
+                int chunkSize = 0;
+                if (!serializer->Next(&chunkData, &chunkSize)) {
+                    return false;
+                }
+
+                const size_t numBytesToCopy = std::min<size_t>(len, chunkSize);
+                std::memcpy(chunkData, data, numBytesToCopy);
+                data += numBytesToCopy;
+                len -= numBytesToCopy;
+
+                const int unused = chunkSize - static_cast<int>(numBytesToCopy);
+                if (unused) {
+                    serializer->BackUp(unused);
+                }
+            }
+            return true;
+        }
+
         TVector<TRope> BuildWirePayloads() const {
             TVector<TRope> result;
             result.reserve(1 + Payloads.size());
-            result.emplace_back(TRope(TString(HeaderStorage)));
+            result.emplace_back(BuildHeaderPayload());
             for (const TRope& payload : Payloads) {
                 result.emplace_back(payload);
             }
@@ -965,8 +1012,8 @@ namespace NActors {
 
         void AssertInitializedDebug() const {
             Y_DEBUG_ABORT_UNLESS(Version != 0);
-            Y_DEBUG_ABORT_UNLESS(HeaderStorage.size() >= sizeof(ui16));
-            Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui16>(HeaderStorage.data()) == Version);
+            Y_DEBUG_ABORT_UNLESS(HeaderSize >= sizeof(ui16));
+            Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui16>(HeaderData()) == Version);
         }
 
         template <class TScheme>
@@ -987,18 +1034,77 @@ namespace NActors {
             return TConstFrontend<TScheme>(HeaderData(), &Payloads);
         }
 
+        void ResetHeaderStorage(size_t size) {
+            HeaderSize = size;
+            if (size <= InlineHeaderCapacity) {
+                HeaderStoredInline = true;
+                HeaderStorage = TString();
+            } else {
+                HeaderStoredInline = false;
+                HeaderStorage = TString::Uninitialized(size);
+            }
+        }
+
+        void AssignHeaderStorage(TString&& header) {
+            const size_t size = header.size();
+            if (size <= InlineHeaderCapacity) {
+                HeaderSize = size;
+                HeaderStoredInline = true;
+                if (size) {
+                    std::memcpy(InlineHeader, header.data(), size);
+                }
+                HeaderStorage = TString();
+            } else {
+                HeaderStoredInline = false;
+                HeaderSize = size;
+                HeaderStorage = std::move(header);
+            }
+        }
+
+        void AssignHeaderStorage(const TRope& header) {
+            const size_t size = header.GetSize();
+            if (size <= InlineHeaderCapacity) {
+                HeaderSize = size;
+                HeaderStoredInline = true;
+                if (size) {
+                    auto it = header.Begin();
+                    TRopeUtils::Memcpy(InlineHeader, it, size);
+                }
+                HeaderStorage = TString();
+            } else {
+                HeaderStoredInline = false;
+                HeaderStorage = header.template ExtractUnderlyingContainerOrCopy<TString>();
+                HeaderSize = HeaderStorage.size();
+            }
+        }
+
+        TRope BuildHeaderPayload() const {
+            if (HeaderStoredInline) {
+                TString header = TString::Uninitialized(HeaderSize);
+                if (HeaderSize) {
+                    std::memcpy(header.Detach(), InlineHeader, HeaderSize);
+                }
+                return TRope(std::move(header));
+            }
+
+            return TRope(TString(HeaderStorage));
+        }
+
         char* MutableHeaderData() {
-            return HeaderStorage.Detach();
+            return HeaderStoredInline ? InlineHeader : HeaderStorage.Detach();
         }
 
         const char* HeaderData() const {
-            return HeaderStorage.data();
+            return HeaderStoredInline ? InlineHeader : HeaderStorage.data();
         }
 
     private:
         TString HeaderStorage;
+        alignas(std::max_align_t) char InlineHeader[InlineHeaderCapacity] = {};
         TVector<TRope> Payloads;
+        size_t HeaderSize = 0;
         ui16 Version = 0;
+        bool HeaderStoredInline = true;
     };
 
 } // namespace NActors

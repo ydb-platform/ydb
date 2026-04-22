@@ -782,6 +782,7 @@ public:
     bool SupportsLevelChangeCallback() const override { return true; }
 
     void SetLevelChangeCallback(TLevelChangeCallback callback) override {
+        LevelChangeCallback_ = callback;
         Serializer->Buffer->SetLevelChangeCallback(std::move(callback));
     }
 
@@ -885,6 +886,7 @@ public:
     std::unique_ptr<TOutputSerializer> Serializer;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
+    IDqOutput::TLevelChangeCallback LevelChangeCallback_;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };

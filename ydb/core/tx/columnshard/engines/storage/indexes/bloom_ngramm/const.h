@@ -7,6 +7,9 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/library/conclusion/status.h>
 
+#include <util/generic/string.h>
+#include <util/system/types.h>
+
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 struct TDerivedSettings {
@@ -26,7 +29,9 @@ public:
     static constexpr ui32 MaxHashesCount = 8;
     static constexpr ui32 DeprecatedRecordsCount = 10000;
     static constexpr ui32 MinFilterSizeBytes = 128;
+    static constexpr ui32 MinFilterSizeBits = MinFilterSizeBytes * 8;
     static constexpr ui32 MaxFilterSizeBytes = 1 << 20;
+    static constexpr ui32 MaxFilterSizeBits = MaxFilterSizeBytes * 8;
     static constexpr ui32 MinRecordsCount = 128;
     static constexpr ui32 MaxRecordsCount = 1000000;
 

@@ -20,7 +20,7 @@ Typical symptoms:
 
 ### Recommended BIOS/UEFI settings {#bios}
 
-For {{ ydb-short-name }} servers, disable or tune the following power-saving features:
+For {{ ydb-short-name }} servers, configure the following BIOS/UEFI settings:
 
 1. **CPU Power Management** — set to **Performance** or **Max Performance**.
 2. **Intel Turbo Boost** — enable for maximum performance.
@@ -31,7 +31,7 @@ For {{ ydb-short-name }} servers, disable or tune the following power-saving fea
 
 ### Operating system settings {#os}
 
-On Linux, additionally consider:
+On Linux, for deployments **not** using the [Ansible role](../../deployment-options/ansible/index.md) (which configures this automatically), additionally consider:
 
 ```bash
 # Force the performance cpufreq governor
@@ -47,7 +47,7 @@ echo 'performance' > /sys/module/pcie_aspm/parameters/policy
 
 ### Verifying current settings {#check}
 
-Useful checks:
+Useful checks (after applying settings, the first command should output `performance` for every CPU core):
 
 ```bash
 # Current governor

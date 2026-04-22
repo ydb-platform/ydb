@@ -20,6 +20,7 @@
 #include <util/generic/serialized_enum.h>
 
 #include <ranges>
+#include <unordered_set>
 
 namespace NKikimr::NKqp {
 static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
@@ -2672,22 +2673,15 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             const auto& indexes = schema.GetIndexes();
             const std::ranges::subrange indexesRange(indexes.begin(), indexes.end());
 
-            std::unordered_set<TString> bloomIndexNames;
-            for (auto&& name : indexesRange
-                     | std::ranges::views::transform([](const auto& idx) -> decltype(auto) {
-                           if (idx.GetName() == "idx_bloom" && idx.HasBloomFilter()) {
-                               return TString{idx.GetName()};
-                           }
-
-                           if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
-                               return TString{idx.GetName()};
-                           }
-
-                           return TString{};
-                       })
-                     | std::ranges::views::filter([](const TString& s) { return !s.empty(); })) {
-                bloomIndexNames.emplace(std::move(name));
-            }
+            const auto bloomIndexNames = [&] {
+                auto namesView = indexesRange
+                    | std::ranges::views::filter([](const auto& index) {
+                          return (index.GetName() == "idx_bloom" && index.HasBloomFilter()) ||
+                              (index.GetName() == "idx_ngram" && index.HasBloomNGrammFilter());
+                      })
+                    | std::ranges::views::transform([](const auto& index) { return TString{index.GetName()}; });
+                return std::unordered_set<TString>(std::ranges::begin(namesView), std::ranges::end(namesView));
+            }();
 
             UNIT_ASSERT_C(bloomIndexNames.contains("idx_bloom"), "idx_bloom should be present in table schema");
             UNIT_ASSERT_C(bloomIndexNames.contains("idx_ngram"), "idx_ngram should be present in table schema");

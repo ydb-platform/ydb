@@ -10,8 +10,8 @@ namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NGranules {
 class TSchemaAdapter: public NAbstract::ISchemaAdapter {
 private:
     using TBase = NAbstract::ISchemaAdapter;
-    static const inline auto Registrator1 = TFactory::TRegistrator<TSchemaAdapter>({".sys", "store_primary_index_granule_stats"});
-    static const inline auto Registrator2 = TFactory::TRegistrator<TSchemaAdapter>({".sys", "primary_index_granule_stats"});
+    // static const inline auto Registrator1 = TFactory::TRegistrator<TSchemaAdapter>({".sys", "store_primary_index_granule_stats"});
+    // static const inline auto Registrator2 = TFactory::TRegistrator<TSchemaAdapter>({".sys", "primary_index_granule_stats"});
 
 public:
     static const TSchemaAdapter& GetInstance() {

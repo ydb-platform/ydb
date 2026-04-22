@@ -123,7 +123,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
             }();
             auto constructor =
-                NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
+                NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
             if (!constructor) {
                 return std::unique_ptr<IScannerConstructor>();
             }

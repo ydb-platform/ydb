@@ -921,6 +921,7 @@ public:
     void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvReplaySchemeChangeRecord::TPtr& ev, const TActorContext& ctx);
     // Scheme change records cleanup & backpressure
     NTabletFlatExecutor::ITransaction* CreateTxUnregisterSubscriber(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev);
     void Handle(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev, const TActorContext& ctx);

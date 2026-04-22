@@ -5593,6 +5593,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvUnregisterSubscriber, Handle);
         HFuncTraced(TEvSchemeShard::TEvForceAdvanceSubscriber, Handle);
         HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies, Handle);
+        HFuncTraced(TEvSchemeShard::TEvReplaySchemeChangeRecord, Handle);
 
         HFuncTraced(TEvPersQueue::TEvOffloadStatus, Handle);
         HFuncTraced(TEvPrivate::TEvContinuousBackupCleanerResult, Handle);

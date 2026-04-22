@@ -94,6 +94,23 @@ inline TEvSchemeShard::TEvFetchSchemeChangeRecordBodiesResult* FetchSchemeChange
     return result;
 }
 
+inline NKikimrScheme::TEvModifySchemeTransactionResult* ReplaySchemeChangeRecord(
+    TTestActorRuntime& runtime, const TString& body, ui64 txId,
+    const TString& sourcePathPrefix, const TString& targetPathPrefix,
+    TAutoPtr<IEventHandle>& handle)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    auto req = MakeHolder<TEvSchemeShard::TEvReplaySchemeChangeRecord>();
+    req->Record.SetBody(body);
+    req->Record.SetTxId(txId);
+    req->Record.SetSourcePathPrefix(sourcePathPrefix);
+    req->Record.SetTargetPathPrefix(targetPathPrefix);
+    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
+    auto* result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+    UNIT_ASSERT(result);
+    return &result->Record;
+}
+
 struct TSchemeChangeRecordEntry {
     ui64 Order = 0;
     ui64 TxId = 0;

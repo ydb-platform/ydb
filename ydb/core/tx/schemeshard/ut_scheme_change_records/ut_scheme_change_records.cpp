@@ -762,17 +762,14 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         //   - 2× (CreateTableIndex + impl CreateTable)   for regular indexes
         //   - 1× (CreateTableIndex + 2 impl CreateTable) for vector index
         //
-        // Subscriber replay strategy (synthesize the high-level DDL):
-        //   1. Collect the main-table CreateTable body.
-        //   2. Collect every CreateTableIndex body — they carry full
-        //      IndexDescription (name, key cols, data cols, type, and
-        //      type-specific settings like VectorIndexKmeansTreeDescription).
-        //   3. IGNORE impl-table CreateTable parts — their names are
-        //      auto-generated, they live under an index path, and the
-        //      target cluster's SS regenerates them from the index spec.
-        //   4. Assemble an IndexedTableDescription with TableDescription +
-        //      IndexDescription[] and submit once as
-        //      ESchemeOpCreateIndexedTable.
+        // Replay strategy: verbatim per-part submission via the privileged
+        // TEvReplaySchemeChangeRecord RPC. The RPC rewrites WorkingDir via
+        // SourcePathPrefix/TargetPathPrefix and force-sets Internal=true and
+        // AllowAccessToPrivatePaths=true so that impl-table parts under
+        // index paths are accepted. Target SS processes each part through
+        // the normal DDL pipeline; the resulting structure mirrors the
+        // source exactly (including auto-generated impl-table names and
+        // vector-index Level/Posting tables).
         //
         // Gap: record.OperationType (TTxState::ETxType, e.g. 28 for
         // TxCreateTableIndex) differs from body.OperationType
@@ -844,83 +841,48 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_VALUES_EQUAL(
             parts.back().Order - parts.front().Order + 1, parts.size());
 
-        // === Subscriber synthesis ===
-        const NKikimrSchemeOp::TTableDescription* mainTableBody = nullptr;
-        TVector<const NKikimrSchemeOp::TIndexCreationConfig*> indexBodies;
-        size_t implTableParts = 0;
+        // Verify bodies carry the type-specific settings we'd lose without
+        // the Body payload — e.g. vector index KMeans parameters.
+        bool sawVectorIdx = false;
         for (const auto& e : parts) {
-            UNIT_ASSERT(e.Body.HasOperationType());
-            switch (e.Body.GetOperationType()) {
-                case NKikimrSchemeOp::ESchemeOpCreateTable: {
-                    UNIT_ASSERT(e.Body.HasCreateTable());
-                    if (e.Body.GetCreateTable().GetName() == "Main") {
-                        mainTableBody = &e.Body.GetCreateTable();
-                    } else {
-                        // Impl-table bodies live under "/MyRoot/Main/<idx>"
-                        // in the emitted Path. Subscribers identify them
-                        // heuristically from the path hierarchy and SKIP
-                        // them on replay — target SS will regenerate.
-                        ++implTableParts;
-                    }
-                    break;
-                }
-                case NKikimrSchemeOp::ESchemeOpCreateTableIndex: {
-                    UNIT_ASSERT(e.Body.HasCreateTableIndex());
-                    indexBodies.push_back(&e.Body.GetCreateTableIndex());
-                    break;
-                }
-                default:
-                    break;
+            if (e.Body.HasCreateTableIndex()
+                && e.Body.GetCreateTableIndex().GetType()
+                    == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)
+            {
+                const auto& idx = e.Body.GetCreateTableIndex();
+                UNIT_ASSERT(idx.HasVectorIndexKmeansTreeDescription());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    idx.GetVectorIndexKmeansTreeDescription()
+                        .GetSettings().Getclusters(), 4u);
+                sawVectorIdx = true;
             }
         }
-        UNIT_ASSERT(mainTableBody);
-        UNIT_ASSERT_VALUES_EQUAL(indexBodies.size(), 3u);
-        // 2 regular indexes (1 impl each) + 1 vector index (2 impls) = 4.
-        UNIT_ASSERT_VALUES_EQUAL(implTableParts, 4u);
+        UNIT_ASSERT(sawVectorIdx);
 
-        // The vector index body must carry its type-specific settings
-        // — without them, replay cannot reconstruct the KMeans tree.
-        const NKikimrSchemeOp::TIndexCreationConfig* vectorIdx = nullptr;
-        for (const auto* ix : indexBodies) {
-            if (ix->GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                vectorIdx = ix;
-            }
-        }
-        UNIT_ASSERT(vectorIdx);
-        UNIT_ASSERT(vectorIdx->HasVectorIndexKmeansTreeDescription());
-        UNIT_ASSERT_VALUES_EQUAL(
-            vectorIdx->GetVectorIndexKmeansTreeDescription()
-                .GetSettings().Getclusters(), 4u);
-
-        // === Assemble + replay as ONE high-level DDL ===
+        // === Privileged verbatim replay ===
+        // Submit each part's body through TEvReplaySchemeChangeRecord with
+        // SourcePathPrefix="/MyRoot" → TargetPathPrefix="/MyRoot/Replay".
+        // The RPC injects Internal=true and AllowAccessToPrivatePaths=true
+        // so that impl-table parts (living under an index path) are accepted.
         TestMkDir(runtime, ++txId, "/MyRoot", "Replay");
         env.TestWaitNotification(runtime, txId);
 
-        auto* replayEv = new TEvSchemeShard::TEvModifySchemeTransaction(
-            ++txId, TTestTxConfig::SchemeShard);
-        auto* replayTx = replayEv->Record.AddTransaction();
-        replayTx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
-        replayTx->SetWorkingDir("/MyRoot/Replay");
-        auto* ct = replayTx->MutableCreateIndexedTable();
-        *ct->MutableTableDescription() = *mainTableBody;
-        for (const auto* ix : indexBodies) {
-            *ct->AddIndexDescription() = *ix;
-        }
+        for (const auto& e : parts) {
+            TString serialized;
+            UNIT_ASSERT(e.Body.SerializeToString(&serialized));
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, replayEv, 0,
-            GetPipeConfigWithRetries());
-        {
             TAutoPtr<IEventHandle> handle;
-            auto* reply = runtime.GrabEdgeEvent<
-                TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+            const ui64 replayTxId = ++txId;
+            auto* reply = ReplaySchemeChangeRecord(
+                runtime, serialized, replayTxId, "/MyRoot", "/MyRoot/Replay", handle);
             UNIT_ASSERT_VALUES_EQUAL_C(
-                (ui32)reply->Record.GetStatus(),
+                (ui32)reply->GetStatus(),
                 (ui32)NKikimrScheme::StatusAccepted,
-                "Replay of synthesized CREATE TABLE WITH INDEXES must "
-                "succeed; reason: " << reply->Record.GetReason());
+                "ReplaySchemeChangeRecord must accept part order=" << e.Order
+                    << " type=" << (ui32)e.Body.GetOperationType()
+                    << "; reason: " << reply->GetReason());
+            env.TestWaitNotification(runtime, replayTxId);
         }
-        env.TestWaitNotification(runtime, txId);
 
         // Verify replay produced the expected structure: main table, each
         // index path, and each impl table.

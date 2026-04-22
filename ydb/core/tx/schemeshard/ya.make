@@ -108,6 +108,7 @@ SRCS(
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__notify.cpp
+    schemeshard__replay_scheme_change_record.cpp
     schemeshard__scheme_change_records.cpp
     schemeshard__scheme_change_records_cleanup.cpp
     schemeshard__scheme_change_records_fetch.cpp

@@ -137,3 +137,20 @@ message TEvFetchSchemeChangeRecordBodiesResult {
     string Reason = 2;
     repeated TEntry Entries = 3;
 }
+
+// Privileged re-execution of a persisted scheme change record body.
+// The server rewrites WorkingDir by substituting SourcePathPrefix with
+// TargetPathPrefix, forces Internal=true and AllowAccessToPrivatePaths=true
+// on the body (caller-supplied values for those fields are ignored), and
+// forwards the body through the usual TEvModifySchemeTransaction pipeline.
+// The response is a TEvModifySchemeTransactionResult for the given TxId.
+//
+// Access control: same as TEvModifySchemeTransaction — cluster-operator
+// only at the frontend/gRPC layer. The value add of this event is that
+// its flag-injection cannot be reached through the normal DDL path.
+message TEvReplaySchemeChangeRecord {
+    bytes Body = 1;                  // serialized NKikimrSchemeOp.TModifyScheme
+    uint64 TxId = 2;                 // tx id for the forwarded TEvModifySchemeTransaction
+    string SourcePathPrefix = 3;     // e.g. "/Source/Db"
+    string TargetPathPrefix = 4;     // e.g. "/Target/Db"
+}

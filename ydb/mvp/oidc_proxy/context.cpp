@@ -22,15 +22,13 @@ TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
 
 TString TContext::GetState(const TString& key) const {
     static const TDuration STATE_LIFE_TIME = TDuration::Minutes(10);
-    TInstant expirationTime = TInstant::Now() + STATE_LIFE_TIME;
-    TStringBuilder json;
-    json << "{\"state\":\"" << State
-         << "\",\"expiration_time\":\"" << ToString(expirationTime.TimeT()) << "\"}";
-    TString digest = HmacSHA1(key, json);
-    TStringBuilder signedState;
-    signedState << "{\"container\":\"" << Base64Encode(json) << "\","
-                  "\"digest\":\"" << Base64Encode(digest) << "\"}";
-    return Base64EncodeNoPadding(signedState);
+    TState payload;
+    payload.AntiForgeryToken = State;
+    payload.ExpirationTime = (TInstant::Now() + STATE_LIFE_TIME).TimeT();
+    if (!NavigationRequest) {
+        payload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+    }
+    return EncodeState(payload, key);
 }
 
 bool TContext::IsNavigationRequest() const {
@@ -43,7 +41,7 @@ TString TContext::GetRequestedAddress() const {
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
     static constexpr size_t COOKIE_MAX_AGE_SEC = 3600;
-    return TStringBuilder() << TOpenIdConnectSettings::YDB_OIDC_COOKIE << "="
+    return TStringBuilder() << CreateNameYdbOidcCookie(NavigationRequest ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX) << "="
                             << GenerateCookie(secret) << ";"
                             " Path=" << GetAuthCallbackUrl() << ";"
                             " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"

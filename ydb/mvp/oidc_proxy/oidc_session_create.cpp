@@ -31,7 +31,7 @@ void THandlerSessionCreate::Bootstrap() {
 
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret);
+    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret, checkStateResult.CookieSuffix);
     Context = restoreContextResult.Context;
 
     if (checkStateResult.IsSuccess()) {

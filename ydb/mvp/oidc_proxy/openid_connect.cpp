@@ -5,6 +5,7 @@
 #include <ydb/core/util/wildcard.h>
 #include <ydb/library/security/util.h>
 
+#include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -27,9 +28,10 @@ bool TRestoreOidcContextResult::IsSuccess() const {
     return Status.IsSuccess;
 }
 
-TCheckStateResult::TCheckStateResult(bool success, const TString& errorMessage)
+TCheckStateResult::TCheckStateResult(bool success, const TString& cookieSuffix, const TString& errorMessage)
     : Success(success)
     , ErrorMessage(errorMessage)
+    , CookieSuffix(cookieSuffix)
 {}
 
 bool TCheckStateResult::IsSuccess() const {
@@ -79,14 +81,19 @@ void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& va
 
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId) {
     TContext context(request);
-    const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
-                                                 << "?response_type=code"
-                                                 << "&scope=openid"
-                                                 << "&state=" << context.GetState(settings.ClientSecret)
-                                                 << "&client_id=" << settings.ClientId
-                                                 << "&redirect_uri=" << (request->Endpoint->Secure ? "https://" : "http://")
-                                                                     << request->Host
-                                                                     << GetAuthCallbackUrl();
+    const TString redirectUri = TStringBuilder()
+        << (request->Endpoint->Secure ? "https://" : "http://")
+        << request->Host
+        << GetAuthCallbackUrl();
+
+    TCgiParameters authParams;
+    authParams.InsertUnescaped("response_type", "code");
+    authParams.InsertUnescaped("scope", "openid");
+    authParams.InsertUnescaped("state", context.GetState(settings.ClientSecret));
+    authParams.InsertUnescaped("client_id", settings.ClientId);
+    authParams.InsertUnescaped("redirect_uri", redirectUri);
+
+    const TString redirectUrl = settings.GetAuthEndpointURL() + "?" + authParams.Print();
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
     SetRequestIdHeader(responseHeaders, requestId);
@@ -100,8 +107,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     return request->CreateResponse("401", "Unauthorized", responseHeaders, body);
 }
 
-TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state) {
-    return TOpenIdConnectSettings::YDB_OIDC_COOKIE + "_" + HexEncode(HmacSHA256(key, state));
+TString CreateNameYdbOidcCookie(TStringBuf suffix) {
+    return TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE) + TString(suffix);
 }
 
 TString CreateNameSessionCookie(TStringBuf key) {
@@ -131,15 +138,16 @@ TString ClearSecureCookie(const TString& name) {
     return cookieBuilder;
 }
 
-TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key) {
+TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf cookieSuffix) {
     TStringBuilder errorMessage;
     errorMessage << "Restore oidc context failed: ";
-    if (!cookies.Has(TOpenIdConnectSettings::YDB_OIDC_COOKIE)) {
+    TString cookieName = CreateNameYdbOidcCookie(cookieSuffix);
+    if (!cookies.Has(cookieName)) {
         return TRestoreOidcContextResult({.IsSuccess = false,
                                          .IsErrorRetryable = false,
-                                         .ErrorMessage = errorMessage << "Cannot find cookie " << TOpenIdConnectSettings::YDB_OIDC_COOKIE});
+                                         .ErrorMessage = errorMessage << "Cannot find cookie " << cookieName});
     }
-    TString signedRequestedAddress = Base64Decode(cookies.Get(TOpenIdConnectSettings::YDB_OIDC_COOKIE));
+    TString signedRequestedAddress = Base64Decode(cookies.Get(cookieName));
     TString requestedAddressContext;
     TString expectedDigest;
     NJson::TJsonValue jsonValue;
@@ -188,51 +196,117 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
                                      .ErrorMessage = ""}, TContext({.RequestedAddress = requestedAddress}));
 }
 
-TCheckStateResult CheckState(const TString& state, const TString& key) {
-    TStringBuilder errorMessage;
-    errorMessage << "Check state failed: ";
-    TString signedState = Base64DecodeUneven(state);
-    TString stateContainer;
-    TString expectedDigest;
+TCheckStateResult TDecodeStateResult::Check(const TString& key) const {
+    const TString errorPrefix = "Check state failed: ";
+    if (StateContainer.empty()) {
+        return TCheckStateResult(false, "", errorPrefix + "Container with state is empty");
+    }
+    if (ExpectedDigest.empty()) {
+        return TCheckStateResult(false, "", errorPrefix + "Expected digest is empty");
+    }
+    if (!HasSignedStateJson) {
+        return TCheckStateResult(false, "", errorPrefix + "Calculated digest is not equal expected digest");
+    }
+
+    TString digest = HmacSHA1(key, StateContainer);
+    if (ExpectedDigest != digest) {
+        return TCheckStateResult(false, "", errorPrefix + "Calculated digest is not equal expected digest");
+    }
+    if (!HasStateContainerJson) {
+        return TCheckStateResult(false, "", errorPrefix + "State container is not valid json");
+    }
+    if (!Payload.ExpirationTime.Defined()) {
+        return TCheckStateResult(false, Payload.CookieSuffix, errorPrefix + "Expiration time not found in json");
+    }
+    timeval timeVal {
+        .tv_sec = Payload.ExpirationTime.GetRef(),
+        .tv_usec = 0
+    };
+    if (TInstant::Now() > TInstant(timeVal)) {
+        return TCheckStateResult(false, Payload.CookieSuffix, errorPrefix + "State life time expired");
+    }
+    return TCheckStateResult(true, Payload.CookieSuffix, "");
+}
+
+TString EncodeState(const TState& payload, TStringBuf signingKey) {
+    TStringBuilder json;
+    json << "{\"state\":\"" << payload.AntiForgeryToken << "\"";
+    if (payload.ExpirationTime.Defined()) {
+        json << ",\"expiration_time\":\"" << ToString(payload.ExpirationTime.GetRef()) << "\"";
+    }
+    if (!payload.CookieSuffix.empty()) {
+        json << ",\"cookie_suffix\":\"" << payload.CookieSuffix << "\"";
+    }
+    json << "}";
+    const TString stateContainer = json;
+
+    TString digest = HmacSHA1(signingKey, stateContainer);
+    TStringBuilder signedState;
+    signedState << "{\"container\":\"" << Base64Encode(stateContainer)
+                << "\",\"digest\":\"" << Base64Encode(digest) << "\"}";
+    return Base64EncodeNoPadding(signedState);
+}
+
+TDecodeStateResult DecodeState(TStringBuf encodedState) {
+    TDecodeStateResult result;
+    TString signedState = Base64DecodeUneven(encodedState);
     NJson::TJsonValue jsonValue;
     NJson::TJsonReaderConfig jsonConfig;
-    if (NJson::ReadJsonTree(signedState, &jsonConfig, &jsonValue)) {
+    result.HasSignedStateJson = NJson::ReadJsonTree(signedState, &jsonConfig, &jsonValue);
+    if (result.HasSignedStateJson) {
         const NJson::TJsonValue* jsonStateContainer = nullptr;
         if (jsonValue.GetValuePointer("container", &jsonStateContainer)) {
-            stateContainer = jsonStateContainer->GetStringRobust();
-            stateContainer = Base64Decode(stateContainer);
-        }
-        if (stateContainer.empty()) {
-            return TCheckStateResult(false, errorMessage << "Container with state is empty");
+            result.StateContainer = jsonStateContainer->GetStringRobust();
+            result.StateContainer = Base64Decode(result.StateContainer);
         }
         const NJson::TJsonValue* jsonDigest = nullptr;
         if (jsonValue.GetValuePointer("digest", &jsonDigest)) {
-            expectedDigest = jsonDigest->GetStringRobust();
-            expectedDigest = Base64Decode(expectedDigest);
+            result.ExpectedDigest = jsonDigest->GetStringRobust();
+            result.ExpectedDigest = Base64Decode(result.ExpectedDigest);
         }
-        if (expectedDigest.empty()) {
-            return TCheckStateResult(false, errorMessage << "Expected digest is empty");
-        }
-    }
-    TString digest = HmacSHA1(key, stateContainer);
-    if (expectedDigest != digest) {
-        return TCheckStateResult(false, errorMessage << "Calculated digest is not equal expected digest");
-    }
-    if (NJson::ReadJsonTree(stateContainer, &jsonConfig, &jsonValue)) {
-        const NJson::TJsonValue* jsonExpirationTime = nullptr;
-        if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {
-            timeval timeVal {
-                .tv_sec = jsonExpirationTime->GetIntegerRobust(),
-                .tv_usec = 0
-            };
-            if (TInstant::Now() > TInstant(timeVal)) {
-                return TCheckStateResult(false, errorMessage << "State life time expired");
+    } else {
+        const TStringBuf signedStateBuf(signedState);
+        auto extractJsonStringField = [signedStateBuf](TStringBuf fieldName) -> TString {
+            const TString pattern = TStringBuilder() << "\"" << fieldName << "\":\"";
+            const size_t valueBegin = signedStateBuf.find(pattern);
+            if (valueBegin == TString::npos) {
+                return {};
             }
-        } else {
-            return TCheckStateResult(false, errorMessage << "Expiration time not found in json");
+            const size_t stringBegin = valueBegin + pattern.size();
+            const size_t stringEnd = signedStateBuf.find('"', stringBegin);
+            if (stringEnd == TString::npos) {
+                return {};
+            }
+            return TString(signedStateBuf.SubString(stringBegin, stringEnd - stringBegin));
+        };
+
+        result.StateContainer = Base64Decode(extractJsonStringField("container"));
+        result.ExpectedDigest = Base64Decode(extractJsonStringField("digest"));
+    }
+
+    if (!result.StateContainer.empty()) {
+        result.HasStateContainerJson = NJson::ReadJsonTree(result.StateContainer, &jsonConfig, &jsonValue);
+        if (result.HasStateContainerJson) {
+            const NJson::TJsonValue* jsonState = nullptr;
+            if (jsonValue.GetValuePointer("state", &jsonState)) {
+                result.Payload.AntiForgeryToken = jsonState->GetStringRobust();
+            }
+            const NJson::TJsonValue* jsonCookieSuffix = nullptr;
+            if (jsonValue.GetValuePointer("cookie_suffix", &jsonCookieSuffix)) {
+                result.Payload.CookieSuffix = jsonCookieSuffix->GetStringRobust();
+            }
+            const NJson::TJsonValue* jsonExpirationTime = nullptr;
+            if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {
+                result.Payload.ExpirationTime = jsonExpirationTime->GetIntegerRobust();
+            }
         }
     }
-    return TCheckStateResult();
+
+    return result;
+}
+
+TCheckStateResult CheckState(const TString& state, const TString& key) {
+    return DecodeState(state).Check(key);
 }
 
 TString DecodeToken(const TStringBuf& cookie) {

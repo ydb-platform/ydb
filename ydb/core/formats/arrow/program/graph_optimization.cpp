@@ -1,7 +1,7 @@
+#include "distinct_marker.h"
 #include "assign_const.h"
 #include "assign_internal.h"
 #include "aggr_keys.h"
-#include "distinct.h"
 #include "filter.h"
 #include "graph_optimization.h"
 #include "header.h"
@@ -303,7 +303,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
 
 // Strict: only allow dictionary-only when the entire request needs exactly one data column, and either:
 // - aggregation: that column is a group key and every aggregate is SOME(columnId), or
-// - distinct: TDistinctProcessor on that single column.
+// - distinct marker: a stateless DISTINCT marker on that single column.
 TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds) {
     if (requiredDataColumnIds.size() != 1) {
         return false;
@@ -312,8 +312,8 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
     const ui32 columnId = *requiredDataColumnIds.begin();
 
     if (node->Is(EProcessorType::Filter)) {
-        const auto distinctProc = std::dynamic_pointer_cast<TDistinctProcessor>(node->GetProcessor());
-        if (!distinctProc || distinctProc->GetKeyColumnId() != columnId) {
+        const auto distinctMarker = std::dynamic_pointer_cast<TDistinctMarkerProcessor>(node->GetProcessor());
+        if (!distinctMarker || distinctMarker->GetKeyColumnId() != columnId) {
             return false;
         }
     } else if (node->Is(EProcessorType::Aggregation)) {

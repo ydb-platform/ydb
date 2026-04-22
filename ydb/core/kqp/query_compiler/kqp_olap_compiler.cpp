@@ -971,6 +971,8 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
 }
 
 void CompileDistinct(const TKqpOlapDistinct& distinctNode, TKqpOlapCompileContext& ctx) {
+    // Emit only a marker into SSA program (used by ColumnShard reader to enable distinct-limit early stop).
+    // Execution itself is done at the reader level (distinct-limit sync point); SSA graph stays free of stateful processors.
     auto* distinct = ctx.CreateDistinct();
     distinct->MutableKeyColumn()->SetId(GetOrCreateColumnId(distinctNode.Key(), ctx));
 }

@@ -56,6 +56,20 @@ public:
         return false;
     }
 
+    std::optional<ui32> GetDistinctKeyColumnIdOptional() const {
+        for (const auto& cmd : ProgramProto.GetCommand()) {
+            if (cmd.GetLineCase() != NKikimrSSA::TProgram::TCommand::kDistinct) {
+                continue;
+            }
+            const auto& distinct = cmd.GetDistinct();
+            if (distinct.HasKeyColumn() && distinct.GetKeyColumn().HasId() && distinct.GetKeyColumn().GetId()) {
+                return distinct.GetKeyColumn().GetId();
+            }
+            return std::nullopt;
+        }
+        return std::nullopt;
+    }
+
     bool HasProcessingColumnIds() const {
         return !!Program || !!OverrideProcessingColumnsVector;
     }

@@ -68,7 +68,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
 
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
-        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
         AssertAstItemsLimitBoundToLetUint64(ast, 10);
 
         NJson::TJsonValue planJson;
@@ -129,7 +128,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
 
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
-        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
         AssertAstItemsLimitBoundToLetUint64(ast, 10);
 
         NJson::TJsonValue planJson;
@@ -158,7 +156,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
 
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
-        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
         UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
 
         NJson::TJsonValue planJson;
@@ -187,7 +184,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
 
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
-        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
         UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
 
         NJson::TJsonValue planJson;

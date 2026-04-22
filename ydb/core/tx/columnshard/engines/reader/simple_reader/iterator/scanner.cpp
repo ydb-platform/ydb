@@ -26,9 +26,8 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     auto readMetadataContext = context->GetReadMetadata();
-    const std::optional<ui64> distinctLimit = (readMetadataContext->GetProgram().HasDistinctCommand())
-        ? readMetadataContext->GetRequestedLimitOptional()
-        : std::nullopt;
+    const auto distinctKeyColumnId = readMetadataContext->GetProgram().GetDistinctKeyColumnIdOptional();
+    const std::optional<ui64> distinctLimit = distinctKeyColumnId ? readMetadataContext->GetRequestedLimitOptional() : std::nullopt;
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
@@ -45,14 +44,16 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
             SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
         }
         if (distinctLimit) {
-            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(*distinctLimit, SyncPoints.size(), context, SourcesCollection));
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
+                *distinctLimit, *distinctKeyColumnId, SyncPoints.size(), context, SourcesCollection));
         }
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
         if (distinctLimit) {
-            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(*distinctLimit, SyncPoints.size(), context, SourcesCollection));
+            SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
+                *distinctLimit, *distinctKeyColumnId, SyncPoints.size(), context, SourcesCollection));
         }
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     }

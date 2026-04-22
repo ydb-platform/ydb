@@ -436,6 +436,80 @@ def format_duration(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+def parse_leaked_blob_ids(path: Path) -> set[str]:
+    blob_ids: set[str] = set()
+    with path.open("r", encoding="utf-8", errors="replace") as inp:
+        for line in inp:
+            if "event=found_leaked_blob_ids_chunk;" not in line:
+                continue
+            blob_ids_pos = line.find("blob_ids=")
+            if blob_ids_pos < 0:
+                continue
+            payload = line[blob_ids_pos + len("blob_ids="):]
+            for match in LOGO_BLOB_ID_RE.finditer(payload):
+                blob_ids.add(match.group(0))
+    return blob_ids
+
+
+def print_leaked_blobs_stats(report: Report, leaked_blob_ids: set[str]) -> None:
+    channel = report.channels[2]
+
+    found_blobs: list[Blob] = []
+    for blob_id in leaked_blob_ids:
+        blob = channel._blobs.get(blob_id)
+        if blob is not None:
+            found_blobs.append(blob)
+
+    found_blobs_count = len(found_blobs)
+    found_blobs_size = sum(blob.blob_size for blob in found_blobs)
+    found_records = sum(blob.total for blob in found_blobs)
+    found_records_size = sum(max_part_size(blob.blob_size, report.erasure) * blob.total for blob in found_blobs)
+
+    keep_blobs = [blob for blob in found_blobs if blob.keep()]
+    keep_blobs_count = len(keep_blobs)
+    keep_blobs_size = sum(blob.blob_size for blob in keep_blobs)
+    keep_records = sum(blob.total for blob in keep_blobs)
+    keep_records_size = sum(max_part_size(blob.blob_size, report.erasure) * blob.total for blob in keep_blobs)
+
+    recoverable_blobs = [blob for blob in keep_blobs if blob.recoverable(report.erasure)]
+    recoverable_blobs_count = len(recoverable_blobs)
+    recoverable_blobs_size = sum(blob.blob_size for blob in recoverable_blobs)
+    recoverable_records = sum(blob.total for blob in recoverable_blobs)
+    recoverable_records_size = sum(
+        max_part_size(blob.blob_size, report.erasure) * blob.total
+        for blob in recoverable_blobs
+    )
+
+    log = Logger()
+    emit = log.emit
+    right = log.shift_right
+    left = log.shift_left
+
+    emit("leaked blobs total:", str(len(leaked_blob_ids)))
+    emit("found blobs:", str(found_blobs_count), pct(found_blobs_count, len(leaked_blob_ids)))
+    right()
+    emit("blobs estimated size:", human_size(found_blobs_size))
+    emit("records:", str(found_records))
+    emit("records size:", human_size(found_records_size))
+    emit("records per blob:", f"{(found_records / found_blobs_count):.1f}" if found_blobs_count else "0.0")
+    emit("keep blobs:", str(keep_blobs_count), pct(keep_blobs_count, found_blobs_count))
+    right()
+    emit("blobs estimated size:", human_size(keep_blobs_size), pct(keep_blobs_size, found_blobs_size))
+    emit("records:", str(keep_records), pct(keep_records, found_records))
+    emit("records size:", human_size(keep_records_size), pct(keep_records_size, found_records_size))
+    emit("records per blob:", f"{(keep_records / keep_blobs_count):.1f}" if keep_blobs_count else "0.0")
+    emit("recoverable:", str(recoverable_blobs_count), pct(recoverable_blobs_count, keep_blobs_count))
+    right()
+    emit("blobs estimated size:", human_size(recoverable_blobs_size), pct(recoverable_blobs_size, keep_blobs_size))
+    emit("records:", str(recoverable_records), pct(recoverable_records, keep_records))
+    emit("records size:", human_size(recoverable_records_size), pct(recoverable_records_size, keep_records_size))
+    emit("records per blob:", f"{(recoverable_records / recoverable_blobs_count):.1f}" if recoverable_blobs_count else "0.0")
+    left()
+    left()
+    left()
+    log.flush()
+
+
 class Progress:
     def __init__(self, total_bytes: int) -> None:
         self._total_bytes = total_bytes
@@ -507,6 +581,7 @@ class Logger:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Calculates blob counts in a snapshot retrieved by dstool from a blobstorage, and parsed by blobsan")
     parser.add_argument("input_path", nargs="?", default="my-snapshot.txt", help="Path to a snapshot file. The file must be retrieved by dstool and parsed by blobsan.")
+    parser.add_argument("--leaked-blobs-log-file", default=None, help="Path to a leaked blobs log file containing the results of the LeakedBlobsNormalizer.")
     parser.add_argument("--disk-type", choices=MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA.keys(), default=DEFAULT_BS_MEDIA)
     parser.add_argument("--erasure", choices=ERASURE_BY_NAME.keys(), default=DEFAULT_ERASURE_NAME)
     parser.add_argument("--allow-non-zero-part-id", action="store_true", help="Allow part_id to be non-zero")
@@ -537,6 +612,9 @@ def main() -> None:
 
     progress.print_completed()
     report.print()
+    if args.leaked_blobs_log_file:
+        leaked_blob_ids = parse_leaked_blob_ids(Path(args.leaked_blobs_log_file))
+        print_leaked_blobs_stats(report, leaked_blob_ids)
 
 
 if __name__ == "__main__":

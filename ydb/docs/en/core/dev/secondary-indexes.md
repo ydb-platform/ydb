@@ -10,7 +10,7 @@ In transactional systems, indexes are used to limit or avoid performance degrada
 
 This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/query_execution/secondary_indexes.md) in the Concepts section.
 
-Tables support **local Bloom skip indexes**, which speed up selective queries by allowing the system to skip data chunks that do not contain the requested values. They are created using `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, do not use the `VIEW` syntax, and their syntax and parameters are described in [Local Bloom skip indexes](../yql/reference/syntax/alter_table/indexes.md#local-bloom-column).
+Tables support **local Bloom skip indexes**, which speed up selective queries by allowing the system to skip data chunks that do not contain the requested values. They are created using `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, do not use the `VIEW` syntax, and their syntax, parameters, and parameter updates via `ALTER INDEX` are described in [Bloom skip indexes](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
 ## Creating secondary indexes {#create}
 

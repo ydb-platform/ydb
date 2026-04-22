@@ -206,7 +206,6 @@ namespace NKikimr {
         TActorId CommitterId;
         TActorId NotifyId;
         bool Scheduled;
-        THashSet<ui32> DeferredPeers;
         THashSet<ui32> StartupCatchupPeers;
         bool StartupCatchupDoneReported = false;
         std::shared_ptr<TSjCtx> JobCtx;
@@ -238,22 +237,15 @@ namespace NKikimr {
             for (const auto &x : *SyncerData->Neighbors) {
                 if (!x.Myself) {
                     Y_DEBUG_ABORT_UNLESS(x.Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
+                    SchedulerQueue.push(&x);
                     if (!NSyncer::TPeerSyncState::Good(x.Get().PeerSyncState.LastSyncStatus)) {
                         StartupCatchupPeers.insert(x.OrderNumber);
-                        SchedulerQueue.push(&x);
-                    } else {
-                        DeferredPeers.insert(x.OrderNumber);
                     }
                 }
             }
 
             ActualizeUnsyncedDisksNum();
             if (StartupCatchupPeers.empty()) {
-                for (const auto& x : *SyncerData->Neighbors) {
-                    if (!x.Myself && DeferredPeers.erase(x.OrderNumber)) {
-                        SchedulerQueue.push(&x);
-                    }
-                }
                 ReportStartupCatchupDone(ctx);
             }
 
@@ -276,11 +268,6 @@ namespace NKikimr {
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(task.VDiskId);
             if (StartupCatchupPeers.erase(orderNumber) && StartupCatchupPeers.empty()) {
-                for (const auto& x : *SyncerData->Neighbors) {
-                    if (!x.Myself && DeferredPeers.erase(x.OrderNumber)) {
-                        SchedulerQueue.push(&x);
-                    }
-                }
                 ReportStartupCatchupDone(ctx);
             }
             SchedulerQueue.push(&(*SyncerData->Neighbors)[task.VDiskId]);

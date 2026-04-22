@@ -3561,33 +3561,39 @@ public:
                 currentContext = &pileContext;
             }
             ui32 disabledRings = 0;
-            ui32 badRings = 0;
+            TVector<TStateStorageRingAvailability> ringAvailability;
+            ringAvailability.reserve(ringGroup.Rings.size());
             for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
                 const auto& ring = ringGroup.Rings[ringIdx];
+                auto& availability = ringAvailability.emplace_back();
+                availability.AvailableReplicas.reserve(ring.Replicas.size());
                 TSelfCheckContext ringContext(currentContext, TStringBuilder() << type << "_RING");
                 ringContext.Location.mutable_compute()->mutable_state_storage()->set_ring(ringIdx + 1);
                 if (ring.IsDisabled) {
                     ++disabledRings;
+                    // Disabled rings are accounted separately via disabledRings.
+                    // Keep this ring "available" for the helper to avoid double counting.
+                    availability.AvailableReplicas.resize(ring.Replicas.size(), true);
                     continue;
                 }
                 for (const auto& replica : ring.Replicas) {
                     const auto node = replica.NodeId();
-                    if (!NodeSystemState[node].IsOk()) {
+                    const bool available = NodeSystemState[node].IsOk();
+                    availability.AvailableReplicas.push_back(available);
+                    if (!available) {
                         TSelfCheckContext nodeContext(&ringContext, TStringBuilder() << type << "_NODE");
                         nodeContext.Location.mutable_compute()->mutable_state_storage()->mutable_node()->set_id(node);
                         nodeContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is not available", ETags::StateStorageNode);
                     }
                 }
                 ringContext.ReportWithMaxChildStatus("Ring has unavailable nodes", ETags::StateStorageRing, {ETags::StateStorageNode});
-                if (ringContext.GetOverallStatus() == Ydb::Monitoring::StatusFlag::RED) {
-                    ++badRings;
-                }
             }
-            if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
+            const ui32 effectiveUnavailableRings = CalculateEffectiveUnavailableRings(ringGroup, ringAvailability);
+            if (disabledRings + effectiveUnavailableRings > (ringGroup.NToSelect - 1) / 2) {
                 currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage);
-            } else if (badRings > 1) {
+            } else if (effectiveUnavailableRings > 1) {
                 currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Multiple rings have unavailable replicas", ETags::StateStorage);
-            } else if (badRings > 0) {
+            } else if (effectiveUnavailableRings > 0) {
                 currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "One ring has unavailable replicas", ETags::StateStorage);
             }
         }

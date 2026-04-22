@@ -25,9 +25,9 @@
 
 ## Используемые величины {#metrics}
 
-**Tablet Storage Used** — это суммарный объём данных, хранимый таблетками базы.
+**Tablet Storage** — это суммарный объём данных, хранимый таблетками базы.
 
-**Distributed Storage Used** — это суммарный размер, аллоцированный VDisk'ами базы. Этот размер включает в себя:
+**Distributed Storage** — это суммарный размер, аллоцированный VDisk'ами базы. Этот размер включает в себя:
 
 - собственно данные, записанные таблетками;
 - избыточность при репликации или кодировании с исправлением ошибок;
@@ -41,13 +41,13 @@
 Другие накладные расходы могут существенно варьироваться в зависимости от характера хранимых данных и нагрузки. Для грубой оценки можно считать `Overhead = 2`, для более точной оценки рекомендуется проведение пилотного эксперимента.
 
 <!--
-Значение Overhead=2 посчитано как медиана на выборке из 195 dedicated баз mirror-3-dc, удовлетворяющих критериям: Tablet storage > 100 GB, Distributed storage > 200 GB
+Значение Overhead=2 посчитано как медиана на выборке из 195 dedicated баз mirror-3-dc, удовлетворяющих критериям: Tablet Storage > 100 GB, Distributed Storage > 200 GB
 -->
 
 Связать эти величины можно приблизительно через соотношение:
 
 ```text
-Distributed Storage Used = Tablet Storage Used × RF × Overhead
+Distributed Storage = Tablet Storage × RF × Overhead
 ```
 
 ## Оценка требуемого оборудования {#hardware-estimation}
@@ -71,28 +71,40 @@ SlotSize = (DriveSize - 28.4 GB) / ExpectedSlotCount
 Чтобы оценить необходимое количество групп хранения, требуется также учесть, что при заполнении любого из VDisk на 87% вся группа хранения получает предупреждение «место скоро закончится» (Capacity Alert = Cyan). На 90% включается логика по снижению пишущей нагрузки и таблетки переназначаются на другие группы хранения. Таким образом общее количество групп хранения в кластере можно оценить как:
 
 ```text
-TotalGroups = Distributed Storage Used / (SlotSize × VDisksInGroup × 0.87)
+TotalGroups = Distributed Storage / (SlotSize × VDisksInGroup × 0.87)
 ```
 
 Здесь `VDisksInGroup = 8` для `block-4-2` и `9` для `mirror-3-dc`.
 
-Помимо этого, в кластере должен оставаться запас пустых слотов для нормальной работы механизма [SelfHeal](../../maintenance/manual/selfheal.md), выполняющего автоматическую реконфигурацию групп хранения для замены вышедших из строя или длительное время недоступных дисков. Минимально необходимое количество пустых слотов `MinEmptySlots` можно оценить как сумму максимального количества слотов в одной стойке ([домене отказа](../../concepts/glossary.md#fail-domain)) плюс 2.7% от общего количества слотов в кластере.
+Помимо этого, в кластере должен оставаться запас пустых слотов для нормальной работы механизма [SelfHeal](../../maintenance/manual/selfheal.md), выполняющего автоматическую реконфигурацию групп хранения для замены вышедших из строя или длительное время недоступных дисков.
+
+Далее необходимо выбрать конкретную конфигурацию кластера:
+- `NumRacks` — количество стоек / серверов ([доменов отказа](../../concepts/glossary.md#fail-domain))
+- `DisksPerRack` — количество дисков в каждом домене отказа.
+
+После этого необходимо проверить, что в кластере остаётся достаточный запас пустых слотов:
 
 ```text
-TotalSlots = TotalGroups × VDisksInGroup + MinEmptySlots
+TotalSlots = NumRacks × DisksPerRack × ExpectedSlotCount
+UsedSlots = TotalGroups × VDisksInGroup
+EmptySlots = TotalSlots - UsedSlots
 ```
 
-Таким образом количество физических дисков можно вычислить как:
+Минимально необходимое количество пустых слотов `MinEmptySlots` можно оценить по формуле:
 
 ```text
-TotalPDisks = TotalSlots / ExpectedSlotCount
+MinEmptySlots = MaxSlotsInRack + 0.027 × TotalSlots
 ```
+
+Здесь `MaxSlotsInRack = DisksPerRack × ExpectedSlotCount` — максимальное количество слотов в одном домене отказа.
+
+Должно выполняться условие `EmptySlots ≥ MinEmptySlots`. Если условие не выполняется, следует увеличить количество стоек или дисков в стойке и повторить проверку. См. [{#T}](#example).
 
 ## Оценка полезной ёмкости хранилища {#usable-capacity}
 
 Обратная задача — оценить, какой объём полезных данных можно разместить на заданном количестве оборудования.
 
-Пусть имеется `TotalPDisks` физических дисков ёмкостью `DriveSize` ГБ каждый. Тогда:
+Пусть имеется `TotalPDisks` физических дисков ёмкостью `DriveSize` каждый. Тогда:
 
 1. Общее количество слотов:
 
@@ -103,10 +115,11 @@ TotalPDisks = TotalSlots / ExpectedSlotCount
 2. Количество слотов, доступных для групп хранения (за вычетом запаса на SelfHeal):
 
     ```text
+    MinEmptySlots = MaxSlotsInRack + 0.027 × TotalSlots
     UsableSlots = TotalSlots - MinEmptySlots
     ```
 
-    Здесь `MinEmptySlots` оценивается как сумма максимального количества слотов в одной стойке ([домене отказа](../../concepts/glossary.md#fail-domain)) плюс 2.7% от `TotalSlots`.
+    Здесь `MaxSlotsInRack` — максимальное количество слотов в одном домене отказа (стойке или сервере).
 
 3. Количество групп хранения:
 
@@ -117,13 +130,13 @@ TotalPDisks = TotalSlots / ExpectedSlotCount
 4. Полезная ёмкость распределённого хранилища с учётом порога заполнения 87%:
 
     ```text
-    DistributedStorageCapacity = TotalGroups × VDisksInGroup × SlotSize × 0.87
+    Distributed Storage = TotalGroups × VDisksInGroup × SlotSize × 0.87
     ```
 
 5. Оценка полезного объёма данных:
 
     ```text
-    TabletStorageCapacity = DistributedStorageCapacity / (RF × Overhead)
+    Tablet Storage = Distributed Storage / (RF × Overhead)
     ```
 
 ## Пример расчёта {#example}
@@ -134,7 +147,7 @@ TotalPDisks = TotalSlots / ExpectedSlotCount
 
 | Параметр | Значение |
 | --- | --- |
-| Tablet Storage Used | 10 000 ГБ |
+| Tablet Storage | 10 000 ГБ |
 | Режим | `block-4-2` |
 | RF | 1.5 |
 | Overhead | 2 |
@@ -144,7 +157,7 @@ TotalPDisks = TotalSlots / ExpectedSlotCount
 
 **Расчёт:**
 
-1. Distributed Storage Used = 10 000 × 1.5 × 2 = **30 000 ГБ**
+1. Distributed Storage = 10 000 × 1.5 × 2 = **30 000 ГБ**
 2. SlotSize = (1000 − 28.4) / 16 ≈ **60.7 ГБ**
 3. TotalGroups = 30 000 / (60.7 × 8 × 0.87) ≈ **71 группа хранения**
 4. TotalSlots (без запаса) = 71 × 8 = **568 слотов**
@@ -156,6 +169,20 @@ TotalPDisks = TotalSlots / ExpectedSlotCount
 
 Так как кластер получился небольшим, в качестве домена отказа можно вместо стойки выбрать сервер.
 Таким образом, для хранения 10 TB данных в режиме `block-4-2` на SSD-дисках ёмкостью 1000 ГБ потребуется 11 серверов и 44 диска, либо 20 серверов и 40 дисков.
+
+**Обратный расчёт:**
+
+Далее возьмём конфигурацию из предыдущего примера — 20 серверов по 2 SSD-диска ёмкостью 1000 ГБ, и оценим, какой объём Tablet storage поместится в таком кластере.
+
+1. TotalSlots = 40 × 16 = **640 слотов**
+2. MinEmptySlots = MaxSlotsInRack + 0.027 × TotalSlots = 2 × 16 + 0.027 × 640 = 32 + 17.3 ≈ **50 слотов**
+3. UsableSlots = 640 − 50 = **590 слотов**
+4. TotalGroups = 590 / 8 = **73 группы хранения**
+5. SlotSize = (1000 − 28.4) / 16 ≈ **60.725 ГБ**
+6. Distributed Storage = 73 × 8 × 60.725 × 0.87 ≈ **30 853 ГБ**
+7. Tablet Storage = 30 853 / (1.5 × 2) ≈ **10 284 ГБ**
+
+Таким образом, кластер из 20 серверов и 40 SSD-дисков по 1000 ГБ в режиме `block-4-2` позволяет разместить около 10.3 TB данных (Tablet Storage).
 
 ## Дополнительная информация {#see-also}
 

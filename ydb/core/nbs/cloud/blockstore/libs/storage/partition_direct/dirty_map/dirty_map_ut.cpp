@@ -1320,11 +1320,41 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto readHint =
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
 
-        // Should have 5 range hints
         UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
 
         UNIT_ASSERT_VALUES_EQUAL(
             "100{[D.....P+++..][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsRangeWithSameStart)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 100),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(10, 40),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 100));
+
+
+        UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][0..9][0..9]};"
+            "200{[D.....P+++..][10..49][10..49]};"
+            "100{[D.....P+++..][50..99][50..99]};",
             readHint.DebugPrint());
     }
 

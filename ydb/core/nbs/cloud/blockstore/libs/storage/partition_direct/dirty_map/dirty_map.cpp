@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -35,24 +36,58 @@ void AddReadHint(TReadHint& result, TReadRangeHint&& hint)
     }
 }
 
-const TOverlappingItem* FindBestItemForReadHint(
-    const TVector<TOverlappingItem>& overlappingItems,
-    ui64 segmentStart,
-    ui64 segmentEnd)
+// Answers suffix-max queries "find item with maximum Key (LSN) among active
+// items whose Range.End >= threshold" in O(log n) per operation.
+//
+// Maintains a map ordered by Range.End (ascending) where Key values are
+// strictly decreasing. This means lower_bound(threshold) immediately gives
+// the entry with the smallest qualifying End, which — by the invariant —
+// also has the largest Key among all entries with End >= threshold.
+//
+// An entry (E_old, K_old) is dominated by a new entry (E_new, K_new) when
+// E_new >= E_old AND K_new >= K_old: the new item is at least as good for
+// every possible threshold. Dominated entries are removed on insertion.
+//
+// Each item is inserted and erased at most once → amortized O(log n) insert.
+class TParetoMaxMap
 {
-    const TOverlappingItem* bestItem = nullptr;
-    for (const auto& item: overlappingItems) {
-        if (item.Range.Start > segmentStart) {
-            break;
+public:
+    void Insert(const TOverlappingItem* item)
+    {
+        const ui64 end = item->Range.End;
+        const ui64 key = item->Key;
+
+        auto it = Map.lower_bound(end);
+
+        // An existing entry with End >= end and Key >= key dominates the new
+        // item for every threshold — skip insertion.
+        if (it != Map.end() && it->second->Key >= key) {
+            return;
         }
-        if (item.Range.End >= segmentEnd &&
-            (bestItem == nullptr || item.Key > bestItem->Key))
-        {
-            bestItem = &item;
+
+        // Remove entries with End <= end and Key <= key: they are dominated
+        // by the new item (larger-or-equal End AND larger-or-equal Key).
+        while (it != Map.begin()) {
+            auto prev = std::prev(it);
+            if (prev->second->Key <= key) {
+                it = Map.erase(prev);
+            } else {
+                break;
+            }
         }
+
+        Map[end] = item;
     }
-    return bestItem;
-}
+
+    [[nodiscard]] const TOverlappingItem* BestWithEndAtLeast(ui64 threshold) const
+    {
+        auto it = Map.lower_bound(threshold);
+        return (it != Map.end()) ? it->second : nullptr;
+    }
+
+private:
+    TMap<ui64, const TOverlappingItem*> Map;
+};
 
 }   // namespace
 
@@ -450,6 +485,9 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
     Sort(boundaries.begin(), boundaries.end());
     boundaries.erase(std::ranges::unique(boundaries).begin(), boundaries.end());
 
+    // Sort overlappingItems by Range.Start ascending, then Key descending.
+    // This allows sweep-line: as segmentStart grows, we activate items
+    // left-to-right.
     Sort(
         overlappingItems.begin(),
         overlappingItems.end(),
@@ -461,9 +499,17 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             return lhs.Key > rhs.Key;
         });
 
+    // Sweep line + Pareto-optimal map for O(n log n) total complexity.
+    //
+    // As segmentStart grows, we activate items with Range.Start <= segmentStart
+    // by inserting them into TParetoMaxMap. Each query "best item with
+    // Range.End >= segmentEnd" is answered in O(log n) via lower_bound.
+    TParetoMaxMap paretoMap;
+
     result.RangeHints.reserve(boundaries.size() - 1);
 
     ui64 offsetBlocks = 0;
+    size_t nextItemIdx = 0;   // sweep-line pointer into overlappingItems
 
     for (ui64 i = 0; i + 1 < boundaries.size(); ++i) {
         const ui64 segmentStart = boundaries[i];
@@ -472,8 +518,17 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         const auto segmentRange =
             TBlockRange64::MakeClosedInterval(segmentStart, segmentEnd);
 
+        // Activate all items whose Range.Start <= segmentStart.
+        while (nextItemIdx < overlappingItems.size() &&
+               overlappingItems[nextItemIdx].Range.Start <= segmentStart)
+        {
+            paretoMap.Insert(&overlappingItems[nextItemIdx]);
+            ++nextItemIdx;
+        }
+
+        // Query: best item with Range.End >= segmentEnd.
         const TOverlappingItem* bestItem =
-            FindBestItemForReadHint(overlappingItems, segmentStart, segmentEnd);
+            paretoMap.BestWithEndAtLeast(segmentEnd);
 
         if (bestItem == nullptr) {
             auto hint = MakeReadRangeHint({}, 0, segmentRange, offsetBlocks);

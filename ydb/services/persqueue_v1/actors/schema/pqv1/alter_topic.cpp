@@ -66,7 +66,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            this->Reply(Ydb::StatusIds::SUCCESS);
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::PersQueue::V1::AlterTopicResponse());
         }
     }
 

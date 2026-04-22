@@ -63,7 +63,7 @@ private:
     void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
         auto status = ev->Get()->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
-            this->Reply(Ydb::StatusIds::SUCCESS);
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::PersQueue::V1::AddReadRuleResponse());
         } else {
             ReplyWithError(status, status, ev->Get()->ErrorMessage);
         }

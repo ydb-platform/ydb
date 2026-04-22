@@ -753,7 +753,6 @@ class TestLogStructure:
             "started and completed should have the same timestamp (query start time)"
 
 
-
 # Keys whose values vary across runs (session ids, pointers, generated
 # timestamps, wallclock-based stats, database path, transport metadata)
 # and must be replaced before canonization.

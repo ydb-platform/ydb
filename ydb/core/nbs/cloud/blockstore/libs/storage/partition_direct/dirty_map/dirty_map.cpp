@@ -7,6 +7,55 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+struct TOverlappingItem
+{
+    ui64 Key;
+    TBlockRange64 Range;
+    TInflightInfo* Value;
+};
+
+void AddReadHint(TReadHint& result, TReadRangeHint&& hint)
+{
+    if (result.RangeHints.empty()) {
+        result.RangeHints.push_back(std::move(hint));
+        return;
+    }
+
+    auto& prevHint = result.RangeHints.back();
+    if (prevHint.Lsn == hint.Lsn &&
+        prevHint.LocationMask == hint.LocationMask &&
+        prevHint.VChunkRange.End + 1 == hint.VChunkRange.Start)
+    {
+        prevHint.VChunkRange.End = hint.VChunkRange.End;
+        prevHint.RequestRelativeRange.End = hint.RequestRelativeRange.End;
+    } else {
+        result.RangeHints.push_back(std::move(hint));
+    }
+}
+
+const TOverlappingItem* FindBestItemForReadHint(
+    const TVector<TOverlappingItem>& overlappingItems,
+    ui64 segmentStart,
+    ui64 segmentEnd)
+{
+    const TOverlappingItem* bestItem = nullptr;
+    for (const auto& item: overlappingItems) {
+        if (item.Range.Start > segmentStart) {
+            break;
+        }
+        if (item.Range.End >= segmentEnd &&
+            (bestItem == nullptr || item.Key > bestItem->Key))
+        {
+            bestItem = &item;
+        }
+    }
+    return bestItem;
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadRangeHint::TReadRangeHint(
@@ -365,49 +414,17 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
                                  : TRangeLock(this, lsn)};
 }
 
-void TBlocksDirtyMap::AddReadHint(
-    TReadHint& result,
-    TReadRangeHint&& hint) const
-{
-    if (result.RangeHints.empty()) {
-        result.RangeHints.push_back(std::move(hint));
-        return;
-    }
-
-    auto& prevHint = result.RangeHints.back();
-    // попробовать смержить элементы. TODO вынести в функцию
-    if (prevHint.Lsn == hint.Lsn &&
-        prevHint.LocationMask == hint.LocationMask &&
-        prevHint.VChunkRange.End + 1 == hint.VChunkRange.Start)
-    {
-        prevHint.VChunkRange.End = hint.VChunkRange.End;
-        prevHint.RequestRelativeRange.End = hint.RequestRelativeRange.End;
-    } else {
-        result.RangeHints.push_back(std::move(hint));
-    }
-}
-
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
-
     if (!Inflight.HasOverlaps(range)) {
         result.RangeHints.push_back(MakeReadRangeHint({}, 0, range, 0));
         return result;
     }
 
-    struct TOverlappingItem
-    {
-        ui64 Key;
-        TBlockRange64 Range;
-        TInflightInfo* Value;
-    };
-
-    TVector<TOverlappingItem> overlappingItems;
-    overlappingItems.reserve(16);
-
     TVector<ui64> boundaries;
-    boundaries.reserve(34);
+    TVector<TOverlappingItem> overlappingItems;
+
     boundaries.push_back(range.Start);
     boundaries.push_back(range.End + 1);
 
@@ -448,24 +465,15 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 
     ui64 offsetBlocks = 0;
 
-    for (size_t i = 0; i + 1 < boundaries.size(); ++i) {
+    for (ui64 i = 0; i + 1 < boundaries.size(); ++i) {
         const ui64 segmentStart = boundaries[i];
         const ui64 nextBoundary = boundaries[i + 1];
         const ui64 segmentEnd = nextBoundary - 1;
         const auto segmentRange =
             TBlockRange64::MakeClosedInterval(segmentStart, segmentEnd);
 
-        const TOverlappingItem* bestItem = nullptr;
-        for (const auto& item: overlappingItems) {
-            if (item.Range.Start > segmentStart) {
-                break;
-            }
-            if (item.Range.End >= segmentEnd &&
-                (bestItem == nullptr || item.Key > bestItem->Key))
-            {
-                bestItem = &item;
-            }
-        }
+        const TOverlappingItem* bestItem =
+            FindBestItemForReadHint(overlappingItems, segmentStart, segmentEnd);
 
         if (bestItem == nullptr) {
             auto hint = MakeReadRangeHint({}, 0, segmentRange, offsetBlocks);

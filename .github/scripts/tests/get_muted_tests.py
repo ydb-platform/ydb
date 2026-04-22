@@ -301,6 +301,14 @@ def mute_applier(args):
         print(f"Unmuted tests have been written to {unmuted_tests_file}.")
 
 
+def _add_muted_ya_file_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        '--muted_ya_file',
+        type=str,
+        help='Mute list path (default: .github/config/muted_ya.txt)',
+    )
+
+
 if __name__ == "__main__":
     print(f'🚀 Starting get_muted_tests.py script')
     print(f'📅 Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
@@ -326,11 +334,7 @@ if __name__ == "__main__":
     upload_muted_tests_parser.add_argument(
         '--build_type', required=True, help='build type for filtering tests'
     )
-    upload_muted_tests_parser.add_argument(
-        '--muted_ya_file',
-        type=str,
-        help='Path to muted_ya.txt file (default: .github/config/muted_ya.txt)'
-    )
+    _add_muted_ya_file_arg(upload_muted_tests_parser)
 
     get_mute_details_parser = subparsers.add_parser(
         'get_mute_diff',
@@ -353,11 +357,7 @@ if __name__ == "__main__":
         required=True,
         help='build type for filtering tests',
     )
-    get_mute_details_parser.add_argument(
-        '--muted_ya_file',
-        type=str,
-        help='Path to mute list (default: .github/config/muted_ya.txt)',
-    )
+    _add_muted_ya_file_arg(get_mute_details_parser)
     args = parser.parse_args()
     
     print(f'📋 Parsed arguments:')

@@ -50,13 +50,8 @@ def candidate_presets(
     base_set = set(allowed_base)
     requested_set: set[str] = set()
     for token in [p.strip().lower() for p in build_types_raw.split(',') if p.strip()]:
-        if token not in base_set:
-            print(
-                f'::notice::Preset {token!r} is not in --allowed-build-types — skipped',
-                file=sys.stderr,
-            )
-            continue
-        requested_set.add(token)
+        if token in base_set:
+            requested_set.add(token)
     return [p for p in allowed_base if p in requested_set]
 
 
@@ -151,9 +146,8 @@ def build_matrix(
         for preset in candidates:
             if not _mute_file_exists_on_remote(git_cwd, branch, preset):
                 if event_name == 'workflow_dispatch' and explicit_dispatch_types:
-                    rel = dedicated_relative(preset)
                     print(
-                        f'::notice::Branch {branch!r} has no {rel} — skipping ({preset})',
+                        f'::notice::No {dedicated_relative(preset)} on origin/{branch} ({preset})',
                         file=sys.stderr,
                     )
                 continue
@@ -168,21 +162,22 @@ def _append_github_env(key: str, value: str) -> None:
             f.write(f'{key}={value}\n')
 
 
-def _git_show_pathspec_to_file(git_cwd: str, pathspec: str, output_path: str) -> tuple[bool, str | None]:
+def _git_show_origin_dedicated_to_file(git_cwd: str, branch: str, preset: str, output_path: str) -> None:
+    ps = _origin_dedicated_pathspec(branch, preset)
     r = subprocess.run(
-        ['git', 'show', pathspec],
+        ['git', 'show', ps],
         cwd=git_cwd,
         capture_output=True,
         text=True,
     )
     if r.returncode != 0:
-        return False, (r.stderr or r.stdout or '').strip() or 'git show failed'
+        err = (r.stderr or r.stdout or '').strip() or 'git show failed'
+        raise RuntimeError(f'{ps}: {err}')
     parent = os.path.dirname(output_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
     with open(output_path, 'w', encoding='utf-8', newline='\n') as f:
         f.write(r.stdout)
-    return True, None
 
 
 def _append_github_output(key: str, value: str) -> None:
@@ -200,10 +195,7 @@ def prepare_mute_update_matrix_job(
     pr_branch_prefix: str,
     output_path: str,
 ) -> int:
-    """
-    Fetch origin/<base_branch>, resolve dedicated mute path, write base file or set skip=true.
-    Appends BASE_BRANCH, BUILD_TYPE, PR_BRANCH to GITHUB_ENV and skip to GITHUB_OUTPUT.
-    """
+    """Fetch branch; if dedicated mute blob missing on origin — skip; else write it to output_path."""
     repo_root = os.path.abspath(repo_root)
     base_branch = base_branch.strip()
     build_type = build_type.strip().lower()
@@ -216,35 +208,25 @@ def prepare_mute_update_matrix_job(
     if not _fetch_branch_full(repo_root, base_branch):
         return 1
 
-    ded = dedicated_relative(build_type)
-    ps = _origin_dedicated_pathspec(base_branch, build_type)
-    print(f'Dedicated mute path on branch: {ded}')
+    rel = dedicated_relative(build_type)
+    print(f'origin/{base_branch}:{rel}')
 
-    # relwithdebinfo → muted_ya.txt is mandatory on target branches (fail job if missing).
-    # Other presets use dedicated files that may be absent on older branches → existence check, then skip.
-    if build_type == 'relwithdebinfo':
-        ok, err = _git_show_pathspec_to_file(repo_root, ps, output_path)
-        if not ok:
-            print(f'::error::git show {ps}: {err}', file=sys.stderr)
-            return 1
-        _append_github_output('skip', 'false')
-        print(f'✓ Retrieved base {ded} from {base_branch}')
+    if not _mute_file_exists_on_remote(repo_root, base_branch, build_type):
+        print(
+            f'::notice::No {rel} on origin/{base_branch} (preset={build_type}) — skip mute update.',
+            file=sys.stderr,
+        )
+        _append_github_output('skip', 'true')
         return 0
 
-    if _mute_file_exists_on_remote(repo_root, base_branch, build_type):
-        ok, err = _git_show_pathspec_to_file(repo_root, ps, output_path)
-        if not ok:
-            print(f'::error::git show {ps}: {err}', file=sys.stderr)
-            return 1
-        _append_github_output('skip', 'false')
-        print(f'✓ Retrieved base {ded} from {base_branch}')
-        return 0
+    try:
+        _git_show_origin_dedicated_to_file(repo_root, base_branch, build_type, output_path)
+    except RuntimeError as exc:
+        print(f'::error::{exc}', file=sys.stderr)
+        return 1
 
-    print(
-        f'::notice::Branch {base_branch!r} has no {ded} — skipping mute update for build_type={build_type} (opt-in per branch).',
-        file=sys.stderr,
-    )
-    _append_github_output('skip', 'true')
+    _append_github_output('skip', 'false')
+    print(f'✓ Wrote base mute from origin/{base_branch}:{rel}')
     return 0
 
 
@@ -277,8 +259,8 @@ def cmd_matrix(args: argparse.Namespace) -> int:
 
     if not matrix:
         print(
-            '::error::Mute update matrix is empty (no branches after fetch, no (branch,preset) with mute file '
-            'on origin, or invalid dispatch filters).',
+            '::error::Mute update matrix is empty (fetch failures, no mute file on origin for allowed presets, '
+            'or workflow_dispatch build_types outside --allowed-build-types).',
             file=sys.stderr,
         )
         return 1
@@ -372,7 +354,7 @@ def main() -> int:
     pj.set_defaults(func=cmd_prepare_job)
 
     args = parser.parse_args()
-    return int(args.func(args))
+    return args.func(args)
 
 
 if __name__ == '__main__':

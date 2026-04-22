@@ -293,7 +293,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
-    operation->UserLevelTransactions = transactions;
+    // Persist the pre-split (post-rewrite) user-level transactions so the
+    // scheme change outbox can replay the original DDL on a target cluster,
+    // which will redo both auto-mkdir split and sub-op decomposition.
+    operation->UserLevelTransactions = rewrittenTransactions;
 
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);

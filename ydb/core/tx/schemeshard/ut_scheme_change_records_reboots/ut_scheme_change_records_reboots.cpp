@@ -50,10 +50,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 auto entries = ReadSchemeChangeRecords(runtime);
                 bool found = false;
                 for (const auto& e : entries) {
-                    if (e.Path == "Table1") {
+                    if (e.Body.GetCreateTable().GetName() == "Table1") {
                         found = true;
                         UNIT_ASSERT(e.Order > 0);
-                        UNIT_ASSERT_VALUES_EQUAL(e.ObjectType, (ui32)NKikimrSchemeOp::EPathTypeTable);
                         break;
                     }
                 }
@@ -96,7 +95,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 // T1 was created in inactive zone -- its entry must exist
                 bool foundT1 = false;
                 for (const auto& e : entries) {
-                    if (e.Path == "T1") {
+                    if (e.Body.GetCreateTable().GetName() == "T1") {
                         foundT1 = true;
                         UNIT_ASSERT(e.Order > 0);
                     }
@@ -144,7 +143,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 // CREATE was done in inactive zone -- its entry must exist
                 bool foundCreate = false;
                 for (const auto& e : entries) {
-                    if (e.Path == "Table1" && e.OperationType == (ui32)TTxState::TxCreateTable) {
+                    if (e.Body.HasCreateTable()
+                        && e.Body.GetCreateTable().GetName() == "Table1") {
                         foundCreate = true;
                         UNIT_ASSERT(e.Order > 0);
                     }
@@ -195,13 +195,13 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 // T1 was created in inactive zone -- its entry must exist
                 ui64 t1Order = 0;
                 for (const auto& e : entries) {
-                    if (e.Path == "T1") t1Order = e.Order;
+                    if (e.Body.GetCreateTable().GetName() == "T1") t1Order = e.Order;
                 }
                 UNIT_ASSERT_C(t1Order > 0, "T1 entry not found in notification log");
 
                 // If T2's entry exists, verify counter continuity
                 for (const auto& e : entries) {
-                    if (e.Path == "T2") {
+                    if (e.Body.GetCreateTable().GetName() == "T2") {
                         UNIT_ASSERT_C(e.Order > t1Order,
                             "T2 Order (" << e.Order
                                 << ") must be greater than T1 Order (" << t1Order << ")");
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsReboots) {
                 auto entries = ReadSchemeChangeRecords(runtime);
                 bool found = false;
                 for (const auto& e : entries) {
-                    if (e.Path == "T1") {
+                    if (e.Body.GetCreateTable().GetName() == "T1") {
                         found = true;
                         break;
                     }

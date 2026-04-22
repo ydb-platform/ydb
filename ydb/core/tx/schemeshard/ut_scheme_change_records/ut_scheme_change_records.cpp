@@ -65,8 +65,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         bool foundT1 = false;
         bool foundT2 = false;
         for (const auto& e : entries) {
-            if (e.Path == "T1") foundT1 = true;
-            if (e.Path == "T2") foundT2 = true;
+            if (e.Body.HasCreateTable()) {
+                const auto& name = e.Body.GetCreateTable().GetName();
+                if (name == "T1") foundT1 = true;
+                if (name == "T2") foundT2 = true;
+            }
         }
         UNIT_ASSERT_C(!foundT1, "T1 record should not exist (created before subscriber)");
         UNIT_ASSERT_C(foundT2, "T2 record should exist (created after subscriber)");
@@ -91,14 +94,12 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         bool found = false;
         for (const auto& e : entries) {
-            if (e.OperationType == (ui32)TTxState::TxCreateTable && e.Path == "Table1") {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable
+                && e.Body.GetCreateTable().GetName() == "Table1") {
                 found = true;
                 UNIT_ASSERT_VALUES_EQUAL(e.TxId, (ui64)txId);
-                UNIT_ASSERT_VALUES_EQUAL(e.ObjectType, (ui32)NKikimrSchemeOp::EPathTypeTable);
-                UNIT_ASSERT_VALUES_EQUAL(e.Status, (ui32)NKikimrScheme::StatusSuccess);
+                UNIT_ASSERT_VALUES_EQUAL(e.Path, "/MyRoot");
                 UNIT_ASSERT(e.Order > 0);
-                UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description");
-                UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpCreateTable);
                 break;
             }
         }
@@ -130,10 +131,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         ui32 alterCount = 0;
         for (const auto& e : entries) {
-            if (e.OperationType == (ui32)TTxState::TxAlterTable && e.Path == "Table1") {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable
+                && e.Body.GetAlterTable().GetName() == "Table1") {
                 ++alterCount;
-                UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description for ALTER");
-                UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpAlterTable);
             }
         }
         UNIT_ASSERT_C(alterCount >= 1, "ALTER TABLE entry not found in notification log");
@@ -161,10 +161,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         bool found = false;
         for (const auto& e : entries) {
-            if (e.OperationType == (ui32)TTxState::TxDropTable && e.Path == "Table1") {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable
+                && e.Body.GetDrop().GetName() == "Table1") {
                 found = true;
-                UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description for DROP");
-                UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpDropTable);
                 break;
             }
         }
@@ -411,7 +410,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
         bool found = false;
         for (const auto& e : entries) {
-            if (e.Path == "Table1" && e.OperationType == (ui32)TTxState::TxCreateTable) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable
+                && e.Body.GetCreateTable().GetName() == "Table1") {
                 found = true;
                 UNIT_ASSERT_C(e.PlanStep > 0,
                     "CreateTable should have a valid PlanStep, got: " << e.PlanStep);
@@ -444,12 +444,16 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         env.TestWaitNotification(runtime, txId);
 
         auto entries = ReadSchemeChangeRecords(runtime);
+        bool sawAlter = false;
         for (const auto& e : entries) {
-            if (e.Path == "Table1") {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable
+                && e.Body.GetAlterTable().GetName() == "Table1") {
+                sawAlter = true;
                 UNIT_ASSERT_C(e.PlanStep > 0,
-                    "Table1 entry (opType=" << e.OperationType << ") should have a valid PlanStep, got: " << e.PlanStep);
+                    "AlterTable Table1 should have a valid PlanStep, got: " << e.PlanStep);
             }
         }
+        UNIT_ASSERT(sawAlter);
     }
 
     Y_UNIT_TEST(PlanStepMonotonicAcrossOperations) {
@@ -512,7 +516,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         auto entries = ReadSchemeChangeRecords(runtime);
         bool found = false;
         for (const auto& e : entries) {
-            if (e.Path == "DirA") {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir
+                && e.Body.GetMkDir().GetName() == "DirA") {
                 found = true;
                 break;
             }
@@ -634,7 +639,10 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 << result.WatermarkPlanStep << ", now " << result2.WatermarkPlanStep);
     }
 
-    Y_UNIT_TEST(CreateTableWithIndexProducesMultipleRecords) {
+    Y_UNIT_TEST(CreateTableWithIndexProducesSingleParentRecord) {
+        // Under parent-level persistence, a multi-part DDL emits exactly one
+        // record carrying the user-level body — index descriptions live
+        // inside it and the target cluster re-runs decomposition on replay.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -642,10 +650,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TAutoPtr<IEventHandle> regHandle;
         RegisterSubscriber(runtime, "test:sub", regHandle);
 
-        // CREATE TABLE WITH GLOBAL INDEX produces multiple parts:
-        //  Parts[0] = CreateTable (main)
-        //  Parts[1] = CreateTableIndex
-        //  Parts[2] = CreateTable (impl table)
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
                 Name: "Main"
@@ -661,32 +665,32 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         env.TestWaitNotification(runtime, txId);
 
         auto entries = ReadSchemeChangeRecords(runtime);
-        // Multi-part: main table + index + impl table = at least 3 records
-        // associated with this txId.
-        ui32 mainTableCount = 0;
-        ui32 indexCount = 0;
-        ui32 implTableCount = 0;
+        ui32 parentCount = 0;
+        bool haveMain = false;
+        bool haveIndex = false;
         for (const auto& e : entries) {
             if (e.TxId != (ui64)txId) continue;
-            if (e.OperationType == (ui32)TTxState::TxCreateTable) {
-                if (e.Path == "Main") ++mainTableCount;
-                else ++implTableCount;
-            } else if (e.OperationType == (ui32)TTxState::TxCreateTableIndex) {
-                ++indexCount;
+            UNIT_ASSERT_VALUES_EQUAL(
+                (ui32)e.Body.GetOperationType(),
+                (ui32)NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
+            ++parentCount;
+            const auto& ct = e.Body.GetCreateIndexedTable();
+            if (ct.GetTableDescription().GetName() == "Main") haveMain = true;
+            for (const auto& idx : ct.GetIndexDescription()) {
+                if (idx.GetName() == "IdxByValue") haveIndex = true;
             }
         }
-        UNIT_ASSERT_C(mainTableCount >= 1,
-            "Expected at least 1 main table record for txId=" << txId << ", got " << mainTableCount);
-        UNIT_ASSERT_C(indexCount >= 1,
-            "Expected at least 1 index record for txId=" << txId << ", got " << indexCount);
-        UNIT_ASSERT_C(implTableCount >= 1,
-            "Expected at least 1 impl table record for txId=" << txId << ", got " << implTableCount);
+        UNIT_ASSERT_VALUES_EQUAL_C(parentCount, 1u,
+            "Expected exactly 1 parent-level record, got " << parentCount);
+        UNIT_ASSERT_C(haveMain, "Parent record must carry the main table description");
+        UNIT_ASSERT_C(haveIndex, "Parent record must carry the index description");
     }
 
-    Y_UNIT_TEST(AutoMkDirProducesMkDirRecords) {
-        // When CREATE TABLE targets a path whose ancestors don't exist,
-        // schemeshard auto-generates MkDir parts. Each part should produce
-        // its own scheme change record.
+    Y_UNIT_TEST(AutoMkDirBodyPreservedOnParent) {
+        // Auto-mkdirs are an internal decomposition detail. Under parent-
+        // level persistence, only the user's original CreateTable body
+        // (with its "A/B/C/Leaf" path) is persisted; the target cluster
+        // regenerates the MkDir chain on replay.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -701,24 +705,24 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto entries = ReadSchemeChangeRecordsFull(runtime);
-        bool foundA = false, foundB = false, foundC = false, foundLeaf = false;
-        for (const auto& e : entries.Entries) {
+        auto entries = ReadSchemeChangeRecords(runtime);
+        bool foundLeaf = false;
+        for (const auto& e : entries) {
             if (e.TxId != (ui64)txId) continue;
-            if (e.OperationType == (ui32)TTxState::TxMkDir) {
-                if (e.Path == "A") foundA = true;
-                else if (e.Path == "B") foundB = true;
-                else if (e.Path == "C") foundC = true;
-            } else if (e.OperationType == (ui32)TTxState::TxCreateTable && e.Path == "Leaf") {
+            UNIT_ASSERT_VALUES_EQUAL(
+                (ui32)e.Body.GetOperationType(),
+                (ui32)NKikimrSchemeOp::ESchemeOpCreateTable);
+            if (e.Body.GetCreateTable().GetName() == "A/B/C/Leaf") {
                 foundLeaf = true;
             }
         }
-        UNIT_ASSERT_C(foundA && foundB && foundC,
-            "Expected MkDir records for A, B, C auto-generated by CREATE TABLE");
-        UNIT_ASSERT_C(foundLeaf, "Expected CreateTable record for Leaf");
+        UNIT_ASSERT_C(foundLeaf, "User-level CreateTable body must preserve the original path");
     }
 
-    Y_UNIT_TEST(EachPartRecordHasOwnBody) {
+    Y_UNIT_TEST(ParentBodyCarriesFullSubDescriptions) {
+        // Every CreateTableIndex/CreateTable sub-description the decomposer
+        // would ever need must live inside the one parent body — otherwise
+        // replay cannot reproduce the DDL on the target.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -740,41 +744,30 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto entries = ReadSchemeChangeRecordsFull(runtime);
-        bool haveCreateTableBody = false;
-        bool haveCreateIndexBody = false;
-        for (const auto& e : entries.Entries) {
-            if (e.TxId != (ui64)txId) continue;
-            if (!e.Body.HasOperationType()) continue;
-            auto op = e.Body.GetOperationType();
-            if (op == NKikimrSchemeOp::ESchemeOpCreateTable) haveCreateTableBody = true;
-            if (op == NKikimrSchemeOp::ESchemeOpCreateTableIndex) haveCreateIndexBody = true;
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const NKikimrSchemeOp::TIndexedTableCreationConfig* ct = nullptr;
+        for (const auto& e : entries) {
+            if (e.TxId == (ui64)txId && e.Body.HasCreateIndexedTable()) {
+                ct = &e.Body.GetCreateIndexedTable();
+                break;
+            }
         }
-        UNIT_ASSERT_C(haveCreateTableBody, "At least one record must have CreateTable body");
-        UNIT_ASSERT_C(haveCreateIndexBody, "At least one record must have CreateTableIndex body");
+        UNIT_ASSERT(ct);
+        UNIT_ASSERT_VALUES_EQUAL(ct->GetTableDescription().GetName(), "Main");
+        UNIT_ASSERT_VALUES_EQUAL(ct->IndexDescriptionSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ct->GetIndexDescription(0).GetName(), "IdxByValue");
     }
 
     Y_UNIT_TEST(MultiPartDDLIsReconstructibleBySubscriber) {
-        // Models replication/backup replay of a complex multi-index DDL.
-        // Target DDL: base table + 2 regular indexes + 1 vector KMeans
-        // tree index. Decomposition produces 1 + 2×2 + 1×3 = 8 parts:
-        //   - main CreateTable (indexes stripped)
-        //   - 2× (CreateTableIndex + impl CreateTable)   for regular indexes
-        //   - 1× (CreateTableIndex + 2 impl CreateTable) for vector index
-        //
-        // Replay strategy: verbatim per-part submission via the privileged
-        // TEvReplaySchemeChangeRecord RPC. The RPC rewrites WorkingDir via
-        // SourcePathPrefix/TargetPathPrefix and force-sets Internal=true and
-        // AllowAccessToPrivatePaths=true so that impl-table parts under
-        // index paths are accepted. Target SS processes each part through
-        // the normal DDL pipeline; the resulting structure mirrors the
-        // source exactly (including auto-generated impl-table names and
-        // vector-index Level/Posting tables).
-        //
-        // Gap: record.OperationType (TTxState::ETxType, e.g. 28 for
-        // TxCreateTableIndex) differs from body.OperationType
-        // (NKikimrSchemeOp::EOperationType, e.g. 29 for CreateTableIndex).
-        // Replay must drive from body, not from the record column.
+        // Models cross-cluster replication of a complex multi-index DDL.
+        // Target: base table + 2 regular indexes + 1 vector KMeans tree index.
+        // Under parent-level persistence the outbox emits exactly ONE record
+        // carrying the user-level ESchemeOpCreateIndexedTable body; all
+        // index descriptions (including vector KMeans settings) live inside
+        // it. Replay on the target cluster is a single submission via
+        // TEvReplaySchemeChangeRecord with WorkingDir prefix rewritten from
+        // "/MyRoot" to "/MyRoot/Replay"; the target's SS re-runs decomposition
+        // and produces the full impl-table tree automatically.
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -822,34 +815,28 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         )");
         env.TestWaitNotification(runtime, indexedTxId);
 
+        // Exactly one parent record for the whole DDL.
         auto result = ReadSchemeChangeRecordsFull(runtime);
-        std::map<ui64, TVector<TSchemeChangeRecordEntry>> byTxId;
+        const NKikimrSchemeOp::TModifyScheme* parentBody = nullptr;
         for (const auto& e : result.Entries) {
-            byTxId[e.TxId].push_back(e);
+            if (e.TxId == indexedTxId) {
+                UNIT_ASSERT_C(!parentBody,
+                    "Expected exactly one record for the indexed-table DDL");
+                parentBody = &e.Body;
+            }
         }
-        const auto& parts = byTxId.at(indexedTxId);
-        UNIT_ASSERT_C(parts.size() >= 8,
-            "Expected >= 8 parts (main + 2*2 regular + 1*3 vector), got "
-                << parts.size());
-
-        // Invariants across parts of one tx: shared PlanStep, contiguous Order.
-        const ui64 sharedPlanStep = parts.front().PlanStep;
-        UNIT_ASSERT(sharedPlanStep > 0);
-        for (const auto& e : parts) {
-            UNIT_ASSERT_VALUES_EQUAL(e.PlanStep, sharedPlanStep);
-        }
+        UNIT_ASSERT(parentBody);
         UNIT_ASSERT_VALUES_EQUAL(
-            parts.back().Order - parts.front().Order + 1, parts.size());
+            (ui32)parentBody->GetOperationType(),
+            (ui32)NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
 
-        // Verify bodies carry the type-specific settings we'd lose without
-        // the Body payload — e.g. vector index KMeans parameters.
+        // Type-specific settings (e.g. vector KMeans params) survive the
+        // roundtrip through persistence.
+        const auto& ct = parentBody->GetCreateIndexedTable();
+        UNIT_ASSERT_VALUES_EQUAL(ct.IndexDescriptionSize(), 3u);
         bool sawVectorIdx = false;
-        for (const auto& e : parts) {
-            if (e.Body.HasCreateTableIndex()
-                && e.Body.GetCreateTableIndex().GetType()
-                    == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)
-            {
-                const auto& idx = e.Body.GetCreateTableIndex();
+        for (const auto& idx : ct.GetIndexDescription()) {
+            if (idx.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                 UNIT_ASSERT(idx.HasVectorIndexKmeansTreeDescription());
                 UNIT_ASSERT_VALUES_EQUAL(
                     idx.GetVectorIndexKmeansTreeDescription()
@@ -859,33 +846,25 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         }
         UNIT_ASSERT(sawVectorIdx);
 
-        // === Privileged verbatim replay ===
-        // Submit each part's body through TEvReplaySchemeChangeRecord with
-        // SourcePathPrefix="/MyRoot" → TargetPathPrefix="/MyRoot/Replay".
-        // The RPC injects Internal=true and AllowAccessToPrivatePaths=true
-        // so that impl-table parts (living under an index path) are accepted.
+        // === Single-submission replay ===
         TestMkDir(runtime, ++txId, "/MyRoot", "Replay");
         env.TestWaitNotification(runtime, txId);
 
-        for (const auto& e : parts) {
-            TString serialized;
-            UNIT_ASSERT(e.Body.SerializeToString(&serialized));
+        TString serialized;
+        UNIT_ASSERT(parentBody->SerializeToString(&serialized));
 
-            TAutoPtr<IEventHandle> handle;
-            const ui64 replayTxId = ++txId;
-            auto* reply = ReplaySchemeChangeRecord(
-                runtime, serialized, replayTxId, "/MyRoot", "/MyRoot/Replay", handle);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                (ui32)reply->GetStatus(),
-                (ui32)NKikimrScheme::StatusAccepted,
-                "ReplaySchemeChangeRecord must accept part order=" << e.Order
-                    << " type=" << (ui32)e.Body.GetOperationType()
-                    << "; reason: " << reply->GetReason());
-            env.TestWaitNotification(runtime, replayTxId);
-        }
+        TAutoPtr<IEventHandle> handle;
+        const ui64 replayTxId = ++txId;
+        auto* reply = ReplaySchemeChangeRecord(
+            runtime, serialized, replayTxId, "/MyRoot", "/MyRoot/Replay", handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            (ui32)reply->GetStatus(),
+            (ui32)NKikimrScheme::StatusAccepted,
+            "Replay of parent CREATE TABLE WITH 3 INDEXES must succeed; reason: "
+                << reply->GetReason());
+        env.TestWaitNotification(runtime, replayTxId);
 
-        // Verify replay produced the expected structure: main table, each
-        // index path, and each impl table.
+        // Target SS regenerated every impl table on its own.
         TestDescribeResult(
             DescribePath(runtime, "/MyRoot/Replay/Main"),
             {NLs::PathExist});
@@ -1014,8 +993,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(PersistsNextSchemeChangeOrderOncePerBatch) {
-        // A multi-part DDL must persist the NextSchemeChangeOrder sysparam
-        // once for the whole batch, not once per emitted record.
+        // Under parent-level persistence a multi-part DDL emits one record,
+        // so the NextSchemeChangeOrder sysparam is persisted once per batch
+        // by construction. This test locks in both properties.
         TSchemeShard* schemeshard = nullptr;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
             schemeshard = new TSchemeShard(tablet, info);
@@ -1029,7 +1009,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TAutoPtr<IEventHandle> regHandle;
         RegisterSubscriber(runtime, "batchpersist:sub", regHandle);
 
-        // Test env setup produces bookkeeping writes; reset before the target DDL.
         schemeshard->NextSchemeChangeOrderPersistCount = 0;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -1046,17 +1025,15 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // The DDL has >= 3 parts → >= 3 records → pre-fix would persist >=3 times.
         auto entries = ReadSchemeChangeRecords(runtime);
         size_t thisTxRecords = 0;
         for (const auto& e : entries) {
             if (e.TxId == (ui64)txId) ++thisTxRecords;
         }
-        UNIT_ASSERT_C(thisTxRecords >= 3,
-            "Indexed-table DDL should emit at least 3 records, got " << thisTxRecords);
+        UNIT_ASSERT_VALUES_EQUAL(thisTxRecords, 1u);
 
         UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->NextSchemeChangeOrderPersistCount, 1u,
-            "Expected one NextSchemeChangeOrder persist for a multi-part DDL, got "
+            "Expected one NextSchemeChangeOrder persist for a batch, got "
             << schemeshard->NextSchemeChangeOrderPersistCount);
     }
 

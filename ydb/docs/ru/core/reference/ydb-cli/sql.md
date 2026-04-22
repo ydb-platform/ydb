@@ -165,10 +165,12 @@ ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice
 cat diagnostics.json
 ```
 
-Если вы хотите получить диагностические данные, относящиеся к плану запроса, без фактического выполнения запроса, вы можете вместо этого выполнить `EXPLAIN`-запрос, добавив опцию `--explain`:
+Чтобы собрать диагностику плана запроса без его фактического выполнения, добавьте опцию `--explain`:
 
 ```bash
-ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --explain --diagnostics-file diagnostics.json
+ydb -e <endpoint> -d <database> \
+  sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" \
+  --explain --diagnostics-file diagnostics.json
 ```
 
 В диагностическом файле `diagnostics.json` в поле `meta.query_text` будет содержаться такая строка:

@@ -2779,10 +2779,28 @@ void TSchemeShard::PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx s
     }
 }
 
+void TSchemeShard::PersistTablePartitioningVersion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
+    if (IsLocalId(pathId)) {
+        db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::Tables::PartitioningVersion>(++tableInfo->PartitioningVersion));
+    } else {
+        db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::MigratedTables::PartitioningVersion>(++tableInfo->PartitioningVersion));
+    }
+}
+
 void TSchemeShard::PersistTablePartitioning(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 startIdx) {
     for (ui64 pi = startIdx; pi < tableInfo->GetPartitions().size(); ++pi) {
         const auto* partition = tableInfo->GetPartitions()[pi];
-        if (IsLocalId(pathId) && IsLocalId(partition->ShardIdx)) {
+        if (tableInfo->PartitionsInShardIdxFormat) {
+            db.Table<Schema::TablePartitionsByShardIdx>()
+                .Key(pathId.OwnerId, pathId.LocalPathId,
+                     partition->ShardIdx.GetOwnerId(), partition->ShardIdx.GetLocalId())
+                .Update(
+                    NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::RangeEnd>(partition->EndOfRange),
+                    NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::LastCondErase>(partition->LastCondErase.GetValue()),
+                    NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::NextCondErase>(partition->NextCondErase.GetValue()));
+        } else if (IsLocalId(pathId) && IsLocalId(partition->ShardIdx)) {
             db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pi).Update(
                 NIceDb::TUpdate<Schema::TablePartitions::RangeEnd>(partition->EndOfRange),
                 NIceDb::TUpdate<Schema::TablePartitions::DatashardIdx>(partition->ShardIdx.GetLocalId()),
@@ -2816,17 +2834,36 @@ void TSchemeShard::PersistTablePartitioning(NIceDb::TNiceDb& db, const TPathId p
 void TSchemeShard::PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 startIdx) {
     const auto& partitions = tableInfo->GetPartitions();
     for (ui64 pi = startIdx; pi < partitions.size(); ++pi) {
-        if (IsLocalId(pathId)) {
-            db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pi).Delete();
+        if (tableInfo->PartitionsInShardIdxFormat) {
+            const auto& partition = partitions[pi];
+            db.Table<Schema::TablePartitionsByShardIdx>()
+                .Key(pathId.OwnerId, pathId.LocalPathId,
+                     partition->ShardIdx.GetOwnerId(), partition->ShardIdx.GetLocalId())
+                .Delete();
+            db.Table<Schema::TablePartitionStatsByShardIdx>()
+                .Key(pathId.OwnerId, pathId.LocalPathId,
+                     partition->ShardIdx.GetOwnerId(), partition->ShardIdx.GetLocalId())
+                .Delete();
+        } else {
+            if (IsLocalId(pathId)) {
+                db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pi).Delete();
+            }
+            db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
         }
-        db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
         db.Table<Schema::TablePartitionStats>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
     }
 }
 
-void TSchemeShard::PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableShardInfo* partition, [[maybe_unused]] const TTableInfo::TPtr tableInfo) {
+void TSchemeShard::PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableShardInfo* partition, const TTableInfo::TPtr tableInfo) {
     const ui64 id = partition->Position;
-    if (IsLocalId(pathId) && IsLocalId(partition->ShardIdx)) {
+    if (tableInfo->PartitionsInShardIdxFormat) {
+        db.Table<Schema::TablePartitionsByShardIdx>()
+            .Key(pathId.OwnerId, pathId.LocalPathId,
+                 partition->ShardIdx.GetOwnerId(), partition->ShardIdx.GetLocalId())
+            .Update(
+                NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::LastCondErase>(partition->LastCondErase.GetValue()),
+                NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::NextCondErase>(partition->NextCondErase.GetValue()));
+    } else if (IsLocalId(pathId) && IsLocalId(partition->ShardIdx)) {
         db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, id).Update(
             NIceDb::TUpdate<Schema::TablePartitions::LastCondErase>(partition->LastCondErase.GetValue()),
             NIceDb::TUpdate<Schema::TablePartitions::NextCondErase>(partition->NextCondErase.GetValue()));
@@ -2838,6 +2875,41 @@ void TSchemeShard::PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPa
         db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, id).Update(
             NIceDb::TUpdate<Schema::MigratedTablePartitions::LastCondErase>(partition->LastCondErase.GetValue()),
             NIceDb::TUpdate<Schema::MigratedTablePartitions::NextCondErase>(partition->NextCondErase.GetValue()));
+    }
+}
+
+void TSchemeShard::PersistTablePartitioningShardIdxDelete(NIceDb::TNiceDb& db, const TPathId pathId,
+        const TTableInfo::TPtr tableInfo, const THashSet<TShardIdx>& srcShardIdxs) {
+   for (const TShardIdx& idx : srcShardIdxs) {
+        db.Table<Schema::TablePartitionsByShardIdx>()
+            .Key(pathId.OwnerId, pathId.LocalPathId, idx.GetOwnerId(), idx.GetLocalId())
+            .Delete();
+        db.Table<Schema::TablePartitionStatsByShardIdx>()
+            .Key(pathId.OwnerId, pathId.LocalPathId, idx.GetOwnerId(), idx.GetLocalId())
+            .Delete();
+    }
+    // TablePartitionStats is position-keyed: use Position for O(k) lookup.
+    for (const TShardIdx& idx : srcShardIdxs) {
+        const auto* p = tableInfo->GetPartitionStore().FindPtr(idx);
+        Y_ABORT_UNLESS(p);
+        db.Table<Schema::TablePartitionStats>()
+            .Key(pathId.OwnerId, pathId.LocalPathId, p->Position)
+            .Delete();
+    }
+}
+
+void TSchemeShard::PersistTablePartitioningShardIdxInsert(NIceDb::TNiceDb& db, const TPathId pathId,
+        const TTableInfo::TPtr tableInfo, ui64 srcFirstIdx, ui64 kAdded) {
+    const auto& partitions = tableInfo->GetPartitions();
+    for (ui64 i = srcFirstIdx; i < srcFirstIdx + kAdded; ++i) {
+        const auto* p = partitions[i];
+        db.Table<Schema::TablePartitionsByShardIdx>()
+            .Key(pathId.OwnerId, pathId.LocalPathId, p->ShardIdx.GetOwnerId(), p->ShardIdx.GetLocalId())
+            .Update(
+                NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::RangeEnd>(p->EndOfRange),
+                NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::LastCondErase>(p->LastCondErase.GetValue()),
+                NIceDb::TUpdate<Schema::TablePartitionsByShardIdx::NextCondErase>(p->NextCondErase.GetValue()));
+        PersistTablePartitionStats(db, pathId, p->ShardIdx, tableInfo);
     }
 }
 
@@ -2906,6 +2978,67 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
     }
 }
 
+void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TPartitionStats& stats) {
+    if (!AppData()->FeatureFlags.GetEnablePersistentPartitionStats()) {
+        return;
+    }
+
+    using T = Schema::TablePartitionStatsByShardIdx;
+    auto persistedStats = db.Table<T>().Key(
+        tableId.OwnerId, tableId.LocalPathId,
+        shardIdx.GetOwnerId(), shardIdx.GetLocalId());
+    persistedStats.Update(
+        NIceDb::TUpdate<T::SeqNoGeneration>(stats.SeqNo.Generation),
+        NIceDb::TUpdate<T::SeqNoRound>(stats.SeqNo.Round),
+        NIceDb::TUpdate<T::RowCount>(stats.RowCount),
+        NIceDb::TUpdate<T::DataSize>(stats.DataSize),
+        NIceDb::TUpdate<T::IndexSize>(stats.IndexSize),
+        NIceDb::TUpdate<T::ByKeyFilterSize>(stats.ByKeyFilterSize),
+        NIceDb::TUpdate<T::LastAccessTime>(stats.LastAccessTime.GetValue()),
+        NIceDb::TUpdate<T::LastUpdateTime>(stats.LastUpdateTime.GetValue()),
+        NIceDb::TUpdate<T::ImmediateTxCompleted>(stats.ImmediateTxCompleted),
+        NIceDb::TUpdate<T::PlannedTxCompleted>(stats.PlannedTxCompleted),
+        NIceDb::TUpdate<T::TxRejectedByOverload>(stats.TxRejectedByOverload),
+        NIceDb::TUpdate<T::TxRejectedBySpace>(stats.TxRejectedBySpace),
+        NIceDb::TUpdate<T::TxCompleteLag>(stats.TxCompleteLag.GetValue()),
+        NIceDb::TUpdate<T::InFlightTxCount>(stats.InFlightTxCount),
+        NIceDb::TUpdate<T::RowUpdates>(stats.RowUpdates),
+        NIceDb::TUpdate<T::RowDeletes>(stats.RowDeletes),
+        NIceDb::TUpdate<T::RowReads>(stats.RowReads),
+        NIceDb::TUpdate<T::RangeReads>(stats.RangeReads),
+        NIceDb::TUpdate<T::RangeReadRows>(stats.RangeReadRows),
+        NIceDb::TUpdate<T::CPU>(stats.GetCurrentRawCpuUsage()),
+        NIceDb::TUpdate<T::Memory>(stats.Memory),
+        NIceDb::TUpdate<T::Network>(stats.Network),
+        NIceDb::TUpdate<T::Storage>(stats.Storage),
+        NIceDb::TUpdate<T::ReadThroughput>(stats.ReadThroughput),
+        NIceDb::TUpdate<T::WriteThroughput>(stats.WriteThroughput),
+        NIceDb::TUpdate<T::ReadIops>(stats.ReadIops),
+        NIceDb::TUpdate<T::WriteIops>(stats.WriteIops),
+        NIceDb::TUpdate<T::SearchHeight>(stats.SearchHeight),
+        NIceDb::TUpdate<T::FullCompactionTs>(stats.FullCompactionTs),
+        NIceDb::TUpdate<T::MemDataSize>(stats.MemDataSize),
+        NIceDb::TUpdate<T::LocksAcquired>(stats.LocksAcquired),
+        NIceDb::TUpdate<T::LocksWholeShard>(stats.LocksWholeShard),
+        NIceDb::TUpdate<T::LocksBroken>(stats.LocksBroken)
+    );
+
+    if (!stats.StoragePoolsStats.empty()) {
+        NKikimrTableStats::TStoragePoolsStats proto;
+        for (const auto& [poolKind, poolStats] : stats.StoragePoolsStats) {
+            auto* poolUsage = proto.MutablePoolsUsage()->Add();
+            poolUsage->SetPoolKind(poolKind);
+            poolUsage->SetDataSize(poolStats.DataSize);
+            poolUsage->SetIndexSize(poolStats.IndexSize);
+        }
+        TString serialized;
+        Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
+        persistedStats.Update(NIceDb::TUpdate<T::StoragePoolsStats>(serialized));
+    } else {
+        persistedStats.Update(NIceDb::TNull<T::StoragePoolsStats>());
+    }
+}
+
 void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo) {
     if (!AppData()->FeatureFlags.GetEnablePersistentPartitionStats()) {
         return;
@@ -2922,7 +3055,11 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         return;
     }
 
-    PersistTablePartitionStats(db, tableId, p->Position, *statsPtr);
+    if (tableInfo->PartitionsInShardIdxFormat) {
+        PersistTablePartitionStats(db, tableId, shardIdx, *statsPtr);
+    } else {
+        PersistTablePartitionStats(db, tableId, p->Position, *statsPtr);
+    }
 }
 
 void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx) {
@@ -2939,7 +3076,11 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
             continue;
         }
         const auto& stats = tableStats.PartitionStats.at(shardIdx);
-        PersistTablePartitionStats(db, tableId, pi, stats);
+        if (tableInfo->PartitionsInShardIdxFormat) {
+            PersistTablePartitionStats(db, tableId, shardIdx, stats);
+        } else {
+            PersistTablePartitionStats(db, tableId, pi, stats);
+        }
     }
 }
 
@@ -4511,13 +4652,25 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     for (ui32 pNo = 0; pNo < tableInfo->GetPartitions().size(); ++pNo) {
-        if (pathId.OwnerId == TabletID()) {
-            db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pNo).Delete();
+        const auto* shardInfo = tableInfo->GetPartitions().at(pNo);
+
+        if (tableInfo->PartitionsInShardIdxFormat) {
+            db.Table<Schema::TablePartitionsByShardIdx>()
+                .Key(pathId.OwnerId, pathId.LocalPathId,
+                     shardInfo->ShardIdx.GetOwnerId(), shardInfo->ShardIdx.GetLocalId())
+                .Delete();
+            db.Table<Schema::TablePartitionStatsByShardIdx>()
+                .Key(pathId.OwnerId, pathId.LocalPathId,
+                     shardInfo->ShardIdx.GetOwnerId(), shardInfo->ShardIdx.GetLocalId())
+                .Delete();
+        } else {
+            if (pathId.OwnerId == TabletID()) {
+                db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pNo).Delete();
+            }
+            db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pNo).Delete();
         }
-        db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pNo).Delete();
         db.Table<Schema::TablePartitionStats>().Key(pathId.OwnerId, pathId.LocalPathId, pNo).Delete();
 
-        const auto* shardInfo = tableInfo->GetPartitions().at(pNo);
         if (auto& lag = shardInfo->LastCondEraseLag) {
             TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
             lag.Clear();

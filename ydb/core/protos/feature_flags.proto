@@ -297,4 +297,8 @@ message TFeatureFlags {
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 260 [default = true];
+    // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
+    // (keyed by positional index) for local tables.  When ON, split/merge writes only
+    // O(k) rows (src+dst shards) instead of O(N) rows (all partitions after srcFirstIdx).
+    optional bool EnableSplitMergePartitionsByShardIdx = 261 [default = false];
 }

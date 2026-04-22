@@ -809,9 +809,16 @@ public:
     void PersistTable(NIceDb::TNiceDb &db, const TPathId pathId);
     void PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx shardId, const TChannelsBindings& bindedChannels);
     void PersistTablePartitioning(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
+    void PersistTablePartitioningVersion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
+    // O(k) helpers for the ShardIdx-format fast path; called before/after ApplySplitMerge.
+    void PersistTablePartitioningShardIdxDelete(NIceDb::TNiceDb& db, const TPathId tableId,
+        const TTableInfo::TPtr tableInfo, const THashSet<TShardIdx>& srcShardIdxs);
+    void PersistTablePartitioningShardIdxInsert(NIceDb::TNiceDb& db, const TPathId tableId,
+        const TTableInfo::TPtr tableInfo, ui64 srcFirstIdx, ui64 kAdded);
     void PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableShardInfo* partition, const TTableInfo::TPtr tableInfo);
     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, ui64 partitionId, const TPartitionStats& stats);
+    void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TPartitionStats& stats);
     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo);
     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
     void PersistTableCreated(NIceDb::TNiceDb& db, const TPathId tableId);

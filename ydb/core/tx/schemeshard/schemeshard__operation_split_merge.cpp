@@ -254,7 +254,7 @@ public:
             if (txShard.Operation == TTxState::TransferData) {
                 allSrcShardIdxs.insert(txShard.Idx);
             } else if (txShard.Operation == TTxState::CreateParts) {
-                // TODO: make sure dst are sorted by range end
+                // Dst shards are pushed in ascending RangeEnd order by AllocateDstFor{Split,Merge,OneToOne}.
                 Y_ABORT_UNLESS(context.SS->ShardInfos.contains(txShard.Idx));
                 TTableShardInfo dst(txShard.Idx, txShard.RangeEnd);
                 if (tableInfo->IsTTLEnabled()) {
@@ -293,23 +293,48 @@ public:
             srcFirstIdx = Min(srcFirstIdx, p->Position);
         }
         Y_ABORT_UNLESS(srcFirstIdx != Max<ui64>());
-        const ui64 splitStartIdx = AppData()->FeatureFlags.GetEnableSplitMergePartialPersistence()
-            ? srcFirstIdx
-            : 0;
 
-        context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo, splitStartIdx);
-        context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
-        if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
-            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
+        const bool useShardIdx = AppData()->FeatureFlags.GetEnableSplitMergePartitionsByShardIdx();
+        ui64 partitionsSkipped;
+        ui64 partitionsRewritten;
+
+        if (useShardIdx && tableInfo->PartitionsInShardIdxFormat) {
+            // O(k) fast path: touch only src/dst rows in TablePartitionsByShardIdx.
+            context.SS->PersistTablePartitioningShardIdxDelete(db, tableId, tableInfo, allSrcShardIdxs);
+            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+            if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+                context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
+            }
+            context.SS->PersistTablePartitioningShardIdxInsert(db, tableId, tableInfo, srcFirstIdx, kAdded);
+            context.SS->PersistTablePartitioningVersion(db, tableId, tableInfo);
+
+            const ui64 newPartitionCount = tableInfo->GetPartitions().size();
+            partitionsSkipped = newPartitionCount - kAdded;
+            partitionsRewritten = kAdded;
+        } else {
+            // Full or partial rewrite.  Migration across format boundary forces startIdx=0.
+            ui64 splitStartIdx = 0;
+            if (!useShardIdx && !tableInfo->PartitionsInShardIdxFormat) {
+                splitStartIdx = AppData()->FeatureFlags.GetEnableSplitMergePartialPersistence()
+                    ? srcFirstIdx : 0;
+            }
+
+            context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo, splitStartIdx);
+            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+            if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+                context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
+            }
+            tableInfo->PartitionsInShardIdxFormat = useShardIdx;
+            context.SS->PersistTablePartitioning(db, tableId, tableInfo, splitStartIdx);
+            context.SS->PersistTablePartitionStats(db, tableId, tableInfo, splitStartIdx);
+
+            const ui64 newPartitionCount = tableInfo->GetPartitions().size();
+            partitionsSkipped = splitStartIdx;
+            partitionsRewritten = newPartitionCount - splitStartIdx;
         }
-        context.SS->PersistTablePartitioning(db, tableId, tableInfo, splitStartIdx);
-        context.SS->PersistTablePartitionStats(db, tableId, tableInfo, splitStartIdx);
 
-        // Track partial persistence savings: skipped = unaffected partitions not rewritten,
-        // rewritten = partitions that were deleted and written back.
-        const ui64 newPartitionCount = tableInfo->GetPartitions().size();
-        context.SS->TabletCounters->Cumulative()[COUNTER_SPLIT_MERGE_PARTITIONS_SKIPPED].Increment(splitStartIdx);
-        context.SS->TabletCounters->Cumulative()[COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN].Increment(newPartitionCount - splitStartIdx);
+        context.SS->TabletCounters->Cumulative()[COUNTER_SPLIT_MERGE_PARTITIONS_SKIPPED].Increment(partitionsSkipped);
+        context.SS->TabletCounters->Cumulative()[COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN].Increment(partitionsRewritten);
 
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_SHARD_ACTIVE_COUNT].Sub(allSrcShardIdxs.size());
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_SHARD_INACTIVE_COUNT].Add(allSrcShardIdxs.size());

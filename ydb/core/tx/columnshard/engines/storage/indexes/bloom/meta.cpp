@@ -134,8 +134,8 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
     if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
         return false;
     }
-    Initialize();
-    return true;
+
+    return Initialize();
 }
 
 void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
@@ -148,12 +148,18 @@ void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription&
     *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }
 
-void TBloomIndexMeta::Initialize() {
+bool TBloomIndexMeta::Initialize() {
     AFL_VERIFY(!ResultSchema);
+    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_init", "false_positive_probability out of (0,1) range");
+        return false;
+    }
+
+    HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>(
         "", arrow::TypeTraits<arrow::BooleanType>::type_singleton()) };
     ResultSchema = std::make_shared<arrow::Schema>(fields);
-    HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
+    return true;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

@@ -27,16 +27,36 @@ private:
     ui32 HashesCount = 0;
     bool UseOldSizing = false;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
-    void Initialize() {
+    [[nodiscard]] bool Initialize() {
         AFL_VERIFY(!ResultSchema);
+        auto check = [](const bool condition, const TStringBuf message) {
+            if (!condition) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_init", message);
+                return false;
+            }
+
+            return true;
+        };
+
+        if (!check(FalsePositiveProbability > 0 && FalsePositiveProbability < 1, "false_positive_probability out of (0,1) range")) {
+            return false;
+        }
+
+        if (!check(TConstants::CheckNGrammSize(NGrammSize), "ngramm_size out of allowed interval")) {
+            return false;
+        }
+
+        if (!check(TConstants::CheckHashesCount(HashesCount), "hashes_count out of allowed interval")) {
+            return false;
+        }
+
+        if (!check(TConstants::CheckFilterSizeBytes(FilterSizeBytes), "filter_size_bytes out of allowed interval")) {
+            return false;
+        }
+
         std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("", arrow::boolean()) };
         ResultSchema = std::make_shared<arrow::Schema>(fields);
-        AFL_VERIFY(FalsePositiveProbability > 0 && FalsePositiveProbability < 1);
-        AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
-        HashesCount = TConstants::CalcHashesCount(FalsePositiveProbability);
-        AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
-        FilterSizeBytes = TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability);
-        AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
+        return true;
     }
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
@@ -79,7 +99,7 @@ protected:
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
         AFL_VERIFY(proto.HasBloomNGrammFilter());
-        auto& bFilter = proto.GetBloomNGrammFilter();
+        const auto& bFilter = proto.GetBloomNGrammFilter();
 
         {
             auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
@@ -93,77 +113,35 @@ protected:
             return false;
         }
 
-        if (bFilter.HasCaseSensitive()) {
-            CaseSensitive = bFilter.GetCaseSensitive();
-        }
-
-        std::optional<ui32> filterSizeBytes;
-        std::optional<ui32> recordsCount;
-        std::optional<ui32> hashesCount;
-
-        if (bFilter.HasFilterSizeBytes()) {
-            const ui32 value = bFilter.GetFilterSizeBytes();
-            if (!TConstants::CheckFilterSizeBytes(value)) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect filter_size_bytes value");
-                return false;
-            }
-            filterSizeBytes = value;
-        }
-
-        if (bFilter.HasRecordsCount()) {
-            const ui32 value = bFilter.GetRecordsCount();
-            if (value != 0) {
-                if (!TConstants::CheckRecordsCount(value)) {
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect records_count value");
-                    return false;
-                }
-
-                recordsCount = value;
-            }
-        }
-
-        if (bFilter.HasHashesCount()) {
-            const ui32 value = bFilter.GetHashesCount();
-            if (!TConstants::CheckHashesCount(value)) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect hashes_count value");
-                return false;
-            }
-            hashesCount = value;
-        }
-
-        const bool hasFpp = bFilter.HasFalsePositiveProbability();
-        UseOldSizing = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0;
-
-        NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
-        if (UseOldSizing) {
-            FalsePositiveProbability = hasFpp ? bFilter.GetFalsePositiveProbability()
-                                              : TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
-                                                    hashesCount, filterSizeBytes, recordsCount);
-        } else {
-            FalsePositiveProbability = hasFpp ? bFilter.GetFalsePositiveProbability()
-                                              : NDefaults::FalsePositiveProbability;
-        }
-
-        {
-            auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize);
-            if (conclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
-                return false;
-            }
-        }
-
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
             return false;
         }
 
-        AddColumnId(bFilter.GetColumnId());
-        Initialize();
+        CaseSensitive = bFilter.HasCaseSensitive() ? bFilter.GetCaseSensitive() : NDefaults::CaseSensitive;
+        NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
+        UseOldSizing = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0;
+        FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
+            ? bFilter.GetFalsePositiveProbability()
+            : (UseOldSizing
+                ? TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
+                    bFilter.HasHashesCount() ? std::optional<ui32>(bFilter.GetHashesCount()) : std::nullopt,
+                    bFilter.HasFilterSizeBytes() ? std::optional<ui32>(bFilter.GetFilterSizeBytes()) : std::nullopt,
+                    bFilter.HasRecordsCount() ? std::optional<ui32>(bFilter.GetRecordsCount()) : std::nullopt)
+                : NDefaults::FalsePositiveProbability);
+
         if (UseOldSizing) {
-            FilterSizeBytes = filterSizeBytes.value_or(TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability));
-            RecordsCount = recordsCount.value_or(TConstants::DeprecatedRecordsCount);
-            HashesCount = hashesCount.value_or(NDefaults::HashesCount);
+            HashesCount = bFilter.HasHashesCount() ? bFilter.GetHashesCount() : NDefaults::HashesCount;
+            FilterSizeBytes = bFilter.HasFilterSizeBytes()
+                ? bFilter.GetFilterSizeBytes()
+                : TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability);
+            RecordsCount = bFilter.GetRecordsCount();
+        } else {
+            HashesCount = TConstants::CalcHashesCount(FalsePositiveProbability);
+            FilterSizeBytes = TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability);
         }
-        return true;
+
+        AddColumnId(bFilter.GetColumnId());
+        return Initialize();
     }
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
         auto* filterProto = proto.MutableBloomNGrammFilter();
@@ -174,19 +152,11 @@ protected:
         filterProto->SetCaseSensitive(CaseSensitive);
         filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
 
+        filterProto->SetHashesCount(HashesCount);
+        filterProto->SetFilterSizeBytes(FilterSizeBytes);
         if (UseOldSizing) {
-            AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
-            AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
-            AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
-            filterProto->SetHashesCount(HashesCount);
-            filterProto->SetFilterSizeBytes(FilterSizeBytes);
             filterProto->SetRecordsCount(RecordsCount);
         } else {
-            const ui32 hashesCountValue = TConstants::CalcHashesCount(FalsePositiveProbability);
-            AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
-            AFL_VERIFY(TConstants::CheckHashesCount(hashesCountValue));
-            filterProto->SetHashesCount(hashesCountValue);
-            filterProto->SetFilterSizeBytes(FilterSizeBytes);
             filterProto->ClearRecordsCount();
         }
 
@@ -211,20 +181,16 @@ public:
         , FalsePositiveProbability(falsePositiveProbability)
         , UseOldSizing(useDeprecatedSizing)
     {
-        Initialize();
         if (useDeprecatedSizing) {
-            if (deprecatedFilterSizeBytes) {
-                FilterSizeBytes = *deprecatedFilterSizeBytes;
-            }
-
-            if (deprecatedRecordsCount) {
-                RecordsCount = *deprecatedRecordsCount;
-            }
-
-            if (deprecatedHashesCount) {
-                HashesCount = *deprecatedHashesCount;
-            }
+            HashesCount = deprecatedHashesCount.value_or(NDefaults::HashesCount);
+            FilterSizeBytes = deprecatedFilterSizeBytes.value_or(TConstants::CalcDeprecatedFilterSizeBytes(falsePositiveProbability));
+            RecordsCount = deprecatedRecordsCount.value_or(TConstants::DeprecatedRecordsCount);
+        } else {
+            HashesCount = TConstants::CalcHashesCount(falsePositiveProbability);
+            FilterSizeBytes = TConstants::CalcDeprecatedFilterSizeBytes(falsePositiveProbability);
         }
+
+        AFL_VERIFY(Initialize());
     }
 
     virtual TString GetClassName() const override {

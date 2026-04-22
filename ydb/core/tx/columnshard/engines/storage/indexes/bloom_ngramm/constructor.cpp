@@ -59,14 +59,42 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
 
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), FalsePositiveProbability, NGrammSize,
-        TBase::GetBitsStorageConstructor(), CaseSensitive, UseDeprecatedSizing, DeprecatedFilterSizeBytes, DeprecatedRecordsCount,
-        DeprecatedHashesCount);
+        GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(),
+        FalsePositiveProbability.value_or(NDefaults::FalsePositiveProbability),
+        NGrammSize.value_or(NDefaults::NGrammSize),
+        TBase::GetBitsStorageConstructor(),
+        CaseSensitive.value_or(NDefaults::CaseSensitive),
+        UseDeprecatedSizing, DeprecatedFilterSizeBytes, DeprecatedRecordsCount, DeprecatedHashesCount);
 }
 
 TConclusionStatus TIndexConstructor::ValidateValues() const {
-    if (auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize); conclusion.IsFail()) {
-        return conclusion;
+    if (FalsePositiveProbability) {
+        if (DeprecatedHashesCount || DeprecatedFilterSizeBytes || DeprecatedRecordsCount) {
+            return TConclusionStatus::Fail(
+                "cannot mix false_positive_probability with filter_size_bytes or records_count or hashes_count in bloom ngramm filter features");
+        }
+
+        if (auto conclusion = TConstants::ValidateParams(*FalsePositiveProbability,
+                NGrammSize.value_or(NDefaults::NGrammSize));
+                conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+
+    if (NGrammSize && !TConstants::CheckNGrammSize(*NGrammSize)) {
+        return TConclusionStatus::Fail("ngramm_size is out of allowed interval");
+    }
+
+    if (DeprecatedHashesCount && !TConstants::CheckHashesCount(*DeprecatedHashesCount)) {
+        return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
+    }
+
+    if (DeprecatedFilterSizeBytes && !TConstants::CheckFilterSizeBytes(*DeprecatedFilterSizeBytes)) {
+        return TConclusionStatus::Fail("filter_size_bytes have to be in bloom ngramm filter in interval " + TConstants::GetFilterSizeBytesIntervalString());
+    }
+
+    if (DeprecatedRecordsCount && !TConstants::CheckRecordsCount(*DeprecatedRecordsCount)) {
+        return TConclusionStatus::Fail("records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
     }
 
     return TConclusionStatus::Success();
@@ -80,78 +108,43 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
         }
     }
 
-    const bool hasFpp = jsonInfo.Has(NIndexParameters::FalsePositiveProbability);
-    if (hasFpp) {
-        if (!jsonInfo[NIndexParameters::FalsePositiveProbability].IsDouble()) {
-            return TConclusionStatus::Fail("false_positive_probability must be in bloom ngramm filter features as double field");
-        }
-
-        FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
+    if (auto c = NIndexParameters::ParseOptionalJsonFields(
+            jsonInfo,
+            NIndexParameters::MakeOptionalJsonField<double>(
+                NIndexParameters::FalsePositiveProbability, FalsePositiveProbability,
+                [](const NJson::TJsonValue& v) { return v.IsDouble(); },
+                [](const NJson::TJsonValue& v) { return v.GetDouble(); },
+                "false_positive_probability must be in bloom ngramm filter features as double field"),
+            NIndexParameters::MakeOptionalJsonField<ui32>(
+                NIndexParameters::NGrammSize, NGrammSize,
+                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
+                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
+                "ngramm_size have to be in bloom filter features as uint field"),
+            NIndexParameters::MakeOptionalJsonField<ui32>(
+                NIndexParameters::HashesCount, DeprecatedHashesCount,
+                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
+                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
+                "hashes_count have to be in bloom filter features as uint field"),
+            NIndexParameters::MakeOptionalJsonField<ui32>(
+                NIndexParameters::FilterSizeBytes, DeprecatedFilterSizeBytes,
+                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
+                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
+                "filter_size_bytes have to be in bloom filter features as uint field"),
+            NIndexParameters::MakeOptionalJsonField<ui32>(
+                NIndexParameters::RecordsCount, DeprecatedRecordsCount,
+                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
+                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
+                "records_count have to be in bloom filter features as uint field"),
+            NIndexParameters::MakeOptionalJsonField<bool>(
+                NIndexParameters::CaseSensitive, CaseSensitive,
+                [](const NJson::TJsonValue& v) { return v.IsBoolean(); },
+                [](const NJson::TJsonValue& v) { return v.GetBoolean(); },
+                "case_sensitive have to be in bloom filter features as boolean field"));
+        c.IsFail()) {
+        return c;
     }
 
-    const bool hasDeprecatedSizingParams = jsonInfo.Has(NIndexParameters::FilterSizeBytes) || jsonInfo.Has(NIndexParameters::RecordsCount) || jsonInfo.Has(NIndexParameters::HashesCount);
-    if (hasFpp && hasDeprecatedSizingParams) {
-        return TConclusionStatus::Fail(
-            "cannot mix false_positive_probability with filter_size_bytes or records_count or hashes_count in bloom ngramm filter features");
-    }
-
-    if (!jsonInfo[NIndexParameters::NGrammSize].IsUInteger()) {
-        return TConclusionStatus::Fail("ngramm_size have to be in bloom filter features as uint field");
-    }
-
-    NGrammSize = jsonInfo[NIndexParameters::NGrammSize].GetUInteger();
-    std::optional<ui32> hashesCount;
-    if (jsonInfo.Has(NIndexParameters::HashesCount)) {
-        if (!jsonInfo[NIndexParameters::HashesCount].IsUInteger()) {
-            return TConclusionStatus::Fail("hashes_count have to be in bloom filter features as uint field");
-        }
-
-        hashesCount = jsonInfo[NIndexParameters::HashesCount].GetUInteger();
-        if (!TConstants::CheckHashesCount(*hashesCount)) {
-            return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
-        }
-    }
-
-    std::optional<ui32> filterSizeBytes;
-    if (jsonInfo.Has(NIndexParameters::FilterSizeBytes)) {
-        if (!jsonInfo[NIndexParameters::FilterSizeBytes].IsUInteger()) {
-            return TConclusionStatus::Fail("filter_size_bytes have to be in bloom filter features as uint field");
-        }
-
-        filterSizeBytes = jsonInfo[NIndexParameters::FilterSizeBytes].GetUInteger();
-        if (!TConstants::CheckFilterSizeBytes(*filterSizeBytes)) {
-            return TConclusionStatus::Fail("filter_size_bytes have to be in bloom ngramm filter in interval " + TConstants::GetFilterSizeBytesIntervalString());
-        }
-    }
-
-    std::optional<ui32> recordsCount;
-    if (jsonInfo.Has(NIndexParameters::RecordsCount)) {
-        if (!jsonInfo[NIndexParameters::RecordsCount].IsUInteger()) {
-            return TConclusionStatus::Fail("records_count have to be in bloom filter features as uint field");
-        }
-
-        recordsCount = jsonInfo[NIndexParameters::RecordsCount].GetUInteger();
-        if (!TConstants::CheckRecordsCount(*recordsCount)) {
-            return TConclusionStatus::Fail("records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
-        }
-    }
-
-    if (!hasFpp && (hashesCount || filterSizeBytes || recordsCount)) {
-        DeprecatedHashesCount = hashesCount;
-        DeprecatedFilterSizeBytes = filterSizeBytes;
-        DeprecatedRecordsCount = recordsCount;
-        FalsePositiveProbability = TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
-            DeprecatedHashesCount, DeprecatedFilterSizeBytes, DeprecatedRecordsCount);
-        UseDeprecatedSizing = true;
-    }
-
-    if (jsonInfo.Has(NIndexParameters::CaseSensitive)) {
-        if (!jsonInfo[NIndexParameters::CaseSensitive].IsBoolean()) {
-            return TConclusionStatus::Fail("case_sensitive have to be in bloom filter features as boolean field");
-        }
-        CaseSensitive = jsonInfo[NIndexParameters::CaseSensitive].GetBoolean();
-    }
-
+    UseDeprecatedSizing = DeprecatedHashesCount || DeprecatedFilterSizeBytes || DeprecatedRecordsCount;
     return ValidateValues();
 }
 
@@ -162,7 +155,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         return TConclusionStatus::Fail(errorMessage);
     }
 
-    auto& bFilter = proto.GetBloomNGrammFilter();
+    const auto& bFilter = proto.GetBloomNGrammFilter();
 
     {
         auto conclusion = TBase::DeserializeFromProtoBitsStorageOnly(bFilter);
@@ -171,55 +164,28 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         }
     }
 
-    if (bFilter.HasCaseSensitive()) {
-        CaseSensitive = bFilter.GetCaseSensitive();
-    }
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
+        ? std::optional<double>(bFilter.GetFalsePositiveProbability()) : std::nullopt;
+    NGrammSize = bFilter.HasNGrammSize()
+        ? std::optional<ui32>(bFilter.GetNGrammSize()) : std::nullopt;
+    CaseSensitive = bFilter.HasCaseSensitive()
+        ? std::optional<bool>(bFilter.GetCaseSensitive()) : std::nullopt;
 
-    NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
+    UseDeprecatedSizing = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0;
     DeprecatedHashesCount.reset();
     DeprecatedFilterSizeBytes.reset();
     DeprecatedRecordsCount.reset();
-    UseDeprecatedSizing = false;
 
-    if (bFilter.HasHashesCount()) {
-        const ui32 v = bFilter.GetHashesCount();
-        if (!TConstants::CheckHashesCount(v)) {
-            return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
-        }
-
-        DeprecatedHashesCount = v;
-    }
-
-    if (bFilter.HasFilterSizeBytes()) {
-        const ui32 v = bFilter.GetFilterSizeBytes();
-        if (!TConstants::CheckFilterSizeBytes(v)) {
-            return TConclusionStatus::Fail("filter_size_bytes have to be in bloom ngramm filter in interval " + TConstants::GetFilterSizeBytesIntervalString());
-        }
-
-        DeprecatedFilterSizeBytes = v;
-    }
-
-    if (bFilter.HasRecordsCount()) {
-        const ui32 v = bFilter.GetRecordsCount();
-        if (v != 0) {
-            if (!TConstants::CheckRecordsCount(v)) {
-                return TConclusionStatus::Fail("records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
-            }
-
-            DeprecatedRecordsCount = v;
-        }
-    }
-
-    const bool hasFpp = bFilter.HasFalsePositiveProbability();
-    UseDeprecatedSizing = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0;
     if (UseDeprecatedSizing) {
-        FalsePositiveProbability = hasFpp ? bFilter.GetFalsePositiveProbability()
-                                          : TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
-                                                DeprecatedHashesCount, DeprecatedFilterSizeBytes, DeprecatedRecordsCount);
-    } else if (hasFpp) {
-        FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-    } else {
-        FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+        if (bFilter.HasHashesCount()) {
+            DeprecatedHashesCount = bFilter.GetHashesCount();
+        }
+
+        if (bFilter.HasFilterSizeBytes()) {
+            DeprecatedFilterSizeBytes = bFilter.GetFilterSizeBytes();
+        }
+
+        DeprecatedRecordsCount = bFilter.GetRecordsCount();
     }
 
     ColumnName = bFilter.GetColumnName();
@@ -234,20 +200,21 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomNGrammFilter();
     TBase::SerializeToProtoBitsStorageOnly(*filterProto);
-    filterProto->SetColumnName(GetColumnName());
-    filterProto->SetCaseSensitive(CaseSensitive);
-    filterProto->SetNGrammSize(NGrammSize);
-    filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
-    if (UseDeprecatedSizing) {
-        filterProto->SetHashesCount(DeprecatedHashesCount.value_or(NDefaults::HashesCount));
-        filterProto->SetFilterSizeBytes(
-            DeprecatedFilterSizeBytes.value_or(TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability)));
-        filterProto->SetRecordsCount(DeprecatedRecordsCount.value_or(TConstants::DeprecatedRecordsCount));
-    } else {
-        filterProto->SetHashesCount(TConstants::CalcHashesCount(FalsePositiveProbability));
-        filterProto->SetFilterSizeBytes(TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability));
-        filterProto->ClearRecordsCount();
+    if (!ColumnName.empty()) {
+        filterProto->SetColumnName(ColumnName);
     }
+
+    NIndexParameters::SetProtoIfPresent(CaseSensitive, [&](bool v) { filterProto->SetCaseSensitive(v); });
+    NIndexParameters::SetProtoIfPresent(NGrammSize, [&](ui32 v) { filterProto->SetNGrammSize(v); });
+
+    if (UseDeprecatedSizing) {
+        NIndexParameters::SetProtoIfPresent(DeprecatedHashesCount, [&](ui32 v) { filterProto->SetHashesCount(v); });
+        NIndexParameters::SetProtoIfPresent(DeprecatedFilterSizeBytes, [&](ui32 v) { filterProto->SetFilterSizeBytes(v); });
+        NIndexParameters::SetProtoIfPresent(DeprecatedRecordsCount, [&](ui32 v) { filterProto->SetRecordsCount(v); });
+    } else {
+        NIndexParameters::SetProtoIfPresent(FalsePositiveProbability, [&](double v) { filterProto->SetFalsePositiveProbability(v); });
+    }
+
     *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }
 

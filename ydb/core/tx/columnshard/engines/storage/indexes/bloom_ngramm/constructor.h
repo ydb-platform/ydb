@@ -19,9 +19,9 @@ public:
     }
 
 private:
-    ui32 NGrammSize = NDefaults::NGrammSize;
-    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
-    bool CaseSensitive = NDefaults::CaseSensitive;
+    std::optional<ui32> NGrammSize;
+    std::optional<double> FalsePositiveProbability;
+    std::optional<bool> CaseSensitive;
     bool UseDeprecatedSizing = false;
     std::optional<ui32> DeprecatedHashesCount;
     std::optional<ui32> DeprecatedFilterSizeBytes;

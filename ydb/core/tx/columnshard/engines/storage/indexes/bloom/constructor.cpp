@@ -16,12 +16,38 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
+        GetInheritPortionStorage().value_or(false), columnId,
+        FalsePositiveProbability.value_or(NDefaults::FalsePositiveProbability),
+        std::make_shared<TDefaultDataExtractor>(),
         TBase::GetBitsStorageConstructor());
 }
 
+std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
+    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
+    const IIndexMeta& existingMeta) const {
+    if (!ColumnName.empty()) {
+        return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+    }
+
+    const auto colId = existingMeta.GetSingleColumnId();
+    if (!colId) {
+        errors.AddError("existing index has no single column; cannot determine column for ALTER INDEX");
+        return nullptr;
+    }
+
+    const auto* col = currentSchema.GetColumns().GetById(*colId);
+    if (!col) {
+        errors.AddError(TStringBuilder() << "column id " << *colId << " not found in schema for ALTER INDEX");
+        return nullptr;
+    }
+
+    TBloomIndexConstructor patched = *this;
+    patched.ColumnName = col->GetName();
+    return patched.DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+}
+
 TConclusionStatus TBloomIndexConstructor::ValidateValues() const {
-    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
+    if (FalsePositiveProbability && (*FalsePositiveProbability <= 0 || *FalsePositiveProbability >= 1)) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval (0, 1)");
     }
 
@@ -50,25 +76,27 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
         return TConclusionStatus::Fail(errorMessage);
     }
-    
-    auto& bFilter = proto.GetBloomFilter();
-    
+
+    const auto& bFilter = proto.GetBloomFilter();
+
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
             return conclusion;
         }
     }
-    
-    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
-                                                                     : NDefaults::FalsePositiveProbability;
+
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
+        ? std::optional<double>(bFilter.GetFalsePositiveProbability()) : std::nullopt;
     return ValidateValues();
 }
 
 void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomFilter();
     TBase::SerializeToProtoImpl(*filterProto);
-    filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+    if (FalsePositiveProbability) {
+        filterProto->SetFalsePositiveProbability(*FalsePositiveProbability);
+    }
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

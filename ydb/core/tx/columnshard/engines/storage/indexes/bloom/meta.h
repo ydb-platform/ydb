@@ -17,7 +17,7 @@ private:
     double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
     ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexMeta>(GetClassNameStatic());
-    void Initialize();
+    [[nodiscard]] bool Initialize();
 
     virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
 
@@ -44,7 +44,7 @@ public:
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
         , FalsePositiveProbability(fpProbability)
     {
-        Initialize();
+        AFL_VERIFY(Initialize());
     }
 
     virtual TString GetClassName() const override {

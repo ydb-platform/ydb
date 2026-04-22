@@ -19,6 +19,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
 
+#include <ranges>
+
 namespace NKikimr::NKqp {
 static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
     if (useQueryService) {
@@ -2667,13 +2669,24 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
             const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
 
+            const auto& indexes = schema.GetIndexes();
+            const std::ranges::subrange indexesRange(indexes.begin(), indexes.end());
+
             std::unordered_set<TString> bloomIndexNames;
-            for (auto&& idx : schema.GetIndexes()) {
-                if (idx.GetName() == "idx_bloom" && idx.HasBloomFilter()) {
-                    bloomIndexNames.emplace(idx.GetName());
-                } else if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
-                    bloomIndexNames.emplace(idx.GetName());
-                }
+            for (auto&& name : indexesRange
+                     | std::ranges::views::transform([](const auto& idx) -> decltype(auto) {
+                           if (idx.GetName() == "idx_bloom" && idx.HasBloomFilter()) {
+                               return TString{idx.GetName()};
+                           }
+
+                           if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
+                               return TString{idx.GetName()};
+                           }
+
+                           return TString{};
+                       })
+                     | std::ranges::views::filter([](const TString& s) { return !s.empty(); })) {
+                bloomIndexNames.emplace(std::move(name));
             }
 
             UNIT_ASSERT_C(bloomIndexNames.contains("idx_bloom"), "idx_bloom should be present in table schema");

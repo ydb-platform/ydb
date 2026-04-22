@@ -8,6 +8,7 @@
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 
+#include <array>
 #include <cstring>
 #include <limits>
 #include <type_traits>
@@ -38,6 +39,20 @@ namespace NActors {
         };
     } // namespace NFlatEventDetail
 
+    /**
+     * TEventFlat defines a flat binary storage format for actor events.
+     *
+     * Compatibility contract:
+     * - The sequence of declared fields is the schema for a specific version.
+     * - Fixed and array element types must be trivially copyable; access goes through
+     *   unaligned views, so users must not assume natural alignment of the buffer.
+     * - Fixed fields are stored inline after the version, array fields are stored as a
+     *   ui32 element count in the fixed part followed by a contiguous payload section.
+     * - Existing field tags must keep their meaning and binary representation across
+     *   versions; incompatible layout changes require a new schema version.
+     * - The format uses the native byte encoding produced by this implementation; there
+     *   is no cross-endian compatibility layer.
+     */
     template <class TEv>
     class TEventFlat : public IEventBase {
         static_assert(std::is_class_v<TEv>, "TEv must be a class");
@@ -195,6 +210,12 @@ namespace NActors {
                 return sizeof(ui16) + FixedFieldsSize + GetVariableIndexImpl<TTag, TFields...>() * sizeof(ui32);
             }
 
+            template <class TTag>
+            static consteval size_t GetVariableIndex() {
+                static_assert(HasVariableField<TTag>, "Field is not an array field in this scheme");
+                return GetVariableIndexImpl<TTag, TFields...>();
+            }
+
             template <class F>
             static void ForEachVariableField(F&& f) {
                 (ForEachVariableFieldImpl<TFields>(f), ...);
@@ -259,7 +280,7 @@ namespace NActors {
                 if constexpr (sizeof...(TRest) > 0) {
                     return DispatchImpl<Version + 1, TRest...>(version, std::forward<F>(f));
                 } else {
-                    Y_ENSURE(false, "Unsupported flat event version " << version);
+                    ythrow TWithBackTrace<yexception>() << "Unsupported flat event version " << version;
                 }
             }
         };
@@ -325,10 +346,29 @@ namespace NActors {
                 typename std::decay_t<TSizes>::TFieldTag;
                 std::declval<std::decay_t<TSizes>>().Size;
             }) && ...), "Unsupported MakeEvent argument");
+            static_assert(NFlatEventDetail::TAreDistinct<typename std::decay_t<TSizes>::TFieldTag...>::value,
+                "Repeated field size arguments must be unique");
             static_assert((TLatestScheme::template HasVariableField<typename std::decay_t<TSizes>::TFieldTag> && ...),
                 "MakeEvent argument doesn't match array field in latest scheme");
 
-            const size_t totalSize = ComputeTotalSize<TLatestScheme>(sizes...);
+            std::array<size_t, TLatestScheme::VariableFieldCount> fieldSizes = {};
+            size_t totalSize = TLatestScheme::FixedPartSize;
+
+            auto collectFieldSize = [&](const auto& item) {
+                using TArg = std::decay_t<decltype(item)>;
+                using TFieldTag = typename TArg::TFieldTag;
+                constexpr size_t index = TLatestScheme::template GetVariableIndex<TFieldTag>();
+
+                const size_t count = item.Size;
+                Y_ENSURE(count <= std::numeric_limits<ui32>::max(), "Repeated field size is too large");
+                fieldSizes[index] = count;
+
+                const size_t fieldBytes = CheckedFieldBytes<typename TFieldTag::TValue>(count);
+                Y_ENSURE(totalSize <= std::numeric_limits<size_t>::max() - fieldBytes, "Flat event is too large");
+                totalSize += fieldBytes;
+            };
+
+            (collectFieldSize(sizes), ...);
 
             THolder<TEv> holder(new TEv());
             holder->Storage = TString::Uninitialized(totalSize);
@@ -339,12 +379,10 @@ namespace NActors {
             WriteUnaligned<ui16>(data, holder->Version);
 
             size_t metaOffset = sizeof(ui16) + TLatestScheme::FixedFieldsSize;
-            TLatestScheme::ForEachVariableField([&]<class TField>() {
-                const size_t count = ExtractRepeatedFieldSize<TField>(sizes...);
-                Y_ENSURE(count <= std::numeric_limits<ui32>::max(), "Repeated field size is too large");
+            for (size_t count : fieldSizes) {
                 WriteUnaligned<ui32>(data + metaOffset, static_cast<ui32>(count));
                 metaOffset += sizeof(ui32);
-            });
+            }
 
             return holder.Release();
         }
@@ -455,41 +493,6 @@ namespace NActors {
         TEventFlat() = default;
 
     private:
-        template <class TScheme, class... TSizes>
-        static size_t ComputeTotalSize(TSizes... sizes) {
-            size_t total = 0;
-            total = TScheme::FixedPartSize;
-
-            TScheme::ForEachVariableField([&]<class TField>() {
-                const size_t count = ExtractRepeatedFieldSize<TField>(sizes...);
-                const size_t fieldBytes = CheckedFieldBytes<typename TField::TValue>(count);
-                Y_ENSURE(total <= std::numeric_limits<size_t>::max() - fieldBytes, "Flat event is too large");
-                total += fieldBytes;
-            });
-
-            return total;
-        }
-
-        template <class T, class... TSizes>
-        static size_t ExtractRepeatedFieldSize(TSizes... sizes) {
-            size_t result = 0;
-            bool found = false;
-
-            auto extract = [&](const auto& item) {
-                using TArg = std::decay_t<decltype(item)>;
-                if constexpr (requires { typename TArg::TFieldTag; item.Size; }) {
-                    if constexpr (std::is_same_v<typename TArg::TFieldTag, T>) {
-                        result = item.Size;
-                        found = true;
-                    }
-                }
-            };
-
-            (extract(sizes), ...);
-            Y_ENSURE(found, "Missing repeated field size");
-            return result;
-        }
-
         template <class TValue>
         static size_t CheckedFieldBytes(size_t count) {
             Y_ENSURE(count <= std::numeric_limits<size_t>::max() / sizeof(TValue), "Flat event field is too large");

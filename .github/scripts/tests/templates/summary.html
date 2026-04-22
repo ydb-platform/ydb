@@ -677,16 +677,21 @@
         return [pieces[1], pieces[2]];
     }
 
+    // Bash/zsh: wrap in single quotes; embedded ' becomes '\'' (close quote, escaped quote, reopen).
+    function bashSingleQuote(s) {
+        return "'" + s.replace(/'/g, "'\\''") + "'";
+    }
+
     function formatTestCommand(path, testName) {
         const namePieces = testName.split('.');
-
+        let filterName = testName;
         if (namePieces.length === 2) {
-            testName = namePieces[0] + '::' + namePieces[1];
-        } else {
-            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+            filterName = namePieces[0] + '::' + namePieces[1];
+        } else if (namePieces.length > 2) {
+            filterName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
         }
 
-        return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+        return `./ya make -ttt {{ build_preset_params }} -F ${bashSingleQuote(filterName)} ${path}`;
     }
 
     function getTestRunCommand(test) {
@@ -728,6 +733,20 @@
         }
         
         return labels.join(',');
+    }
+
+    // Encode each '/'-separated segment with encodeURIComponent; '/' stays a separator
+    // (so '+' in a test name becomes %2B, not a space).
+    function encodePathSegmentsForUrl(path) {
+        return path.split('/').map(function(part) {
+            return encodeURIComponent(part);
+        }).join('/');
+    }
+
+    // Same as encodePathSegmentsForUrl, then double '%' for values embedded in the
+    // GitHub issue-creation URL body=... (GitHub decodes once; %252B → %2B in markdown).
+    function encodePathForBodyUrl(path) {
+        return encodePathSegmentsForUrl(path).replace(/%/g, '%25');
     }
 
     function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, successRates, logUrls, errorText, reportUrl) {
@@ -785,7 +804,7 @@
         }
         
         // Always include test run history link
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodePathForBodyUrl(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
         
         // Always include report link
         body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
@@ -904,7 +923,7 @@
         const full_name = test.trim();
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
-        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodePathSegmentsForUrl(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
         window.open(url, '_blank');
     }
 

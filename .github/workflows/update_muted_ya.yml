@@ -28,10 +28,12 @@ jobs:
     outputs:
       matrix_include: ${{ steps.set-mute-matrix.outputs.matrix_include }}
     steps:
-      - name: Checkout branch list and mute files from main
+      # workflow_dispatch: ref = branch selected in UI (so new scripts under .github/ are present).
+      # schedule: use repository default branch (same as previous hard-coded main for hourly runs).
+      - name: Checkout branch list and mute files
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
           path: config-repo
           sparse-checkout: |
             .github/config/

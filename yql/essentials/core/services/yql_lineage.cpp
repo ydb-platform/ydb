@@ -516,8 +516,16 @@ private:
 
     void WriteLineageRef(NYson::TYsonWriter& writer, const TStringBuf& tableName) {
         writer.OnKeyedItem("Lineage");
+        auto it = LineageRefs_.find(tableName);
+        if (it == LineageRefs_.end()) {
+            if (Standalone_) {
+                writer.OnEntity();
+                return;
+            }
+            throw yexception() << TStringBuilder() << "Lineage can't be calculated for " << tableName << " table";
+        }
         writer.OnBeginMap();
-        const auto& lineageRefs = LineageRefs_.at(tableName);
+        const auto& lineageRefs = it->second;
         if (lineageRefs.empty()) {
             writer.OnEndMap();
             return;

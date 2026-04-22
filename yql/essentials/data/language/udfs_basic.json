@@ -2424,6 +2424,12 @@
     },
     {
       "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Utf8\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "minLangVer": "2026.01",
+      "name": "AsUtf8"
+    },
+    {
+      "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"DictType\";[\"DataType\";\"String\"];[\"ResourceType\";\"Yson2.Node\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
       "isStrict": true,
       "name": "Attributes"
@@ -2609,6 +2615,13 @@
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
       "isStrict": true,
       "name": "IsUint64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Bool\"]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.01",
+      "name": "IsUtf8"
     },
     {
       "argCount": 1,
@@ -2847,6 +2860,13 @@
       "isStrict": true,
       "minLangVer": "2025.05",
       "name": "TryAsUint64"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Utf8\"]]];[[[\"ResourceType\";\"Yson2.Node\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.01",
+      "name": "TryAsUtf8"
     },
     {
       "argCount": 2,

@@ -257,13 +257,19 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
             const auto now = context.Ctx.Now();
-            for (const auto& [_, shard] : table->GetPartitionStore()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
                 lag = now - shard.LastCondErase;
                 context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
             }
+        }
+
+        if (table->PartitionsInShardIdxFormat) {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+        } else {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
         }
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -759,6 +765,9 @@ public:
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
 
+        // Preserve table partitions storage format from source table.
+        tableInfo->PartitionsInShardIdxFormat = srcTableInfo->PartitionsInShardIdxFormat;
+
         TChannelsBindings channelsBinding;
         bool storePerShardConfig = false;
         NKikimrSchemeOp::TPartitionConfig perShardConfig;
@@ -848,7 +857,7 @@ public:
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }
-        for (const auto& [shardIdx, shard] : tableInfo->GetPartitionStore()) {
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
             if (storePerShardConfig) {
                 tableInfo->PerShardPartitionConfig[shardIdx].CopyFrom(perShardConfig);

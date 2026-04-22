@@ -92,6 +92,15 @@ def _sql_build_type_clause(build_type) -> str:
     return f"\n    AND build_type = '{escaped}'"
 
 
+def _cell_utf8(val):
+    """Normalize YDB Utf8 values (often ``bytes`` in scan_query rows) to ``str``."""
+    if val is None:
+        return None
+    if isinstance(val, bytes):
+        return val.decode("utf-8", errors="replace")
+    return val
+
+
 def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
     """
     Get all team data (stats + trends) from YDB in one optimized query.
@@ -101,7 +110,9 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
         build_type: ``test_muted_monitor_mart.build_type`` filter; ``"all"`` = no filter.
 
     Returns:
-        dict: Dictionary with team names as keys and their data, or None if error
+        dict: Keys are canonical team slugs from mart ``owner_team`` (effective owner,
+            includes ``area_override``), not raw TESTOWNERS ``owner``. Values are per-team
+            ``stats`` and ``trend`` dicts, or None if the query failed.
     """
     if not YDB_AVAILABLE:
         print("❌ YDBWrapper not available")
@@ -129,10 +140,11 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
 
     bt_clause = _sql_build_type_clause(build_type)
 
-    # Single optimized query for all data
+    # Single optimized query for all data (aggregate by owner_team = effective team + area_override,
+    # same as ``test_muted_monitor_mart_with_issue.sql`` / dashboard — not raw ``owner``).
     all_data_query = f"""
     SELECT 
-        owner,
+        owner_team,
         date_window,
         COUNT(*) as daily_count,
         SUM(CASE WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1 ELSE 0 END) as today_count
@@ -143,8 +155,8 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
     AND branch = '{branch}'{bt_clause}
     AND is_test_chunk = 0
     AND resolution != 'Skipped'
-    GROUP BY owner, date_window
-    ORDER BY owner, date_window
+    GROUP BY owner_team, date_window
+    ORDER BY owner_team, date_window
     """
     
     # Execute query
@@ -164,16 +176,16 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
     base_date = datetime(1970, 1, 1)
     
     for row in results:
-        owner = row.get('owner') if isinstance(row, dict) else row.owner
-        if not owner:
+        owner_team = row.get('owner_team') if isinstance(row, dict) else row.owner_team
+        owner_team = _cell_utf8(owner_team)
+        if owner_team is None:
             continue
-            
-        # Accept TEAM:@ydb-platform/<slug> and the sentinel unknown (any case);
-        # skip everything else (plain usernames, email addresses, etc.)
-        if owner.startswith('TEAM:@ydb-platform/') or str(owner).strip().lower() == 'unknown':
-            team_name = canonical_team_slug(owner)
-        else:
+        raw = str(owner_team).strip()
+        if not raw:
             continue
+        # Mart ``owner_team`` is usually a lowercase slug; canonical_team_slug also accepts
+        # ``TEAM:@ydb-platform/...`` if present.
+        team_name = canonical_team_slug(raw)
         
         if team_name not in team_data:
             team_data[team_name] = {

@@ -2380,7 +2380,9 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
             queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
         }
         task.Meta.TaskParams.emplace("query_path", queryPath);
-
+        if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
+            task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
+        }
         tasksIds.push_back(task.Id);
     }
 

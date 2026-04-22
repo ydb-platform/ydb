@@ -1003,8 +1003,7 @@
             ],
         )
 
-      ```python
-      import ydb
+    ```
 
     {% endcut %}
 
@@ -1047,20 +1046,8 @@
             ],
         )
 
-          pool.execute_with_retries(query)
-          driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
-
-          print(f"Table index {index_name} created.")
-      ```
+        print(f"Table index {index_name} created.")
+    ```
 
     - Native SDK (Asyncio)
 
@@ -1106,8 +1093,6 @@
 
           print(f"Table index {index_name} created.")
       ```
-
-    {% endlist %}
 
 - C++
 

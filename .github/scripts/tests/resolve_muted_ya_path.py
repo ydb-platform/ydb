@@ -21,6 +21,7 @@ DEDICATED_NAMES: dict[str, str] = {
 
 
 def dedicated_relative(preset: str) -> str:
+    preset = preset.strip().lower()
     fn = DEDICATED_NAMES.get(preset, 'muted_ya.txt')
     return os.path.join(CONFIG_DIR, fn).replace('\\', '/')
 

@@ -10,6 +10,7 @@ RECURSE(
     oauth2_token_exchange
     observability
     params
+    query
     result
     table
     value

@@ -103,7 +103,7 @@ public:
         CollectQuerySize(query);
         CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
 
-        auto obs = MakeObservation("ydb.ExecuteQuery");
+        auto obs = MakeObservation("ExecuteQuery");
         std::string sessionEndpoint = session.has_value() ? session->SessionImpl_->GetEndpoint() : std::string{};
 
         return TExecQueryImpl::ExecuteQuery(
@@ -186,7 +186,7 @@ public:
 
         auto promise = NThreading::NewPromise<TStatus>();
 
-        auto obs = MakeObservation("ydb.Rollback");
+        auto obs = MakeObservation("Rollback");
 
         auto responseCb = [promise, session, obs]
             (Ydb::Query::RollbackTransactionResponse* response, TPlainStatus status) mutable {
@@ -234,7 +234,7 @@ public:
 
         auto promise = NThreading::NewPromise<TCommitTransactionResult>();
 
-        auto obs = MakeObservation("ydb.Commit");
+        auto obs = MakeObservation("Commit");
 
         auto responseCb = [promise, session, obs]
             (Ydb::Query::CommitTransactionResponse* response, TPlainStatus status) mutable {
@@ -493,6 +493,7 @@ public:
                 );
 
                 if (Observation) {
+                    Observation->SetPeerEndpoint(session->GetEndpoint());
                     Observation->End(EStatus::SUCCESS);
                 }
                 ScheduleReply(std::move(val));
@@ -535,7 +536,7 @@ public:
             std::shared_ptr<TQueryObservation> Observation;
         };
 
-        auto obs = MakeObservation("ydb.CreateSession");
+        auto obs = MakeObservation("CreateSession");
         auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings, obs);
         auto future = ctx->GetFuture();
         SessionPool_.GetSession(std::move(ctx));

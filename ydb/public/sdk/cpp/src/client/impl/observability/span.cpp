@@ -1,5 +1,7 @@
 #include "span.h"
 
+#include "operation_name.h"
+
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -128,13 +130,14 @@ TRequestSpan::TRequestSpan(const std::string& ydbClientType
     ParseEndpoint(discoveryEndpoint, host, port);
 
     try {
-        Span_ = tracer->StartSpan(requestName, kind);
+        const auto operationName = NormalizeOperationName(requestName);
+        Span_ = tracer->StartSpan(operationName, kind);
         if (!Span_) {
             return;
         }
         Span_->SetAttribute("db.system.name", "ydb");
         Span_->SetAttribute("db.namespace", database);
-        Span_->SetAttribute("db.operation.name", requestName);
+        Span_->SetAttribute("db.operation.name", operationName);
         Span_->SetAttribute("ydb.client.api", YdbClientApiAttributeValue(ydbClientType));
         Span_->SetAttribute("server.address", host);
         Span_->SetAttribute("server.port", static_cast<int64_t>(port));

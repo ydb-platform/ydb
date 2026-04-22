@@ -9,17 +9,13 @@ ENDIF()
 
 FORK_SUBTESTS()
 
-PEERDIR(
-    library/cpp/testing/common
-    library/cpp/testing/gtest
-    ydb/public/api/grpc
-    ydb/public/sdk/cpp/src/client/impl/observability
-    ydb/public/sdk/cpp/src/client/table
+SRCS(
+    query_spans_ut.cpp
 )
 
-SRCS(
-    table_ut.cpp
-    table_spans_ut.cpp
+PEERDIR(
+    library/cpp/testing/gtest
+    ydb/public/sdk/cpp/src/client/impl/observability
 )
 
 END()

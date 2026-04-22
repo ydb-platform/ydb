@@ -244,7 +244,7 @@ private:
         auto promise = NewPromise<TDataQueryResult>();
         bool keepInCache = settings.KeepInQueryCache_ && settings.KeepInQueryCache_.value();
 
-        auto obs = MakeObservation("ydb.ExecuteDataQuery");
+        auto obs = MakeObservation("ExecuteDataQuery");
 
         // We don't want to delay call of TSession dtor, so we can't capture it by copy
         // otherwise we break session pool and other clients logic.

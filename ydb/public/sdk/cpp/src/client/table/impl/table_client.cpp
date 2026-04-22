@@ -403,7 +403,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
-    auto obs = MakeObservation("ydb.CreateSession");
+    auto obs = MakeObservation("CreateSession");
 
     auto createSessionExtractor = [createSessionPromise, self, standalone, obs]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
@@ -421,6 +421,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
                 // We do not use SessionStatusInterception for CreateSession request
                 session.SessionImpl_->MarkBroken();
             }
+            obs->SetPeerEndpoint(status.Endpoint);
             TCreateSessionResult val(TStatus(std::move(status)), std::move(session));
             obs->End(val.GetStatus());
             createSessionPromise.SetValue(std::move(val));
@@ -786,7 +787,7 @@ TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const TSession& session, co
     request.set_session_id(TStringType{session.GetId()});
     request.set_yql_text(TStringType{query});
 
-    auto obs = MakeObservation("ydb.ExecuteSchemeQuery");
+    auto obs = MakeObservation("ExecuteSchemeQuery");
 
     auto future = RunSimple<Ydb::Table::V1::TableService, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse>(
         std::move(request),
@@ -796,6 +797,7 @@ TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const TSession& session, co
 
     return future.Apply([obs](NThreading::TFuture<TStatus> f) mutable {
         auto status = f.ExtractValue();
+        obs->SetPeerEndpoint(status.GetEndpoint());
         obs->End(status.GetStatus());
         return status;
     });
@@ -811,7 +813,7 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
     request.set_session_id(TStringType{session.GetId()});
     SetTxSettings(txSettings, request.mutable_tx_settings());
 
-    auto obs = MakeObservation("ydb.BeginTransaction");
+    auto obs = MakeObservation("BeginTransaction");
 
     auto promise = NewPromise<TBeginTransactionResult>();
 
@@ -824,6 +826,7 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
                 txId = result.tx_meta().id();
             }
 
+            obs->SetPeerEndpoint(status.Endpoint);
             TBeginTransactionResult beginTxResult(TStatus(std::move(status)),
                 TTransaction(session, txId));
             obs->End(beginTxResult.GetStatus());
@@ -853,7 +856,7 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     request.set_tx_id(TStringType{txId});
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
 
-    auto obs = MakeObservation("ydb.Commit");
+    auto obs = MakeObservation("Commit");
 
     auto promise = NewPromise<TCommitTransactionResult>();
 
@@ -869,6 +872,7 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
                 }
             }
 
+            obs->SetPeerEndpoint(status.Endpoint);
             TCommitTransactionResult commitTxResult(TStatus(std::move(status)), queryStats);
             obs->End(commitTxResult.GetStatus());
             promise.SetValue(std::move(commitTxResult));
@@ -896,7 +900,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     request.set_session_id(TStringType{session.GetId()});
     request.set_tx_id(TStringType{txId});
 
-    auto obs = MakeObservation("ydb.Rollback");
+    auto obs = MakeObservation("Rollback");
 
     auto future = RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),
@@ -906,6 +910,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
 
     return future.Apply([obs](TAsyncStatus fut) {
         auto status = fut.GetValue();
+        obs->SetPeerEndpoint(status.GetEndpoint());
         obs->End(status.GetStatus());
         return status;
     });
@@ -1178,11 +1183,12 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
         *mutable_rows->mutable_type() = rows.GetType().GetProto();
     }
 
-    auto obs = MakeObservation("ydb.BulkUpsert");
+    auto obs = MakeObservation("BulkUpsert");
 
     auto promise = NewPromise<TBulkUpsertResult>();
     auto extractor = [promise, obs](google::protobuf::Any* any, TPlainStatus status) mutable {
         Y_UNUSED(any);
+        obs->SetPeerEndpoint(status.Endpoint);
         TBulkUpsertResult val(TStatus(std::move(status)));
         obs->End(val.GetStatus());
         promise.SetValue(std::move(val));
@@ -1227,13 +1233,14 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     }
     request.set_data(TStringType{data});
 
-    auto obs = MakeObservation("ydb.BulkUpsert");
+    auto obs = MakeObservation("BulkUpsert");
 
     auto promise = NewPromise<TBulkUpsertResult>();
 
     auto extractor = [promise, obs]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Y_UNUSED(any);
+            obs->SetPeerEndpoint(status.Endpoint);
             TBulkUpsertResult val(TStatus(std::move(status)));
             obs->End(val.GetStatus());
             promise.SetValue(std::move(val));

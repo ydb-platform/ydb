@@ -32,7 +32,9 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 {% endif %}
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+**Limitations.** The `ADD INDEX` operation for creating regular secondary indexes (`GLOBAL`/`LOCAL`, `UNIQUE`, and so on) is supported only for row-oriented tables. For column-oriented tables, `ADD INDEX` supports only the special local Bloom skip indexes described below.
+
+For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), adding **global secondary** and **vector** indexes is not yet supported (see the note above). At the same time, adding **local Bloom skip indexes** is supported; see [Bloom skip indexes](#local-bloom).
 
 ### Examples
 
@@ -69,9 +71,49 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
+### Bloom skip indexes {#local-bloom}
+
+Bloom skip indexes allow the engine to skip data fragments that do not contain the requested values and speed up selective queries.
+
+Local Bloom skip indexes have additional limitations:
+
+* For column-oriented tables, the `ON (...)` expression must contain exactly one column.
+* `COVER (...)` and data columns are not supported for these indexes.
+
+Supported index types:
+
+* `bloom_filter`: Bloom filter by column values. Parameters:
+  * `false_positive_probability`: Target false-positive probability (for example, `0.01`). Default: `0.1` for column-oriented tables and `0.0001` for row-oriented tables.
+* `bloom_ngram_filter`: N-gram Bloom filter for string columns. Parameters:
+  * `ngram_size`: N-gram size from `3` to `8` (for example, `3`). Default: `3`.
+  * `false_positive_probability`: Target false-positive probability (for example, `0.01`). Default: `0.1`.
+  * `case_sensitive`: Optional, `true` or `false` (`true` by default).
+
+**Example: add a Bloom filter index**
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+**Example: add an N-gram Bloom filter index**
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (resource_id)
+  WITH (
+    ngram_size = 3,
+    false_positive_probability = 0.01,
+    case_sensitive = true
+  );
+```
+
 ## Altering an index {#alter-index}
 
-Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
+Indexes have type-specific parameters that can be tuned. `ALTER INDEX` is supported for both global secondary indexes and Bloom skip indexes. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
 
 {% note info %}
 
@@ -86,14 +128,17 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 * `<table_name>`: The name of the table whose index is to be modified.
 * `<index_name>`: The name of the index to be modified.
-* `<setting_name>`: The name of the setting to be modified, which should be one of the following:
-
-    * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
-    * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
-    * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
-    * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
-    * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
-    * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+* `<setting_name>`: The name of the setting to be modified. Allowed settings depend on the index type:
+    * for global secondary indexes:
+        * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+        * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+        * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+        * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+        * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+        * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+    * for local Bloom skip indexes:
+        * `false_positive_probability`
+        * `ngram_size` and `case_sensitive` (for `bloom_ngram_filter` only)
 
 
 {% note info %}
@@ -106,6 +151,9 @@ These settings cannot be reset.
     * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
     * `"PER_AZ:<count>"` or `"ANY_AZ:<count>"` where `<count>` is the number of replicas for the `READ_REPLICAS_SETTINGS`
     * An integer of `Uint64` type for the other settings
+    * A floating-point value in `(0, 1)` for `false_positive_probability`
+    * An integer value from `3` to `8` for `ngram_size`
+    * `true` or `false` for `case_sensitive`
 
 ### Example
 
@@ -117,6 +165,16 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5,
     READ_REPLICAS_SETTINGS = "PER_AZ:1"
+);
+```
+
+For local Bloom skip indexes, you can also alter index-specific parameters, for example:
+
+```yql
+ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
+    ngram_size = 4,
+    false_positive_probability = 0.005,
+    case_sensitive = false
 );
 ```
 

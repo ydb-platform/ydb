@@ -88,6 +88,9 @@ void WriteJsonEntry(TStringBuf poolId, const TString& reqId, TStringBuf sessionI
     if (!loggedText.empty()) {
         json.WriteKey("query_text").WriteString(loggedText);
     }
+    if (!requestText.empty()) {
+        json.WriteKey("query_text_size").WriteULongLong(requestText.size());
+    }
     if (truncated) {
         json.WriteKey("query_text_truncated").WriteBool(true);
     }

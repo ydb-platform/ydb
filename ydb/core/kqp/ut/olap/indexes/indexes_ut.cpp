@@ -523,20 +523,23 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ui32 filterBytesBefore = 0;
         readBloomNGramm(fppBefore, filterBytesBefore);
 
-        ExecQuery(kikimr, UseQueryService, R"(
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapTableBloomNgramAddThenUpsert` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, "records_count" : 50000, "case_sensitive" : true, "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
-        )");
+        )", "cannot switch bloom ngram index from false_positive_probability mode to deprecated sizing");
 
         double fppAfter = 0;
         ui32 filterBytesAfter = 0;
         readBloomNGramm(fppAfter, filterBytesAfter);
 
-        UNIT_ASSERT_C(
-            fppBefore != fppAfter || filterBytesBefore != filterBytesAfter,
-            TStringBuilder() << "After ADD INDEX, ALTER OBJECT ... UPSERT_INDEX with filter_size_bytes/records_count should change schema; before fpp="
-                             << fppBefore << " filter_size_bytes=" << filterBytesBefore << " after fpp=" << fppAfter
-                             << " filter_size_bytes=" << filterBytesAfter);
+        UNIT_ASSERT_DOUBLES_EQUAL_C(
+            fppBefore, fppAfter, 1e-9,
+            TStringBuilder() << "Rejected UPSERT_INDEX must not change false_positive_probability; before fpp="
+                             << fppBefore << " after fpp=" << fppAfter);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            filterBytesBefore, filterBytesAfter,
+            TStringBuilder() << "Rejected UPSERT_INDEX must not change filter_size_bytes; before="
+                             << filterBytesBefore << " after=" << filterBytesAfter);
     }
 
     Y_UNIT_TEST(BloomNgramIndexCreatedViaAlterObjectWithFalsePositiveProbability, EUseQueryService) {
@@ -2397,6 +2400,206 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
         UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > 0,
             "Bloom ngram filter should skip at least some portions for a nonexistent value");
+    }
+
+    Y_UNIT_TEST(BloomNgramAlterObjectNgramAndFilterBytesThenSqlAlterFpp, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapAlterObjectNgramFilterThenSqlFpp`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapAlterObjectNgramFilterThenSqlFpp` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 5, "filter_size_bytes" : 2048, "records_count" : 10000, "case_sensitive" : true}`);
+        )");
+
+        auto readNgram = [&]() {
+            auto desc = client.Ls("/Root/olapAlterObjectNgramFilterThenSqlFpp");
+            UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
+            const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (auto&& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
+                    const auto& f = idx.GetBloomNGrammFilter();
+                    return std::make_tuple(
+                        f.GetFalsePositiveProbability(),
+                        f.GetNGrammSize(),
+                        f.GetCaseSensitive(),
+                        f.GetFilterSizeBytes());
+                }
+            }
+
+            UNIT_ASSERT_C(false, "idx_ngram with BloomNGrammFilter not found");
+            return std::make_tuple(0.0, 0u, false, 0u);
+        };
+
+        {
+            const auto [fpp, ngram, cs, filterBytes] = readNgram();
+            UNIT_ASSERT_VALUES_EQUAL_C(ngram, 5u, "ngramm_size from ALTER OBJECT FEATURES");
+            UNIT_ASSERT_C(filterBytes > 0 && filterBytes <= 2048u,
+                TStringBuilder() << "filter_size_bytes after UPSERT (normalized from FEATURES), got " << filterBytes);
+            UNIT_ASSERT_VALUES_EQUAL_C(cs, true, "case_sensitive after UPSERT");
+            UNIT_ASSERT_C(fpp > 0 && fpp < 1.0,
+                TStringBuilder() << "implicit fpp in (0,1) from filter/records sizing, got " << fpp);
+        }
+
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterObjectNgramFilterThenSqlFpp` ALTER INDEX idx_ngram SET (false_positive_probability = 0.07);
+        )", "cannot change false_positive_probability on a bloom ngram index created with deprecated sizing");
+
+        {
+            const auto [fpp, ngram, cs, filterBytes] = readNgram();
+            UNIT_ASSERT_VALUES_EQUAL_C(ngram, 5u, "ngram_size unchanged after rejected ALTER");
+            UNIT_ASSERT_VALUES_EQUAL_C(cs, true, "case_sensitive unchanged after rejected ALTER");
+            UNIT_ASSERT_C(filterBytes > 0 && filterBytes <= 2048u,
+                TStringBuilder() << "filter_size_bytes unchanged after rejected ALTER, got " << filterBytes);
+        }
+    }
+
+    Y_UNIT_TEST(BloomNgramFppIndexRejectsDeprecatedSizingUpsert, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapFppThenOldSizing`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapFppThenOldSizing`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, false_positive_probability = 0.05, case_sensitive = true);
+        )");
+
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapFppThenOldSizing` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "filter_size_bytes" : 1024, "records_count" : 5000}`);
+        )", "cannot switch bloom ngram index from false_positive_probability mode to deprecated sizing");
+    }
+
+    Y_UNIT_TEST(BloomNgramAlterIndexBasic, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapAlterIdx`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx` ALTER INDEX idx_ngram SET (false_positive_probability = 0.05);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx` ALTER INDEX idx_ngram SET (ngram_size = 4);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdx` ALTER INDEX idx_ngram SET (case_sensitive = false);
+        )");
+    }
+
+    Y_UNIT_TEST(BloomNgramAlterIndexKeepsSameSchemeIndexId, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapAlterIdxSameSchemeId`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdxSameSchemeId`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, false_positive_probability = 0.02, case_sensitive = true);
+        )");
+
+        auto readBloomNgramIndexIdAndFpp = [&]() -> std::tuple<ui32, double> {
+            auto desc = client.Ls("/Root/olapAlterIdxSameSchemeId");
+            UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
+            const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (auto&& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
+                    return std::make_tuple(idx.GetId(), idx.GetBloomNGrammFilter().GetFalsePositiveProbability());
+                }
+            }
+
+            UNIT_ASSERT_C(false, "idx_ngram with BloomNGrammFilter not found");
+            return std::make_tuple(0, 0.0);
+        };
+
+        const auto [idBefore, fppBefore] = readBloomNgramIndexIdAndFpp();
+        UNIT_ASSERT_C(idBefore != 0, "index id must be assigned by schemeshard");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapAlterIdxSameSchemeId` ALTER INDEX idx_ngram SET (false_positive_probability = 0.06);
+        )");
+
+        const auto [idAfter, fppAfter] = readBloomNgramIndexIdAndFpp();
+        UNIT_ASSERT_VALUES_EQUAL_C(idBefore, idAfter, "ALTER INDEX must update the same local OLAP index (stable scheme id), not drop+add a new index");
+        UNIT_ASSERT_DOUBLES_EQUAL_C(fppAfter, 0.06, 1e-9, "fpp should change after ALTER INDEX");
+        UNIT_ASSERT_C(fppBefore != fppAfter, "sanity: fpp actually changed");
     }
 }
 

@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
@@ -55,13 +57,21 @@ public:
     static ui32 CalcDeprecatedFilterSizeBytes(const double falsePositiveProbability) {
         const double probability = (std::isfinite(falsePositiveProbability) && falsePositiveProbability > 0.0 && falsePositiveProbability < 1.0)
             ? falsePositiveProbability
-            : 0.1;
+            : NDefaults::FalsePositiveProbability;
         const double hashesCount = static_cast<double>(CalcHashesCount(probability));
         const double recordsCount = static_cast<double>(CalcDeprecatedRecordsCount(probability));
         const double bitsCount =
             std::ceil((-hashesCount * recordsCount) / std::log(1.0 - std::pow(probability, 1.0 / hashesCount)));
         return std::clamp<ui32>(
             static_cast<ui32>(std::ceil(bitsCount / 8.0)), MinFilterSizeBytes, MaxFilterSizeBytes);
+    }
+
+    static double FalsePositiveProbabilityFromDeprecatedSizing(const std::optional<ui32> hashesCount, const std::optional<ui32> filterSizeBytes, const std::optional<ui32> recordsCount) {
+        const double k = static_cast<double>(hashesCount.value_or(NDefaults::HashesCount));
+        const double m = static_cast<double>(filterSizeBytes.value_or(CalcDeprecatedFilterSizeBytes(NDefaults::FalsePositiveProbability)) * 8);
+        const double n = static_cast<double>(recordsCount.value_or(DeprecatedRecordsCount));
+        const double oneMinus = 1.0 - std::exp(-(k * n) / m);
+        return std::pow(std::clamp(oneMinus, 0.0, 1.0), k); 
     }
 
     static TDerivedSettings BuildDerivedSettings(const double falsePositiveProbability, const ui32 ngramSize, const bool caseSensitive) {

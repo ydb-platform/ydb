@@ -549,7 +549,6 @@ protected:
         return output;
     }
 
-
     TMaybeNode<TExprBase> RewriteRightJoinToLeft(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqRewriteRightJoinToLeft(node, ctx);
         DumpAppliedRule("RewriteRightJoinToLeft", node.Ptr(), output.Ptr(), ctx);

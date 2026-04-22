@@ -112,7 +112,7 @@ EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
 enum class EGroupState {
     Active,
-    Inactive
+    Inactive,
 };
 
 struct ISubActor {

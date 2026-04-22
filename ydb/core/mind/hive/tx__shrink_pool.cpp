@@ -10,15 +10,17 @@ class TTxShrinkPool : public TTransactionBase<THive> {
     const TString StoragePool;
     const ui64 NewSize;
     const ui64 Cookie;
+    const ui64 Version;
     TSideEffects SideEffects;
 
 public:
-    TTxShrinkPool(const TActorId& source, const TString& storagePool, ui64 newSize, ui64 cookie, THive* hive)
+    TTxShrinkPool(const TActorId& source, const TString& storagePool, ui64 newSize, ui64 cookie, ui64 version, THive* hive)
         : TBase(hive)
         , Source(source)
         , StoragePool(storagePool)
         , NewSize(newSize)
         , Cookie(cookie)
+	, Version(version)
     {
     }
 
@@ -39,6 +41,7 @@ public:
         reply->Record.SetStatus(NKikimrProto::ERROR);
         reply->Record.SetError(error);
         reply->Record.SetStoragePool(StoragePool);
+        reply->Record.SetVersion(Version);
         SideEffects.Send(Source, reply.release(), 0, Cookie);
     }
 
@@ -97,6 +100,7 @@ public:
         reply->Record.SetStatus(NKikimrProto::OK);
         reply->Record.MutableGroupsToRemove()->Assign(storagePool->InactiveGroups.begin(), storagePool->InactiveGroups.end());
         reply->Record.SetStoragePool(StoragePool);
+        reply->Record.SetVersion(Version);
         SideEffects.Send(Source, reply.release(), 0, Cookie);
         return true;
     }
@@ -108,7 +112,7 @@ public:
 
 ITransaction* THive::CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    return new TTxShrinkPool(ev->Sender, record.GetStoragePool(), record.GetNewSize(), ev->Cookie, this);
+    return new TTxShrinkPool(ev->Sender, record.GetStoragePool(), record.GetNewSize(), ev->Cookie, record.GetVersion(), this);
 }
 
 class TTxShrinkPoolReply : public TTransactionBase<THive> {
@@ -130,6 +134,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         const auto& poolName = Event->Get()->Record.GetStoragePool();
         auto& storagePool = Self->GetStoragePool(poolName);
+        if (storagePool.ConsoleVersion > Event->Get()->Record.GetVersion()) {
+            return true;
+        }
         const auto& groupsToRemove = Event->Get()->Record.GetGroupsToRemove();
         std::unordered_set<TStorageGroupId> inactiveGroups(groupsToRemove.begin(), groupsToRemove.end());
         for (auto groupId : inactiveGroups) {

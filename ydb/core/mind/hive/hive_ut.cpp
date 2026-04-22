@@ -9218,16 +9218,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             usedGroups.insert(groupsRange.begin(), groupsRange.end());
         }
 
+        ui64 version = 1;
         auto makeRequest = [&](ui64 newSize, NKikimrProto::EReplyStatus expectedStatus) {
             auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
             request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
             request->Record.MutableSubDomain()->SetPathId(1);
             request->Record.SetStoragePool("def1");
             request->Record.SetNewSize(newSize);
+            request->Record.SetVersion(++version);
             runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
             auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), expectedStatus);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetVersion(), version);
             return response->Record.GetGroupsToRemove();
         };
 

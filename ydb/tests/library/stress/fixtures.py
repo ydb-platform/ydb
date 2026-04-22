@@ -70,6 +70,7 @@ class StressFixture:
             timeout_seconds=timeout_seconds
         )
 
+        self.cluster.register_and_start_slots(self.shared_database_name, count=1)
         self.cluster.wait_tenant_up(self.shared_database_name)
 
         self.serverless_database_name = "/Root/serverless_db"

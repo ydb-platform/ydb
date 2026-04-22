@@ -2601,6 +2601,115 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT_DOUBLES_EQUAL_C(fppAfter, 0.06, 1e-9, "fpp should change after ALTER INDEX");
         UNIT_ASSERT_C(fppBefore != fppAfter, "sanity: fpp actually changed");
     }
+
+    Y_UNIT_TEST(LocalBloomIndexesCompatibleWithDictionaryEncoding, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
+        TKikimrRunner kikimr(settings);
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableBloomWithDict`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8 ENCODING(DICT),
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableBloomWithDict`
+            ADD INDEX idx_bloom LOCAL USING bloom_filter
+                ON (resource_id)
+                WITH (false_positive_probability = 0.01);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableBloomWithDict`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+        )");
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto showResult = session.ExecuteQuery(
+                "SHOW CREATE TABLE `/Root/olapTableBloomWithDict`;",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(showResult.IsSuccess(), showResult.GetIssues().ToString());
+            UNIT_ASSERT(!showResult.GetResultSets().empty());
+            NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+            TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+            UNIT_ASSERT_C(createText.Contains("`resource_id` Utf8 ENCODING (DICT)") ||
+                createText.Contains("resource_id Utf8 ENCODING (DICT)") ||
+                createText.Contains("`resource_id` Utf8 ENCODING(DICT)") ||
+                createText.Contains("resource_id Utf8 ENCODING(DICT)"),
+                "SHOW CREATE should contain dictionary encoding for resource_id, got: " << createText);
+            UNIT_ASSERT_C(
+                createText.Contains("NAME = idx_bloom") && createText.Contains("TYPE = BLOOM_FILTER"),
+                "SHOW CREATE should contain idx_bloom bloom filter definition, got: " << createText);
+            UNIT_ASSERT_C(
+                createText.Contains("NAME = idx_ngram") && createText.Contains("TYPE = BLOOM_NGRAMM_FILTER"),
+                "SHOW CREATE should contain idx_ngram bloom ngram definition, got: " << createText);
+        }
+
+        {
+            auto desc = client.Ls("/Root/olapTableBloomWithDict");
+            UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
+            const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+            bool hasBloom = false;
+            bool hasNgram = false;
+            for (auto&& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "idx_bloom" && idx.HasBloomFilter()) {
+                    hasBloom = true;
+                } else if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
+                    hasNgram = true;
+                }
+            }
+
+            UNIT_ASSERT_C(hasBloom, "idx_bloom should be present in table schema");
+            UNIT_ASSERT_C(hasNgram, "idx_ngram should be present in table schema");
+        }
+
+        auto runDataQuery = [&](const TString& query) {
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (!result.GetResultSets().empty()) {
+                return FormatResultSetYson(result.GetResultSet(0));
+            }
+
+            return TString("[]");
+        };
+
+        runDataQuery(R"(
+            --!syntax_v1
+            UPSERT INTO `/Root/olapTableBloomWithDict` (timestamp, resource_id, uid) VALUES
+                (Timestamp("2024-01-01T00:00:00Z"), "alpha", "u1"),
+                (Timestamp("2024-01-01T00:00:01Z"), "beta", "u2"),
+                (Timestamp("2024-01-01T00:00:02Z"), "alpha", "u3"),
+                (Timestamp("2024-01-01T00:00:03Z"), "gamma", "u4");
+        )");
+
+        CompareYson(runDataQuery(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/olapTableBloomWithDict` WHERE resource_id = "alpha";
+        )"), "[[2u]]");
+
+        CompareYson(runDataQuery(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/olapTableBloomWithDict` WHERE resource_id LIKE "alp%";
+        )"), "[[2u]]");
+    }
 }
 
 }   // namespace NKikimr::NKqp

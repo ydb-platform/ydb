@@ -46,7 +46,8 @@ struct TScopedNbsService: TDisableCopyMove
 
 [[nodiscard]] TScopedNbsService SetupStorage(
     TEnvironmentSetup& env,
-    EWriteMode writeMode)
+    EWriteMode writeMode,
+    TDuration writeHedgingDelay = TDuration::Seconds(1))
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -79,6 +80,7 @@ struct TScopedNbsService: TDisableCopyMove
         PersistentBufferDDiskPoolName);
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
     storageConfig->SetVChunkSize(DefaultVChunkSize);
+    storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
 
     return TScopedNbsService(nbsConfig);
 }
@@ -779,12 +781,6 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 NDDisk::TEvWritePersistentBuffer::EventType)
             {
                 if (writeRequestsCount++ < 2) {
-                    runtime->Schedule(
-                        TDuration::Seconds(10),
-                        ev.release(),
-                        nullptr,
-                        nodeId);
-
                     return false;
                 }
             }

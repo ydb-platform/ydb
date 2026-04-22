@@ -2,12 +2,11 @@
 
 #include <yt/cpp/mapreduce/common/fwd.h>
 
+#include <yt/cpp/mapreduce/interface/abortable_stream.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
-
-class IInputStream;
 
 namespace NYT {
 
@@ -27,6 +26,9 @@ public:
         const TClientContext& context,
         const TTransactionId& transactionId);
 
+    void Abort() override;
+    bool IsAborted() const override;
+
     ~TStreamReaderBase();
 
 protected:
@@ -37,13 +39,13 @@ protected:
 
 private:
     size_t DoRead(void* buf, size_t len) override;
-    virtual std::unique_ptr<IInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) = 0;
+    virtual std::unique_ptr<IAbortableInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) = 0;
 
 private:
     const IClientRetryPolicyPtr ClientRetryPolicy_;
     TFileReaderOptions FileReaderOptions_;
 
-    std::unique_ptr<IInputStream> Input_;
+    std::unique_ptr<IAbortableInputStream> Input_;
 
     std::unique_ptr<TPingableTransaction> ReadTransaction_;
 
@@ -66,7 +68,7 @@ public:
         const TFileReaderOptions& options = {});
 
 private:
-    std::unique_ptr<IInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) override;
+    std::unique_ptr<IAbortableInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) override;
 
 private:
     const ui64 StartOffset_;
@@ -93,7 +95,7 @@ public:
         const TBlobTableReaderOptions& options = {});
 
 private:
-    std::unique_ptr<IInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) override;
+    std::unique_ptr<IAbortableInputStream> Request(const TTransactionId& transactionId, ui64 readBytes) override;
 
 private:
     const ui64 StartOffset_;

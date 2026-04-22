@@ -8,7 +8,14 @@
 
 namespace NYql::NUdf {
 
-class TProtobufValue: public TBoxedValue {
+class IProtobufParser {
+public:
+    virtual ~IProtobufParser();
+
+    virtual TAutoPtr<NProtoBuf::Message> Parse(const TStringBuf& data) const = 0;
+};
+
+class TProtobufValue: public TBoxedValue, public IProtobufParser {
 public:
     explicit TProtobufValue(TProtoInfo info);
     ~TProtobufValue() override;
@@ -17,13 +24,20 @@ public:
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const override;
 
-    virtual TAutoPtr<NProtoBuf::Message> Parse(const TStringBuf& data) const = 0;
-
 protected:
     const TProtoInfo Info_;
 };
 
-class TProtobufSerialize: public TBoxedValue {
+class IProtobufSerialize {
+public:
+    virtual ~IProtobufSerialize();
+
+    virtual TMaybe<TString> Serialize(const NProtoBuf::Message& proto) const = 0;
+
+    virtual TAutoPtr<NProtoBuf::Message> MakeProto() const = 0;
+};
+
+class TProtobufSerialize: public TBoxedValue, public IProtobufSerialize {
 public:
     explicit TProtobufSerialize(TProtoInfo info);
     ~TProtobufSerialize() override;
@@ -31,10 +45,6 @@ public:
     TUnboxedValue Run(
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const override;
-
-    virtual TMaybe<TString> Serialize(const NProtoBuf::Message& proto) const = 0;
-
-    virtual TAutoPtr<NProtoBuf::Message> MakeProto() const = 0;
 
 protected:
     const TProtoInfo Info_;

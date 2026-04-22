@@ -1,6 +1,4 @@
 #include "proc.h"
-#include "common.h"
-#include "string.h"
 
 #include <yt/yt/core/logging/log.h>
 
@@ -22,9 +20,12 @@
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
+#include <util/system/getpid.h>
 #include <util/system/info.h>
 #include <util/system/fs.h>
 #include <util/system/fstat.h>
+#include <util/system/thread.h>
+
 #include <util/folder/iterator.h>
 #include <util/folder/filelist.h>
 
@@ -327,24 +328,12 @@ std::vector<int> GetPidsUnderParent(int targetPid)
 
 size_t GetCurrentProcessId()
 {
-#if defined(_linux_)
-    return getpid();
-#else
-    YT_ABORT();
-#endif
+    return GetPID();
 }
 
 size_t GetCurrentThreadId()
 {
-#if defined(_linux_)
-    return static_cast<size_t>(::syscall(SYS_gettid));
-#elif defined(_darwin_)
-    uint64_t tid;
-    YT_VERIFY(pthread_threadid_np(nullptr, &tid) == 0);
-    return static_cast<size_t>(tid);
-#else
-    return ::GetCurrentThreadId();
-#endif
+    return TThread::CurrentThreadNumericId();
 }
 
 std::vector<size_t> GetCurrentProcessThreadIds()
@@ -371,10 +360,20 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 
 bool IsUserspaceThread(size_t tid)
 {
-#ifdef __linux__
+#if defined(__linux__)
     TFileInput file(Format("/proc/%v/stat", tid));
-    auto statFields = SplitString(file.ReadLine(), " ");
-    constexpr int StartStackIndex = 27;
+    auto line = file.ReadLine();
+    // The format of /proc/PID/stat is: "pid (comm) state ...".
+    // Field 2 (comm) is the process name wrapped in parentheses and may contain
+    // spaces and even parentheses. The kernel always closes it with ')', so we
+    // find the last ')' and split only the fields that follow it.
+    auto closeParenPos = line.rfind(')');
+    auto statFields = SplitString(
+        closeParenPos != TString::npos ? line.substr(closeParenPos + 2) : line,
+        " ");
+    // Fields are now 0-indexed starting from field 3 (state). StartStackIndex
+    // is field 28 (0-indexed as 25) in the original 1-based numbering.
+    constexpr int StartStackIndex = 25;
     if (statFields.size() < StartStackIndex) {
         return false;
     }
@@ -383,14 +382,23 @@ bool IsUserspaceThread(size_t tid)
     return startStack != 0;
 #else
     Y_UNUSED(tid);
-    return false;
+    return true;
 #endif
 }
 
 std::string GetCurrentProcessName()
 {
-#ifdef __linux__
+#if defined(__linux__)
     return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
+#elif defined(_win_)
+    char path[MAX_PATH];
+    DWORD length = ::GetModuleFileNameA(nullptr, path, MAX_PATH);
+    if (length == 0) {
+        return "(unknown)";
+    }
+    std::string fullPath(path, length);
+    auto pos = fullPath.find_last_of("\\/");
+    return pos == std::string::npos ? fullPath : fullPath.substr(pos + 1);
 #else
     return "(unknown)";
 #endif
@@ -398,8 +406,12 @@ std::string GetCurrentProcessName()
 
 std::string GetCurrentProcessCommandLine()
 {
-#ifdef __linux__
-    return std::string(Trim(TUnbufferedFileInput("/proc/self/cmdline").ReadAll(), "\n"));
+#if defined(__linux__)
+    auto cmdline = TUnbufferedFileInput("/proc/self/cmdline").ReadAll();
+    auto delimiterPos = cmdline.find('\0');
+    return delimiterPos == std::string::npos ? cmdline : cmdline.substr(0, delimiterPos);
+#elif defined(_win_)
+    return ::GetCommandLineA();
 #else
     return "(unknown)";
 #endif

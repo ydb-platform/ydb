@@ -1122,6 +1122,13 @@ public:
             if (!f->CallableType) {
                 return false;
             }
+
+            if (result.RunConfigType) {
+                f->RunConfigType = TypeParser_(NYT::NodeToYsonString(*result.RunConfigType), ctx);
+                if (!f->RunConfigType) {
+                    return false;
+                }
+            }
         }
 
         return true;

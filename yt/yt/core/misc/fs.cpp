@@ -215,7 +215,7 @@ bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path)
             if (depth < 0) {
                 return false;
             }
-        } else if (normalizedPath == ".") {
+        } else if (part == ".") {
             // Do nothing.
         } else {
             ++depth;

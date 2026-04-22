@@ -1052,13 +1052,24 @@ class TDropMaintenanceTask
         ++Requests;
     }
 
-    void DropPermissions(const TTaskInfo& task) {
-        auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
-        cmsRequest->Record.SetUser(task.Owner);
-        cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
+    void MaybeDropPermissionsInCms() {
+        if (Requests > 0) {
+            return;
+        }
 
-        for (const auto& id : task.Permissions) {
-            cmsRequest->Record.AddPermissions(id);
+        auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
+        cmsRequest->Record.SetUser(User);
+        cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
+        cmsRequest->Record.MutablePermissions()->Assign(Permissions.begin(), Permissions.end());
+
+        Send(CmsActorId, std::move(cmsRequest));
+        ++Requests;
+    }
+
+    void DropPermissions(const TTaskInfo& task) {
+        Permissions.assign(task.Permissions.begin(), task.Permissions.end());
+
+        for (const auto& id : Permissions) {
             const auto& permission = GetCmsState()->Permissions.at(id);
             if (permission.Action.GetType() == NKikimrCms::TAction::DRAIN_NODE ||
                 permission.Action.GetType() == NKikimrCms::TAction::CORDON_NODE) 
@@ -1069,8 +1080,7 @@ class TDropMaintenanceTask
             }
         }
 
-        Send(CmsActorId, std::move(cmsRequest));
-        ++Requests;
+        MaybeDropPermissionsInCms();
     }
 
 public:
@@ -1089,6 +1099,7 @@ public:
         }
 
         const auto& task = it->second;
+        User = task.Owner;
         if (cmsState->ScheduledRequests.contains(task.RequestId)) {
             DropRequest(task);
         } else {
@@ -1113,6 +1124,7 @@ public:
     }
 
     void HandleDropRequest(TEvCms::TEvManageRequestResponse::TPtr& ev) {
+        --Requests;
         auto cmsState = GetCmsState();
         if (cmsState->MaintenanceTasks.contains(GetTaskUid())) {
             DropPermissions(cmsState->MaintenanceTasks.at(GetTaskUid()));
@@ -1149,8 +1161,9 @@ public:
     }
 
     void Handle(TEvHive::TEvSetDownReply::TPtr &ev) {
+        --Requests;
         if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
-            return MaybeReply();
+            MaybeDropPermissionsInCms();
         } else {
             return Reply(Ydb::StatusIds::GENERIC_ERROR, "Node not found");
         }
@@ -1169,6 +1182,8 @@ public:
 
 private:
     i64 Requests = 0;
+    std::vector<TString> Permissions;
+    TString User;
 
 }; // TDropMaintenanceTask
 

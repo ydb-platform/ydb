@@ -16,7 +16,8 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
     NWilson::TTraceId traceId,
-    TDuration hedgingDelay)
+    TDuration hedgingDelay,
+    TDuration timeout)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
@@ -26,6 +27,7 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
     , TraceId(std::move(traceId))
     , Lsn(lsn)
     , HedgingDelay(hedgingDelay)
+    , RequestTimeout(timeout)
 {}
 
 TBaseWriteRequestExecutor::~TBaseWriteRequestExecutor()
@@ -59,6 +61,10 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 
 void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     auto span =
         DirectBlockGroup->CreateChildSpan(TraceId, "TBaseWriteRequestExecutor");
     if (span) {
@@ -87,6 +93,10 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     if (!HasError(response.Error)) {
         CompletedWrites.Set(location);
         if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
@@ -122,6 +132,49 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
 
         auto ender = TEndSpanWithError(std::move(span), response.Error);
     }
+}
+
+void TBaseWriteRequestExecutor::ScheduleRequestTimeoutCallback()
+{
+    if (!RequestTimeout) {
+        return;
+    }
+
+    DirectBlockGroup->Schedule(
+        RequestTimeout,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->RequestTimeoutCallback();
+            }
+        });
+}
+
+void TBaseWriteRequestExecutor::RequestTimeoutCallback()
+{
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TBaseWriteRequestExecutor. Write request timeout. %s %s",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str());
+
+    Reply(MakeError(E_TIMEOUT, "Write request timeout"));
+}
+
+TVector<ELocation>
+TBaseWriteRequestExecutor::GetAvailableHandOffLocations() const
+{
+    TVector<ELocation> locations;
+    locations.reserve(2);
+    if (!RequestedWrites.Get(ELocation::HOPBuffer0)) {
+        locations.push_back(ELocation::HOPBuffer0);
+    }
+    if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
+        locations.push_back(ELocation::HOPBuffer1);
+    }
+
+    return locations;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

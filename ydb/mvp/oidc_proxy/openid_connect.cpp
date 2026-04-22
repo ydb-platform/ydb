@@ -17,17 +17,6 @@
 
 namespace NMVP::NOIDC {
 
-namespace {
-
-NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder& headers, const TString& redirectUrl) {
-    headers.Set("Content-Type", "application/json; charset=utf-8");
-    SetCORS(request, &headers);
-    TString body {"{\"error\":\"Authorization Required\",\"authUrl\":\"" + redirectUrl + "\"}"};
-    return request->CreateResponse("401", "Unauthorized", headers, body);
-}
-
-} // namespace
-
 TRestoreOidcContextResult::TRestoreOidcContextResult(const TStatus& status, const TContext& context)
     : Context(context)
     , Status(status)
@@ -100,12 +89,17 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
                                                                      << GetAuthCallbackUrl();
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
-    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
-    if (context.IsAjaxRequest()) {
-        return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
+
+    if (context.IsNavigationRequest()) {
+        responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
+        responseHeaders.Set(LOCATION_HEADER, redirectUrl);
+        return request->CreateResponse("302", "Authorization required", responseHeaders);
     }
-    responseHeaders.Set(LOCATION_HEADER, redirectUrl);
-    return request->CreateResponse("302", "Authorization required", responseHeaders);
+
+    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
+    responseHeaders.Set("Content-Type", "application/json; charset=utf-8");
+    TString body {"{\"error\":\"Authorization Required\",\"authUrl\":\"" + redirectUrl + "\"}"};
+    return request->CreateResponse("401", "Unauthorized", responseHeaders, body);
 }
 
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state) {

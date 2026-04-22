@@ -257,6 +257,8 @@ bool IsRetriable(const std::exception& ex)
 {
     if (dynamic_cast<const TRequestRetriesTimeout*>(&ex)) {
         return false;
+    } else if (dynamic_cast<const TInputStreamAbortedError*>(&ex)) {
+        return false;
     }
     return true;
 }

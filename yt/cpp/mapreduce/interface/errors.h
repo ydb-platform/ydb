@@ -293,6 +293,13 @@ private:
     TVector<TFailedJobInfo> FailedJobInfo_;
 };
 
+///
+/// @brief Error that is thrown when trying to read from aborted reader.
+///
+class TInputStreamAbortedError
+    : public yexception
+{ };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

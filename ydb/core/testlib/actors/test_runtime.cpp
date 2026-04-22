@@ -236,7 +236,8 @@ namespace NActors {
                 node->Mon.Reset(new NActors::TMon({
                     .Port = port,
                     .Threads = 10,
-                    .Title = "KIKIMR monitoring"
+                    .Title = "KIKIMR monitoring",
+                    .AllowOrigin = MonitoringAllowOrigin_,
                 }));
                 nodeAppData->Mon = node->Mon.Get();
                 node->Mon->RegisterCountersPage("counters", "Counters", node->DynamicCounters);

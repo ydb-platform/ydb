@@ -532,6 +532,12 @@ namespace Tests {
             Runtime->SetupStatsCollectors();
         }
         Runtime->SetupMonitoring(Settings->MonitoringPortOffset, Settings->MonitoringTypeAsync);
+        if (Settings->AppConfig) {
+            const auto& monCfg = Settings->AppConfig->GetMonitoringConfig();
+            if (monCfg.HasAllowOrigin() && !monCfg.GetAllowOrigin().empty()) {
+                Runtime->SetMonitoringAllowOrigin(monCfg.GetAllowOrigin());
+            }
+        }
         Runtime->SetLogBackend(Settings->LogBackend);
 
         SetupActorSystemConfig();

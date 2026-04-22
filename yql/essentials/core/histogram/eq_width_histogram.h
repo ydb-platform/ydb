@@ -192,7 +192,7 @@ public:
             return 0;
         }
         if (CmpLess<T>(domainEnd, val)) {
-            return NumBuckets_ - 1;
+            return GetNumBuckets() - 1;
         }
         const THistValue bucketWidth = GetBucketWidth<T>();
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
@@ -202,11 +202,11 @@ public:
             const UT diff = value - start;
             UT bucketIndex = diff / LoadFrom<UT>(bucketWidth.Value.data());
             bucketIndex = std::floor<UT>(bucketIndex);
-            bucketIndex = std::min<UT>(NumBuckets_ - 1, bucketIndex);
+            bucketIndex = std::min<UT>(GetNumBuckets() - 1, bucketIndex);
             return static_cast<ui32>(bucketIndex);
         }
         T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.Value.data()));
-        bucketIndex = std::min<T>(NumBuckets_ - 1, bucketIndex);
+        bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
         return static_cast<ui32>(bucketIndex);
     }
 
@@ -229,7 +229,7 @@ public:
             return returnValue;
         }
         const T rangeLen = end - start;
-        const T bucketWidth = rangeLen / static_cast<T>(NumBuckets_);
+        const T bucketWidth = rangeLen / static_cast<T>(GetNumBuckets());
         StoreTo<T>(returnValue.Value.data(), bucketWidth);
         return returnValue;
     }
@@ -274,7 +274,7 @@ public:
     // Checks whether two histograms have same parameters.
     template <typename T>
     bool BucketsEqual(const TEqWidthHistogram& other) {
-        if (NumBuckets_ != other.GetNumBuckets()) {
+        if (GetNumBuckets() != other.GetNumBuckets()) {
             return false;
         } else if (ValueType_ != other.GetType()) {
             return false;
@@ -294,7 +294,7 @@ public:
 
     // Returns a number of buckets in histogram.
     ui32 GetNumBuckets() const {
-        return NumBuckets_;
+        return Buckets_.size();
     }
 
     // Returns histogram type.

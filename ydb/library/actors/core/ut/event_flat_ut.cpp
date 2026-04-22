@@ -43,8 +43,8 @@ struct TEvFlatMessage : TEventFlat<TEvFlatMessage> {
     using TOldFieldTag = TBase::FixedField<i64, 1>;
     using TArrayFieldTag = TBase::ArrayField<ui32, 2>;
 
-    using TSchemeV1 = TBase::Scheme<TTabletIdTag, TOldFieldTag, TArrayFieldTag>;
-    using TSchemeV2 = TBase::Scheme<TTabletIdTag, TArrayFieldTag>;
+    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TTabletIdTag, TOldFieldTag, TArrayFieldTag>;
+    using TSchemeV2 = TBase::Scheme<TBase::WithPayloadType<ui8>, TTabletIdTag, TArrayFieldTag>;
     using TScheme = TBase::Versions<TSchemeV1, TSchemeV2>;
 
     friend class TEventFlat<TEvFlatMessage>;
@@ -53,16 +53,16 @@ struct TEvFlatMessage : TEventFlat<TEvFlatMessage> {
         return TBase::MakeEvent();
     }
 
-    auto TabletId() { return TBase::template Field<TTabletIdTag>(); }
-    auto TabletId() const { return TBase::template Field<TTabletIdTag>(); }
+    auto TabletId() { return this->template Field<TTabletIdTag>(); }
+    auto TabletId() const { return this->template Field<TTabletIdTag>(); }
 
-    bool HasOldField() const { return TBase::template HasField<TOldFieldTag>(); }
-    auto OldField() { return TBase::template Field<TOldFieldTag>(); }
-    auto OldField() const { return TBase::template Field<TOldFieldTag>(); }
+    bool HasOldField() const { return this->template HasField<TOldFieldTag>(); }
+    auto OldField() { return this->template Field<TOldFieldTag>(); }
+    auto OldField() const { return this->template Field<TOldFieldTag>(); }
 
-    auto Numbers() { return TBase::template Array<TArrayFieldTag>(); }
-    auto Numbers() const { return TBase::template Array<TArrayFieldTag>(); }
-    size_t NumbersSize() const { return TBase::template GetSize<TArrayFieldTag>(); }
+    auto Numbers() { return this->template Array<TArrayFieldTag>(); }
+    auto Numbers() const { return this->template Array<TArrayFieldTag>(); }
+    size_t NumbersSize() const { return this->template GetSize<TArrayFieldTag>(); }
 };
 
 struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields> {
@@ -84,17 +84,17 @@ struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields> {
         return TBase::MakeEvent();
     }
 
-    auto Small() { return TBase::template Field<TSmallTag>(); }
-    auto Small() const { return TBase::template Field<TSmallTag>(); }
+    auto Small() { return this->template Field<TSmallTag>(); }
+    auto Small() const { return this->template Field<TSmallTag>(); }
 
-    auto TabletId() { return TBase::template Field<TTabletIdTag>(); }
-    auto TabletId() const { return TBase::template Field<TTabletIdTag>(); }
+    auto TabletId() { return this->template Field<TTabletIdTag>(); }
+    auto TabletId() const { return this->template Field<TTabletIdTag>(); }
 
-    auto Point() { return TBase::template Field<TPointTag>(); }
-    auto Point() const { return TBase::template Field<TPointTag>(); }
+    auto Point() { return this->template Field<TPointTag>(); }
+    auto Point() const { return this->template Field<TPointTag>(); }
 
-    auto Cookie() { return TBase::template Field<TCookieTag>(); }
-    auto Cookie() const { return TBase::template Field<TCookieTag>(); }
+    auto Cookie() { return this->template Field<TCookieTag>(); }
+    auto Cookie() const { return this->template Field<TCookieTag>(); }
 };
 
 struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields> {
@@ -108,7 +108,7 @@ struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields> {
     using TItemsTag = TBase::ArrayField<TRepeatedItem, 3>;
     using TEmptyItemsTag = TBase::ArrayField<TRepeatedItem, 4>;
 
-    using TSchemeV1 = TBase::Scheme<TMarkerTag, TPointTag, TNumbersTag, TItemsTag, TEmptyItemsTag>;
+    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TMarkerTag, TPointTag, TNumbersTag, TItemsTag, TEmptyItemsTag>;
     using TScheme = TBase::Versions<TSchemeV1>;
 
     friend class TEventFlat<TEvFlatRepeatedFields>;
@@ -117,23 +117,23 @@ struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields> {
         return TBase::MakeEvent();
     }
 
-    auto Marker() { return TBase::template Field<TMarkerTag>(); }
-    auto Marker() const { return TBase::template Field<TMarkerTag>(); }
+    auto Marker() { return this->template Field<TMarkerTag>(); }
+    auto Marker() const { return this->template Field<TMarkerTag>(); }
 
-    auto Point() { return TBase::template Field<TPointTag>(); }
-    auto Point() const { return TBase::template Field<TPointTag>(); }
+    auto Point() { return this->template Field<TPointTag>(); }
+    auto Point() const { return this->template Field<TPointTag>(); }
 
-    auto Numbers() { return TBase::template Array<TNumbersTag>(); }
-    auto Numbers() const { return TBase::template Array<TNumbersTag>(); }
-    size_t NumbersSize() const { return TBase::template GetSize<TNumbersTag>(); }
+    auto Numbers() { return this->template Array<TNumbersTag>(); }
+    auto Numbers() const { return this->template Array<TNumbersTag>(); }
+    size_t NumbersSize() const { return this->template GetSize<TNumbersTag>(); }
 
-    auto Items() { return TBase::template Array<TItemsTag>(); }
-    auto Items() const { return TBase::template Array<TItemsTag>(); }
-    size_t ItemsSize() const { return TBase::template GetSize<TItemsTag>(); }
+    auto Items() { return this->template Array<TItemsTag>(); }
+    auto Items() const { return this->template Array<TItemsTag>(); }
+    size_t ItemsSize() const { return this->template GetSize<TItemsTag>(); }
 
-    auto EmptyItems() { return TBase::template Array<TEmptyItemsTag>(); }
-    auto EmptyItems() const { return TBase::template Array<TEmptyItemsTag>(); }
-    size_t EmptyItemsSize() const { return TBase::template GetSize<TEmptyItemsTag>(); }
+    auto EmptyItems() { return this->template Array<TEmptyItemsTag>(); }
+    auto EmptyItems() const { return this->template Array<TEmptyItemsTag>(); }
+    size_t EmptyItemsSize() const { return this->template GetSize<TEmptyItemsTag>(); }
 };
 
 struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields> {
@@ -145,7 +145,7 @@ struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields> {
     using TBlobTag = TBase::BytesField<1>;
     using TNumbersTag = TBase::ArrayField<ui32, 2>;
 
-    using TSchemeV1 = TBase::Scheme<TMarkerTag, TBlobTag, TNumbersTag>;
+    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TMarkerTag, TBlobTag, TNumbersTag>;
     using TScheme = TBase::Versions<TSchemeV1>;
 
     friend class TEventFlat<TEvFlatPayloadFields>;
@@ -154,24 +154,50 @@ struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields> {
         return TBase::MakeEvent();
     }
 
-    auto Marker() { return TBase::template Field<TMarkerTag>(); }
-    auto Marker() const { return TBase::template Field<TMarkerTag>(); }
+    auto Marker() { return this->template Field<TMarkerTag>(); }
+    auto Marker() const { return this->template Field<TMarkerTag>(); }
 
-    auto Blob() { return TBase::template Bytes<TBlobTag>(); }
-    auto Blob() const { return TBase::template Bytes<TBlobTag>(); }
-    size_t BlobSize() const { return TBase::template GetSize<TBlobTag>(); }
+    auto Blob() { return this->template Bytes<TBlobTag>(); }
+    auto Blob() const { return this->template Bytes<TBlobTag>(); }
+    size_t BlobSize() const { return this->template GetSize<TBlobTag>(); }
 
-    auto Numbers() { return TBase::template Array<TNumbersTag>(); }
-    auto Numbers() const { return TBase::template Array<TNumbersTag>(); }
-    size_t NumbersSize() const { return TBase::template GetSize<TNumbersTag>(); }
+    auto Numbers() { return this->template Array<TNumbersTag>(); }
+    auto Numbers() const { return this->template Array<TNumbersTag>(); }
+    size_t NumbersSize() const { return this->template GetSize<TNumbersTag>(); }
 };
 
 namespace {
 
-    TIntrusivePtr<TEventSerializedData> MakeSerializedData(const TVector<TRope>& payloads) {
-        TAllocChunkSerializer serializer;
-        UNIT_ASSERT(SerializeToArcadiaStreamImpl(&serializer, payloads));
-        return serializer.Release(CreateSerializationInfoImpl(0, false, payloads, 0));
+    size_t SerializeNumberTo(char* dst, size_t number) {
+        size_t pos = 0;
+        do {
+            dst[pos++] = static_cast<char>((number & 0x7F) | (number >= 128 ? 0x80 : 0x00));
+            number >>= 7;
+        } while (number);
+        return pos;
+    }
+
+    TIntrusivePtr<TEventSerializedData> MakeSerializedData(TVector<TRope> payloads, TString header) {
+        const ui32 framingSize = CalculateSerializedHeaderSizeImpl(payloads);
+        const size_t headerSize = header.size();
+        TString buffer = TString::Uninitialized(framingSize);
+        char* ptr = buffer.Detach();
+
+        if (framingSize) {
+            *ptr++ = ExtendedPayloadMarker;
+            ptr += SerializeNumberTo(ptr, payloads.size());
+            for (const TRope& rope : payloads) {
+                ptr += SerializeNumberTo(ptr, rope.GetSize());
+            }
+        }
+
+        TRope rope(std::move(buffer));
+        for (TRope& payload : payloads) {
+            rope.Insert(rope.End(), std::move(payload));
+        }
+        rope.Insert(rope.End(), TRope(std::move(header)));
+
+        return MakeIntrusive<TEventSerializedData>(std::move(rope), CreateSerializationInfoImpl(0, false, payloads, headerSize));
     }
 
     TString MakeArrayPayload(const TVector<ui32>& values) {
@@ -184,26 +210,23 @@ namespace {
     }
 
     TIntrusivePtr<TEventSerializedData> MakeV1Buffer(i64 tabletId, i64 oldField, const TVector<ui32>& values) {
-        using TBase = TEvFlatMessage::TBase;
         using TScheme = TEvFlatMessage::TSchemeV1;
         TString header = TString::Uninitialized(TScheme::HeaderSize);
         char* ptr = header.Detach();
         std::memset(ptr, 0, TScheme::HeaderSize);
 
-        WriteUnaligned<ui16>(ptr + 0, 1);
+        WriteUnaligned<ui8>(ptr + 0, 1);
         WriteUnaligned<i64>(ptr + TScheme::template GetFixedOffset<TEvFlatMessage::TTabletIdTag>(), tabletId);
         WriteUnaligned<i64>(ptr + TScheme::template GetFixedOffset<TEvFlatMessage::TOldFieldTag>(), oldField);
-        WriteUnaligned<typename TBase::TPayloadRef>(
+        WriteUnaligned<typename TScheme::TPayloadRef>(
             ptr + TScheme::template GetPayloadRefOffset<TEvFlatMessage::TArrayFieldTag>(),
-            typename TBase::TPayloadRef{
-                .PayloadId = values.empty() ? 0u : 1u,
-                .Size = static_cast<ui32>(values.size()),
+            typename TScheme::TPayloadRef{
+                .PayloadId = static_cast<ui8>(values.empty() ? 0u : 1u),
             });
 
         TVector<TRope> payloads;
-        payloads.push_back(TRope(std::move(header)));
         payloads.push_back(TRope(MakeArrayPayload(values)));
-        return MakeSerializedData(payloads);
+        return MakeSerializedData(std::move(payloads), std::move(header));
     }
 
 } // namespace
@@ -216,7 +239,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         ev->Point() = TPoint{11, 22};
         ev->Cookie() = 77;
 
-        UNIT_ASSERT_VALUES_EQUAL(ev->GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ev->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui16>(ev->Small()), 17);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(ev->TabletId()), 123456789);
 
@@ -233,7 +256,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             EvFlatFixedFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatFixedFields* loaded = handle->Get<TEvFlatFixedFields>();
-        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui16>(loaded->Small()), 17);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->TabletId()), 123456789);
         const TPoint loadedPoint = loaded->Point();
@@ -285,7 +308,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             EvFlatRepeatedFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatRepeatedFields* loaded = handle->Get<TEvFlatRepeatedFields>();
-        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 99);
         const TPoint loadedPoint = loaded->Point();
         UNIT_ASSERT_VALUES_EQUAL(loadedPoint.X, 5);
@@ -338,7 +361,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             EvFlatPayloadFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatPayloadFields* loaded = handle->Get<TEvFlatPayloadFields>();
-        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 7);
         UNIT_ASSERT_VALUES_EQUAL(loaded->Blob().Materialize(), "abcd");
         UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), 5);
@@ -403,7 +426,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             EvFlatPayloadFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatPayloadFields* loaded = handle->Get<TEvFlatPayloadFields>();
-        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 13);
         UNIT_ASSERT(!loaded->Blob().HasPayload());
         UNIT_ASSERT(loaded->Blob().empty());
@@ -418,7 +441,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         ui32 values[] = {10, 20, 30};
         ev->Numbers().Append(values, std::size(values));
 
-        UNIT_ASSERT_VALUES_EQUAL(ev->GetVersion(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ev->GetVersion(), static_cast<ui8>(2));
         UNIT_ASSERT(!ev->HasOldField());
         UNIT_ASSERT_VALUES_EQUAL(ev->NumbersSize(), 3);
 
@@ -430,7 +453,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
-        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), static_cast<ui8>(2));
         UNIT_ASSERT(!loaded->HasOldField());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->TabletId()), 42);
         UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), 3);
@@ -445,7 +468,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
-        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT(loaded->HasOldField());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->TabletId()), 101);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->OldField()), 202);
@@ -460,7 +483,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
-        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT(loaded->HasOldField());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->TabletId()), 101);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->OldField()), 202);

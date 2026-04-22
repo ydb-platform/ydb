@@ -9,3 +9,7 @@ message TFiveU64 {
     optional fixed64 Value4 = 4;
     optional fixed64 Value5 = 5;
 }
+
+message TPayloadBytes {
+    optional uint32 PayloadId = 1;
+}

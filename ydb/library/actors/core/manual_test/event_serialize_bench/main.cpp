@@ -17,6 +17,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
@@ -41,6 +42,8 @@ enum EBenchEvents {
 
 constexpr ui32 Node1 = 1;
 constexpr ui32 Node2 = 2;
+constexpr size_t Payload4KB = 4 * 1024;
+constexpr size_t Payload1MB = 1024 * 1024;
 
 TActorId MakeBenchReceiverServiceId(ui32 nodeId) {
     return TActorId(nodeId, TStringBuf("bnchrecv"));
@@ -59,6 +62,8 @@ struct TBenchConfig {
 struct TBenchResult {
     TString Scenario;
     TString Format;
+    TString Test;
+    ui64 EffectiveWindow = 0;
     ui64 SentMessages = 0;
     ui64 AckedMessages = 0;
     ui64 Checksum = 0;
@@ -84,6 +89,14 @@ struct TEvBenchPbMessage
     }
 };
 
+struct TEvBenchPbBytesMessage
+    : TEventPB<TEvBenchPbBytesMessage, NActorsBench::TPayloadBytes, EvBenchPbMessage>
+{
+    using TBase = TEventPB<TEvBenchPbBytesMessage, NActorsBench::TPayloadBytes, EvBenchPbMessage>;
+
+    TEvBenchPbBytesMessage() = default;
+};
+
 struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage> {
     using TBase = TEventFlat<TEvBenchFlatMessage>;
 
@@ -100,16 +113,16 @@ struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage> {
 
     friend class TEventFlat<TEvBenchFlatMessage>;
 
-    auto Value1() { return TBase::template Field<TValue1Tag>(); }
-    auto Value1() const { return TBase::template Field<TValue1Tag>(); }
-    auto Value2() { return TBase::template Field<TValue2Tag>(); }
-    auto Value2() const { return TBase::template Field<TValue2Tag>(); }
-    auto Value3() { return TBase::template Field<TValue3Tag>(); }
-    auto Value3() const { return TBase::template Field<TValue3Tag>(); }
-    auto Value4() { return TBase::template Field<TValue4Tag>(); }
-    auto Value4() const { return TBase::template Field<TValue4Tag>(); }
-    auto Value5() { return TBase::template Field<TValue5Tag>(); }
-    auto Value5() const { return TBase::template Field<TValue5Tag>(); }
+    auto Value1() { return this->template Field<TValue1Tag>(); }
+    auto Value1() const { return this->template Field<TValue1Tag>(); }
+    auto Value2() { return this->template Field<TValue2Tag>(); }
+    auto Value2() const { return this->template Field<TValue2Tag>(); }
+    auto Value3() { return this->template Field<TValue3Tag>(); }
+    auto Value3() const { return this->template Field<TValue3Tag>(); }
+    auto Value4() { return this->template Field<TValue4Tag>(); }
+    auto Value4() const { return this->template Field<TValue4Tag>(); }
+    auto Value5() { return this->template Field<TValue5Tag>(); }
+    auto Value5() const { return this->template Field<TValue5Tag>(); }
 
     static TEvBenchFlatMessage* Make(ui64 base) {
         THolder<TEvBenchFlatMessage> holder(TBase::MakeEvent());
@@ -121,6 +134,19 @@ struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage> {
         frontend.template Field<TValue5Tag>() = base + 5;
         return holder.Release();
     }
+};
+
+struct TEvBenchFlatBytesMessage : TEventFlat<TEvBenchFlatBytesMessage> {
+    using TBase = TEventFlat<TEvBenchFlatBytesMessage>;
+
+    static constexpr ui32 EventType = EvBenchFlatMessage;
+
+    using TBlobTag = TBase::BytesField<0>;
+
+    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TBlobTag>;
+    using TScheme = TBase::Versions<TSchemeV1>;
+
+    friend class TEventFlat<TEvBenchFlatBytesMessage>;
 };
 
 struct TEvBenchAck : TEventFlat<TEvBenchAck> {
@@ -136,10 +162,10 @@ struct TEvBenchAck : TEventFlat<TEvBenchAck> {
 
     friend class TEventFlat<TEvBenchAck>;
 
-    auto Count() { return TBase::template Field<TCountTag>(); }
-    auto Count() const { return TBase::template Field<TCountTag>(); }
-    auto Checksum() { return TBase::template Field<TChecksumTag>(); }
-    auto Checksum() const { return TBase::template Field<TChecksumTag>(); }
+    auto Count() { return this->template Field<TCountTag>(); }
+    auto Count() const { return this->template Field<TCountTag>(); }
+    auto Checksum() { return this->template Field<TChecksumTag>(); }
+    auto Checksum() const { return this->template Field<TChecksumTag>(); }
 
     static TEvBenchAck* Make(ui32 count, ui64 checksum) {
         THolder<TEvBenchAck> holder(TBase::MakeEvent());
@@ -161,8 +187,8 @@ struct TEvBenchFlush : TEventFlat<TEvBenchFlush> {
 
     friend class TEventFlat<TEvBenchFlush>;
 
-    auto Value() { return TBase::template Field<TTag>(); }
-    auto Value() const { return TBase::template Field<TTag>(); }
+    auto Value() { return this->template Field<TTag>(); }
+    auto Value() const { return this->template Field<TTag>(); }
 
     static TEvBenchFlush* Make() {
         THolder<TEvBenchFlush> holder(TBase::MakeEvent());
@@ -174,12 +200,46 @@ struct TEvBenchFlush : TEventFlat<TEvBenchFlush> {
 template <class TEvent>
 struct TMessageTraits;
 
+ui64 SamplePayloadChecksum(const TRope& payload) {
+    const size_t size = payload.GetSize();
+    if (!size) {
+        return 0;
+    }
+
+    auto first = payload.Begin();
+    auto last = payload.Position(size - 1);
+
+    return static_cast<ui64>(*first.ContiguousData())
+        + (static_cast<ui64>(*last.ContiguousData()) << 8)
+        + (static_cast<ui64>(size) << 16);
+}
+
+const TRope& GetSharedPayload(size_t size) {
+    static THashMap<size_t, TRope> payloads;
+
+    auto [it, inserted] = payloads.try_emplace(size);
+    if (inserted) {
+        TString data = TString::Uninitialized(size);
+        char* ptr = data.Detach();
+        for (size_t i = 0; i < size; ++i) {
+            ptr[i] = static_cast<char>((i * 131u + size) & 0xFF);
+        }
+        it->second = TRope(std::move(data));
+    }
+
+    return it->second;
+}
+
 template <>
 struct TMessageTraits<TEvBenchPbMessage> {
     using TEvent = TEvBenchPbMessage;
 
     static constexpr TStringBuf Name() {
         return "protobuf";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "fixed-u64";
     }
 
     static TEvent* Make(ui64 base) {
@@ -195,6 +255,10 @@ struct TMessageTraits<TEvBenchPbMessage> {
         TEvent ev(base);
         return ev.CalculateSerializedSize();
     }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
 };
 
 template <>
@@ -203,6 +267,10 @@ struct TMessageTraits<TEvBenchFlatMessage> {
 
     static constexpr TStringBuf Name() {
         return "flat";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "fixed-u64";
     }
 
     static TEvent* Make(ui64 base) {
@@ -221,6 +289,95 @@ struct TMessageTraits<TEvBenchFlatMessage> {
     static ui32 SerializedSize(ui64 base) {
         THolder<TEvent> ev(TEvent::Make(base));
         return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <size_t PayloadBytes>
+struct TPayloadPbTraits {
+    using TEvent = TEvBenchPbBytesMessage;
+
+    static constexpr TStringBuf Name() {
+        return "protobuf";
+    }
+
+    static constexpr TStringBuf TestName() {
+        if constexpr (PayloadBytes == Payload4KB) {
+            return "payload-bytes-4k";
+        } else if constexpr (PayloadBytes == Payload1MB) {
+            return "payload-bytes-1m";
+        } else {
+            return "payload-bytes";
+        }
+    }
+
+    static TEvent* Make(ui64) {
+        THolder<TEvent> holder(new TEvent());
+        const ui64 payloadId = holder->AddPayload(TRope(GetSharedPayload(PayloadBytes)));
+        holder->Record.SetPayloadId(payloadId);
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        const ui64 payloadId = ev.Record.GetPayloadId();
+        Y_ABORT_UNLESS(payloadId < ev.GetPayloadCount());
+        return SamplePayloadChecksum(ev.GetPayload(payloadId));
+    }
+
+    static ui32 SerializedSize(ui64) {
+        THolder<TEvent> ev(Make(0));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        if constexpr (PayloadBytes >= Payload1MB) {
+            return Min<ui64>(window, 8);
+        }
+        return window;
+    }
+};
+
+template <size_t PayloadBytes>
+struct TPayloadFlatTraits {
+    using TEvent = TEvBenchFlatBytesMessage;
+
+    static constexpr TStringBuf Name() {
+        return "flat";
+    }
+
+    static constexpr TStringBuf TestName() {
+        if constexpr (PayloadBytes == Payload4KB) {
+            return "payload-bytes-4k";
+        } else if constexpr (PayloadBytes == Payload1MB) {
+            return "payload-bytes-1m";
+        } else {
+            return "payload-bytes";
+        }
+    }
+
+    static TEvent* Make(ui64) {
+        THolder<TEvent> holder(TEvent::MakeEvent());
+        holder->template Bytes<typename TEvent::TBlobTag>().Set(TRope(GetSharedPayload(PayloadBytes)));
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        return SamplePayloadChecksum(ev.template Bytes<typename TEvent::TBlobTag>().Rope());
+    }
+
+    static ui32 SerializedSize(ui64) {
+        THolder<TEvent> ev(Make(0));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        if constexpr (PayloadBytes >= Payload1MB) {
+            return Min<ui64>(window, 8);
+        }
+        return window;
     }
 };
 
@@ -364,6 +521,8 @@ private:
         TBenchResult result;
         result.Scenario = ScenarioName;
         result.Format = TString(TTraits::Name());
+        result.Test = TString(TTraits::TestName());
+        result.EffectiveWindow = Window;
         result.SentMessages = SentMessages;
         result.AckedMessages = AckedMessages;
         result.Checksum = Checksum;
@@ -463,6 +622,7 @@ THolder<TActorSystemSetup> BuildInterconnectActorSystemSetup(
 
 template <class TTraits>
 TBenchResult RunLocalBenchmark(const TBenchConfig& config) {
+    const ui64 window = TTraits::EffectiveWindow(config.Window);
     THolder<TActorSystemSetup> setup = BuildLocalActorSystemSetup(Node1, config.Threads);
     TActorSystem actorSystem(setup);
     actorSystem.Start();
@@ -475,7 +635,7 @@ TBenchResult RunLocalBenchmark(const TBenchConfig& config) {
     actorSystem.Register(new TSenderActor<TTraits>(
         MakeBenchReceiverServiceId(Node1),
         config.Duration,
-        config.Window,
+        window,
         "local",
         std::move(promise)));
 
@@ -490,6 +650,7 @@ TBenchResult RunLocalBenchmark(const TBenchConfig& config) {
 
 template <class TTraits>
 TBenchResult RunInterconnectBenchmark(const TBenchConfig& config) {
+    const ui64 window = TTraits::EffectiveWindow(config.Window);
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters1 = new NMonitoring::TDynamicCounters();
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters2 = new NMonitoring::TDynamicCounters();
 
@@ -509,7 +670,7 @@ TBenchResult RunInterconnectBenchmark(const TBenchConfig& config) {
     node1.Register(new TSenderActor<TTraits>(
         MakeBenchReceiverServiceId(Node2),
         config.Duration,
-        config.Window,
+        window,
         "interconnect",
         std::move(promise)));
 
@@ -590,6 +751,8 @@ void MaybeRunScenario(const TBenchConfig& config, TStringBuf scenarioName) {
     Cout
         << "scenario=" << result.Scenario
         << " format=" << result.Format
+        << " test=" << result.Test
+        << " effective_window=" << result.EffectiveWindow
         << " connected=" << (result.Connected ? "true" : "false")
         << " sample_size_start=" << result.SerializedSizeStart
         << " sample_size_end=" << result.SerializedSizeEnd
@@ -617,11 +780,19 @@ void RunBenchmarks(const TBenchConfig& config) {
     if (runLocal) {
         MaybeRunScenario<TMessageTraits<TEvBenchPbMessage>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatMessage>>(config, "local");
+        MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "local");
+        MaybeRunScenario<TPayloadFlatTraits<Payload4KB>>(config, "local");
+        MaybeRunScenario<TPayloadPbTraits<Payload1MB>>(config, "local");
+        MaybeRunScenario<TPayloadFlatTraits<Payload1MB>>(config, "local");
     }
 
     if (runInterconnect) {
         MaybeRunScenario<TMessageTraits<TEvBenchPbMessage>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatMessage>>(config, "interconnect");
+        MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "interconnect");
+        MaybeRunScenario<TPayloadFlatTraits<Payload4KB>>(config, "interconnect");
+        MaybeRunScenario<TPayloadPbTraits<Payload1MB>>(config, "interconnect");
+        MaybeRunScenario<TPayloadFlatTraits<Payload1MB>>(config, "interconnect");
     }
 }
 

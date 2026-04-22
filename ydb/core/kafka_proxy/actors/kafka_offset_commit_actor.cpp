@@ -133,12 +133,6 @@ void TKafkaOffsetCommitActor::ProcessPipeProblem(ui64 tabletId, const TActorCont
 }
 
 void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ctx) {
-    // generationId == -1 означает, что проверку делать не нужно
-    if (Message->GenerationId == -1) {
-        SendCommits(ctx);
-        return;
-    }
-
     KAFKA_LOG_D("Sending generation check KQP request for group# " << Message->GroupId.value()
         << ", generationId# " << Message->GenerationId);
 
@@ -147,19 +141,13 @@ void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ct
     params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
 
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_GENERATION.c_str(),
-                        NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
-                        params.Build(), 0, ctx);
+                        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()
+                        ->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+             params.Build(), 0, ctx);
 }
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-
-     if (!ev) {
-        SendFailedForAllPartitions(UNKNOWN_SERVER_ERROR, ctx);
-        return;
-    }
-
     const auto& record = ev->Get()->Record;
-
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         KAFKA_LOG_CRIT("Generation check KQP query failed."
             << " group# " << Message->GroupId.value()
@@ -170,28 +158,18 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
 
     auto& resp = record.GetResponse();
     if (resp.GetYdbResults().empty()) {
-        KAFKA_LOG_D("Empty response");
-        SendFailedForAllPartitions(RESOURCE_NOT_FOUND, ctx);
+        SendFailedForAllPartitions(GROUP_ID_NOT_FOUND, ctx);
         return;
     }
 
     NYdb::TResultSetParser parser(resp.GetYdbResults(0));
     if (!parser.TryNextRow()) {
-        SendFailedForAllPartitions(RESOURCE_NOT_FOUND, ctx);
+        SendFailedForAllPartitions(GROUP_ID_NOT_FOUND, ctx);
         return;
     }
     auto tableGeneration = parser.ColumnParser("generation").GetUint64();
-    // if (results.empty() || results[0].GetValue().struct_size() == 0) {
-    //     // Группа не найдена в таблице — пропускаем проверку и отправляем коммиты
-    //     KAFKA_LOG_W("Consumer group not found in meta table during generation check."
-    //         << " group# " << Message->GroupId.value());
-    //     SendCommits(ctx);
-    //     return;
-    // }
-
-
     if (tableGeneration != static_cast<ui64>(Message->GenerationId)) {
-        KAFKA_LOG_W("Generation mismatch for group# " << Message->GroupId.value()
+        KAFKA_LOG_ERROR("Generation mismatch for group# " << Message->GroupId.value()
             << ". Expected# " << Message->GenerationId
             << ", got# " << tableGeneration);
         SendFailedForAllPartitions(ILLEGAL_GENERATION, ctx);
@@ -208,7 +186,6 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     KAFKA_LOG_D("Auth success. Topics count: " << ev->Get()->TopicAndTablets.size());
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
 
-    // Если generationId != -1, сначала проверяем generation через KQP
     if (Message->GenerationId == -1) {
         SendCommits(ctx);
     } else {

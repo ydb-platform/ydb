@@ -20,13 +20,15 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include "ydb/services/persqueue_v1/actors/persqueue_utils.h"
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
-#include <ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
 
 
 namespace NKafka {
 using namespace NKikimr;
+
+extern const TString CHECK_GROUP_GENERATION;
 
 class TKafkaOffsetCommitActor: public NActors::TActorBootstrapped<TKafkaOffsetCommitActor> {
 
@@ -38,18 +40,6 @@ struct TRequestInfo {
     TRequestInfo(const TString& topicName, ui64 partitionId)
         : TopicName(topicName), PartitionId(partitionId) {}
 };
-
-const TString CHECK_GROUP_GENERATION = R"sql(
-    --!syntax_v1
-    DECLARE $ConsumerGroup AS Utf8;
-    DECLARE $Database AS Utf8;
-
-    SELECT generation
-    FROM `%s`
-    VIEW PRIMARY KEY
-    WHERE database = $Database
-      AND consumer_group = $ConsumerGroup;
-)sql";
 
 public:
     using TBase = NActors::TActorBootstrapped<TKafkaOffsetCommitActor>;
@@ -117,9 +107,6 @@ private:
     std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     TActorId AuthInitActor;
     EKafkaErrors Error = NONE_ERROR;
-
-    // Сохраняем результаты auth, чтобы использовать их после проверки generation
-    TMaybe<NKikimr::NGRpcProxy::TTopicInitInfoMap> PendingTopicAndTablets;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {

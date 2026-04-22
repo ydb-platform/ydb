@@ -4261,7 +4261,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString topicName = "/Root/topic-0-test";
         TString topicName1 = "/Root/topic-1-test";
         TString topicName2 = "/Root/topic-2-test";
-        ui64 minActivePartitions = 3;
+        ui64 minActivePartitions = 2;
 
         TString consumerName = "consumer-0";
         TString anotherConsumerName = "consumer-1";
@@ -4350,9 +4350,19 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (ui64 i = 0; i < minActivePartitions; ++i) {
                 partitionsAndOffsetsIncorrect.emplace_back(i + minActivePartitions + 1, 0, commitedMetaData);
             }
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsetsOne;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                partitionsAndOffsetsOne.emplace_back(i, 1, commitedMetaData);
+            }
+            auto producePartitionOneResponse = client.Produce({topicName, 0}, {{"key1", "val1"}, {"key2", "val2"}, {"key3", "val3"}});
+            UNIT_ASSERT_VALUES_EQUAL(producePartitionOneResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto producePartitionTwoResponse = client.Produce({topicName, 1}, {{"key1", "val1"}, {"key2", "val2"}, {"key3", "val3"}});
+            UNIT_ASSERT_VALUES_EQUAL(producePartitionTwoResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
             std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets1;
             offsets1[topicName2] = partitionsAndOffsetsIncorrect;
-            offsets1[topicName] = partitionsAndOffsets;
+            offsets1[topicName] = partitionsAndOffsetsOne;
             auto msg2 = client.OffsetCommit(consumerName, offsets1, generationId);
             UNIT_ASSERT_VALUES_EQUAL(msg2->Topics.size(), 2);
             for (const auto& topic : msg2->Topics) {
@@ -4366,6 +4376,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
             }
 
+            // checking what happens if consumer has no read rule on one of the topics
             std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets2;
             offsets2[topicName1] = partitionsAndOffsets;
             offsets2[topicName] = partitionsAndOffsets;
@@ -4377,6 +4388,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
                 }
             }
+
+            auto fetchResponse = client.OffsetFetch(consumerName, {{topicName, {0, 1}}});
+            UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Groups[0].Topics[0].Partitions[0].Metadata, commitedMetaData);
+            UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Groups[0].Topics[0].Partitions[1].CommittedOffset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Groups[0].Topics[0].Partitions[1].Metadata, commitedMetaData);
         }
     }
 

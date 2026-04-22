@@ -167,6 +167,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
         SendFailedForAllPartitions(GROUP_ID_NOT_FOUND, ctx);
         return;
     }
+    
     auto tableGeneration = parser.ColumnParser("generation").GetUint64();
     if (tableGeneration != static_cast<ui64>(Message->GenerationId)) {
         KAFKA_LOG_ERROR("Generation mismatch for group# " << Message->GroupId.value()

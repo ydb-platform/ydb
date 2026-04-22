@@ -1,12 +1,13 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/thread_context.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr::NDDisk::NPrivate {
 
     inline void AddMessageWaitAttributes(NWilson::TSpan& span) {
-        if (!span) {
+        if (!span || !NActors::TlsThreadContext) {
             return;
         }
 

@@ -26,11 +26,7 @@ struct TAddConsumerStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-        targetConfig.CopyFrom(sourceConfig);
-
-        // keep previous values or set in ModifyPersqueueConfig
-        targetConfig.ClearTotalGroupCount();
-        targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
+        NPQ::NSchema::CopyConfig(targetConfig, sourceConfig);
 
         if (Rule.version() == 0) {
             Rule.set_version(topicInfo.Self->Info.GetVersion().GetPQVersion());

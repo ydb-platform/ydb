@@ -21,6 +21,17 @@ std::pair <TString, TString> GetWorkingDirAndName(const TString& fullName) {
     }
 }
 
+void CopyConfig(
+    NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
+) {
+    targetConfig.CopyFrom(sourceConfig);
+
+    // keep previous values or set in ModifyPersqueueConfig
+    targetConfig.ClearTotalGroupCount();
+    targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
+}
+
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
     if (duration.seconds() < 0) {
         return std::unexpected(TStringBuilder() << "duration seconds cannot be negative, provided " << duration.seconds());

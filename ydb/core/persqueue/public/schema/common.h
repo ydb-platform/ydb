@@ -48,6 +48,11 @@ struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
 
 std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName);
 
+void CopyConfig(
+    NKikimrSchemeOp::TPersQueueGroupDescription& destination,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& source
+);
+
 
 struct TClientServiceType {
     TString Name;

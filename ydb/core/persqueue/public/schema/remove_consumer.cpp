@@ -29,13 +29,9 @@ struct TRemoveConsumerStrategy: public IAlterTopicStrategy {
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-        targetConfig.CopyFrom(sourceConfig);
-
-        // keep previous values or set in ModifyPersqueueConfig
-        targetConfig.ClearTotalGroupCount();
+        CopyConfig(targetConfig, sourceConfig);
 
         auto* config = targetConfig.MutablePQTabletConfig();
-        config->ClearPartitionKeySchema();
         config->ClearConsumers();
 
         bool removed = false;

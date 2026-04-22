@@ -207,10 +207,13 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             const auto aggregate = CastOperator<TOpAggregate>(op);
             const auto prevStageId = *aggregate->GetInput()->Props.StageId;
 
-            auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, prevStageId);
-            stageArgs[opStageId].push_back(stageArg);
+             if (!currentStageBody) {
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, prevStageId);
+                stageArgs[opStageId].push_back(stageArg);
+                currentStageBody = stageInput;
+            }
 
-            currentStageBody = Build<TPhysicalAggregationBuilder>(aggregate, ctx, op->Pos, stageInput);
+            currentStageBody = Build<TPhysicalAggregationBuilder>(aggregate, ctx, op->Pos, currentStageBody);
 
             if (!aggregate->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, aggregate->GetNumOfConsumers(), ctx, op->Pos);

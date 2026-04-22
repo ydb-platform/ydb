@@ -18,6 +18,7 @@ ydb/core/kqp/ut/service KqpQueryServiceScripts.CancelScriptExecution
 ydb/core/kqp/ut/tli KqpTli.BasicDataQuery
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.CrossTables
+ydb/core/kqp/ut/tli KqpTli.IgnoredTableRegexes
 ydb/core/kqp/ut/tli KqpTli.InvisibleRowSkips
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
@@ -66,6 +67,7 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
 ydb/tests/functional/suite_tests py3test.[test_sql_logic.py */*] chunk
+ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/functional/ydb_cli test_ydb_interactive_sql.py.TestInteractiveExitCommands.test_consequence_ctrl_c_without_prompt
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

@@ -106,7 +106,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
         return;
     }
 
-    auto group = counters->GetKqpCounters()->GetSubgroup("scheduler/pool", id);
+    auto group = counters->GetKqpCounters()->GetSubgroup("schedulerPool", id);
 
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 

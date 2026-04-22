@@ -63,13 +63,6 @@
 
   В [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) для джобов сбора метрик задайте **`scheme: http`** и отключите или удалите параметры `tls_config`, если шаблон из репозитория ориентирован на HTTPS.
 
-  Пример быстрой проверки заполненных целей:
-
-  ```bash
-  cat ydbd-storage.yml
-  cat ydbd-database.yml
-  ```
-
 - Вручную с TLS
 
   Скопируйте файлы из каталога [ydb/deploy/prometheus](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) репозитория {{ ydb-short-name }}.
@@ -85,13 +78,6 @@
   ```
 
   Файл CA (например, `ca.crt`) должен быть доступен Prometheus по указанному пути. Если в вашей конфигурации используются клиентский сертификат и ключ, добавьте их в `tls_config` и проверьте доступность файлов для процесса Prometheus.
-
-  Пример быстрой проверки заполненных целей:
-
-  ```bash
-  cat ydbd-storage.yml
-  cat ydbd-database.yml
-  ```
 
   Шаблон `prometheus_ydb.yml` в репозитории может отличаться от конфигурации, оптимальной для вашего кластера; канонический вариант для промышленного окружения надежнее получать генерацией через Ansible. При необходимости помощи с ручной сборкой TLS-конфигурации обратитесь к команде сопровождения {{ ydb-short-name }}.
 

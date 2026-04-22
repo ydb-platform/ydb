@@ -19,7 +19,6 @@ public:
         ui64 lsn,
         NWilson::TTraceId traceId,
         TDuration hedgingDelay,
-        TDuration timeout,
         TDuration pbufferReplyTimeout);
 
     ~TWriteWithPbReplicationRequestExecutor() override = default;
@@ -29,11 +28,9 @@ public:
 private:
     const TDuration PbufferReplyTimeout;
 
-    void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
+    void SendWriteRequestToManyPBuffers();
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
-
-    void ScheduleHedging() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

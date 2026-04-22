@@ -74,11 +74,6 @@ constexpr std::array<ELocation, 5> PBufferLocations{
     ELocation::HOPBuffer0,
     ELocation::HOPBuffer1};
 
-constexpr std::array<ELocation, 2> HandOffPBuffersLocations{
-    ELocation::HOPBuffer0,
-    ELocation::HOPBuffer1,
-};
-
 bool IsDDisk(ELocation location);
 bool IsPBuffer(ELocation location);
 

@@ -5222,6 +5222,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaTestClient kafkaClient(testServer.Port);
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         TString topicName = "topic";
+        testServer.KikimrServer->GetServer().GetRuntime()->GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
         TString fullTopicName = "/Root/topic";
         TString consumerName = "my-consumer";
         ui64 minActivePartitions = 1;
@@ -5295,7 +5296,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto committed_lag_counter = group->GetNamedCounter("name", "topic.committed_lag_messages", false);
         i64 desired_read_lag = 2;
         i64 desired_committed_lag = 2;
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(3);
         while (TInstant::Now() < deadline) {
             if (committed_lag_counter->Val() == desired_committed_lag && read_lag_counter->Val() == desired_read_lag) {
                 break;

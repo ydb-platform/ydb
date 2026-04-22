@@ -63,9 +63,10 @@ class TActionActor
     : public TActorBootstrapped<TDerived>
 {
 public:
-    TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb)
+    TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb, const TString& peername)
         : Action_(action)
         , RequestId_(sourceSqsRequest.GetRequestId())
+        , PeerName_(peername)
         , Cb_(std::move(cb))
         , Shards_(1)
         , SourceSqsRequest_(sourceSqsRequest)
@@ -647,7 +648,12 @@ private:
     }
 
     void RequestTicketParser() {
-        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken_));
+        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = SecurityToken_,
+            .Database = "",
+            .PeerName = PeerName_,
+            .Entries = {}
+        }));
     }
 
     bool IsACLProtectedAccount(const TString& accountName) const {
@@ -921,6 +927,7 @@ protected:
 
     const EAction Action_;
     const TString RequestId_;
+    const TString PeerName_;
     THolder<IReplyCallback> Cb_;
     TString  RootUrl_;
     TString  UserName_;

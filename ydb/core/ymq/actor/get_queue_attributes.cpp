@@ -46,8 +46,8 @@ class TGetQueueAttributesActor
     : public TActionActor<TGetQueueAttributesActor>
 {
 public:
-    TGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::GetQueueAttributes, std::move(cb))
+    TGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::GetQueueAttributes, std::move(cb), peername)
     {
     }
 
@@ -342,8 +342,8 @@ class TGetQueueAttributesBatchActor
     : public TCommonBatchActor<TGetQueueAttributesBatchActor>
 {
 public:
-    TGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TCommonBatchActor(sourceSqsRequest, EAction::GetQueueAttributesBatch, std::move(cb))
+    TGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TCommonBatchActor(sourceSqsRequest, EAction::GetQueueAttributesBatch, std::move(cb), peername)
     {
     }
 
@@ -402,12 +402,12 @@ private:
     }
 };
 
-IActor* CreateGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TGetQueueAttributesActor(sourceSqsRequest, std::move(cb));
+IActor* CreateGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TGetQueueAttributesActor(sourceSqsRequest, std::move(cb), peername);
 }
 
-IActor* CreateGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TGetQueueAttributesBatchActor(sourceSqsRequest, std::move(cb));
+IActor* CreateGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TGetQueueAttributesBatchActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

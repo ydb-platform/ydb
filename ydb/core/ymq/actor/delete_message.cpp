@@ -20,8 +20,8 @@ class TDeleteMessageActor
     : public TActionActor<TDeleteMessageActor>
 {
 public:
-    TDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, isBatch ? EAction::DeleteMessageBatch : EAction::DeleteMessage, std::move(cb))
+    TDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, isBatch ? EAction::DeleteMessageBatch : EAction::DeleteMessage, std::move(cb), peername)
         , IsBatch_(isBatch)
     {
     }
@@ -261,12 +261,12 @@ private:
     std::vector<size_t> MLPRequestToReplyIndexMapping_;
 };
 
-IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TDeleteMessageActor(sourceSqsRequest, false, std::move(cb));
+IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TDeleteMessageActor(sourceSqsRequest, false, std::move(cb), peername);
 }
 
-IActor* CreateDeleteMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TDeleteMessageActor(sourceSqsRequest, true, std::move(cb));
+IActor* CreateDeleteMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TDeleteMessageActor(sourceSqsRequest, true, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

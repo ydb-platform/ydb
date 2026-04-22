@@ -29,8 +29,8 @@ public:
         return true;
     }
 
-    TTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::TagQueue, std::move(cb))
+    TTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::TagQueue, std::move(cb), peername)
     {
         auto& map = Tags_.GetMapSafe();
         for (const auto& t : Request().tags()) {
@@ -171,8 +171,8 @@ private:
     TString SourceAddress_ = "";
 };
 
-IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TTagQueueActor(sourceSqsRequest, std::move(cb));
+IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TTagQueueActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

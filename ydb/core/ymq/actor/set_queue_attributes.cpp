@@ -24,8 +24,8 @@ class TSetQueueAttributesActor
     : public TActionActor<TSetQueueAttributesActor>
 {
 public:
-    TSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::SetQueueAttributes, std::move(cb))
+    TSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::SetQueueAttributes, std::move(cb), peername)
     {
         for (const auto& attr : Request().attributes()) {
             Attributes_[attr.GetName()] = attr.GetValue();
@@ -221,8 +221,8 @@ private:
     TQueueAttributes ValidatedAttributes_;
 };
 
-IActor* CreateSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TSetQueueAttributesActor(sourceSqsRequest, std::move(cb));
+IActor* CreateSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TSetQueueAttributesActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

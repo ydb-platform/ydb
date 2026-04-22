@@ -19,8 +19,8 @@ class TPurgeQueueActor
     : public TActionActor<TPurgeQueueActor>
 {
 public:
-    TPurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::PurgeQueue, std::move(cb))
+    TPurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::PurgeQueue, std::move(cb), peername)
     {
     }
 
@@ -150,8 +150,8 @@ class TPurgeQueueBatchActor
     : public TCommonBatchActor<TPurgeQueueBatchActor>
 {
 public:
-    TPurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TCommonBatchActor(sourceSqsRequest, EAction::PurgeQueueBatch, std::move(cb))
+    TPurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TCommonBatchActor(sourceSqsRequest, EAction::PurgeQueueBatch, std::move(cb), peername)
     {
     }
 
@@ -209,12 +209,12 @@ private:
     }
 };
 
-IActor* CreatePurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TPurgeQueueActor(sourceSqsRequest, std::move(cb));
+IActor* CreatePurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TPurgeQueueActor(sourceSqsRequest, std::move(cb), peername);
 }
 
-IActor* CreatePurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TPurgeQueueBatchActor(sourceSqsRequest, std::move(cb));
+IActor* CreatePurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TPurgeQueueBatchActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

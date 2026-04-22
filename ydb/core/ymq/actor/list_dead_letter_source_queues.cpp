@@ -18,8 +18,8 @@ class TListDeadLetterSourceQueuesActor
     : public TActionActor<TListDeadLetterSourceQueuesActor>
 {
 public:
-    TListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::ListDeadLetterSourceQueues, std::move(cb))
+    TListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::ListDeadLetterSourceQueues, std::move(cb), peername)
     {
     }
 
@@ -103,8 +103,8 @@ private:
     }
 };
 
-IActor* CreateListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TListDeadLetterSourceQueuesActor(sourceSqsRequest, std::move(cb));
+IActor* CreateListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TListDeadLetterSourceQueuesActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

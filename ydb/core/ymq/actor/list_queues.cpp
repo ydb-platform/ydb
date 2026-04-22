@@ -23,8 +23,8 @@ public:
         return false;
     }
 
-    TListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::ListQueues, std::move(cb))
+    TListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::ListQueues, std::move(cb), peername)
     {
     }
 
@@ -107,8 +107,8 @@ private:
     }
 };
 
-IActor* CreateListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TListQueuesActor(sourceSqsRequest, std::move(cb));
+IActor* CreateListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TListQueuesActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

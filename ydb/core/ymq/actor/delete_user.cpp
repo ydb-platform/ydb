@@ -21,8 +21,8 @@ public:
         return false;
     }
 
-    TDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::DeleteUser, std::move(cb))
+    TDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::DeleteUser, std::move(cb), peername)
     {
     }
 
@@ -160,8 +160,8 @@ private:
     TSet<TString> Queues_;
 };
 
-IActor* CreateDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TDeleteUserActor(sourceSqsRequest, std::move(cb));
+IActor* CreateDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TDeleteUserActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

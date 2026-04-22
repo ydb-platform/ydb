@@ -14,8 +14,8 @@ namespace NKikimr::NSQS {
 class TModifyPermissionsActor
    : public TActionActor<TModifyPermissionsActor> {
 public:
-    TModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::ModifyPermissions, std::move(cb))
+    TModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::ModifyPermissions, std::move(cb), peername)
     {
     }
 
@@ -167,8 +167,8 @@ private:
     TString Resource_;
 };
 
-IActor* CreateModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TModifyPermissionsActor(sourceSqsRequest, std::move(cb));
+IActor* CreateModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TModifyPermissionsActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

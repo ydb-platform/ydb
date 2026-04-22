@@ -249,7 +249,7 @@ TClientServiceTypes GetSupportedClientServiceTypes() {
     return serviceTypes;
 }
 
-TResult ProcessAddConsumer(
+TResult AddConsumer(
     NKikimrPQ::TPQTabletConfig* config,
     const Ydb::Topic::Consumer& consumerConfig,
     const TClientServiceTypes& supportedClientServiceTypes,

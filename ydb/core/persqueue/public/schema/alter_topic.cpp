@@ -239,7 +239,7 @@ TResult ApplyChangesInt(
     pqTabletConfig->ClearConsumers();
 
     for (const auto& rr : consumers) {
-        auto result = ProcessAddConsumer(
+        auto result = AddConsumer(
             pqTabletConfig,
             rr.second,
             supportedClientServiceTypes,

@@ -242,7 +242,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TAppData* /*appData*/,
         TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
     ) {
-        auto result = NPQ::NSchema::ProcessAddConsumer(
+        auto result = NPQ::NSchema::AddConsumer(
             config,
             rr,
             supportedClientServiceTypes,

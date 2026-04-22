@@ -227,36 +227,40 @@ void FillTestTable(TQueryClient& db, const std::string& tableName, const std::st
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void ValidatePredicate(TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate) {
-    auto query = [&](const std::string& table, const std::string& indexTable, const std::string& predicate) {
+void ValidatePredicate(TQueryClient& db, const std::string& predicate) {
+    static constexpr const char* Table = "TestTable";
+    static constexpr const char* IndexTable = "json_idx";
+    auto query = [&](const std::string& indexPart, const std::string& pred) {
         return std::format(R"(
             SELECT Key, Text FROM {} {} WHERE {} ORDER BY Key;
-        )", table, (indexTable.empty() ? "" : "VIEW  " + indexTable), predicate);
+        )", Table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
     };
 
-    auto mainResult = db.ExecuteQuery(query(table, "", predicate), TTxControl::NoTx()).ExtractValueSync();
+    auto mainResult = db.ExecuteQuery(query("", predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(mainResult.IsSuccess(), mainResult.GetIssues().ToString());
 
-    auto indexResult = db.ExecuteQuery(query(table, indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
+    auto indexResult = db.ExecuteQuery(query(IndexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(indexResult.IsSuccess(), indexResult.GetIssues().ToString());
 
     // Cerr << "MAIN: " << Endl << FormatResultSetYson(mainResult.GetResultSet(0)) << Endl;
     // Cerr << "INDEX: " << Endl << FormatResultSetYson(indexResult.GetResultSet(0)) << Endl;
-    // Cerr << predicate << ", main size: " << mainResult.GetResultSet(0).RowsCount() << ", index size: " << indexResult.GetResultSet(0).RowsCount() << Endl;
 
+    Cerr << predicate << ", main size: " << mainResult.GetResultSet(0).RowsCount() << ", index size: " << indexResult.GetResultSet(0).RowsCount() << Endl;
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
-void ValidateError(TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate) {
-    auto query = [&](const std::string& table, const std::string& indexTable, const std::string& predicate) {
+void ValidateError(TQueryClient& db, const std::string& predicate) {
+    static constexpr const char* Table = "TestTable";
+    static constexpr const char* IndexTable = "json_idx";
+    auto query = [&](const std::string& indexPart, const std::string& pred) {
         return std::format(R"(
             SELECT * FROM {} {} WHERE {} ORDER BY Key;
-        )", table, (indexTable.empty() ? "" : "VIEW  " + indexTable), predicate);
+        )", Table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
     };
 
-    auto result = db.ExecuteQuery(query(table, indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to extract search terms from predicate");
+    auto result = db.ExecuteQuery(query(IndexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(!result.IsSuccess(), "Predicate: " + predicate + ", issues: " + result.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Failed to extract search terms from predicate", "for predicate = " << predicate);
 }
 
 void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
@@ -296,17 +300,17 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, const std::v
     )", predicate);
 
     auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.IsSuccess(), "Predicate: " + predicate + ", error: " + result.GetIssues().ToString());
     UNIT_ASSERT_C(result.GetStats(), "Stats are empty");
 
     auto plan = result.GetStats()->GetPlan();
     UNIT_ASSERT_C(plan, "Plan is empty");
 
-    // Cerr << "PREDICATE: " << predicate << Endl;
-    // auto ast = result.GetStats()->GetAst();
-    // UNIT_ASSERT_C(ast, "AST is empty");
-    // Cout << "AST: " << Endl << *ast << Endl;
-    // Cout << "PLAN: " << Endl << *plan << Endl;
+    Cerr << "PREDICATE: " << predicate << Endl;
+    auto ast = result.GetStats()->GetAst();
+    UNIT_ASSERT_C(ast, "AST is empty");
+    Cout << "AST: " << Endl << *ast << Endl;
+    Cout << "PLAN: " << Endl << *plan << Endl;
 
     NJson::TJsonValue planJson;
     auto success = NJson::ReadJsonTree(*plan, &planJson, true);
@@ -317,7 +321,7 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, const std::v
 
     auto splitTokens = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["Tokens"].GetString();
     auto tokens = SplitString(splitTokens, ", ");
-    UNIT_ASSERT_VALUES_EQUAL(tokens.size(), expected.size());
+    UNIT_ASSERT_VALUES_EQUAL_C(tokens.size(), expected.size(), "for predicate = " << predicate);
 
     for (const auto& token : tokens) {
         auto decoded = HexDecode(token);
@@ -1275,83 +1279,83 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_ContextObject, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$"));
+            ValidatePredicate(db, jsonExists("$"));
         });
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_MemberAccess, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k3"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k4"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k5"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k6"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k7"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k8"));
+            ValidatePredicate(db, jsonExists("$.k1"));
+            ValidatePredicate(db, jsonExists("$.k2"));
+            ValidatePredicate(db, jsonExists("$.k3"));
+            ValidatePredicate(db, jsonExists("$.k4"));
+            ValidatePredicate(db, jsonExists("$.k5"));
+            ValidatePredicate(db, jsonExists("$.k6"));
+            ValidatePredicate(db, jsonExists("$.k7"));
+            ValidatePredicate(db, jsonExists("$.k8"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k3"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k4"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k5"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.k2"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.k3"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.k4"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.k5"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k3.k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k4.k1"));
+            ValidatePredicate(db, jsonExists("$.k1.k1"));
+            ValidatePredicate(db, jsonExists("$.k1.k2"));
+            ValidatePredicate(db, jsonExists("$.k1.k3"));
+            ValidatePredicate(db, jsonExists("$.k1.k4"));
+            ValidatePredicate(db, jsonExists("$.k1.k5"));
+            ValidatePredicate(db, jsonExists("$.k2.k1"));
+            ValidatePredicate(db, jsonExists("$.k2.k2"));
+            ValidatePredicate(db, jsonExists("$.k2.k3"));
+            ValidatePredicate(db, jsonExists("$.k2.k4"));
+            ValidatePredicate(db, jsonExists("$.k2.k5"));
+            ValidatePredicate(db, jsonExists("$.k3.k1"));
+            ValidatePredicate(db, jsonExists("$.k4.k1"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\".\"\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\".\"\".\"\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\".\"\".\"\".\"\""));
+            ValidatePredicate(db, jsonExists("$.\"\""));
+            ValidatePredicate(db, jsonExists("$.\"\".\"\""));
+            ValidatePredicate(db, jsonExists("$.\"\".\"\".\"\""));
+            ValidatePredicate(db, jsonExists("$.\"\".\"\".\"\".\"\""));
+            ValidatePredicate(db, jsonExists("$.\"\".\"\".\"\".\"\".\"\""));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.*"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k1.*"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.*"));
+            ValidatePredicate(db, jsonExists("$.*"));
+            ValidatePredicate(db, jsonExists("$.k1.*"));
+            ValidatePredicate(db, jsonExists("$.k2.*"));
+            ValidatePredicate(db, jsonExists("$.k1.k1.*"));
+            ValidatePredicate(db, jsonExists("$.k1.*.k1"));
+            ValidatePredicate(db, jsonExists("$.k1.*.*"));
         });
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_ArrayAccess, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0][0][0]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3].k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3].k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last].k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].*"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].*"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0, 3]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[1 to 3]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0 to last]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[0]"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[*]"));
+            ValidatePredicate(db, jsonExists("$[0]"));
+            ValidatePredicate(db, jsonExists("$[0, 3]"));
+            ValidatePredicate(db, jsonExists("$[1 to 3]"));
+            ValidatePredicate(db, jsonExists("$[last]"));
+            ValidatePredicate(db, jsonExists("$[*]"));
+            ValidatePredicate(db, jsonExists("$[0][0][0]"));
+            ValidatePredicate(db, jsonExists("$[0].k1"));
+            ValidatePredicate(db, jsonExists("$[0, 3].k1"));
+            ValidatePredicate(db, jsonExists("$[1 to 3].k1"));
+            ValidatePredicate(db, jsonExists("$[last].k1"));
+            ValidatePredicate(db, jsonExists("$[*].k1"));
+            ValidatePredicate(db, jsonExists("$[0].*"));
+            ValidatePredicate(db, jsonExists("$[*].*"));
+            ValidatePredicate(db, jsonExists("$.k1[0]"));
+            ValidatePredicate(db, jsonExists("$.k1[0, 3]"));
+            ValidatePredicate(db, jsonExists("$.k1[1 to 3]"));
+            ValidatePredicate(db, jsonExists("$.k1[last]"));
+            ValidatePredicate(db, jsonExists("$.k1[0 to last]"));
+            ValidatePredicate(db, jsonExists("$.k1[*]"));
+            ValidatePredicate(db, jsonExists("$.*[0]"));
+            ValidatePredicate(db, jsonExists("$.*[*]"));
         });
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_Methods, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             auto validateMethod = [&](const std::string& method) {
-                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.{}", method)));
-                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.{}", method)));
-                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.*.{}", method)));
-                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$[0].{}", method)));
-                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$[*].{}", method)));
+                ValidatePredicate(db, jsonExists(std::format("$.{}", method)));
+                ValidatePredicate(db, jsonExists(std::format("$.k1.{}", method)));
+                ValidatePredicate(db, jsonExists(std::format("$.*.{}", method)));
+                ValidatePredicate(db, jsonExists(std::format("$[0].{}", method)));
+                ValidatePredicate(db, jsonExists(std::format("$[*].{}", method)));
             };
 
             validateMethod("type()");
@@ -1377,63 +1381,63 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterEqual, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             // @.field == literal, all literal types
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k2 == -1.5)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k2 == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k2 == -1.5)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k2 == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k5 == null)"));
             // Both sides are paths (index terms merged with AND)
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k3 == @.k4)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == @.k1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k3 == @.k4)"));
             // @ itself as the filter path (not a sub-member), all literal types
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == -1.5)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == null)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ == 1)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ == -1.5)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ == \"1\")"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ == true)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ == false)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ == null)"));
         });
     }
 
     // All comparison operators in a filter
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterComparisonOps, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= -1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= -2)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 <= -1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 > 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 >= -2)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 != 0)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (+1 == @.k1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (-(+(-10)) > @.k1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (\"text\" == @.k3)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (null == @.k5)"));
+            ValidatePredicate(db, jsonExists("$ ? (+1 == @.k1)"));
+            ValidatePredicate(db, jsonExists("$ ? (-(+(-10)) > @.k1)"));
+            ValidatePredicate(db, jsonExists("$ ? (\"text\" == @.k3)"));
+            ValidatePredicate(db, jsonExists("$ ? (null == @.k5)"));
         });
     }
 
     // AND and OR boolean operators inside filter predicates
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterLogicalOps, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true && @.k5 == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 0 && @.k1 < 100)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k4 == true && @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 > 0 && @.k1 < 100)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 1) || (@.k1 == 0))"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k4 == true) || (@.k2 == false))"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@.k1 == 10) || (@.k1 == 20))"));
+            ValidatePredicate(db, jsonExists("$ ? ((@.k1 == 1) || (@.k1 == 0))"));
+            ValidatePredicate(db, jsonExists("$ ? ((@.k4 == true) || (@.k2 == false))"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@.k1 == 10) || (@.k1 == 20))"));
         });
     }
 
     // Corner cases for the filter context path: deep nesting, array subscript, empty key
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterPaths, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[0] == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[2] == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1[0] == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k6[2] == false)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.\"\" == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.\"\" == 1)"));
         });
     }
 
@@ -1441,580 +1445,725 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST_QUAD(SelectJsonExists_Predicates, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             // Predicates are not allowed in JsonExists without a filter
-            ValidateError(db, "TestTable", "json_idx", jsonExists("exists($.k1)"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 starts with \"abc\""));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 like_regex \"abc\""));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("($.k1 == 10) is unknown"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 == 10"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 != 10"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 > 10"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 < 10"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 >= 10"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 <= 10"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("!($.k1 == 10)"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 == 10 && $.k2 == 20"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 == 10 || $.k2 == 20"));
+            ValidateError(db, jsonExists("exists($.k1)"));
+            ValidateError(db, jsonExists("$.k1 starts with \"abc\""));
+            ValidateError(db, jsonExists("$.k1 like_regex \"abc\""));
+            ValidateError(db, jsonExists("($.k1 == 10) is unknown"));
+            ValidateError(db, jsonExists("$.k1 == 10"));
+            ValidateError(db, jsonExists("$.k1 != 10"));
+            ValidateError(db, jsonExists("$.k1 > 10"));
+            ValidateError(db, jsonExists("$.k1 < 10"));
+            ValidateError(db, jsonExists("$.k1 >= 10"));
+            ValidateError(db, jsonExists("$.k1 <= 10"));
+            ValidateError(db, jsonExists("!($.k1 == 10)"));
+            ValidateError(db, jsonExists("$.k1 == 10 && $.k2 == 20"));
+            ValidateError(db, jsonExists("$.k1 == 10 || $.k2 == 20"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists(@.k1))"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 starts with \"abc\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 like_regex \"abc\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 10 && @.k2 == 20)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 10 || @.k2 == 20)"));
+            ValidatePredicate(db, jsonExists("$ ? (exists(@.k1))"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 starts with \"abc\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 like_regex \"abc\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 != 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 > 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 >= 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 <= 10)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 10 && @.k2 == 20)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 10 || @.k2 == 20)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (exists(@))"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ starts with \"abc\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ like_regex \"abc\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ > 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ < 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ >= 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ <= 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (exists(@))"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ starts with \"abc\")"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ like_regex \"abc\")"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ != 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ > 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ < 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ >= 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ <= 10)"));
 
             // Nested predicates are not allowed even in a filter
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 10) is unknown)"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$ ? (!(@.k1 == 10))"));
+            ValidateError(db, jsonExists("$ ? ((@.k1 == 10) is unknown)"));
+            ValidateError(db, jsonExists("$ ? (!(@.k1 == 10))"));
         });
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_Literals, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidateError(db, "TestTable", "json_idx", jsonExists("null"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("1"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("\"str\""));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("true"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("false"));
+            ValidateError(db, jsonExists("null"));
+            ValidateError(db, jsonExists("1"));
+            ValidateError(db, jsonExists("\"str\""));
+            ValidateError(db, jsonExists("true"));
+            ValidateError(db, jsonExists("false"));
         });
     }
 
     // Filter with != (inequality) and range comparisons (<, <=, >, >=)
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterInequality, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k3 != \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k5 != null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 != false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 != 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k3 != \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k5 != null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k4 != false)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != \"1\")"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ != 1)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ != null)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@ != \"1\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k2 < 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (0 < @.k1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (0 >= @.k2)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 999)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k99 != 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 <= 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 > 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 >= 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k2 < 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (0 < @.k1)"));
+            ValidatePredicate(db, jsonExists("$ ? (0 >= @.k2)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 > 999)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k99 != 1)"));
         });
     }
 
     // Three-way AND/OR and mixed (AND+OR) filter predicates
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterAndOrComplex, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == \"1\" && @.k2 == \"22\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k2 == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= 0 && @.k1 <= 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true && @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == \"1\" && @.k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k2 == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 >= 0 && @.k1 <= 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k4 == true && @.k5 == null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k1 == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true || @.k2 == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == \"1\" || @.k2 == \"22\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k99 == 1 || @.k98 == 2)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 || @.k1 == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k4 == true || @.k2 == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == \"1\" || @.k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k99 == 1 || @.k98 == 2)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\" && @.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\" && @.k4 == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k1 == 1 || @.k1 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\" && @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\" && @.k4 == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 || @.k1 == 1 || @.k1 == \"1\")"));
 
             // Mixing AND and OR inside filter: OR wins, index search uses OR semantics
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 0 && @.k4 == true) || @.k2 == \"22\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 1 || (@.k1 == \"1\" && @.k2 == \"22\"))"));
+            ValidatePredicate(db, jsonExists("$ ? ((@.k1 == 0 && @.k4 == true) || @.k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 1 || (@.k1 == \"1\" && @.k2 == \"22\"))"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 10 || @.k1 == 20)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (@.k1 == 2 && @.k2 == true)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 == 10 || @.k1 == 20)"));
+            ValidatePredicate(db, jsonExists("$.k2 ? (@.k1 == 2 && @.k2 == true)"));
         });
     }
 
     // Filter with arithmetic operators combined with && and ||: OR dominance
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterArithmeticWithBooleanOps, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 * @.k2 != 0 || @.k5 == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 / @.k2 < 1 || @.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 % @.k2 == 0 || @.k4 == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 * @.k2 != 0 || @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 / @.k2 < 1 || @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 % @.k2 == 0 || @.k4 == false)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 && @.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 * @.k2 != 0 && @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 - @.k2 > 0 && @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 * @.k2 != 0 && @.k5 == null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 + @.k4 == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k3 - @.k4 < 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 + @.k4 == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 - @.k4 < 0 || @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 + @.k4 == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k3 - @.k4 < 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 + @.k4 == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 - @.k4 < 0 || @.k5 == null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 + @.k2 == 5 && @.k3 == \"text\") || @.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || (@.k1 + @.k2 == 5 && @.k3 == \"text\"))"));
+            ValidatePredicate(db, jsonExists("$ ? ((@.k1 + @.k2 == 5 && @.k3 == \"text\") || @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 || (@.k1 + @.k2 == 5 && @.k3 == \"text\"))"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 + @.k2 == 5 || @.k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 - @.k2 > 0 && @.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 + @.k2 == 5 || @.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 - @.k2 > 0 && @.k1 == 10)"));
         });
     }
 
     // Filter with path-vs-path comparison operators combined with && and ||: OR dominance
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterComparisonWithBooleanOps, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > @.k2 || @.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= @.k2 || @.k5 == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= @.k2 || @.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k2 || @.k4 == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != @.k2 || @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 > @.k2 || @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 <= @.k2 || @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 >= @.k2 || @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == @.k2 || @.k4 == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 != @.k2 || @.k3 == \"text\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > @.k2 && @.k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != @.k2 && @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < @.k2 && @.k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 > @.k2 && @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 != @.k2 && @.k5 == null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 > @.k4)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k2 || @.k3 != @.k4)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4 || @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < @.k2 || @.k3 > @.k4)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == @.k2 || @.k3 != @.k4)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4 || @.k5 == null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k2 < @.k3)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\" || @.k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 || @.k2 < @.k3)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\" || @.k4 == true)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 < @.k2 && @.k3 > @.k4) || @.k5 == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || (@.k2 < @.k3 && @.k4 == true))"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 < @.k2 || @.k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 > @.k2 && @.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@.k1 < @.k2 && @.k3 > @.k4) || @.k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 || (@.k2 < @.k3 && @.k4 == true))"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 < @.k2 || @.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 > @.k2 && @.k1 == 10)"));
         });
     }
 
     // Filter with paths: deep nesting, array subscripts inside filter, empty key
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterPathsDeep, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1.k2.k3.k4 == \"2\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1.k2.k3.k4 == \"2\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[0] == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[1] == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[2] == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[0] == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[123] == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k6[0] == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k6[1] == \"1\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k6[2] == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k6[0] == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k6[123] == null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[0] == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[1] == 2)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[2] == 3)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1[0] == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1[1] == 2)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1[2] == 3)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 20)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 999)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 == 20)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1 == 999)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? (@.k1 == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0] ? (@.k1 == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? (@.\"\" == \"\")"));
+            ValidatePredicate(db, jsonExists("$[*] ? (@.k1 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$[0] ? (@.k1 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$[*] ? (@.\"\" == \"\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == false)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == \"1\")"));
+            ValidatePredicate(db, jsonExists("$ ? (@.\"\" == null)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.\"\" == 1)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.\"\" == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.\"\" == false)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.\"\" == \"1\")"));
         });
     }
 
     // Combined key access + array subscript + method with filter
     Y_UNIT_TEST_QUAD(SelectJsonExists_PathArrayMethodWithFilter, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] ? (@.k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] ? (@.k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last] ? (@.k1 == 20)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] ? (@.k1 == 999)"));
+            ValidatePredicate(db, jsonExists("$.k1[*] ? (@.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1[0] ? (@.k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1[last] ? (@.k1 == 20)"));
+            ValidatePredicate(db, jsonExists("$.k1[*] ? (@.k1 == 999)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == 42)"));
+            ValidatePredicate(db, jsonExists("$.* ? (@ == 1)"));
+            ValidatePredicate(db, jsonExists("$.* ? (@ == \"1\")"));
+            ValidatePredicate(db, jsonExists("$.* ? (@ == true)"));
+            ValidatePredicate(db, jsonExists("$.* ? (@ == null)"));
+            ValidatePredicate(db, jsonExists("$.* ? (@ == 42)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.size() ? (@ == 3)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.size() ? (@ > 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.size() == 3)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.size() > 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k2.k3 != null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (@.k1 == 2 && @.k2 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (@.k1 == 2 || @.k2.type() == \"boolean\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@.k1.abs() - @.k2.abs()) == 0)"));
+            ValidatePredicate(db, jsonExists("$.k1.size() ? (@ == 3)"));
+            ValidatePredicate(db, jsonExists("$.k1.size() ? (@ > 0)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.size() == 3)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.size() > 0)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k2.k3 != null)"));
+            ValidatePredicate(db, jsonExists("$.k2 ? (@.k1 == 2 && @.k2 == true)"));
+            ValidatePredicate(db, jsonExists("$.k2 ? (@.k1 == 2 || @.k2.type() == \"boolean\")"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@.k1.abs() - @.k2.abs()) == 0)"));
         });
     }
 
     // Nested filter: result of an inner filter (@ ? (pred)) is accessed as an object
     Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilter, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0)).k2 == -1.5)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0)).k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0)).k4 == false)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0)).k2 == -1.5)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0)).k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0)).k4 == false)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? ((@ ? (@.k1 == 2)).k2 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? ((@ ? (@.k1 == 2)).k2 == false)"));
+            ValidatePredicate(db, jsonExists("$.k2 ? ((@ ? (@.k1 == 2)).k2 == true)"));
+            ValidatePredicate(db, jsonExists("$.k2 ? ((@ ? (@.k1 == 2)).k2 == false)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10)).k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 20)).k1 == 20)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 99)).k1 == 99)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 == 10)).k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 == 20)).k1 == 20)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 == 99)).k1 == 99)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@ ? (@.k1 == \"1\")).k2 == \"22\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@ ? (@.k1 == \"x\")).k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$[*] ? ((@ ? (@.k1 == \"1\")).k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$[*] ? ((@ ? (@.k1 == \"x\")).k2 == \"22\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k2 == \"b\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k1 == \"b\")"));
+            ValidatePredicate(db, jsonExists("$.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k2 == \"b\")"));
+            ValidatePredicate(db, jsonExists("$.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k1 == \"b\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 != 0)).k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 > 0)).k2 == \"22\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k2 < 0)).k1 == 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 >= 10)).k1 > 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 <= 10)).k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 != 0)).k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 > 0)).k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k2 < 0)).k1 == 0)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 >= 10)).k1 > 0)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 <= 10)).k1 == 10)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (0 == @.k1)).k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (\"1\" == @.k1)).k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (0 == @.k1)).k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (\"1\" == @.k1)).k2 == \"22\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.\"\" == null)).\"\" == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.\"\" == 1)).\"\" == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@ ? (@.\"\" == \"\")).\"\" == \"\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.\"\" == null)).\"\" == null)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.\"\" == 1)).\"\" == 1)"));
+            ValidatePredicate(db, jsonExists("$[*] ? ((@ ? (@.\"\" == \"\")).\"\" == \"\")"));
         });
     }
 
     // Nested filter where the inner predicate uses AND or OR
     Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilterAndOr, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k5 == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k3 == \"text\")).k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == false)).k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k5 == null)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k3 == \"text\")).k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == false)).k5 == null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == \"1\" && @.k2 == \"22\")).k1 == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == \"1\" && @.k2 == \"99\")).k1 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == \"1\" && @.k2 == \"22\")).k1 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == \"1\" && @.k2 == \"99\")).k1 == \"1\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? ((@ ? (@.k1 == 2 && @.k2 == true)).k2 == true)"));
+            ValidatePredicate(db, jsonExists("$.k2 ? ((@ ? (@.k1 == 2 && @.k2 == true)).k2 == true)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 || @.k1 == 1)).k3 == \"text\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 || @.k1 == 1)).k4 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == \"1\" || @.k2 == \"22\")).k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 || @.k1 == 1)).k3 == \"text\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 || @.k1 == 1)).k4 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == \"1\" || @.k2 == \"22\")).k2 == \"22\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k4 == true || @.k5 == null)).k1 == 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k99 == 1 || @.k98 == 2)).k1 == 0)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k4 == true || @.k5 == null)).k1 == 0)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k99 == 1 || @.k98 == 2)).k1 == 0)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 > 0)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 > 0)"));
         });
     }
 
     // Nested filter combined with other path constructs: array subscript, wildcards, double nesting
     Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilterPaths, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@[0] ? (@.k1 == \"1\")).k2 == \"22\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[0] ? (@.k1 == 10)).k1 == 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[last] ? (@.k1 == 20)).k1 == 20)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[0] ? (@.k1 == 99)).k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@[0] ? (@.k1 == \"1\")).k2 == \"22\")"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@[0] ? (@.k1 == 10)).k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@[last] ? (@.k1 == 20)).k1 == 20)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@[0] ? (@.k1 == 99)).k1 == 10)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@[*] ? (@.k1 == 1)).k1 == 1)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[*] ? (@.k1 == 10)).k1 == 10)"));
+            ValidatePredicate(db, jsonExists("$[*] ? ((@[*] ? (@.k1 == 1)).k1 == 1)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@[*] ? (@.k1 == 10)).k1 == 10)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k2.k3.k4 == \"1\")).k2.k3.k4 == \"1\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2 ? ((@ ? (@.k4[0] == 0)).k3[0].k1 == \"a\")"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k2.k3.k4 == \"1\")).k2.k3.k4 == \"1\")"));
+            ValidatePredicate(db, jsonExists("$.k1.k2 ? ((@ ? (@.k4[0] == 0)).k3[0].k1 == \"a\")"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? ((@ ? (@.k1 == 0)).k4 == true)).k5 == null)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? ((@ ? (@.k1 == 10)).k1 == 10)).k1 > 0)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? ((@ ? (@.k1 == 0)).k4 == true)).k5 == null)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? ((@ ? (@.k1 == 10)).k1 == 10)).k1 > 0)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists($.k1 ? ((@ ? (@.k1 == 10)).k1 > 0)))"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists($.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k2 == \"b\")))"));
+            ValidatePredicate(db, jsonExists("$ ? (exists($.k1 ? ((@ ? (@.k1 == 10)).k1 > 0)))"));
+            ValidatePredicate(db, jsonExists("$ ? (exists($.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k2 == \"b\")))"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 ? ((@ ? (@.k1 == \"a\")).k1 starts with \"a\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k3 == \"text\")).k3 starts with \"tex\")"));
+            ValidatePredicate(db, jsonExists("$.k1.k2.k3 ? ((@ ? (@.k1 == \"a\")).k1 starts with \"a\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k3 == \"text\")).k3 starts with \"tex\")"));
         });
     }
 
     // Combined key access + array subscript + methods + predicates + filters + literals + nested filter + AND/OR
     Y_UNIT_TEST_QUAD(SelectJsonExists_Mix, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] ? (exists(@.k1 ? (@.type() starts with \"s\")))"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k2[*].k3 != null && -@.k1.floor() > +3)"));
+            ValidatePredicate(db, jsonExists("$.k1[*] ? (exists(@.k1 ? (@.type() starts with \"s\")))"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k2[*].k3 != null && -@.k1.floor() > +3)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 > 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 <= 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 < 0)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 > 0)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 <= 10)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 < 0)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 < 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 >= -2)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k3 != \"blah\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 > -1)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 < 0)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 >= -2)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k3 != \"blah\")"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 > -1)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] ? ((@ ? (@.k1 == 10)).k1 >= 10)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last] ? ((@ ? (@.k1 == 20)).k1 > 15)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] ? ((@ ? (@.k1 == 10)).k1 < 5)"));
+            ValidatePredicate(db, jsonExists("$.k1[0] ? ((@ ? (@.k1 == 10)).k1 >= 10)"));
+            ValidatePredicate(db, jsonExists("$.k1[last] ? ((@ ? (@.k1 == 20)).k1 > 15)"));
+            ValidatePredicate(db, jsonExists("$.k1[0] ? ((@ ? (@.k1 == 10)).k1 < 5)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (-@.k1 < 0 && @.k2 == true)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= 1 && @.k2 < 0)"));
+            ValidatePredicate(db, jsonExists("$.k2 ? (-@.k1 < 0 && @.k2 == true)"));
+            ValidatePredicate(db, jsonExists("$ ? (@.k1 <= 1 && @.k2 < 0)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1.abs() > 5 && @.k1 != null)"));
+            ValidatePredicate(db, jsonExists("$.k1 ? (@.k1.abs() > 5 && @.k1 != null)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists(@.k1) && @.k2 < 0)"));
+            ValidatePredicate(db, jsonExists("$ ? (exists(@.k1) && @.k2 < 0)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k3 starts with \"te\")).k2 < 0)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k3 starts with \"te\")).k1 != 99)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k3 starts with \"te\")).k2 < 0)"));
+            ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k3 starts with \"te\")).k1 != 99)"));
 
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3[*] ? ((@ ? (@.k1 == \"a\")).k1 > \"\")"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k4[*] ? (@ != null && @ > 0)"));
+            ValidatePredicate(db, jsonExists("$.k1.k2.k3[*] ? ((@ ? (@.k1 == \"a\")).k1 > \"\")"));
+            ValidatePredicate(db, jsonExists("$.k1.k2.k4[*] ? (@ != null && @ > 0)"));
         });
     }
 
     Y_UNIT_TEST(JsonExistsTokens) {
         TestSelectJsonTokens([](TQueryClient& db) {
-            ValidateTokens(db,
-                R"(JSON_EXISTS(Text, '$.key'))",
-                {"\3key"},
-                "and"
-            );
-            ValidateTokens(db,
-                R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))",
-                {"\2k1\2k2" + numSuffix(2)},
-                "and"
-            );
+            // Basic path exists cases
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key'))", {"\3key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))", {"\2k1\2k2" + numSuffix(2)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))", {"\2k1" + trueSuffix, "\2k2" + falseSuffix}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))", {"\2k1" + nullSuffix, "\2k2" + strSuffix("str")}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key') IS NOT NULL)", {"\3key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key') == true)", {"\3key"});
 
-            ValidateTokens(db,
-                R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))",
-                {"\2k1" + trueSuffix, "\2k2" + falseSuffix},
-                "and"
-            );
-            ValidateTokens(db,
-                R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str")},
-                "or"
-            );
+            // Negated JSON_EXISTS is not supported by JSON index
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.key') == false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.key') != true)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.key') IS NULL)");
 
+            // AND combinations
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
-                {"\2k1", "\2k2"},
-                "and"
-            );
+                {"\2k1", "\2k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "and"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "or"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "or"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "or"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
 
+            // OR combinations
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))",
-                {"\2k1", "\2k2"},
-                "or"
-            );
+                {"\2k1", "\2k2"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "or"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "or"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "or"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix},
-                "or"
-            );
+                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
 
+            // Mixed combinations
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"},
-                "and"
-            );
+                {"\2k1", "\2k2", "\2k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"},
-                "or"
-            );
+                {"\2k1", "\2k2", "\2k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"},
-                "or"
-            );
+                {"\2k1", "\2k2", "\2k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"},
-                "or"
-            );
-
+                {"\2k1", "\2k2", "\2k3"}, "or");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')) AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"},
-                "and"
-            );
+                {"\2k1", "\2k2", "\2k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND (JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3')))",
-                {"\2k1", "\2k2", "\2k3"},
-                "and"
-            );
+                {"\2k1", "\2k2", "\2k3"}, "and");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')) AND (JSON_EXISTS(Text, '$.k3') AND JSON_EXISTS(Text, '$.k4')))",
-                {"\2k1", "\2k2", "\2k3", "\2k4"},
-                "and"
-            );
-
+                {"\2k1", "\2k2", "\2k3", "\2k4"}, "and");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) OR JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"},
-                "or"
-            );
+                {"\2k1", "\2k2", "\2k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR (JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3')))",
-                {"\2k1", "\2k2", "\2k3"},
-                "or"
-            );
+                {"\2k1", "\2k2", "\2k3"}, "or");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) OR (JSON_EXISTS(Text, '$.k3') OR JSON_EXISTS(Text, '$.k4')))",
-                {"\2k1", "\2k2", "\2k3", "\2k4"},
-                "or"
-            );
+                {"\2k1", "\2k2", "\2k3", "\2k4"}, "or");
 
+            // NOT JSON_EXISTS and wrapped-NOT forms fall through to "nothing to extract"
+            ValidateError(db, R"(NOT JSON_EXISTS(Text, '$.k1'))");
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')))");
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')))");
+
+            // Filter equality: covers every literal type; the token carries the value suffix
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == null)'))", {"\2k1\2k2" + nullSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == true)'))", {"\2k1\2k2" + trueSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == false)'))", {"\2k1\2k2" + falseSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == "abc")'))", {"\2k1\2k2" + strSuffix("abc")});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 42)'))", {"\2k1\2k2" + numSuffix(42)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == -1.5)'))", {"\2k1\2k2" + numSuffix(-1.5)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 == @.k2)'))", {"\2k1\2k2" + numSuffix(2)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? ("s" == @.k2)'))", {"\2k1\2k2" + strSuffix("s")});
+
+            // Filter inequality / range: path only, no value suffix
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != 2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 > 2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 < 2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 >= 2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 <= 2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != null)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != "abc")'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 > @.k2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 < @.k2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 >= @.k2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 <= @.k2)'))", {"\2k1\2k2"});
+
+            // Filter path-vs-path comparisons: two tokens, AND mode (value suffix dropped)
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == @.k2)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 != @.k2)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > @.k2)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 < @.k2)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 >= @.k2)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 <= @.k2)'))", {"\2k1", "\2k2"}, "and");
+
+            // Filter arithmetic (path vs literal): path only, no value suffix
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - 1 == 0)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 == 4)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 / 2 == 1)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 % 2 == 0)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 > 2)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 != 4)'))", {"\2k1"});
+
+            // Filter arithmetic (path vs path): two tokens, AND mode
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - @.k2 > 0)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * @.k2 < 10)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 / @.k2 >= 1)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 % @.k2 != 0)'))", {"\2k1", "\2k2"}, "and");
+
+            // Filter unary operators: path only
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 == -1)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (+@.k1 == 1)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 > 0)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() == 1)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() > 5)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.size() == 3)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.size() > 0)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.size() ? (@ == 3)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1.abs() == -1)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() - @.k2.abs() == 0)'))", {"\2k1", "\2k2"}, "and");
+
+            // && / || inside jsonpath: mode propagates from inner operator
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 != 2)'))",
+                {"\2k1" + numSuffix(1), "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || @.k2 != 2)'))",
+                {"\2k1" + numSuffix(1), "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > 0 && @.k2 < 10)'))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > 0 || @.k2 < 10)'))",
+                {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2 && @.k2 * 2 == 4)'))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2 || @.k2 * 2 == 4)'))",
+                {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() == 1 && @.k2.size() > 0)'))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 == -1 || @.k2 % 2 == 0)'))",
+                {"\2k1", "\2k2"}, "or");
+
+            // Three-way && / || inside jsonpath
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 == 2 && @.k3 == 3)'))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || @.k2 == 2 || @.k3 == 3)'))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+
+            // Mixed && and || inside jsonpath
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? ((@.k1 == 1 && @.k2 == 2) || @.k3 == 3)'))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || (@.k2 == 2 && @.k3 == 3))'))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? ((@.k1 > 0 && @.k2 != null) || @.k3 == "text")'))",
+                {"\2k1", "\2k2", "\2k3" + strSuffix("text")}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5 && @.k3 == "text" || @.k4 == null)'))",
+                {"\2k1", "\2k2", "\2k3" + strSuffix("text"), "\2k4" + nullSuffix}, "or");
+
+            // Outer SQL AND/OR over filters with &&/|| inside
             ValidateTokens(db,
-                R"(JSON_EXISTS(Text, '$.key') IS NOT NULL)",
-                {"\3key"},
-                "and"
-            );
+                R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 == 2)') AND JSON_EXISTS(Text, '$ ? (@.k3 > 0)'))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3"}, "and");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || @.k2 == 2)') AND JSON_EXISTS(Text, '$ ? (@.k3 > 0)'))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3"}, "or");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 == 2)') OR JSON_EXISTS(Text, '$ ? (@.k3 > 0)'))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3"}, "or");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5)') AND JSON_EXISTS(Text, '$ ? (-@.k3 == -3)'))",
+                {"\2k1", "\2k2", "\2k3"}, "and");
+
+            // Outer range comparison with bool literal (non-equality): errors
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > true)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') < false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') < true)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') <= false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') <= true)");
+
+            // Flipped side (literal op JSON_EXISTS)
+            ValidateError(db, R"(true > JSON_EXISTS(Text, '$.k1'))");
+            ValidateError(db, R"(false >= JSON_EXISTS(Text, '$.k1'))");
+            ValidateError(db, R"(false == JSON_EXISTS(Text, '$.k1'))");
+            ValidateError(db, R"(true != JSON_EXISTS(Text, '$.k1'))");
+
+            // JSON_EXISTS comparison with true rewrites to JSON_EXISTS without boolean comparison
+            ValidateTokens(db, R"(true == JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
+            ValidateTokens(db, R"(false != JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
+
+            // JSON_EXISTS comparison with false rewrites to NOT JSON_EXISTS
+            ValidateError(db, R"(false == JSON_EXISTS(Text, '$.k1'))");
+            ValidateError(db, R"(true != JSON_EXISTS(Text, '$.k1'))");
+
+            // Outer comparison between two JSON_EXISTS: errors
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') == JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') != JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') < JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') <= JSON_EXISTS(Text, '$.k2'))");
+
+            // Outer AND/OR over range comparisons with bool literal
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2') <= true)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > false OR JSON_EXISTS(Text, '$.k2') < true)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true OR JSON_EXISTS(Text, '$.k2') == true)");
+
+            // Outer AND/OR over cross JSON_EXISTS comparisons
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') != JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))");
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') >= JSON_EXISTS(Text, '$.k2')) AND (JSON_EXISTS(Text, '$.k3') <= JSON_EXISTS(Text, '$.k4')))");
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') == JSON_EXISTS(Text, '$.k2')) OR (JSON_EXISTS(Text, '$.k3') != JSON_EXISTS(Text, '$.k4')))");
+
+            // NOT of these outer comparisons falls through to "nothing to extract"
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') > true))");
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') >= false))");
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') < true))");
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') <= false))");
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') == JSON_EXISTS(Text, '$.k2')))");
+            ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2')))");
         });
     }
 
     Y_UNIT_TEST(JsonValueTokens) {
         TestSelectJsonTokens([](TQueryClient& db) {
-            ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.key') IS NOT NULL)",
-                {"\3key"},
-                "and"
-            );
+            // Supported RETURNING types
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NULL)"); // negation
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key') IS NOT NULL)", {"\3key"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int8) == 1t)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint8) == 1ut)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int16) == 1s)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint16) == 1us)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint32) == 1u)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == 1l)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint64) == 1ul)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Float) == 1.0f)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Double) == 1.0)", {"\2k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) == "value"s)", {"\2k1" + strSuffix("value")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "value"u)", {"\2k1" + strSuffix("value")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\2k1" + trueSuffix});
 
-            ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)",
-                {"\2k1" + numSuffix(1)},
-                "and"
-            );
+            // Not supported RETURNING types
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Date) == Date("2021-01-01"))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Datetime) == Datetime("2021-01-01T00:00:00Z"))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Timestamp) == Timestamp("2021-01-01T00:00:00Z"))");
 
-            ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1') == "1")",
-                {"\2k1" + strSuffix("1")},
-                "and"
-            );
+            // Default RETURNING type is Utf8
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "1")", {"\2k1" + strSuffix("1")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "string")", {"\2k1" + strSuffix("string")});
 
-            ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)",
-                {"\2k1" + trueSuffix},
-                "and"
-            );
-            ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool))",
-                {"\2k1" + trueSuffix},
-                "and"
-            );
+            // Bool comparison with true
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\2k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\2k1" + trueSuffix});
 
-            ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)",
-                {"\2k1" + falseSuffix},
-                "and"
-            );
-            ValidateTokens(db,
-                R"(NOT JSON_VALUE(Text, '$.k1' RETURNING Bool))",
-                {"\2k1" + falseSuffix},
-                "and"
-            );
+            // Bool comparison with false (negation)
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)");
+            ValidateError(db, R"(NOT JSON_VALUE(Text, '$.k1' RETURNING Bool))");
 
+            // Comparison with other literals
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 10)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) < 10)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) >= 10)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 10)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != 10)", {"\2k1"});
+
+            // For some nodes inside the path, it cannot be combined with == operator
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 starts with "1"') == "true")", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.size()' RETURNING Int32) == 2)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.*' RETURNING Int32) == 2)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1[*]' RETURNING Int32) == 2)", {"\2k1" + numSuffix(2)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 + 1' RETURNING Int32) == 2)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == 2' RETURNING Bool))", {"\2k1" + numSuffix(2)});
+
+            // BETWEEN clause
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) BETWEEN 1 AND 10)", {"\2k1", "\2k1"});
+
+            // AND/OR combinations - numeric equality
             ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 10)",
-                {"\2k1"},
-                "and"
-            );
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2)",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2)}, "and");
             ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) < 10)",
-                {"\2k1"},
-                "and"
-            );
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2)",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2)}, "or");
+
+            // AND/OR combinations - string equality
             ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) >= 10)",
-                {"\2k1"},
-                "and"
-            );
+                R"(JSON_VALUE(Text, '$.k1') == "a" AND JSON_VALUE(Text, '$.k2') == "b")",
+                {"\2k1" + strSuffix("a"), "\2k2" + strSuffix("b")}, "and");
             ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 10)",
-                {"\2k1"},
-                "and"
-            );
+                R"(JSON_VALUE(Text, '$.k1') == "a" OR JSON_VALUE(Text, '$.k2') == "b")",
+                {"\2k1" + strSuffix("a"), "\2k2" + strSuffix("b")}, "or");
+
+            // AND/OR with range comparisons - path-only tokens
             ValidateTokens(db,
-                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != 10)",
-                {"\2k1"},
-                "and"
-            );
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 5 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) < 10)",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 5 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) < 10)",
+                {"\2k1", "\2k2"}, "or");
+
+            // AND/OR mixing equality and range
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1') == "a" AND JSON_VALUE(Text, '$.k2' RETURNING Int32) > 0)",
+                {"\2k1" + strSuffix("a"), "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1') == "a" OR JSON_VALUE(Text, '$.k2' RETURNING Int32) > 0)",
+                {"\2k1" + strSuffix("a"), "\2k2"}, "or");
+
+            // Three-way AND/OR
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 AND JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 OR JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+
+            // Mixed AND/OR (AND binds tighter): both cases produce "or"
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 OR JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 AND JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+
+            // Comparison operators with strings - path-only token (no value suffix for non-equality)
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') > "abc")", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') < "xyz")", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') >= "abc")", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') <= "xyz")", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') != "abc")", {"\2k1"});
+
+            // Flipped operand order - string comparisons
+            ValidateTokens(db, R"("abc" < JSON_VALUE(Text, '$.k1'))", {"\2k1"});
+            ValidateTokens(db, R"("abc" > JSON_VALUE(Text, '$.k1'))", {"\2k1"});
+            ValidateTokens(db, R"("abc" != JSON_VALUE(Text, '$.k1'))", {"\2k1"});
+
+            // Flipped operand order - numeric comparisons
+            ValidateTokens(db, R"(10 < JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
+            ValidateTokens(db, R"(10 > JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
+            ValidateTokens(db, R"(10 >= JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
+            ValidateTokens(db, R"(10 <= JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
+            ValidateTokens(db, R"(10 != JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
+
+            // STARTS WITH
+            ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix"))", {"\2k1"});
+            ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix") AND JSON_VALUE(Text, '$.k1') == "a")", {"\2k1", "\2k1" + strSuffix("a")});
+
+            // ENDS WITH: not extractable
+            ValidateTokens(db, R"(EndsWith(JSON_VALUE(Text, '$.k1'), "suffix"))", {"\2k1"});
+
+            // LIKE / ILIKE: not extractable
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') LIKE "pattern%")", {"\2k1"});
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1') ILIKE "pattern%")"); // udf
+
+            // REGEXP: not extractable
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1') REGEXP "^pattern$")"); // udf
+
+            // String concatenation (||) in a comparison: not extractable
+            ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix")");
+            ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix" AND JSON_VALUE(Text, '$.k2') == "b")");
         });
     }
-
-    // Y_UNIT_TEST(Tmp) {
-    //     TestSelectJsonExists(false, false, [](TQueryClient& db, const auto&) {
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "NOT JSON_EXISTS(Text, '$.k1')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "NOT JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') IS NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') IS NOT NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') = True");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_EXISTS(Text, '$.k1') = False");
-
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) == 2");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "2 == JSON_VALUE(Text, '$.k1' RETURNING Int32)");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) != 2");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) > 2");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) < 2");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) >= 2");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 2");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) == 2 AND JSON_EXISTS(Text, '$.k2')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) == 2 OR JSON_EXISTS(Text, '$.k2')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Int32) == 2 AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3')");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1') IS NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Utf8) IS NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1') == NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Bool) == NULL");
-
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1') IS NOT NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Utf8) IS NOT NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1') != NULL");
-    //         ValidatePredicate(db, "TestTable", "json_idx", "JSON_VALUE(Text, '$.k1' RETURNING Bool) != NULL");
-    //     });
-    // }
 }
 
 }  // namespace NKikimr::NKqp

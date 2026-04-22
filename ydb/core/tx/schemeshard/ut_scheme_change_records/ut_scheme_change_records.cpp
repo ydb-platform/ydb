@@ -754,6 +754,196 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_C(haveCreateIndexBody, "At least one record must have CreateTableIndex body");
     }
 
+    Y_UNIT_TEST(MultiPartDDLIsReconstructibleBySubscriber) {
+        // Models replication/backup replay of a complex multi-index DDL.
+        // Target DDL: base table + 2 regular indexes + 1 vector KMeans
+        // tree index. Decomposition produces 1 + 2×2 + 1×3 = 8 parts:
+        //   - main CreateTable (indexes stripped)
+        //   - 2× (CreateTableIndex + impl CreateTable)   for regular indexes
+        //   - 1× (CreateTableIndex + 2 impl CreateTable) for vector index
+        //
+        // Subscriber replay strategy (synthesize the high-level DDL):
+        //   1. Collect the main-table CreateTable body.
+        //   2. Collect every CreateTableIndex body — they carry full
+        //      IndexDescription (name, key cols, data cols, type, and
+        //      type-specific settings like VectorIndexKmeansTreeDescription).
+        //   3. IGNORE impl-table CreateTable parts — their names are
+        //      auto-generated, they live under an index path, and the
+        //      target cluster's SS regenerates them from the index spec.
+        //   4. Assemble an IndexedTableDescription with TableDescription +
+        //      IndexDescription[] and submit once as
+        //      ESchemeOpCreateIndexedTable.
+        //
+        // Gap: record.OperationType (TTxState::ETxType, e.g. 28 for
+        // TxCreateTableIndex) differs from body.OperationType
+        // (NKikimrSchemeOp::EOperationType, e.g. 29 for CreateTableIndex).
+        // Replay must drive from body, not from the record column.
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "replay:sub", regHandle);
+
+        const ui64 indexedTxId = ++txId;
+        TestCreateIndexedTable(runtime, indexedTxId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Main"
+                Columns { Name: "id"       Type: "Uint64" }
+                Columns { Name: "value"    Type: "Utf8"   }
+                Columns { Name: "other"    Type: "Uint32" }
+                Columns { Name: "embedding" Type: "String" }
+                Columns { Name: "covered"  Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "IdxByValue"
+                KeyColumnNames: ["value"]
+            }
+            IndexDescription {
+                Name: "IdxByOther"
+                KeyColumnNames: ["other"]
+            }
+            IndexDescription {
+                Name: "IdxByEmbedding"
+                KeyColumnNames: ["embedding"]
+                DataColumnNames: ["covered"]
+                Type: EIndexTypeGlobalVectorKmeansTree
+                VectorIndexKmeansTreeDescription: {
+                    Settings: {
+                        settings: {
+                            metric: DISTANCE_COSINE
+                            vector_type: VECTOR_TYPE_FLOAT
+                            vector_dimension: 1024
+                        }
+                        clusters: 4
+                        levels: 5
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, indexedTxId);
+
+        auto result = ReadSchemeChangeRecordsFull(runtime);
+        std::map<ui64, TVector<TSchemeChangeRecordEntry>> byTxId;
+        for (const auto& e : result.Entries) {
+            byTxId[e.TxId].push_back(e);
+        }
+        const auto& parts = byTxId.at(indexedTxId);
+        UNIT_ASSERT_C(parts.size() >= 8,
+            "Expected >= 8 parts (main + 2*2 regular + 1*3 vector), got "
+                << parts.size());
+
+        // Invariants across parts of one tx: shared PlanStep, contiguous Order.
+        const ui64 sharedPlanStep = parts.front().PlanStep;
+        UNIT_ASSERT(sharedPlanStep > 0);
+        for (const auto& e : parts) {
+            UNIT_ASSERT_VALUES_EQUAL(e.PlanStep, sharedPlanStep);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            parts.back().Order - parts.front().Order + 1, parts.size());
+
+        // === Subscriber synthesis ===
+        const NKikimrSchemeOp::TTableDescription* mainTableBody = nullptr;
+        TVector<const NKikimrSchemeOp::TIndexCreationConfig*> indexBodies;
+        size_t implTableParts = 0;
+        for (const auto& e : parts) {
+            UNIT_ASSERT(e.Body.HasOperationType());
+            switch (e.Body.GetOperationType()) {
+                case NKikimrSchemeOp::ESchemeOpCreateTable: {
+                    UNIT_ASSERT(e.Body.HasCreateTable());
+                    if (e.Body.GetCreateTable().GetName() == "Main") {
+                        mainTableBody = &e.Body.GetCreateTable();
+                    } else {
+                        // Impl-table bodies live under "/MyRoot/Main/<idx>"
+                        // in the emitted Path. Subscribers identify them
+                        // heuristically from the path hierarchy and SKIP
+                        // them on replay — target SS will regenerate.
+                        ++implTableParts;
+                    }
+                    break;
+                }
+                case NKikimrSchemeOp::ESchemeOpCreateTableIndex: {
+                    UNIT_ASSERT(e.Body.HasCreateTableIndex());
+                    indexBodies.push_back(&e.Body.GetCreateTableIndex());
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+        UNIT_ASSERT(mainTableBody);
+        UNIT_ASSERT_VALUES_EQUAL(indexBodies.size(), 3u);
+        // 2 regular indexes (1 impl each) + 1 vector index (2 impls) = 4.
+        UNIT_ASSERT_VALUES_EQUAL(implTableParts, 4u);
+
+        // The vector index body must carry its type-specific settings
+        // — without them, replay cannot reconstruct the KMeans tree.
+        const NKikimrSchemeOp::TIndexCreationConfig* vectorIdx = nullptr;
+        for (const auto* ix : indexBodies) {
+            if (ix->GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                vectorIdx = ix;
+            }
+        }
+        UNIT_ASSERT(vectorIdx);
+        UNIT_ASSERT(vectorIdx->HasVectorIndexKmeansTreeDescription());
+        UNIT_ASSERT_VALUES_EQUAL(
+            vectorIdx->GetVectorIndexKmeansTreeDescription()
+                .GetSettings().Getclusters(), 4u);
+
+        // === Assemble + replay as ONE high-level DDL ===
+        TestMkDir(runtime, ++txId, "/MyRoot", "Replay");
+        env.TestWaitNotification(runtime, txId);
+
+        auto* replayEv = new TEvSchemeShard::TEvModifySchemeTransaction(
+            ++txId, TTestTxConfig::SchemeShard);
+        auto* replayTx = replayEv->Record.AddTransaction();
+        replayTx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
+        replayTx->SetWorkingDir("/MyRoot/Replay");
+        auto* ct = replayTx->MutableCreateIndexedTable();
+        *ct->MutableTableDescription() = *mainTableBody;
+        for (const auto* ix : indexBodies) {
+            *ct->AddIndexDescription() = *ix;
+        }
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, replayEv, 0,
+            GetPipeConfigWithRetries());
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto* reply = runtime.GrabEdgeEvent<
+                TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                (ui32)reply->Record.GetStatus(),
+                (ui32)NKikimrScheme::StatusAccepted,
+                "Replay of synthesized CREATE TABLE WITH INDEXES must "
+                "succeed; reason: " << reply->Record.GetReason());
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify replay produced the expected structure: main table, each
+        // index path, and each impl table.
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Replay/Main"),
+            {NLs::PathExist});
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Replay/Main/IdxByValue"),
+            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal)});
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Replay/Main/IdxByEmbedding"),
+            {NLs::PathExist,
+             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)});
+        TestDescribeResult(
+            DescribePrivatePath(runtime,
+                "/MyRoot/Replay/Main/IdxByEmbedding/indexImplLevelTable"),
+            {NLs::PathExist});
+        TestDescribeResult(
+            DescribePrivatePath(runtime,
+                "/MyRoot/Replay/Main/IdxByEmbedding/indexImplPostingTable"),
+            {NLs::PathExist});
+    }
+
     Y_UNIT_TEST(FetchBodiesReturnsOnlyRequestedSparseOrders) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

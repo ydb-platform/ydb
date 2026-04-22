@@ -12,7 +12,9 @@ namespace NActors {
     const TEventSerializedData IEventHandle::EmptyBuffer;
 
     TString IEventHandle::GetTypeName() const {
-        return HasEvent() ? TypeName(*(const_cast<IEventHandle*>(this)->GetBase())) : TypeName(*this);
+        return HasEvent()
+            ? TypeName(*(const_cast<IEventHandle*>(this)->GetBase()))
+            : TStringBuilder() << "ev_serialized_" << (GetTypeRewrite() >> 16u) << "_" << (GetTypeRewrite() & ((1u << 16u) - 1));
     }
 
     TString IEventHandle::ToString() const {

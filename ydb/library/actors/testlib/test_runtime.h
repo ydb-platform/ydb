@@ -838,6 +838,7 @@ namespace NActors {
 
         void InitNodes();
         void CleanupNodes();
+        void CleanupActorSystems();
         virtual void InitNodeImpl(TNodeDataBase*, size_t);
 
         static bool AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev);

@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <util/string/vector.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
@@ -1238,6 +1239,13 @@ private:
                 }
 
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
+            } else if (type == "localMinMax") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableCsMinMaxIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local min_max index is disabled with EnableCsMinMaxIndex feature flag"));
+                    return TStatus::Error;
+                }
+
+                indexType = TIndexDescription::EType::LocalMinMax;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1246,6 +1254,13 @@ private:
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                     "Local bloom ngram indexes are supported only for column tables"));
+                return TStatus::Error;
+            }
+
+            if (indexType == TIndexDescription::EType::LocalMinMax &&
+                meta->StoreType != EStoreType::Column) {
+                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                    "Local min_max index is supported only for column tables"));
                 return TStatus::Error;
             }
 
@@ -1307,6 +1322,9 @@ private:
                         FillLocalBloomNgramFilterSetting(
                             localBloomNgramFilterDescription,
                             name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalMinMax: {
                         break;
                     }
                     default:
@@ -1403,6 +1421,25 @@ private:
 
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
                     break;
+                }
+                case TIndexDescription::EType::LocalMinMax: {
+                    if (!dataColums.empty()) { //todo: что такое data columns?
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            "Local bloom index does not support data columns"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (meta->StoreType != EStoreType::Column) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            "Local min_max index is supported only for column tables"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (indexColums.size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            TStringBuilder() << "Local min_max is applied to 1 column only, tried to apply to "
+                            << indexColums.size() << " columns: [" << JoinStrings(indexColums, ", ") << "]"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
                 }
             }
 

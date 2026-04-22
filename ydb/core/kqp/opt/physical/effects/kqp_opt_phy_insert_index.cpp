@@ -276,6 +276,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
+            case TIndexDescription::EType::LocalMinMax:
                 break;
         }
         Y_ENSURE(upsertIndexRows.has_value());

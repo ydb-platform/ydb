@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
 class TIndexMeta: public TSkipIndex {
 public:
     static TString GetClassNameStatic() {
-        return "MINMAX";
+        return "MIN_MAX";
     }
 
 private:

@@ -2387,6 +2387,14 @@ public:
                                 }
 
                                 add_index->mutable_local_bloom_ngram_filter_index();
+                            } else if (type == "localMinMax") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableCsMinMaxIndex()) {
+
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Local min_max index is disabled with EnableCsMinMaxIndex feature flag"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_local_min_max_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2484,6 +2492,31 @@ public:
                                                 << "Unknown index setting: " << name));
                                             return SyncError();
                                     }
+                                    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                                        NKikimr::NFulltext::FillSetting(
+                                            *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                                        FillLocalBloomFilterSetting(
+                                            localBloomFilterDesc,
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                                        FillLocalBloomNgramFilterSetting(
+                                            localBloomNgramFilterDesc,
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                                        break;
+                                    }
+                                    default:
+                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                            << "Unknown index setting: " << name.StringValue()));
+                                        return SyncError();
                                 }
 
                                 if (error) {
@@ -2582,6 +2615,15 @@ public:
                             }
 
                             break;
+
+                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local min_max index is supported only for column tables"));
+                                return SyncError();
+                            }
+
+                            break;
+                        }
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();

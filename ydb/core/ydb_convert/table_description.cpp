@@ -169,6 +169,32 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
 
     ui32 nextIndexId = 1;
     for (const auto& index : in.indexes()) {
+        if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+            if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
+                return fail("min_max index is disabled with EnableCsMinMaxIndex feature flag");
+            }
+            if (index.name().empty()) {
+                return fail("min_max index must have a name");
+            }
+            if (index.index_columns_size() != 1) {
+                return fail(TStringBuilder() << "min_max index is applied to 1 column only, got " << index.index_columns_size() << " columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]");
+            }
+            if (!index.data_columns().empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
+                return fail(TStringBuilder() << "min_max index doesn't need data columns, got " << index.data_columns_size() << ": [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]");
+            }
+            auto columnIdIt = nameToId.find(index.index_columns(0));
+            if (columnIdIt == nameToId.end()) {
+                return fail(TStringBuilder() << "Tried to apply min_max index to unknown column '" << index.index_columns(0) << "'");
+            }
+            auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
+            olapIndex->SetId(nextIndexId++);
+            olapIndex->SetName(index.name());
+            olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
+            auto* min_max = olapIndex->MutableMinMaxIndex();
+            min_max->SetColumnId(columnIdIt->second);
+            return true;
+        }
+
         if (index.name().empty()) {
             return fail("Index must have a name");
         }
@@ -194,6 +220,9 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         olapIndex->SetName(index.name());
 
         switch (index.type_case()) {
+            case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                Y_ABORT("min_max index was handled before");
+            }
             case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     return fail("Local bloom filter index support is disabled");
@@ -1454,7 +1483,8 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             }
             default:
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Only local bloom indexes are supported for column tables";
+                const google::protobuf::Reflection* reflection = index.GetReflection();
+                error = TStringBuilder() << "Only local bloom indexes ans local min_max index are supported for column tables, got " << reflection->GetOneofFieldDescriptor(index, index.GetDescriptor()->FindOneofByName("type"))->camelcase_name();
                 return false;
         }
     } else if (OpType == EAlterOperationKind::RenameIndex) {
@@ -1841,7 +1871,8 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
-
+        case Ydb::Table::TableIndex::kLocalMinMaxIndex:
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type
             // so it's not possible to return an invalid index type error here for now

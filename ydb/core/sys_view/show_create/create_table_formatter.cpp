@@ -564,6 +564,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             isLocalBloomNgramFilter = true;
             break;
         }
+        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+            Stream << " LOCAL USING min_max ON ";
+            break;
+        }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableIndex::TYPE_NOT_SET");
     }

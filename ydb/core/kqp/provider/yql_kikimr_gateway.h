@@ -89,6 +89,7 @@ struct TIndexDescription {
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
         GlobalJson = 8,
+        LocalMinMax = 9,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf

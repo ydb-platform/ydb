@@ -1,5 +1,6 @@
 #include "kqp_host_impl.h"
 
+#include <util/string/vector.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
@@ -11,13 +12,13 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
-
 #include <util/generic/overloaded.h>
 
 namespace NKikimr::NKqp {
@@ -626,6 +627,32 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
 
                 break;
             }
+            case TIndexDescription::EType::LocalMinMax: {
+                if (index.KeyColumns.size() != 1) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Local min_max index is applied to 1 column only, got columns: [" << JoinStrings(index.KeyColumns, ", ") << "]";
+                    return false;
+                }
+                if (!index.DataColumns.empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Local min_max index doesn't need data columns, got: [" << JoinStrings(index.DataColumns, ", ") << "]";
+                    return false;
+                }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
+                if (columnIdIt == columnIdsByName.end()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Tried to apply min_max index to unknown column '" << index.KeyColumns.front() << "'";
+                    return false;
+                }
+
+                auto* upsert = tableDesc.MutableSchema()->AddIndexes();
+                upsert->SetId(nextIndexId++);
+                upsert->SetName(index.Name);
+                upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
+                auto* minmax = upsert->MutableMinMaxIndex();
+                minmax->SetColumnId(columnIdIt->second);
+
+            }
             default:
                 break;
         }
@@ -1039,6 +1066,13 @@ public:
                                 bloomPrefixes[prefix] = fpp;
                             }
                             continue;
+                        }
+
+                        if (index.Type == TIndexDescription::EType::LocalMinMax) {
+                            if (metadata->StoreType != EStoreType::Column) {
+                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local min_max index is not supported for row tables"));
+                                return;
+                            }
                         }
 
                         auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();

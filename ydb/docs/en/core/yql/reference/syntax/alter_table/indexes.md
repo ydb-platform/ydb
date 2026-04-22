@@ -89,7 +89,7 @@ Supported index types:
   * `false_positive_probability`: Target false-positive probability (for example, `0.01`). Default: `0.1`.
   * `case_sensitive`: Optional, `true` or `false` (`true` by default).
 
-**Example: add a Bloom filter index**
+#### Example: add a Bloom filter index
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -98,7 +98,7 @@ ALTER TABLE `/Root/Table`
   WITH (false_positive_probability = 0.01);
 ```
 
-**Example: add an N-gram Bloom filter index**
+#### Example: add an N-gram Bloom filter index
 
 ```yql
 ALTER TABLE `/Root/Table`

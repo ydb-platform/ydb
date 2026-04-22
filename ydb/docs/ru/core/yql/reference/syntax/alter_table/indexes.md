@@ -89,7 +89,7 @@ Bloom skip индексы позволяют пропускать фрагмен
   * `false_positive_probability` — целевая вероятность ложноположительного срабатывания (например, `0.01`). По умолчанию: `0.1`;
   * `case_sensitive` — необязательный, `true` или `false` (по умолчанию `true`).
 
-**Пример: добавление индекса Bloom filter**
+#### Пример: добавление индекса Bloom filter
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -98,7 +98,7 @@ ALTER TABLE `/Root/Table`
   WITH (false_positive_probability = 0.01);
 ```
 
-**Пример: добавление индекса N-gram Bloom filter**
+#### Пример: добавление индекса N-gram Bloom filter
 
 ```yql
 ALTER TABLE `/Root/Table`

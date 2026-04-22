@@ -82,6 +82,9 @@ struct TEvPrivate {
         EvDescribeTopicResult,
         EvExecuteTopicEvent,
         EvPartitionIdleness,
+        EvCheckPartitionTimer,
+        EvCheckPartitionCount,
+        EvCheckPartitionCountResult,
 
         EvEnd
     };
@@ -134,6 +137,30 @@ struct TEvPrivate {
 
     struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
         using TTopicEventBase::TTopicEventBase;
+    };
+
+    struct TEvCheckPartitionTimer : public TEventLocal<TEvCheckPartitionTimer, EvCheckPartitionTimer> {};
+
+    struct TEvCheckPartitionCount : public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
+        explicit TEvCheckPartitionCount(ui32 clusterIndex)
+            : ClusterIndex(clusterIndex)
+        {}
+        const ui32 ClusterIndex = 0;
+    };
+
+    struct TEvCheckPartitionCountResult : public TEventLocal<TEvCheckPartitionCountResult, EvCheckPartitionCountResult> {
+        TEvCheckPartitionCountResult(ui32 clusterIndex, ui32 partitionsCount)
+            : ClusterIndex(clusterIndex)
+            , PartitionsCount(partitionsCount)
+        {}
+        TEvCheckPartitionCountResult(ui32 clusterIndex, const NYdb::TStatus& status)
+            : ClusterIndex(clusterIndex)
+            , PartitionsCount(0)
+            , Status(status)
+        {}
+        const ui32 ClusterIndex = 0;
+        const ui32 PartitionsCount = 0;
+        TMaybe<NYdb::TStatus> Status;
     };
 };
 
@@ -239,7 +266,8 @@ public:
         const IPqStaticGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters,
-        TActorId infoAggregator)
+        TActorId infoAggregator,
+        TDuration checkPartitionCountPeriod)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
@@ -252,6 +280,7 @@ public:
         , PqGateway(pqGateway)
         , TopicPartitionsCount(topicPartitionsCount)
         , WithoutConsumer(SourceParams.GetConsumerName().empty())
+        , CheckPartitionCountPeriod(checkPartitionCountPeriod)
     {
         if (const auto& period = SourceParams.GetReconnectPeriod(); !TDuration::TryParse(period, ReconnectPeriod)) {
             SRC_LOG_N("Failed to parse reconnect period: " << period);
@@ -419,6 +448,9 @@ private:
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
+        hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
+        hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
+        hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
     )
 
@@ -516,6 +548,7 @@ private:
             }
 
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
+            SchedulePartitionCountTimer();
             return;
         }
 
@@ -611,6 +644,7 @@ private:
         SRC_LOG_D("Got partition info for cluster " << clusterIndex << " = " << partitionsCount);
         Clusters[clusterIndex].PartitionsCount = partitionsCount;
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
+        SchedulePartitionCountTimer();
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
@@ -760,7 +794,8 @@ private:
         settings
             .AppendTopics(topicReadSettings)
             .MaxMemoryUsageBytes(BufferSize)
-            .ReadFromTimestamp(StartingMessageTimestamp);
+            .ReadFromTimestamp(StartingMessageTimestamp)
+            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets());    // In table mode the query will not fail query by TEndPartitionSessionEvent.
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
@@ -864,6 +899,78 @@ private:
         ReadyBuffer.swap(empty);
     }
 
+    void SchedulePartitionCountTimer() {
+        if (!CheckPartitionCountPeriod || SourceParams.GetStopAtCurrentEndOffsets() || PartitionCountTimerScheduled) {
+            return;
+        }
+        PartitionCountTimerScheduled = true;
+        Schedule(CheckPartitionCountPeriod, new TEvPrivate::TEvCheckPartitionTimer());
+    }
+
+    void Handle(TEvPrivate::TEvCheckPartitionTimer::TPtr& /*ev*/) {
+        PartitionCountTimerScheduled = false;
+        SchedulePartitionCountTimer();
+
+        for (auto& clusterState : Clusters) {
+            const auto checkTime = CheckPartitionCountPeriod * RandomNumber<double>();
+            SRC_LOG_T("Next partition count check in " << checkTime << " seconds (cluster \"" << clusterState.Info.Name << "\")");
+            Schedule(checkTime, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
+        }
+    }
+        
+    void Handle(TEvPrivate::TEvCheckPartitionCount::TPtr& ev) {
+        auto& clusterState = Clusters[ev->Get()->ClusterIndex];
+        SRC_LOG_T("Checking partition count for topic \"" << SourceParams.GetTopicPath() << "\", cluster \"" << clusterState.Info.Name << "\"");
+
+        std::string clusterTopicPath = SourceParams.GetTopicPath();
+        clusterState.Info.AdjustTopicPath(clusterTopicPath);
+
+        GetTopicClient(clusterState)
+            .DescribeTopic(TString(clusterTopicPath), {})
+            .Subscribe([
+                index = clusterState.Index,
+                actorSystem = TActivationContext::ActorSystem(),
+                selfId = SelfId()](const auto& describeTopicFuture)
+            {
+                try {
+                    auto& describeTopic = describeTopicFuture.GetValue();
+                    if (!describeTopic.IsSuccess()) {
+                        actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, describeTopic));
+                        return;
+                    }
+                    auto partitionsCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
+                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, partitionsCount));
+                } catch (const std::exception& ex) {
+                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index,
+                        NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR, {NYdb::NIssue::TIssue(ex.what())})
+                    ));
+                }
+            });
+    }
+
+    void Handle(TEvPrivate::TEvCheckPartitionCountResult::TPtr& ev) {
+        auto clusterIndex = ev->Get()->ClusterIndex;
+        auto partitionsCount = ev->Get()->PartitionsCount;
+
+        if (ev->Get()->Status) {
+            SRC_LOG_W("Periodic DescribeTopic failed for topic \"" << SourceParams.GetTopicPath() << "\""
+                << " on cluster index " << clusterIndex << ": " << ev->Get()->Status->GetIssues().ToOneLineString());
+            return;
+        }
+        if (clusterIndex < Clusters.size() && Clusters[clusterIndex].PartitionsCount != partitionsCount) {
+            TStringBuilder message;
+            message << "Number of partitions in the topic \"" << SourceParams.GetTopicPath() << "\"";
+            if (!Clusters[clusterIndex].Info.Name.empty()) {
+                message << " (on cluster \"" << Clusters[clusterIndex].Info.Name << "\")";
+            }
+            message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
+                << ". You need to restart (alter with text or drop / create) query to read all partitions.";
+            SRC_LOG_E(message);
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+            return;
+        }
+    }
+
     // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
@@ -955,6 +1062,12 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
+            if (!Self.SourceParams.GetStopAtCurrentEndOffsets()) {  // streaming mode
+                TStringBuilder message;
+                message << "Topic (" << Self.SourceParams.GetTopicPath() << ") with auto partitioning is not supported.";
+                SRC_LOG_E(message);
+                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+            }
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
@@ -1020,6 +1133,14 @@ private:
     bool WakeupScheduled = false;
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
+<<<<<<< HEAD
+=======
+    bool FinishedByOffsets = false;
+    THashSet<TPartitionKey> FinishedPartitions;
+    const TDuration CheckPartitionCountPeriod;
+    TInstant NextCheckPartitionTime = TInstant::Now();
+    bool PartitionCountTimerScheduled = false;
+>>>>>>> a62410b9c71 (YQ-5215 abort query if partition count changed (#37570))
 };
 
 ui32 ExtractPartitionsFromParams(
@@ -1068,7 +1189,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
     i64 bufferSize,
-    TActorId infoAggregator
+    TActorId infoAggregator,
+    TDuration checkPartitionCountPeriod
 ) {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1095,7 +1217,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         pqGateway,
         topicPartitionsCount,
         enableStreamingQueriesCounters,
-        infoAggregator
+        infoAggregator,
+        checkPartitionCountPeriod
     );
 
     return {actor, actor};
@@ -1120,6 +1243,14 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         auto taskParamsIt = args.TaskParams.find("query_path");
         if (taskParamsIt != args.TaskParams.end()) {
             txId = taskParamsIt->second;
+        }
+
+        TDuration checkPartitionCountPeriod;
+        taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
+        if (taskParamsIt != args.TaskParams.end()) {
+            if (taskParamsIt->second == "true") {
+                checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod;
+            }
         }
 
         TActorId infoAggregator;
@@ -1148,7 +1279,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 topicPartitionsCount,
                 enableStreamingQueriesCounters,
                 PQReadDefaultFreeSpace,
-                infoAggregator);
+                infoAggregator,
+                checkPartitionCountPeriod);
         }
 
         return CreateDqPqRdReadActor(
@@ -1168,7 +1300,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             counters ? counters : args.TaskCounters,
             PQReadDefaultFreeSpace,
             pqGateway,
-            enableStreamingQueriesCounters);
+            enableStreamingQueriesCounters,
+            checkPartitionCountPeriod);
     });
 }
 

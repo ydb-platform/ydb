@@ -1481,6 +1481,7 @@ Y_UNIT_TEST(DistributesWithBackpressure) {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(rowCount, totalPopped);
+    UNIT_ASSERT_VALUES_EQUAL(rowCount, totalPushed);
 
     // With small buffers and 3 channels, scatter must have activated multiple channels.
     ui32 activeChannels = 0;

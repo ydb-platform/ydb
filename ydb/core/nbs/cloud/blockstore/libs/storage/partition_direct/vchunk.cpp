@@ -307,13 +307,12 @@ void TVChunk::DoReadBlocksLocal(
         return;
     }
 
-    // НОВОЕ: Сложный случай - несколько источников данных
-    span->Event("MultiSource");
+    span->Event("ReadRequestExecutor");
     span->Attribute(
         "SourceCount",
         static_cast<i64>(readHint.RangeHints.size()));
 
-    auto coordinator = std::make_shared<TReadRequestExecutor>(
+    auto requestExecutor = std::make_shared<TReadRequestExecutor>(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
@@ -322,13 +321,13 @@ void TVChunk::DoReadBlocksLocal(
         std::move(request),
         span->GetTraceId());
 
-    auto future = coordinator->GetFuture();
+    auto future = requestExecutor->GetFuture();
     future.Subscribe(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
          span,
-         threadChecker = ExecutorThreadChecker.CreateDelegate()](
-            const TFuture<TReadRequestExecutor::TResponse>& f) mutable
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TFuture<TReadRequestExecutor::TResponse>& f) mutable
         {
             Y_ABORT_UNLESS(threadChecker.Check());
 
@@ -343,8 +342,8 @@ void TVChunk::DoReadBlocksLocal(
                 TReadBlocksLocalResponse{.Error = std::move(value.Error)});
         });
 
-    span->Event("RunMultiSource");
-    coordinator->Run();
+    span->Event("Run ReadRequestExecutor");
+    requestExecutor->Run();
 }
 
 void TVChunk::DoWriteBlocksLocal(

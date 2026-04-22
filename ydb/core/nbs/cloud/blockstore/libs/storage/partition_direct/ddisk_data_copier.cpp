@@ -169,14 +169,12 @@ void TDDiskDataCopier::StartCopyRange()
     auto future = readExecutor->GetFuture();
     future.Subscribe(
         [weakSelf = weak_from_this(),
-         copyRangeState = std::move(copyRangeState),
-         readExecutor]   //
+         copyRangeState = std::move(copyRangeState)]   //
         (const TFuture<TReadRequestExecutor::TResponse>& f) mutable
         {
             if (auto self = weakSelf.lock()) {
                 self->OnRangeRead(std::move(copyRangeState), f.GetValue());
             }
-            // readExecutor уничтожается здесь, освобождая TRangeLock-и
         });
     readExecutor->Run();
 }

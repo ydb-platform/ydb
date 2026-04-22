@@ -72,9 +72,10 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TBufferData* UploadBuf = nullptr;
     TBufferData* DocsBuf = nullptr;
 
-    THashMap<TString, THashMap<ui64, ui32>> TermBuf;
-    ui64 TermBufDocs = 0;
-    ui64 TermBufBytes = 0;
+    bool Compact = false;
+    bool WithRelevance = false;
+    THashMap<TString, TDeltaWriter> TokenBuf;
+    ui64 BufferedBytes = 0;
 
     ui64 MaxBatchRows = 0;
     ui64 MaxBatchBytes = 0;
@@ -154,8 +155,14 @@ public:
 
         MakeTokenTypes(table, types, addType);
 
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
+            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
+            Compact = true;
+        }
+
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
             Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
+            WithRelevance = true;
             MakeDocsTypes(table, addType);
         }
     }
@@ -285,8 +292,6 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
-        LastProcessedKey = TSerializedCellVec(key);
-
         TVector<TString> tokens;
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
             Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
@@ -302,17 +307,35 @@ public:
         } else {
             tokens = Analyze(row.Get(0).AsBuf(), TextAnalyzers);
         }
-        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
-            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
+        if (Compact) {
             Y_ENSURE(key.size() == 1);
             ui64 docId = key[0].AsValue<ui64>();
+            std::sort(tokens.begin(), tokens.end());
+            ui32 freq = 1;
             for (size_t i = 0; i < tokens.size(); i++) {
-                TermBuf[tokens[i]][docId]++;
-                TermBufBytes += tokens[i].size();
-            }
-            TermBufDocs++;
-            if (!FlushTermBuf(false)) {
-                return EScan::Final;
+                if (i < tokens.size()-1 && tokens[i] == tokens[i+1]) {
+                    freq++;
+                    continue;
+                }
+                auto & writer = TokenBuf[tokens[i]];
+                if (!writer.GetCount()) {
+                    BufferedBytes += tokens[i].size();
+                }
+                BufferedBytes -= writer.GetBuf().size();
+                if (WithRelevance) {
+                    writer.Add(docId, freq);
+                } else {
+                    writer.Add(docId);
+                }
+                BufferedBytes += writer.GetBuf().size();
+                freq = 1;
+                if (BufferedBytes >= MaxBatchBytes ||
+                    TokenBuf.size() >= MaxBatchRows) {
+                    if (!FlushAllTokens()) {
+                        return EScan::Final;
+                    }
+                    LastProcessedKey = TSerializedCellVec(key);
+                }
             }
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
                 UploadDocRow(key, row, tokens.size());
@@ -320,8 +343,10 @@ public:
         } else if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             UploadFulltextRelevance(key, tokens);
             UploadDocRow(key, row, tokens.size());
+            LastProcessedKey = TSerializedCellVec(key);
         } else {
             UploadFulltextPlain(key, row, tokens);
+            LastProcessedKey = TSerializedCellVec(key);
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
@@ -396,50 +421,40 @@ public:
         }
     }
 
-    bool FlushTermBuf(bool force)
+    bool FlushToken(const TString& token, TDeltaWriter& writer)
     {
-        if (!TermBuf.size() || !force && TermBufDocs < MaxBatchRows && TermBufBytes < MaxBatchBytes) {
+        if (!writer.GetCount()) {
             return true;
         }
         if (Generation > MaxGeneration) {
             Finish(std::runtime_error("MaxGeneration exceeded"));
             return false;
         }
+        auto segment = writer.GetBuf();
         TVector<TCell> uploadKey(::Reserve(3));
+        uploadKey.push_back(TCell(token));
+        uploadKey.push_back(TCell::Make(writer.GetMaxId()));
+        uploadKey.push_back(TCell::Make(Generation));
         TVector<TCell> uploadValue(::Reserve(2));
-        for (auto& [token, docs] : TermBuf) {
-            TVector<ui8> segment;
-            ui64 minId = 0;
-            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact) {
-                TVector<ui64> ids;
-                for (auto& [docId, freq] : docs) {
-                    ids.push_back(docId);
-                }
-                std::sort(ids.begin(), ids.end());
-                minId = ids[0];
-                segment = DeltaCompress(ids);
-            } else {
-                TVector<TTermFreq> terms;
-                for (auto& [docId, freq] : docs) {
-                    terms.emplace_back(docId, freq);
-                }
-                std::sort(terms.begin(), terms.end(), [](const TTermFreq& a, const TTermFreq& b) -> bool {
-                    return a.DocId < b.DocId;
-                });
-                minId = terms[0].DocId;
-                segment = DeltaCompressWithFreq(terms);
-            }
-            uploadKey.clear();
-            uploadKey.push_back(TCell(token));
-            uploadKey.push_back(TCell::Make(minId));
-            uploadKey.push_back(TCell::Make(Generation));
-            uploadValue.clear();
-            uploadValue.push_back(TCell::Make(true));
-            uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
-            UploadBuf->AddRow(uploadKey, uploadValue);
+        uploadValue.push_back(TCell::Make(true));
+        uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
+        UploadBuf->AddRow(uploadKey, uploadValue);
+        return true;
+    }
+
+    bool FlushAllTokens()
+    {
+        if (!TokenBuf.size()) {
+            return true;
         }
-        TermBuf.clear();
+        for (auto& [token, writer] : TokenBuf) {
+            if (!FlushToken(token, writer)) {
+                return false;
+            }
+        }
         Generation++;
+        BufferedBytes = 0;
+        TokenBuf.clear();
         return true;
     }
 
@@ -451,7 +466,7 @@ public:
 
     EScan Exhausted() final
     {
-        if (!FlushTermBuf(true)) {
+        if (!FlushAllTokens()) {
             return EScan::Final;
         }
 

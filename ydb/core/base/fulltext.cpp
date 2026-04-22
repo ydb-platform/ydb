@@ -591,7 +591,7 @@ void TDeltaWriter::Reset()
 void TDeltaWriter::Add(ui64 DocId)
 {
     Y_ENSURE(DocId > MaxId || !Count);
-    if (!Buf.size()) {
+    if (!Count) {
         MinId = DocId;
     }
     AddVarint(Buf, DocId - MaxId);
@@ -603,7 +603,7 @@ void TDeltaWriter::Add(ui64 DocId)
 void TDeltaWriter::Add(ui64 DocId, ui32 Freq)
 {
     Y_ENSURE(DocId > MaxId || !Count);
-    if (!Buf.size()) {
+    if (!Count) {
         MinId = DocId;
     }
     AddVarintWithFlag(Buf, DocId - MaxId, Freq > 1);

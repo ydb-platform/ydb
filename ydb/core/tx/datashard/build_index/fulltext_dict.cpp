@@ -160,6 +160,9 @@ public:
 
             WithFreq = (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
             MaxSegmentDocuments = request.GetMaxSegmentDocuments();
+            if (!MaxSegmentDocuments) {
+                MaxSegmentDocuments = 10000;
+            }
 
             auto tags = GetAllTags(table);
             ScanTags.push_back(tags.at("__ydb_added"));
@@ -346,8 +349,10 @@ protected:
                 inPos += Delta.AddCompressed(maxId, inBuf.Slice(inPos), WithFreq, MaxSegmentDocuments);
                 LastTokenRows += (Delta.GetCount() - prev);
                 if (inPos < inBuf.size()) {
-                    // Large segments may be split in parts
-                    maxId = Delta.GetMaxId();
+                    if (inPos > 0) {
+                        // Save maxId to resume delta stream from the middle
+                        maxId = Delta.GetMaxId();
+                    }
                     UploadSegment();
                 } else {
                     break;
@@ -371,8 +376,8 @@ protected:
                 TCell((const char*)buf.data(), buf.size()),
             };
             PostingBuf->AddRow(uploadKey, uploadValue);
-            Delta.Reset();
         }
+        Delta.Reset();
     }
 
     void FinishToken(bool last)

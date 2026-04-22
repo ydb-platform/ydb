@@ -1423,9 +1423,9 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalMinMax: {
-                    if (!dataColums.empty()) { //todo: что такое data columns?
+                    if (!dataColums.empty()) { // todo: что такое data columns? Это колонки, указанные в COVER?
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            "Local bloom index does not support data columns"));
+                            "Local min_max index does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
                     if (meta->StoreType != EStoreType::Column) {

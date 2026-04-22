@@ -3,12 +3,14 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
+#include <util/string/vector.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
@@ -171,20 +173,20 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
     for (const auto& index : in.indexes()) {
         if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
             if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
-                return fail("min_max index is disabled with EnableCsMinMaxIndex feature flag");
+                return fail("Local min_max index is disabled with EnableCsMinMaxIndex feature flag");
             }
             if (index.name().empty()) {
-                return fail("min_max index must have a name");
+                return fail("Local min_max index must have a name");
             }
             if (index.index_columns_size() != 1) {
-                return fail(TStringBuilder() << "min_max index is applied to 1 column only, got " << index.index_columns_size() << " columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]");
+                return fail(TStringBuilder() << "Local min_max index is applied to 1 column only, got " << index.index_columns_size() << " columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]");
             }
             if (!index.data_columns().empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
-                return fail(TStringBuilder() << "min_max index doesn't need data columns, got " << index.data_columns_size() << ": [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]");
+                return fail(TStringBuilder() << "Local min_max index doesn't need data columns, got " << index.data_columns_size() << ": [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]");
             }
             auto columnIdIt = nameToId.find(index.index_columns(0));
             if (columnIdIt == nameToId.end()) {
-                return fail(TStringBuilder() << "Tried to apply min_max index to unknown column '" << index.index_columns(0) << "'");
+                return fail(TStringBuilder() << "Tried to apply local min_max index to unknown column '" << index.index_columns(0) << "'");
             }
             auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
             olapIndex->SetId(nextIndexId++);
@@ -1872,7 +1874,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
         case Ydb::Table::TableIndex::kLocalMinMaxIndex:
-            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "local min_max index type is not supported in indexed table creation config"); // todo: спросить, правда ли, что этот код создает отдельную табличку для индексов, а в cs индексы сделаны без отдельной таблички поэтому надо вернуть ошибку?
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type
             // so it's not possible to return an invalid index type error here for now

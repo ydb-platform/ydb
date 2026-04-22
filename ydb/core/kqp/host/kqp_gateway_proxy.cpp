@@ -1070,7 +1070,7 @@ public:
 
                         if (index.Type == TIndexDescription::EType::LocalMinMax) {
                             if (metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local min_max index is not supported for row tables"));
+                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local min_max index is supported only for column tables"));
                                 return;
                             }
                         }

@@ -171,7 +171,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
 
     auto tableGeneration = parser.ColumnParser("generation").GetUint64();
     if (tableGeneration != static_cast<ui64>(Message->GenerationId)) {
-        KAFKA_LOG_ERROR("Generation mismatch for group# " << Message->GroupId.value()
+        KAFKA_LOG_I("Generation mismatch for group# " << Message->GroupId.value()
             << ". Expected# " << Message->GenerationId
             << ", got# " << tableGeneration);
         SendFailedForAllPartitions(ILLEGAL_GENERATION, ctx);

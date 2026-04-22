@@ -502,5 +502,19 @@
             "size": 385,
             "uri": "https://{canondata_backend}/1600758/4248636efdaa36f150a17c3f1e81c0728d33ae03/resource.tar.gz#test.test_Udf-PythonGeneratorWithClosure--Results_/results.txt"
         }
+    ],
+    "test.test[Window-WinOnRowsVoidFrameNewPipeline-default.txt-Debug]": [
+        {
+            "checksum": "7e2d7feee49bc17f0ca41058bc3370b0",
+            "size": 1344,
+            "uri": "https://{canondata_backend}/1130705/f063f5c683c4b036174d6c51e3491bd3171db43f/resource.tar.gz#test.test_Window-WinOnRowsVoidFrameNewPipeline-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Window-WinOnRowsVoidFrameNewPipeline-default.txt-Results]": [
+        {
+            "checksum": "d610600f721698c6fdd12432ed8752ad",
+            "size": 458,
+            "uri": "https://{canondata_backend}/1130705/f063f5c683c4b036174d6c51e3491bd3171db43f/resource.tar.gz#test.test_Window-WinOnRowsVoidFrameNewPipeline-default.txt-Results_/results.txt"
+        }
     ]
 }

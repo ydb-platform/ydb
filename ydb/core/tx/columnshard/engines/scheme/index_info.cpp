@@ -482,7 +482,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
         if (index->IsHierarchical()) {
             result.indexData.Data = chunks.front()->GetData();
             AFL_VERIFY(result.indexData.Data.size() > 0);
-            result.indexData.NGrammSize = index->GetNGrammSize();
+            result.indexData.IndexId = indexId;
+            result.indexData.SchemaVersion = GetVersion();
         }
         AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {
@@ -490,7 +491,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
             AFL_VERIFY(chunks.size() == 1);
             result.indexData.Data = chunks.front()->GetData();
             AFL_VERIFY(result.indexData.Data.size() > 0);
-            result.indexData.NGrammSize = index->GetNGrammSize();
+            result.indexData.IndexId = indexId;
+            result.indexData.SchemaVersion = GetVersion();
         }
         AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
     }

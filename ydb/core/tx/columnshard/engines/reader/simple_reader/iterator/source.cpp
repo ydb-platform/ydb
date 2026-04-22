@@ -291,7 +291,7 @@ TConclusion<bool> TPortionDataSource::DoCheckHierarchicalIndex(
     if (!IndexAccessStub) {
         return true;
     }
-    return IndexAccessStub->CheckValue(Portion->GetPortionId(), value, fetchContext.GetOperation());
+    return IndexAccessStub->CheckValue(Portion->GetPortionId(), Portion->GetSchemaVersionVerified(), value, fetchContext.GetOperation());
 }
 
 void TPortionDataSource::DoAbort() {

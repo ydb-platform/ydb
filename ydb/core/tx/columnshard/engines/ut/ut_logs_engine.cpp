@@ -37,12 +37,16 @@ std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<N
 
 class TTestIndexAccessStub : public IIndexAccessStub {
 public:
-    void RegisterPortion(ui64 /*portionId*/, const TIndexData& /*indexData*/) override {
-        // No-op for tests
+    double RegisterPortion(ui64 /*portionId*/, const TIndexData& /*indexData*/) override {
+        return 0;
     }
 
-    bool CheckValue(ui64 /*portionId*/, const TString& /*value*/) override {
-        // Always return true for tests
+    void RegisterWithoutIndex(ui64 /*portionId*/) override {
+    }
+
+    bool CheckValue(ui64 /*portionId*/, ui64 /*schemaVersion*/,
+        const std::shared_ptr<arrow::Scalar>& /*value*/,
+        const NKikimr::NArrow::NSSA::TIndexCheckOperation& /*operation*/) override {
         return true;
     }
 };

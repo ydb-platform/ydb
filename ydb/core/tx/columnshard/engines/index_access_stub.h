@@ -6,18 +6,21 @@
 #include <util/system/types.h>
 
 #include <ydb/core/formats/arrow/program/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/meta.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/string.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/abstract.h>
 
 namespace NKikimr::NOlap {
 
+class TVersionedIndex;
+
 struct TIndexData {
     TString Data;
-    ui32 NGrammSize;
+    ui32 IndexId = 0;
+    ui64 SchemaVersion = 0;
 
-    TIndexData(const TString& data, ui32 nGrammSize)
+    TIndexData(const TString& data, ui32 indexId, ui64 schemaVersion)
         : Data(data)
-        , NGrammSize(nGrammSize)
+        , IndexId(indexId)
+        , SchemaVersion(schemaVersion)
     {}
 
     TIndexData() = default;
@@ -32,7 +35,8 @@ public:
     virtual void RegisterWithoutIndex(ui64 portionId) = 0;
 
     // if false, value is definitely absent from portion
-    virtual bool CheckValue(ui64 portionId, const std::shared_ptr<arrow::Scalar>& value,
+    virtual bool CheckValue(ui64 portionId, ui64 schemaVersion,
+        const std::shared_ptr<arrow::Scalar>& value,
         const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) = 0;
 };
 
@@ -44,33 +48,27 @@ public:
         AFL_VERIFY(PortionsWithoutIndex.insert(portionId).second);
     }
 
-    bool CheckValue(ui64 portionId, const std::shared_ptr<arrow::Scalar>& value,
+    bool CheckValue(ui64 portionId, ui64 schemaVersion,
+        const std::shared_ptr<arrow::Scalar>& value,
         const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) override;
 
+    void SetVersionedIndex(const TVersionedIndex& versionedIndex) {
+        VersionedIndex = &versionedIndex;
+    }
+
     TDefaultIndexAccessStub(ui32 portionsPerNode)
-        : Constructor(std::make_shared<NIndexes::TFixStringBitsStorageConstructor>())
-        , PortionsPerNode(portionsPerNode)
+        : PortionsPerNode(portionsPerNode)
         , CurrentCounter(0)
     {
-        Index3 = std::make_unique<NIndexes::NBloomNGramm::TIndexMeta>(0, "", "", false, 0, NIndexes::TReadDataExtractorContainer(),
-            0.1, 3, Constructor, false);
-        Index4 = std::make_unique<NIndexes::NBloomNGramm::TIndexMeta>(0, "", "", false, 0, NIndexes::TReadDataExtractorContainer(),
-            0.1, 4, Constructor, false);
-        Index5 = std::make_unique<NIndexes::NBloomNGramm::TIndexMeta>(0, "", "", false, 0, NIndexes::TReadDataExtractorContainer(),
-            0.1, 5, Constructor, false);
     }
 
 private:
-    // does not store actual data, only performs operations
-    std::unique_ptr<NIndexes::NBloomNGramm::TIndexMeta> Index3;
-    std::unique_ptr<NIndexes::NBloomNGramm::TIndexMeta> Index4;
-    std::unique_ptr<NIndexes::NBloomNGramm::TIndexMeta> Index5;
-    std::shared_ptr<NIndexes::TFixStringBitsStorageConstructor> Constructor;
+    const TVersionedIndex* VersionedIndex = nullptr;
     std::vector<std::shared_ptr<NIndexes::IBitsStorage>> Storages;
     const ui32 PortionsPerNode;
     ui32 CurrentCounter;
     THashMap<ui64, ui32> PortionId2Position;
-    THashMap<ui64, ui32> PortionId2NGrammSize;
+    THashMap<ui64, ui32> PortionId2IndexId;
     THashSet<ui64> PortionsWithoutIndex;
 
 };

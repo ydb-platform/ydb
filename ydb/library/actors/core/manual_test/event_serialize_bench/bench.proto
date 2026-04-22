@@ -1,0 +1,11 @@
+option cc_enable_arenas = true;
+
+package NActorsBench;
+
+message TFiveU64 {
+    optional fixed64 Value1 = 1;
+    optional fixed64 Value2 = 2;
+    optional fixed64 Value3 = 3;
+    optional fixed64 Value4 = 4;
+    optional fixed64 Value5 = 5;
+}

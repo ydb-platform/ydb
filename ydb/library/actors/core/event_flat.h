@@ -4,11 +4,11 @@
 #include "event_pb.h"
 
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 
-#include <array>
 #include <cstring>
 #include <limits>
 #include <type_traits>
@@ -42,12 +42,15 @@ namespace NActors {
     /**
      * TEventFlat defines a flat binary storage format for actor events.
      *
+     * Storage model:
+     * - Fixed fields live inline inside a contiguous header buffer.
+     * - BytesField/ArrayField payloads live out-of-line in TRope payload sections.
+     * - The serialized form uses the existing extended payload framing: payload 0 is the
+     *   header, payloads 1..N are field payload slots in schema order.
+     *
      * Compatibility contract:
      * - The sequence of declared fields is the schema for a specific version.
-     * - Fixed and array element types must be trivially copyable; access goes through
-     *   unaligned views, so users must not assume natural alignment of the buffer.
-     * - Fixed fields are stored inline after the version, array fields are stored as a
-     *   ui32 element count in the fixed part followed by a contiguous payload section.
+     * - Fixed fields and array element types must be trivially copyable.
      * - Existing field tags must keep their meaning and binary representation across
      *   versions; incompatible layout changes require a new schema version.
      * - The format uses the native byte encoding produced by this implementation; there
@@ -57,9 +60,23 @@ namespace NActors {
     class TEventFlat : public IEventBase {
         static_assert(std::is_class_v<TEv>, "TEv must be a class");
 
+    public:
+        struct TPayloadRef {
+            ui32 PayloadId = 0; // 0 means payload is absent
+            ui32 Size = 0;      // bytes for BytesField, element count for ArrayField<T>
+        };
+
+    private:
         enum class EFieldKind {
             Fixed,
+            Bytes,
             Array,
+        };
+
+        struct TPayloadBinding {
+            size_t RefOffset = 0;
+            size_t PayloadIndex = 0;
+            ui32 PayloadId = 0;
         };
 
     public:
@@ -71,7 +88,16 @@ namespace NActors {
             static constexpr size_t Id = TagId;
             static constexpr EFieldKind Kind = EFieldKind::Fixed;
             static constexpr bool IsFixed = true;
-            static constexpr bool IsVariable = false;
+            static constexpr bool IsPayload = false;
+        };
+
+        template <size_t TagId>
+        struct BytesField {
+            using TValue = char;
+            static constexpr size_t Id = TagId;
+            static constexpr EFieldKind Kind = EFieldKind::Bytes;
+            static constexpr bool IsFixed = false;
+            static constexpr bool IsPayload = true;
         };
 
         template <class T, size_t TagId>
@@ -82,7 +108,7 @@ namespace NActors {
             static constexpr size_t Id = TagId;
             static constexpr EFieldKind Kind = EFieldKind::Array;
             static constexpr bool IsFixed = false;
-            static constexpr bool IsVariable = true;
+            static constexpr bool IsPayload = true;
         };
 
         template <class T, bool IsConst>
@@ -120,33 +146,186 @@ namespace NActors {
         template <class T>
         using TConstView = TBasicView<T, true>;
 
+        template <bool IsConst>
+        class TBasicBytesView {
+            using TRopePtr = std::conditional_t<IsConst, const TRope*, TRope*>;
+            using TPointer = std::conditional_t<IsConst, const char*, char*>;
+
+        public:
+            TBasicBytesView() = default;
+
+            TBasicBytesView(TRopePtr payload, TPointer refPtr, ui32 payloadId)
+                : Payload(payload)
+                , RefPtr(refPtr)
+                , PayloadId(payloadId)
+            {}
+
+            size_t size() const {
+                return GetRef().Size;
+            }
+
+            bool empty() const {
+                return size() == 0;
+            }
+
+            bool HasPayload() const {
+                return GetRef().PayloadId != 0;
+            }
+
+            const TRope& Rope() const {
+                return *Payload;
+            }
+
+            TString Materialize() const {
+                return Payload->template ExtractUnderlyingContainerOrCopy<TString>();
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Clear() {
+                Payload->clear();
+                SetRef({});
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Set(TRope data) {
+                *Payload = std::move(data);
+                UpdateRefFromPayloadBytes();
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Append(TRope data) {
+                if (!data) {
+                    return;
+                }
+                Payload->Insert(Payload->End(), std::move(data));
+                UpdateRefFromPayloadBytes();
+            }
+
+        private:
+            TPayloadRef GetRef() const {
+                return ReadUnaligned<TPayloadRef>(RefPtr);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> SetRef(TPayloadRef ref) {
+                WriteUnaligned<TPayloadRef>(RefPtr, ref);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> UpdateRefFromPayloadBytes() {
+                const size_t bytes = Payload->GetSize();
+                Y_ENSURE(bytes <= std::numeric_limits<ui32>::max(), "Payload is too large");
+                SetRef(TPayloadRef{
+                    .PayloadId = bytes ? PayloadId : 0,
+                    .Size = static_cast<ui32>(bytes),
+                });
+            }
+
+        private:
+            TRopePtr Payload = nullptr;
+            TPointer RefPtr = nullptr;
+            ui32 PayloadId = 0;
+        };
+
+        using TBytesView = TBasicBytesView<false>;
+        using TConstBytesView = TBasicBytesView<true>;
+
         template <class T, bool IsConst>
         class TBasicArrayView {
+            static_assert(std::is_trivially_copyable_v<T>, "Array view requires trivially copyable type");
+
+            using TRopePtr = std::conditional_t<IsConst, const TRope*, TRope*>;
             using TPointer = std::conditional_t<IsConst, const char*, char*>;
+
+            class TElementView {
+            public:
+                TElementView(TRopePtr payload, TPointer refPtr, ui32 payloadId, size_t index)
+                    : Payload(payload)
+                    , RefPtr(refPtr)
+                    , PayloadId(payloadId)
+                    , Index(index)
+                {}
+
+                operator T() const {
+                    return Read();
+                }
+
+                template <bool Enabled = !IsConst>
+                std::enable_if_t<Enabled, TElementView&> operator=(T value) {
+                    Write(value);
+                    return *this;
+                }
+
+            private:
+                size_t Size() const {
+                    return ReadUnaligned<TPayloadRef>(RefPtr).Size;
+                }
+
+                T Read() const {
+                    Y_ENSURE(Index < Size(), "Array index " << Index << " is out of range " << Size());
+                    T value;
+                    auto it = Payload->Position(Index * sizeof(T));
+                    TRopeUtils::Memcpy(reinterpret_cast<char*>(&value), it, sizeof(T));
+                    return value;
+                }
+
+                template <bool Enabled = !IsConst>
+                std::enable_if_t<Enabled> Write(T value) {
+                    Y_ENSURE(Index < Size(), "Array index " << Index << " is out of range " << Size());
+                    auto it = Payload->Position(Index * sizeof(T));
+                    TRopeUtils::Memcpy(it, reinterpret_cast<const char*>(&value), sizeof(T));
+                    TPayloadRef ref = ReadUnaligned<TPayloadRef>(RefPtr);
+                    ref.PayloadId = ref.Size ? PayloadId : 0;
+                    WriteUnaligned<TPayloadRef>(RefPtr, ref);
+                }
+
+            private:
+                TRopePtr Payload = nullptr;
+                TPointer RefPtr = nullptr;
+                ui32 PayloadId = 0;
+                size_t Index = 0;
+            };
 
         public:
             TBasicArrayView() = default;
 
-            TBasicArrayView(TPointer ptr, size_t size)
-                : Ptr(ptr)
-                , Size(size)
+            TBasicArrayView(TRopePtr payload, TPointer refPtr, ui32 payloadId)
+                : Payload(payload)
+                , RefPtr(refPtr)
+                , PayloadId(payloadId)
             {}
 
             size_t size() const {
-                return Size;
+                return GetRef().Size;
             }
 
             bool empty() const {
-                return Size == 0;
+                return size() == 0;
             }
 
-            TBasicView<T, IsConst> operator[](size_t index) const {
-                Y_ENSURE(index < Size, "Array index " << index << " is out of range " << Size);
-                return TBasicView<T, IsConst>(Ptr + index * sizeof(T));
+            TElementView operator[](size_t index) const {
+                return TElementView(Payload, RefPtr, PayloadId, index);
+            }
+
+            T At(size_t index) const {
+                return (*this)[index];
             }
 
             T Get(size_t index) const {
-                return (*this)[index].Get();
+                return At(index);
+            }
+
+            void CopyTo(T* dst, size_t count) const {
+                Y_ENSURE(count == size(), "Unexpected array size " << count << ", expected " << size());
+                auto it = Payload->Begin();
+                TRopeUtils::Memcpy(reinterpret_cast<char*>(dst), it, count * sizeof(T));
+            }
+
+            template <class F>
+            void ForEach(F&& f) const {
+                for (size_t i = 0; i < size(); ++i) {
+                    f(At(i));
+                }
             }
 
             template <bool Enabled = !IsConst>
@@ -155,23 +334,78 @@ namespace NActors {
             }
 
             template <bool Enabled = !IsConst>
-            std::enable_if_t<Enabled> CopyFrom(const T* src, size_t count) {
-                Y_ENSURE(count == Size, "Unexpected array size " << count << ", expected " << Size);
-                for (size_t i = 0; i < Size; ++i) {
-                    WriteUnaligned<T>(Ptr + i * sizeof(T), src[i]);
-                }
+            std::enable_if_t<Enabled> Clear() {
+                Payload->clear();
+                SetRef({});
             }
 
-            void CopyTo(T* dst, size_t count) const {
-                Y_ENSURE(count == Size, "Unexpected array size " << count << ", expected " << Size);
-                for (size_t i = 0; i < Size; ++i) {
-                    dst[i] = ReadUnaligned<T>(Ptr + i * sizeof(T));
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Append(const T* src, size_t count) {
+                if (!count) {
+                    return;
                 }
+
+                const size_t bytes = CheckedFieldBytes(count);
+                TString data = TString::Uninitialized(bytes);
+                std::memcpy(data.Detach(), src, bytes);
+                Payload->Insert(Payload->End(), TRope(std::move(data)));
+
+                TPayloadRef ref = GetRef();
+                Y_ENSURE(ref.Size <= std::numeric_limits<ui32>::max() - count, "Array field is too large");
+                ref.Size += count;
+                ref.PayloadId = PayloadId;
+                SetRef(ref);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> CopyFrom(const T* src, size_t count) {
+                Clear();
+                Append(src, count);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Resize(size_t newSize) {
+                const size_t current = size();
+                if (newSize == current) {
+                    return;
+                }
+                if (newSize == 0) {
+                    Clear();
+                    return;
+                }
+                Y_ENSURE(newSize >= current, "Shrink is not supported for flat array payloads");
+
+                const size_t delta = newSize - current;
+                const size_t bytes = CheckedFieldBytes(delta);
+                TString data = TString::Uninitialized(bytes);
+                std::memset(data.Detach(), 0, bytes);
+                Payload->Insert(Payload->End(), TRope(std::move(data)));
+
+                TPayloadRef ref = GetRef();
+                ref.Size = static_cast<ui32>(newSize);
+                ref.PayloadId = PayloadId;
+                SetRef(ref);
             }
 
         private:
-            TPointer Ptr = nullptr;
-            size_t Size = 0;
+            static size_t CheckedFieldBytes(size_t count) {
+                Y_ENSURE(count <= std::numeric_limits<size_t>::max() / sizeof(T), "Array field is too large");
+                return count * sizeof(T);
+            }
+
+            TPayloadRef GetRef() const {
+                return ReadUnaligned<TPayloadRef>(RefPtr);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> SetRef(TPayloadRef ref) {
+                WriteUnaligned<TPayloadRef>(RefPtr, ref);
+            }
+
+        private:
+            TRopePtr Payload = nullptr;
+            TPointer RefPtr = nullptr;
+            ui32 PayloadId = 0;
         };
 
         template <class T>
@@ -185,9 +419,9 @@ namespace NActors {
             static_assert(NFlatEventDetail::TAreDistinct<TFields...>::value, "Duplicate field tag in flat event scheme");
 
             static constexpr size_t FieldCount = sizeof...(TFields);
-            static constexpr size_t VariableFieldCount = (0u + ... + (TFields::IsVariable ? 1u : 0u));
-            static constexpr size_t FixedFieldsSize = (0u + ... + (TFields::IsFixed ? sizeof(typename TFields::TValue) : 0u));
-            static constexpr size_t FixedPartSize = sizeof(ui16) + FixedFieldsSize + VariableFieldCount * sizeof(ui32);
+            static constexpr size_t PayloadFieldCount = (0u + ... + (TFields::IsPayload ? 1u : 0u));
+            static constexpr size_t HeaderFieldsSize = (0u + ... + (TFields::IsFixed ? sizeof(typename TFields::TValue) : sizeof(TPayloadRef)));
+            static constexpr size_t HeaderSize = sizeof(ui16) + HeaderFieldsSize;
 
             template <class TTag>
             static constexpr bool HasField = (std::is_same_v<TTag, TFields> || ...);
@@ -196,63 +430,72 @@ namespace NActors {
             static constexpr bool HasFixedField = ((std::is_same_v<TTag, TFields> && TFields::IsFixed) || ...);
 
             template <class TTag>
-            static constexpr bool HasVariableField = ((std::is_same_v<TTag, TFields> && TFields::IsVariable) || ...);
+            static constexpr bool HasPayloadField = ((std::is_same_v<TTag, TFields> && TFields::IsPayload) || ...);
 
             template <class TTag>
             static consteval size_t GetFixedOffset() {
                 static_assert(HasFixedField<TTag>, "Field is not a fixed field in this scheme");
-                return sizeof(ui16) + GetFixedOffsetImpl<TTag, TFields...>();
+                return sizeof(ui16) + GetFieldOffsetImpl<TTag, TFields...>();
             }
 
             template <class TTag>
-            static consteval size_t GetVariableMetaOffset() {
-                static_assert(HasVariableField<TTag>, "Field is not an array field in this scheme");
-                return sizeof(ui16) + FixedFieldsSize + GetVariableIndexImpl<TTag, TFields...>() * sizeof(ui32);
+            static consteval size_t GetPayloadRefOffset() {
+                static_assert(HasPayloadField<TTag>, "Field is not a payload field in this scheme");
+                return sizeof(ui16) + GetFieldOffsetImpl<TTag, TFields...>();
             }
 
             template <class TTag>
-            static consteval size_t GetVariableIndex() {
-                static_assert(HasVariableField<TTag>, "Field is not an array field in this scheme");
-                return GetVariableIndexImpl<TTag, TFields...>();
+            static consteval size_t GetPayloadIndex() {
+                static_assert(HasPayloadField<TTag>, "Field is not a payload field in this scheme");
+                return GetPayloadIndexImpl<TTag, TFields...>();
             }
 
             template <class F>
-            static void ForEachVariableField(F&& f) {
-                (ForEachVariableFieldImpl<TFields>(f), ...);
+            static void ForEachPayloadField(F&& f) {
+                (ForEachPayloadFieldImpl<TFields>(f), ...);
             }
 
         private:
-            template <class TTag>
-            static consteval size_t GetFixedOffsetImpl() {
-                return 0;
-            }
-
-            template <class TTag, class TFirst, class... TRest>
-            static consteval size_t GetFixedOffsetImpl() {
-                if constexpr (std::is_same_v<TTag, TFirst>) {
-                    return 0;
+            template <class TField>
+            static consteval size_t GetStoredSize() {
+                if constexpr (TField::IsFixed) {
+                    return sizeof(typename TField::TValue);
                 } else {
-                    return (TFirst::IsFixed ? sizeof(typename TFirst::TValue) : 0u) + GetFixedOffsetImpl<TTag, TRest...>();
+                    return sizeof(TPayloadRef);
                 }
             }
 
             template <class TTag>
-            static consteval size_t GetVariableIndexImpl() {
+            static consteval size_t GetFieldOffsetImpl() {
                 return 0;
             }
 
             template <class TTag, class TFirst, class... TRest>
-            static consteval size_t GetVariableIndexImpl() {
+            static consteval size_t GetFieldOffsetImpl() {
                 if constexpr (std::is_same_v<TTag, TFirst>) {
                     return 0;
                 } else {
-                    return (TFirst::IsVariable ? 1u : 0u) + GetVariableIndexImpl<TTag, TRest...>();
+                    return GetStoredSize<TFirst>() + GetFieldOffsetImpl<TTag, TRest...>();
+                }
+            }
+
+            template <class TTag>
+            static consteval size_t GetPayloadIndexImpl() {
+                return 0;
+            }
+
+            template <class TTag, class TFirst, class... TRest>
+            static consteval size_t GetPayloadIndexImpl() {
+                if constexpr (std::is_same_v<TTag, TFirst>) {
+                    return 0;
+                } else {
+                    return (TFirst::IsPayload ? 1u : 0u) + GetPayloadIndexImpl<TTag, TRest...>();
                 }
             }
 
             template <class TField, class F>
-            static void ForEachVariableFieldImpl(F& f) {
-                if constexpr (TField::IsVariable) {
+            static void ForEachPayloadFieldImpl(F& f) {
+                if constexpr (TField::IsPayload) {
                     f.template operator()<TField>();
                 }
             }
@@ -265,12 +508,31 @@ namespace NActors {
             using TLatestScheme = typename NFlatEventDetail::TLastType<TSchemes...>::Type;
             static constexpr ui16 VersionCount = sizeof...(TSchemes);
 
+            template <class TScheme>
+            static constexpr bool HasScheme = (std::is_same_v<TScheme, TSchemes> || ...);
+
+            template <class TScheme>
+            static consteval ui16 GetVersion() {
+                static_assert(HasScheme<TScheme>, "Scheme does not belong to this flat event version set");
+                return GetVersionImpl<TScheme, 1, TSchemes...>();
+            }
+
             template <class F>
             static decltype(auto) Dispatch(ui16 version, F&& f) {
                 return DispatchImpl<1, TSchemes...>(version, std::forward<F>(f));
             }
 
         private:
+            template <class TScheme, ui16 Version, class TCurrent, class... TRest>
+            static consteval ui16 GetVersionImpl() {
+                if constexpr (std::is_same_v<TScheme, TCurrent>) {
+                    return Version;
+                } else {
+                    static_assert(sizeof...(TRest) > 0, "Scheme does not belong to this flat event version set");
+                    return GetVersionImpl<TScheme, Version + 1, TRest...>();
+                }
+            }
+
             template <ui16 Version, class TScheme, class... TRest, class F>
             static decltype(auto) DispatchImpl(ui16 version, F&& f) {
                 if (version == Version) {
@@ -285,20 +547,86 @@ namespace NActors {
             }
         };
 
-        template <class TTag>
-        struct TRepeatedFieldSize {
-            using TFieldTag = TTag;
-
-            explicit TRepeatedFieldSize(size_t size)
-                : Size(size)
-            {}
-
-            size_t Size;
-        };
-
     public:
         using THandle = TEventHandle<TEv>;
         using TPtr = typename THandle::TPtr;
+
+        template <class TScheme, bool IsConst>
+        class TBasicFrontend {
+            using THeaderPtr = std::conditional_t<IsConst, const char*, char*>;
+            using TPayloadVector = std::conditional_t<IsConst, const TVector<TRope>, TVector<TRope>>;
+
+        public:
+            TBasicFrontend() = default;
+
+            TBasicFrontend(THeaderPtr header, TPayloadVector* payloads)
+                : Header(header)
+                , Payloads(payloads)
+            {}
+
+            template <class TTag>
+            static constexpr bool HasField = TScheme::template HasField<TTag>;
+
+            template <class TTag>
+            auto Field() const {
+                static_assert(TTag::IsFixed, "Field() is only available for fixed fields");
+                static_assert(TScheme::template HasFixedField<TTag>, "Field is absent in this scheme");
+
+                using TValue = typename TTag::TValue;
+                constexpr size_t offset = TScheme::template GetFixedOffset<TTag>();
+                if constexpr (IsConst) {
+                    return TConstView<TValue>(Header + offset);
+                } else {
+                    return TView<TValue>(Header + offset);
+                }
+            }
+
+            template <class TTag>
+            auto Bytes() const {
+                static_assert(TTag::Kind == EFieldKind::Bytes, "Bytes() is only available for bytes fields");
+                static_assert(TScheme::template HasPayloadField<TTag>, "Field is absent in this scheme");
+
+                constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
+                constexpr size_t refOffset = TScheme::template GetPayloadRefOffset<TTag>();
+                if constexpr (IsConst) {
+                    return TConstBytesView(&(*Payloads)[payloadIndex], Header + refOffset, payloadIndex + 1);
+                } else {
+                    return TBytesView(&(*Payloads)[payloadIndex], Header + refOffset, payloadIndex + 1);
+                }
+            }
+
+            template <class TTag>
+            auto Array() const {
+                static_assert(TTag::Kind == EFieldKind::Array, "Array() is only available for array fields");
+                static_assert(TScheme::template HasPayloadField<TTag>, "Field is absent in this scheme");
+
+                using TValue = typename TTag::TValue;
+                constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
+                constexpr size_t refOffset = TScheme::template GetPayloadRefOffset<TTag>();
+                if constexpr (IsConst) {
+                    return TConstArrayView<TValue>(&(*Payloads)[payloadIndex], Header + refOffset, payloadIndex + 1);
+                } else {
+                    return TArrayView<TValue>(&(*Payloads)[payloadIndex], Header + refOffset, payloadIndex + 1);
+                }
+            }
+
+            template <class TTag>
+            size_t GetSize() const {
+                static_assert(TTag::IsPayload, "GetSize() is only available for payload-backed fields");
+                static_assert(TScheme::template HasPayloadField<TTag>, "Field is absent in this scheme");
+                return ReadUnaligned<TPayloadRef>(Header + TScheme::template GetPayloadRefOffset<TTag>()).Size;
+            }
+
+        private:
+            THeaderPtr Header = nullptr;
+            TPayloadVector* Payloads = nullptr;
+        };
+
+        template <class TScheme>
+        using TFrontend = TBasicFrontend<TScheme, false>;
+
+        template <class TScheme>
+        using TConstFrontend = TBasicFrontend<TScheme, true>;
 
         ui32 Type() const override {
             return TEv::EventType;
@@ -309,11 +637,61 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            return TStringBuilder() << TypeName<TEv>() << " { version# " << Version << " size# " << Storage.size() << " }";
+            return TStringBuilder() << TypeName<TEv>() << " { version# " << Version
+                << " header# " << HeaderStorage.size() << " payloads# " << Payloads.size() << " }";
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* serializer) const override {
-            return serializer->WriteString(&Storage);
+            AssertInitializedDebug();
+            const auto payloads = BuildWirePayloads();
+            return SerializeToArcadiaStreamImpl(serializer, payloads);
+        }
+
+        std::optional<TRope> SerializeToRope(IRcBufAllocator* allocator) const override {
+            AssertInitializedDebug();
+            const auto payloads = BuildWirePayloads();
+            const ui32 headerSize = CalculateSerializedHeaderSizeImpl(payloads);
+
+            TRope result;
+            if (headerSize) {
+                TRcBuf headerBuf = allocator->AllocRcBuf(headerSize, 0, 0);
+                if (!headerBuf) {
+                    return {};
+                }
+
+                char* data = headerBuf.GetDataMut();
+                auto append = [&data](const char* ptr, size_t len) {
+                    std::memcpy(data, ptr, len);
+                    data += len;
+                    return true;
+                };
+
+                char marker = ExtendedPayloadMarker;
+                append(&marker, 1);
+
+                auto appendNumber = [&append](size_t number) {
+                    char buf[MaxNumberBytes];
+                    size_t pos = 0;
+                    do {
+                        buf[pos++] = (number & 0x7F) | (number >= 128 ? 0x80 : 0x00);
+                        number >>= 7;
+                    } while (number);
+                    return append(buf, pos);
+                };
+
+                appendNumber(payloads.size());
+                for (const TRope& rope : payloads) {
+                    appendNumber(rope.GetSize());
+                }
+
+                result.Insert(result.End(), std::move(headerBuf));
+            }
+
+            for (const TRope& rope : payloads) {
+                result.Insert(result.End(), TRope(rope));
+            }
+
+            return result;
         }
 
         bool IsSerializable() const override {
@@ -321,167 +699,188 @@ namespace NActors {
         }
 
         ui32 CalculateSerializedSize() const override {
-            return Storage.size();
+            AssertInitializedDebug();
+            return CalculateSerializedSizeCached();
         }
 
         ui32 CalculateSerializedSizeCached() const override {
-            return Storage.size();
+            AssertInitializedDebug();
+            const auto payloads = BuildWirePayloads();
+            return CalculateSerializedSizeImpl(payloads, 0);
+        }
+
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            AssertInitializedDebug();
+            const auto payloads = BuildWirePayloads();
+            return CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(), payloads, 0);
         }
 
         ui16 GetVersion() const {
+            AssertInitializedDebug();
             return Version;
         }
 
         size_t GetSerializedSize() const {
-            return Storage.size();
+            return CalculateSerializedSizeCached();
         }
 
-        template <class... TSizes>
-        static TEv* MakeEvent(TSizes... sizes) {
+        static TEv* MakeEvent() {
             using TVersions = typename TEv::TScheme;
             using TLatestScheme = typename TVersions::TLatestScheme;
 
-            static_assert(sizeof...(TSizes) == TLatestScheme::VariableFieldCount, "Unexpected number of repeated field sizes");
-            static_assert(((requires {
-                typename std::decay_t<TSizes>::TFieldTag;
-                std::declval<std::decay_t<TSizes>>().Size;
-            }) && ...), "Unsupported MakeEvent argument");
-            static_assert(NFlatEventDetail::TAreDistinct<typename std::decay_t<TSizes>::TFieldTag...>::value,
-                "Repeated field size arguments must be unique");
-            static_assert((TLatestScheme::template HasVariableField<typename std::decay_t<TSizes>::TFieldTag> && ...),
-                "MakeEvent argument doesn't match array field in latest scheme");
-
-            std::array<size_t, TLatestScheme::VariableFieldCount> fieldSizes = {};
-            size_t totalSize = TLatestScheme::FixedPartSize;
-
-            auto collectFieldSize = [&](const auto& item) {
-                using TArg = std::decay_t<decltype(item)>;
-                using TFieldTag = typename TArg::TFieldTag;
-                constexpr size_t index = TLatestScheme::template GetVariableIndex<TFieldTag>();
-
-                const size_t count = item.Size;
-                Y_ENSURE(count <= std::numeric_limits<ui32>::max(), "Repeated field size is too large");
-                fieldSizes[index] = count;
-
-                const size_t fieldBytes = CheckedFieldBytes<typename TFieldTag::TValue>(count);
-                Y_ENSURE(totalSize <= std::numeric_limits<size_t>::max() - fieldBytes, "Flat event is too large");
-                totalSize += fieldBytes;
-            };
-
-            (collectFieldSize(sizes), ...);
-
             THolder<TEv> holder(new TEv());
-            holder->Storage = TString::Uninitialized(totalSize);
-            char* data = holder->Storage.Detach();
-            memset(data, 0, totalSize);
-
+            holder->HeaderStorage = TString::Uninitialized(TLatestScheme::HeaderSize);
+            std::memset(holder->HeaderStorage.Detach(), 0, TLatestScheme::HeaderSize);
+            holder->Payloads.resize(TLatestScheme::PayloadFieldCount);
             holder->Version = TVersions::VersionCount;
-            WriteUnaligned<ui16>(data, holder->Version);
-
-            size_t metaOffset = sizeof(ui16) + TLatestScheme::FixedFieldsSize;
-            for (size_t count : fieldSizes) {
-                WriteUnaligned<ui32>(data + metaOffset, static_cast<ui32>(count));
-                metaOffset += sizeof(ui32);
-            }
-
+            WriteUnaligned<ui16>(holder->MutableHeaderData(), holder->Version);
             return holder.Release();
         }
 
         static TEv* Load(const TEventSerializedData* input) {
             Y_ENSURE(input, "Flat event buffer is null");
+            Y_ENSURE(input->GetSize(), "Flat event payload is empty");
 
-            TString storage = input->GetString();
-            const ui16 version = ValidateStorage(storage);
+            TVector<TRope> wirePayloads;
+            if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
+                TRope::TConstIterator iter = input->GetBeginIter();
+                size_t size = input->GetSize();
+                size_t totalPayloadSize = 0;
+                ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
+            } else {
+                wirePayloads.push_back(input->GetRope());
+            }
+
+            Y_ENSURE(!wirePayloads.empty(), "Flat event payload set is empty");
 
             THolder<TEv> holder(new TEv());
-            holder->Storage = std::move(storage);
-            holder->Version = version;
+            holder->HeaderStorage = wirePayloads.front().template ExtractUnderlyingContainerOrCopy<TString>();
+            holder->Version = ValidateHeaderStorage(holder->HeaderStorage);
+
+            holder->DispatchCurrentVersion([&]<class TScheme>() {
+                Y_ENSURE(wirePayloads.size() == 1 + TScheme::PayloadFieldCount,
+                    "Unexpected number of payloads " << wirePayloads.size() << " for flat event version " << holder->Version);
+                holder->Payloads.resize(TScheme::PayloadFieldCount);
+                for (size_t i = 0; i < TScheme::PayloadFieldCount; ++i) {
+                    holder->Payloads[i] = std::move(wirePayloads[i + 1]);
+                }
+                holder->template ValidateStateForScheme<TScheme>();
+            });
+
             return holder.Release();
         }
 
         template <class TTag>
         bool HasField() const {
-            using TVersions = typename TEv::TScheme;
-            return TVersions::Dispatch(Version, []<class TScheme>() {
+            return DispatchCurrentVersion([&]<class TScheme>() {
                 return TScheme::template HasField<TTag>;
             });
+        }
+
+        template <class TScheme>
+        bool IsVersion() const {
+            using TVersions = typename TEv::TScheme;
+            static_assert(TVersions::template HasScheme<TScheme>, "Scheme does not belong to this flat event");
+            AssertInitializedDebug();
+            return Version == TVersions::template GetVersion<TScheme>();
+        }
+
+        template <class TScheme>
+        TFrontend<TScheme> GetFrontend() {
+            AssertFrontendVersion<TScheme>();
+            return MakeFrontend<TScheme>();
+        }
+
+        template <class TScheme>
+        TConstFrontend<TScheme> GetFrontend() const {
+            AssertFrontendVersion<TScheme>();
+            return MakeFrontend<TScheme>();
         }
 
         template <class TTag>
         TView<typename TTag::TValue> Field() {
             static_assert(TTag::IsFixed, "Field() is only available for fixed fields");
-
-            using TValue = typename TTag::TValue;
-            const size_t offset = DispatchCurrentVersion([&]<class TScheme>() {
+            return DispatchCurrentVersion([&]<class TScheme>() -> TView<typename TTag::TValue> {
                 if constexpr (TScheme::template HasFixedField<TTag>) {
-                    return TScheme::template GetFixedOffset<TTag>();
+                    return MakeFrontend<TScheme>().template Field<TTag>();
                 } else {
                     Y_ENSURE(false, "Field is absent in this event version");
-                    return size_t{0};
+                    return {};
                 }
             });
-
-            return TView<TValue>(MutableData() + offset);
         }
 
         template <class TTag>
         TConstView<typename TTag::TValue> Field() const {
             static_assert(TTag::IsFixed, "Field() is only available for fixed fields");
-
-            using TValue = typename TTag::TValue;
-            const size_t offset = DispatchCurrentVersion([&]<class TScheme>() {
+            return DispatchCurrentVersion([&]<class TScheme>() -> TConstView<typename TTag::TValue> {
                 if constexpr (TScheme::template HasFixedField<TTag>) {
-                    return TScheme::template GetFixedOffset<TTag>();
+                    return MakeFrontend<TScheme>().template Field<TTag>();
                 } else {
                     Y_ENSURE(false, "Field is absent in this event version");
-                    return size_t{0};
+                    return {};
                 }
             });
+        }
 
-            return TConstView<TValue>(Data() + offset);
+        template <class TTag>
+        TBytesView Bytes() {
+            static_assert(TTag::Kind == EFieldKind::Bytes, "Bytes() is only available for bytes fields");
+            return DispatchCurrentVersion([&]<class TScheme>() -> TBytesView {
+                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                    return MakeFrontend<TScheme>().template Bytes<TTag>();
+                } else {
+                    Y_ENSURE(false, "Field is absent in this event version");
+                    return {};
+                }
+            });
+        }
+
+        template <class TTag>
+        TConstBytesView Bytes() const {
+            static_assert(TTag::Kind == EFieldKind::Bytes, "Bytes() is only available for bytes fields");
+            return DispatchCurrentVersion([&]<class TScheme>() -> TConstBytesView {
+                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                    return MakeFrontend<TScheme>().template Bytes<TTag>();
+                } else {
+                    Y_ENSURE(false, "Field is absent in this event version");
+                    return {};
+                }
+            });
         }
 
         template <class TTag>
         TArrayView<typename TTag::TValue> Array() {
-            static_assert(TTag::IsVariable, "Array() is only available for array fields");
-
-            using TValue = typename TTag::TValue;
-            const size_t offset = DispatchCurrentVersion([&]<class TScheme>() {
-                if constexpr (TScheme::template HasVariableField<TTag>) {
-                    return GetVariablePayloadOffset<TScheme, TTag>();
+            static_assert(TTag::Kind == EFieldKind::Array, "Array() is only available for array fields");
+            return DispatchCurrentVersion([&]<class TScheme>() -> TArrayView<typename TTag::TValue> {
+                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                    return MakeFrontend<TScheme>().template Array<TTag>();
                 } else {
                     Y_ENSURE(false, "Field is absent in this event version");
-                    return size_t{0};
+                    return {};
                 }
             });
-
-            return TArrayView<TValue>(MutableData() + offset, GetSize<TTag>());
         }
 
         template <class TTag>
         TConstArrayView<typename TTag::TValue> Array() const {
-            static_assert(TTag::IsVariable, "Array() is only available for array fields");
-
-            using TValue = typename TTag::TValue;
-            const size_t offset = DispatchCurrentVersion([&]<class TScheme>() {
-                if constexpr (TScheme::template HasVariableField<TTag>) {
-                    return GetVariablePayloadOffset<TScheme, TTag>();
+            static_assert(TTag::Kind == EFieldKind::Array, "Array() is only available for array fields");
+            return DispatchCurrentVersion([&]<class TScheme>() -> TConstArrayView<typename TTag::TValue> {
+                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                    return MakeFrontend<TScheme>().template Array<TTag>();
                 } else {
                     Y_ENSURE(false, "Field is absent in this event version");
-                    return size_t{0};
+                    return {};
                 }
             });
-
-            return TConstArrayView<TValue>(Data() + offset, GetSize<TTag>());
         }
 
         template <class TTag>
         size_t GetSize() const {
-            static_assert(TTag::IsVariable, "GetSize() is only available for array fields");
-
+            static_assert(TTag::IsPayload, "GetSize() is only available for payload-backed fields");
             return DispatchCurrentVersion([&]<class TScheme>() -> size_t {
-                if constexpr (TScheme::template HasVariableField<TTag>) {
-                    return GetStoredCount<TScheme, TTag>();
+                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                    return MakeFrontend<TScheme>().template GetSize<TTag>();
                 } else {
                     Y_ENSURE(false, "Field is absent in this event version");
                     return 0;
@@ -499,79 +898,106 @@ namespace NActors {
             return count * sizeof(TValue);
         }
 
-        static ui16 ValidateStorage(const TString& storage) {
-            Y_ENSURE(storage.size() >= sizeof(ui16), "Flat event payload is too short");
-
-            const ui16 version = ReadUnaligned<ui16>(storage.data());
-            using TVersions = typename TEv::TScheme;
-
-            TVersions::Dispatch(version, [&]<class TScheme>() {
-                ValidateStorageForScheme<TScheme>(storage);
-            });
-
-            return version;
+        static ui16 ValidateHeaderStorage(const TString& header) {
+            Y_ENSURE(header.size() >= sizeof(ui16), "Flat event header is too short");
+            return ReadUnaligned<ui16>(header.data());
         }
 
         template <class TScheme>
-        static void ValidateStorageForScheme(const TString& storage) {
-            Y_ENSURE(storage.size() >= TScheme::FixedPartSize, "Flat event payload is too short for this scheme");
+        void ValidateStateForScheme() const {
+            Y_ENSURE(HeaderStorage.size() == TScheme::HeaderSize,
+                "Unexpected flat event header size " << HeaderStorage.size() << ", expected " << TScheme::HeaderSize);
+            Y_ENSURE(Payloads.size() == TScheme::PayloadFieldCount,
+                "Unexpected number of flat payload slots " << Payloads.size() << ", expected " << TScheme::PayloadFieldCount);
 
-            size_t expected = TScheme::FixedPartSize;
-            const char* data = storage.data();
+            TScheme::ForEachPayloadField([&]<class TField>() {
+                constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TField>();
+                const TPayloadRef ref = GetPayloadRef<TScheme, TField>();
+                const TRope& payload = Payloads[payloadIndex];
+                const size_t expectedBytes = CheckedFieldBytes<typename TField::TValue>(ref.Size);
 
-            TScheme::ForEachVariableField([&]<class TField>() {
-                const ui32 count = ReadUnaligned<ui32>(data + TScheme::template GetVariableMetaOffset<TField>());
-                const size_t fieldBytes = CheckedFieldBytes<typename TField::TValue>(count);
-                Y_ENSURE(expected <= std::numeric_limits<size_t>::max() - fieldBytes, "Flat event payload is too large");
-                expected += fieldBytes;
+                if (ref.PayloadId == 0) {
+                    Y_ENSURE(ref.Size == 0, "Absent payload must have zero size");
+                    Y_ENSURE(payload.GetSize() == 0, "Absent payload slot must be empty");
+                } else {
+                    Y_ENSURE(ref.PayloadId == payloadIndex + 1,
+                        "Unexpected payload id " << ref.PayloadId << " for slot " << payloadIndex);
+                    Y_ENSURE(payload.GetSize() == expectedBytes,
+                        "Payload size mismatch, payload# " << payloadIndex << " expected " << expectedBytes
+                        << " got " << payload.GetSize());
+                }
             });
+        }
 
-            Y_ENSURE(expected == storage.size(),
-                "Flat event payload size mismatch, expected " << expected << " got " << storage.size());
+        bool AllowExternalDataChannel() const {
+            size_t totalPayloadSize = 0;
+            for (const TRope& payload : Payloads) {
+                totalPayloadSize += payload.GetSize();
+            }
+            return totalPayloadSize >= 4096;
+        }
+
+        TVector<TRope> BuildWirePayloads() const {
+            TVector<TRope> result;
+            result.reserve(1 + Payloads.size());
+            result.emplace_back(TRope(TString(HeaderStorage)));
+            for (const TRope& payload : Payloads) {
+                result.emplace_back(payload);
+            }
+            return result;
         }
 
         template <class F>
         decltype(auto) DispatchCurrentVersion(F&& f) const {
             using TVersions = typename TEv::TScheme;
-            return TVersions::Dispatch(Version, std::forward<F>(f));
+            AssertInitializedDebug();
+            if constexpr (TVersions::VersionCount == 1) {
+                return f.template operator()<typename TVersions::TLatestScheme>();
+            } else {
+                return TVersions::Dispatch(Version, std::forward<F>(f));
+            }
         }
 
         template <class TScheme, class TTag>
-        ui32 GetStoredCount() const {
-            return ReadUnaligned<ui32>(Data() + TScheme::template GetVariableMetaOffset<TTag>());
+        TPayloadRef GetPayloadRef() const {
+            return ReadUnaligned<TPayloadRef>(HeaderData() + TScheme::template GetPayloadRefOffset<TTag>());
         }
 
-        template <class TScheme, class TTag>
-        size_t GetVariablePayloadOffset() const {
-            size_t offset = TScheme::FixedPartSize;
-            bool found = false;
-
-            TScheme::ForEachVariableField([&]<class TField>() {
-                if (found) {
-                    return;
-                }
-
-                if constexpr (std::is_same_v<TField, TTag>) {
-                    found = true;
-                } else {
-                    offset += CheckedFieldBytes<typename TField::TValue>(GetStoredCount<TScheme, TField>());
-                }
-            });
-
-            Y_ENSURE(found, "Array field is absent in this event version");
-            return offset;
+        void AssertInitializedDebug() const {
+            Y_DEBUG_ABORT_UNLESS(Version != 0);
+            Y_DEBUG_ABORT_UNLESS(HeaderStorage.size() >= sizeof(ui16));
+            Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui16>(HeaderStorage.data()) == Version);
         }
 
-        char* MutableData() {
-            return Storage.Detach();
+        template <class TScheme>
+        void AssertFrontendVersion() const {
+            using TVersions = typename TEv::TScheme;
+            static_assert(TVersions::template HasScheme<TScheme>, "Scheme does not belong to this flat event");
+            AssertInitializedDebug();
+            Y_DEBUG_ABORT_UNLESS(Version == TVersions::template GetVersion<TScheme>());
         }
 
-        const char* Data() const {
-            return Storage.data();
+        template <class TScheme>
+        TFrontend<TScheme> MakeFrontend() {
+            return TFrontend<TScheme>(MutableHeaderData(), &Payloads);
+        }
+
+        template <class TScheme>
+        TConstFrontend<TScheme> MakeFrontend() const {
+            return TConstFrontend<TScheme>(HeaderData(), &Payloads);
+        }
+
+        char* MutableHeaderData() {
+            return HeaderStorage.Detach();
+        }
+
+        const char* HeaderData() const {
+            return HeaderStorage.data();
         }
 
     private:
-        TString Storage;
+        TString HeaderStorage;
+        TVector<TRope> Payloads;
         ui16 Version = 0;
     };
 

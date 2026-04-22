@@ -38,7 +38,7 @@ public:
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
-    std::shared_ptr<IIndexAccessStub> IndexAccessStub;
+    std::shared_ptr<NIndexes::NHierarchical::IAccessor> IndexAccessStub;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
     bool readNonconflictingPortions;

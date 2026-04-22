@@ -1,7 +1,7 @@
 #pragma once
 #include "abstract.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/index_access_stub.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
@@ -17,7 +17,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSourceConstructor: public NCommon::TDataSourceConstructor {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
-    YDB_READONLY_DEF(std::shared_ptr<IIndexAccessStub>, IndexAccessStub);
+    YDB_READONLY_DEF(std::shared_ptr<NIndexes::NHierarchical::IAccessor>, IndexAccessStub);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
 
@@ -37,7 +37,7 @@ public:
     }
 
     TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isVisible, const NReader::ERequestSorting sorting,
-        const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
+        const std::shared_ptr<NIndexes::NHierarchical::IAccessor>& indexAccessStub)
         : NCommon::TDataSourceConstructor(
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
                   sorting == NReader::ERequestSorting::DESC),

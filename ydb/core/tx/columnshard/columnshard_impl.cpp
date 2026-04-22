@@ -86,7 +86,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , IndexAccessStub(std::make_shared<NOlap::TDefaultIndexAccessStub>(10))
+    , IndexAccessStub(std::make_shared<NOlap::NIndexes::NHierarchical::TDefaultAccessor>(10))
     , TablesManager(StoragesManager, nullptr, Counters.GetPortionIndexCounters(), info->TabletID,
           IndexAccessStub)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))

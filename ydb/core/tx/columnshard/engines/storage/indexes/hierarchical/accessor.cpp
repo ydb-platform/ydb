@@ -1,11 +1,11 @@
-#include "index_access_stub.h"
+#include "accessor.h"
 
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NIndexes::NHierarchical {
 
-double TDefaultIndexAccessStub::RegisterPortion(ui64 portionId, const TIndexData& indexData) {
+double TDefaultAccessor::RegisterPortion(ui64 portionId, const TIndexData& indexData) {
     AFL_VERIFY(indexData.Data.size() > 0);
     AFL_VERIFY(indexData.IndexMeta)("error", "IndexMeta is required for RegisterPortion");
 
@@ -29,7 +29,7 @@ double TDefaultIndexAccessStub::RegisterPortion(ui64 portionId, const TIndexData
     return result;
 }
 
-bool TDefaultIndexAccessStub::CheckValue(ui64 portionId, const NIndexes::TSkipIndex& indexMeta, const TIndexInfo& indexInfo,
+bool TDefaultAccessor::CheckValue(ui64 portionId, const NIndexes::TSkipIndex& indexMeta, const TIndexInfo& indexInfo,
     const std::shared_ptr<arrow::Scalar>& value,
     const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) {
     if (PortionsWithoutIndex.contains(portionId)) {
@@ -49,4 +49,4 @@ bool TDefaultIndexAccessStub::CheckValue(ui64 portionId, const NIndexes::TSkipIn
     return result;
 }
 
-}  // namespace NKikimr::NOlap
+}  // namespace NKikimr::NOlap::NIndexes::NHierarchical

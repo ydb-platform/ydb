@@ -59,7 +59,7 @@ private:
     std::shared_ptr<TGranulesStorage> GranulesStorage;
     std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
-    std::shared_ptr<IIndexAccessStub> IndexAccessStub;
+    std::shared_ptr<NIndexes::NHierarchical::IAccessor> IndexAccessStub;
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache;
@@ -114,12 +114,12 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId,
         const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters,
-        const std::shared_ptr<IIndexAccessStub>& indexAccessStub);
+        const std::shared_ptr<NIndexes::NHierarchical::IAccessor>& indexAccessStub);
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema,
         const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters,
-        const std::shared_ptr<IIndexAccessStub>& indexAccessStub);
+        const std::shared_ptr<NIndexes::NHierarchical::IAccessor>& indexAccessStub);
 
     void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) override;
     void OnTieringModified(const THashMap<TInternalPathId, NOlap::TTiering>& ttl) override;

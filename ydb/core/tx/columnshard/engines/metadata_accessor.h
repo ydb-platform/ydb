@@ -1,5 +1,5 @@
 #pragma once
-#include "storage/indexes/hierarchical/index_access_stub.h"
+#include "storage/indexes/hierarchical/accessor.h"
 #include "scheme/index_info.h"
 #include "scheme/versions/preset_schemas.h"
 #include "scheme/versions/versioned_index.h"
@@ -68,7 +68,7 @@ public:
     private:
         const NOlap::IPathIdTranslator& PathIdTranslator;
         const IColumnEngine& Engine;
-        const std::shared_ptr<IIndexAccessStub> IndexAccessStub;
+        const std::shared_ptr<NIndexes::NHierarchical::IAccessor> IndexAccessStub;
 
     public:
         const NOlap::IPathIdTranslator& GetPathIdTranslator() const {
@@ -77,12 +77,12 @@ public:
         const IColumnEngine& GetEngine() const {
             return Engine;
         }
-        const std::shared_ptr<IIndexAccessStub>& GetIndexAccessStub() const {
+        const std::shared_ptr<NIndexes::NHierarchical::IAccessor>& GetIndexAccessStub() const {
             return IndexAccessStub;
         }
 
         TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine,
-            const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
+            const std::shared_ptr<NIndexes::NHierarchical::IAccessor>& indexAccessStub)
             : PathIdTranslator(pathIdTranslator)
             , Engine(engine)
             , IndexAccessStub(indexAccessStub) {

@@ -7,16 +7,14 @@
 
 #include <ydb/core/formats/arrow/program/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/abstract.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
 namespace NKikimr::NOlap {
-
 struct TIndexInfo;
+}
 
-namespace NIndexes {
-class IIndexMeta;
-class TSkipIndex;
-class TSkipBitmapIndex;
-}  // namespace NIndexes
+namespace NKikimr::NOlap::NIndexes::NHierarchical {
 
 struct TIndexData {
     TString Data;
@@ -32,9 +30,9 @@ struct TIndexData {
     TIndexData() = default;
 };
 
-class IIndexAccessStub {
+class IAccessor {
 public:
-    virtual ~IIndexAccessStub() = default;
+    virtual ~IAccessor() = default;
 
     virtual double RegisterPortion(ui64 portionId, const TIndexData& indexData) = 0;
 
@@ -46,7 +44,7 @@ public:
         const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) = 0;
 };
 
-class TDefaultIndexAccessStub : public IIndexAccessStub {
+class TDefaultAccessor : public IAccessor {
 public:
     double RegisterPortion(ui64 portionId, const TIndexData& indexData) override;
 
@@ -58,7 +56,7 @@ public:
         const std::shared_ptr<arrow::Scalar>& value,
         const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) override;
 
-    TDefaultIndexAccessStub(ui32 portionsPerNode)
+    TDefaultAccessor(ui32 portionsPerNode)
         : PortionsPerNode(portionsPerNode)
         , CurrentCounter(0)
     {
@@ -73,4 +71,4 @@ private:
 
 };
 
-}  // namespace NKikimr::NOlap
+}  // namespace NKikimr::NOlap::NIndexes::NHierarchical

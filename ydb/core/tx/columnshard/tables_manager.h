@@ -341,7 +341,7 @@ private:
     TTtlVersions Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
-    std::shared_ptr<NOlap::IIndexAccessStub> IndexAccessStub;
+    std::shared_ptr<NOlap::NIndexes::NHierarchical::IAccessor> IndexAccessStub;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     YDB_READONLY_DEF(NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache>, SchemaObjectsCache);
@@ -363,7 +363,7 @@ public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId,
-        const std::shared_ptr<NOlap::IIndexAccessStub>& indexAccessStub);
+        const std::shared_ptr<NOlap::NIndexes::NHierarchical::IAccessor>& indexAccessStub);
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(
         const TString& tablePath, const TSchemeShardLocalPathId externalPathId);

@@ -1,6 +1,6 @@
 #include "helper.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/index_access_stub.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/accessor.h>
 #include <ydb/core/tx/columnshard/background_controller.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
@@ -35,9 +35,9 @@ namespace {
 
 std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<NDataLocks::TManager>();
 
-class TTestIndexAccessStub : public IIndexAccessStub {
+class TTestIndexAccessStub : public NIndexes::NHierarchical::IAccessor {
 public:
-    double RegisterPortion(ui64 /*portionId*/, const TIndexData& /*indexData*/) override {
+    double RegisterPortion(ui64 /*portionId*/, const NIndexes::NHierarchical::TIndexData& /*indexData*/) override {
         return 0;
     }
 
@@ -51,7 +51,7 @@ public:
     }
 };
 
-std::shared_ptr<IIndexAccessStub> TestIndexAccessStub = std::make_shared<TTestIndexAccessStub>();
+std::shared_ptr<NIndexes::NHierarchical::IAccessor> TestIndexAccessStub = std::make_shared<TTestIndexAccessStub>();
 
 class TTestDbWrapper: public IDbWrapper {
 private:

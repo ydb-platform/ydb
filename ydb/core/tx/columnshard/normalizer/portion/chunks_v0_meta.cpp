@@ -5,7 +5,7 @@
 #include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/index_access_stub.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
@@ -65,7 +65,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksV0MetaNormalizer::DoInit(
 
     TTablesManager tablesManager(
         controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0,
-        std::make_shared<NOlap::TDefaultIndexAccessStub>(100));
+        std::make_shared<NOlap::NIndexes::NHierarchical::TDefaultAccessor>(100));
     if (!tablesManager.InitFromDB(db, nullptr)) {
         ACFL_TRACE("normalizer", "TChunksV0MetaNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");

@@ -201,7 +201,7 @@ private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
-    YDB_READONLY_DEF(std::shared_ptr<IIndexAccessStub>, IndexAccessStub);
+    YDB_READONLY_DEF(std::shared_ptr<NIndexes::NHierarchical::IAccessor>, IndexAccessStub);
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
@@ -303,7 +303,7 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
-        const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
+        const std::shared_ptr<NIndexes::NHierarchical::IAccessor>& indexAccessStub)
         : TBase(EType::PlainPortion, sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
               portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
               portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())

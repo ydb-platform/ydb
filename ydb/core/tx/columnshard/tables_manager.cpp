@@ -531,7 +531,7 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
     const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId,
-    const std::shared_ptr<NOlap::IIndexAccessStub>& indexAccessStub)
+    const std::shared_ptr<NOlap::NIndexes::NHierarchical::IAccessor>& indexAccessStub)
     : StoragesManager(storagesManager)
     , IndexAccessStub(indexAccessStub)
     , DataAccessorsManager(dataAccessorsManager)

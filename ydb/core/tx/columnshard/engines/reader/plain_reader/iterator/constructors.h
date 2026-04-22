@@ -13,7 +13,7 @@ class TPortionSources: public NCommon::ISourcesConstructor {
 private:
     std::deque<std::shared_ptr<TPortionInfo>> Sources;
     ui32 SourceIdx = 0;
-    YDB_READONLY_DEF(std::shared_ptr<IIndexAccessStub>, IndexAccessStub);
+    YDB_READONLY_DEF(std::shared_ptr<NIndexes::NHierarchical::IAccessor>, IndexAccessStub);
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -54,7 +54,7 @@ private:
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override;
 
 public:
-    TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources, const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
+    TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources, const std::shared_ptr<NIndexes::NHierarchical::IAccessor>& indexAccessStub)
         : Sources(sources.begin(), sources.end())
         , IndexAccessStub(indexAccessStub) {
     }

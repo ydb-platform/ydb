@@ -39,6 +39,7 @@ public:
         }
         return DoIsAppropriateFor(op);
     }
+
     using TBase::TBase;
 };
 
@@ -90,6 +91,10 @@ public:
         , BitsStorageConstructor(bitsStorageConstructor)
     {
         AFL_VERIFY(!!BitsStorageConstructor);
+    }
+
+    virtual bool IsHierarchical() const {
+        return false;
     }
 };
 

@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    index_access_stub.cpp
+    accessor.cpp
 )
 
 PEERDIR(

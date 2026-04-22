@@ -111,7 +111,7 @@ public:
         return *PortionConstructor;
     }
 
-    TIndexData indexData;
+    NIndexes::NHierarchical::TIndexData indexData;
 };
 
 class TWritePortionInfoWithBlobsResult {
@@ -249,7 +249,7 @@ public:
         return std::make_shared<TPortionAccessorConstructor>(std::move(*PortionConstructor));
     }
 
-    TIndexData indexData;
+    NIndexes::NHierarchical::TIndexData indexData;
     bool mustHaveIndex = true;
 };
 

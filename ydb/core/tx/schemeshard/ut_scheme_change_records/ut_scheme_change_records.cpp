@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 && e.Body.GetCreateTable().GetName() == "Table1") {
                 found = true;
                 UNIT_ASSERT_VALUES_EQUAL(e.TxId, (ui64)txId);
-                UNIT_ASSERT_VALUES_EQUAL(e.Path, "/MyRoot");
+                UNIT_ASSERT_VALUES_EQUAL(e.Path, "/MyRoot/Table1");
                 UNIT_ASSERT(e.Order > 0);
                 break;
             }

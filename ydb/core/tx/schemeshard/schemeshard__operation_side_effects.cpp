@@ -1002,6 +1002,38 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             Y_DEBUG_ABORT_UNLESS(ok);
         }
 
+        // Best-effort synthesis of a human-friendly Path by joining WorkingDir
+        // with the target name extracted from the body's typed sub-message.
+        // For ops without a single identifiable target, fall back to WorkingDir.
+        TString targetName;
+        switch (userTx.GetOperationType()) {
+            case NKikimrSchemeOp::ESchemeOpCreateTable:
+                targetName = userTx.GetCreateTable().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpAlterTable:
+                targetName = userTx.GetAlterTable().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpDropTable:
+                targetName = userTx.GetDrop().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpMkDir:
+                targetName = userTx.GetMkDir().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpCreateIndexedTable:
+                targetName = userTx.GetCreateIndexedTable().GetTableDescription().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpRmDir:
+                targetName = userTx.GetDrop().GetName();
+                break;
+            default:
+                break;  // fall back to WorkingDir only
+        }
+        TString path = userTx.GetWorkingDir();
+        if (!targetName.empty()) {
+            if (path.empty() || path.back() != '/') path += '/';
+            path += targetName;
+        }
+
         ui64 order = ss->AllocateSchemeChangeOrderInMemory();
         anyAllocated = true;
 
@@ -1012,7 +1044,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             // not from the record column. Keep TxInvalid as a placeholder.
             .TxType = TTxState::TxInvalid,
             .PathId = {},
-            .Path = userTx.GetWorkingDir(),
+            .Path = path,
             .ObjectType = NKikimrSchemeOp::EPathTypeInvalid,
             .Status = NKikimrScheme::StatusSuccess,
             .UserSid = "",

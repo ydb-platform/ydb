@@ -116,7 +116,7 @@ void TKqpCountersBase::Init() {
     QueriesWithFullScan = KqpGroup->GetCounter("Query/WithFullScan", true);
 
     QueryAffectedShardsCount = KqpGroup->GetHistogram("Query/AffectedShards",
-        NMonitoring::ExplicitHistogram({1, 9, 49, 99, 499, 999}));
+        NMonitoring::ExplicitHistogram({1, 2, 4, 8, 16, 64, 512, 1024}));
     QueryReadSetsCount = KqpGroup->GetHistogram("Query/ReadSets",
         NMonitoring::ExplicitHistogram({99, 999, 9999, 99999}));
     QueryReadBytes = KqpGroup->GetHistogram("Query/ReadBytes",

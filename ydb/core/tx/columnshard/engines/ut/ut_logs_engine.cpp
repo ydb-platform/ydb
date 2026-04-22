@@ -1,6 +1,6 @@
 #include "helper.h"
 
-#include <ydb/core/tx/columnshard/engines/index_access_stub.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/index_access_stub.h>
 #include <ydb/core/tx/columnshard/background_controller.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
@@ -44,7 +44,7 @@ public:
     void RegisterWithoutIndex(ui64 /*portionId*/) override {
     }
 
-    bool CheckValue(ui64 /*portionId*/, ui64 /*schemaVersion*/,
+    bool CheckValue(ui64 /*portionId*/, const NIndexes::TSkipIndex& /*indexMeta*/, const TIndexInfo& /*indexInfo*/,
         const std::shared_ptr<arrow::Scalar>& /*value*/,
         const NKikimr::NArrow::NSSA::TIndexCheckOperation& /*operation*/) override {
         return true;

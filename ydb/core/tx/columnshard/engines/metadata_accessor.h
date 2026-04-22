@@ -1,5 +1,5 @@
 #pragma once
-#include "index_access_stub.h"
+#include "storage/indexes/hierarchical/index_access_stub.h"
 #include "scheme/index_info.h"
 #include "scheme/versions/preset_schemas.h"
 #include "scheme/versions/versioned_index.h"

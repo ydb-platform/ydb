@@ -9,7 +9,6 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 SRCS(
-    index_access_stub.cpp
     metadata_accessor.cpp
     column_engine_logs.cpp
     column_engine.cpp

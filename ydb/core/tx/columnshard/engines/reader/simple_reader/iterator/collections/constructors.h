@@ -1,7 +1,7 @@
 #pragma once
 #include "abstract.h"
 
-#include <ydb/core/tx/columnshard/engines/index_access_stub.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/index_access_stub.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>

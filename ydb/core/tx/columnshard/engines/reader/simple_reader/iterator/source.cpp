@@ -291,7 +291,15 @@ TConclusion<bool> TPortionDataSource::DoCheckHierarchicalIndex(
     if (!IndexAccessStub) {
         return true;
     }
-    return IndexAccessStub->CheckValue(Portion->GetPortionId(), Portion->GetSchemaVersionVerified(), value, fetchContext.GetOperation());
+    NIndexes::NRequest::TOriginalDataAddress addr(fetchContext.GetColumnId(), fetchContext.GetSubColumnName());
+    const auto indexesMeta = GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, fetchContext.GetOperation());
+    auto meta = SelectOptimalIndex(indexesMeta, fetchContext.GetOperation());
+    if (!meta) {
+        return true;
+    }
+    return IndexAccessStub->CheckValue(Portion->GetPortionId(),
+        *meta, GetSourceSchema()->GetIndexInfo(),
+        value, fetchContext.GetOperation());
 }
 
 void TPortionDataSource::DoAbort() {

@@ -225,9 +225,6 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, schema);
-    if (auto* defaultStub = dynamic_cast<TDefaultIndexAccessStub*>(IndexAccessStub.get())) {
-        defaultStub->SetVersionedIndex(GetVersionedIndex());
-    }
 }
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
@@ -248,9 +245,6 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));
-    if (auto* defaultStub = dynamic_cast<TDefaultIndexAccessStub*>(IndexAccessStub.get())) {
-        defaultStub->SetVersionedIndex(GetVersionedIndex());
-    }
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {

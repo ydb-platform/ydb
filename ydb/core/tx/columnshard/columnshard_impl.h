@@ -8,7 +8,7 @@
 #include "inflight_request_tracker.h"
 #include "tables_manager.h"
 
-#include "engines/index_access_stub.h"
+#include "engines/storage/indexes/hierarchical/index_access_stub.h"
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"

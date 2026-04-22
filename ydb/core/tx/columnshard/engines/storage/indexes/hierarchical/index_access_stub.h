@@ -10,17 +10,23 @@
 
 namespace NKikimr::NOlap {
 
-class TVersionedIndex;
+struct TIndexInfo;
+
+namespace NIndexes {
+class IIndexMeta;
+class TSkipIndex;
+class TSkipBitmapIndex;
+}  // namespace NIndexes
 
 struct TIndexData {
     TString Data;
     ui32 IndexId = 0;
-    ui64 SchemaVersion = 0;
+    std::shared_ptr<NIndexes::IIndexMeta> IndexMeta;
 
-    TIndexData(const TString& data, ui32 indexId, ui64 schemaVersion)
+    TIndexData(const TString& data, ui32 indexId, const std::shared_ptr<NIndexes::IIndexMeta>& indexMeta)
         : Data(data)
         , IndexId(indexId)
-        , SchemaVersion(schemaVersion)
+        , IndexMeta(indexMeta)
     {}
 
     TIndexData() = default;
@@ -35,7 +41,7 @@ public:
     virtual void RegisterWithoutIndex(ui64 portionId) = 0;
 
     // if false, value is definitely absent from portion
-    virtual bool CheckValue(ui64 portionId, ui64 schemaVersion,
+    virtual bool CheckValue(ui64 portionId, const NIndexes::TSkipIndex& indexMeta, const TIndexInfo& indexInfo,
         const std::shared_ptr<arrow::Scalar>& value,
         const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) = 0;
 };
@@ -48,13 +54,9 @@ public:
         AFL_VERIFY(PortionsWithoutIndex.insert(portionId).second);
     }
 
-    bool CheckValue(ui64 portionId, ui64 schemaVersion,
+    bool CheckValue(ui64 portionId, const NIndexes::TSkipIndex& indexMeta, const TIndexInfo& indexInfo,
         const std::shared_ptr<arrow::Scalar>& value,
         const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) override;
-
-    void SetVersionedIndex(const TVersionedIndex& versionedIndex) {
-        VersionedIndex = &versionedIndex;
-    }
 
     TDefaultIndexAccessStub(ui32 portionsPerNode)
         : PortionsPerNode(portionsPerNode)
@@ -63,12 +65,10 @@ public:
     }
 
 private:
-    const TVersionedIndex* VersionedIndex = nullptr;
     std::vector<std::shared_ptr<NIndexes::IBitsStorage>> Storages;
     const ui32 PortionsPerNode;
     ui32 CurrentCounter;
     THashMap<ui64, ui32> PortionId2Position;
-    THashMap<ui64, ui32> PortionId2IndexId;
     THashSet<ui64> PortionsWithoutIndex;
 
 };

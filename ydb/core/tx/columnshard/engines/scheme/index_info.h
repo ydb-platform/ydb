@@ -15,7 +15,7 @@
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
-#include <ydb/core/tx/columnshard/engines/index_access_stub.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/hierarchical/index_access_stub.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>

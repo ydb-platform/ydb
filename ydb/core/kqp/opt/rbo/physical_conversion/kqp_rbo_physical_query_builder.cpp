@@ -150,13 +150,17 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(TExprNode::TPtr node) {
     return param;
 }
 
+bool TPhysicalQueryBuilder::IsSingleTaskConnection(const TExprBase& input) const {
+    return input.Maybe<TDqCnUnionAll>() || input.Maybe<TDqCnMerge>();
+}
+
 TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {
     auto& ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr finalStage;
     bool needFinalUnionStage = false;
     // Final stage, which is input for DqCnResult, should have only one 1 task.
     for (const auto& input : TDqPhyStage(stage).Inputs()) {
-        if (!input.Maybe<TDqCnUnionAll>()) {
+        if (!IsSingleTaskConnection(input)) {
             needFinalUnionStage = true;
             break;
         }

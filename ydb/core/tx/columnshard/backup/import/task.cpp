@@ -8,15 +8,18 @@ namespace NKikimr::NOlap::NImport {
 
 NKikimr::TConclusionStatus TImportTask::DoDeserializeFromProto(const NKikimrColumnShardImportProto::TImportTask& proto) {
     InternalPathId = TInternalPathId::FromRawValue(proto.GetIdentifier().GetPathId());
-    if (proto.HasTxId()) {
-        TxId = proto.GetTxId();
+    if (!proto.HasTxId()) {
+        return TConclusionStatus::Fail("Can't find tx id");
     }
-    if (proto.HasRestoreTask()) {
-        RestoreTask = proto.GetRestoreTask();
+    if (!proto.HasRestoreTask()) {
+        return TConclusionStatus::Fail("Can't find restore task");
     }
-    if (proto.HasSchemaVersion()) {
-        SchemaVersion = proto.GetSchemaVersion();
+    if (!proto.HasSchemaVersion()) {
+        return TConclusionStatus::Fail("Can't find schema version");
     }
+    TxId = proto.GetTxId();
+    RestoreTask = proto.GetRestoreTask();
+    SchemaVersion = proto.GetSchemaVersion();
     Columns.clear();
     for (const auto& columnProto : proto.GetColumns()) {
         const NKikimrProto::TTypeInfo* typeInfoProto = columnProto.HasTypeInfo() ? &columnProto.GetTypeInfo() : nullptr;

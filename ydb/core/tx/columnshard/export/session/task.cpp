@@ -10,12 +10,14 @@ NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColu
         return id;
     }
     Identifier = id.DetachResult();
-    if (proto.HasTxId()) {
-        TxId = proto.GetTxId();
+    if (!proto.HasTxId()) {
+        return TConclusionStatus::Fail("Can't find tx id");
     }
-    if (proto.HasBackupTask()) {
-        BackupTask = proto.GetBackupTask();
+    if (!proto.HasBackupTask()) {
+        return TConclusionStatus::Fail("Can't find backup task");
     }
+    TxId = proto.GetTxId();
+    BackupTask = proto.GetBackupTask();
     Columns.clear();
     for (const auto& columnProto : proto.GetColumns()) {
         const NKikimrProto::TTypeInfo* typeInfoProto = columnProto.HasTypeInfo() ? &columnProto.GetTypeInfo() : nullptr;

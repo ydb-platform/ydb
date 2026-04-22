@@ -401,13 +401,15 @@ namespace NKikimr::NDDisk {
         }
         Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= MaxSectorsPerBufferRecord + 1 && sectorsCnt > 1);
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size)
-            .Attribute("lsn", static_cast<long>(lsn)));
+            .Attribute("lsn", static_cast<long>(lsn));
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
 
         const TWriteInstruction instr(record.GetInstruction());
@@ -496,13 +498,15 @@ namespace NKikimr::NDDisk {
 
         Counters.Interface.ReadPersistentBuffer.Request(selector.Size);
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.ReadPersistentBuffer",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.ReadPersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size)
-            .Attribute("lsn", static_cast<long>(lsn)));
+            .Attribute("lsn", static_cast<long>(lsn));
 
         auto it = PersistentBuffers.find({creds.TabletId, generation});
         if (it == PersistentBuffers.end()) {
@@ -711,9 +715,10 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.BatchErasePersistentBuffer",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId)));
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.BatchErasePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span.Attribute("tablet_id", static_cast<long>(creds.TabletId));
 
         STLOG(PRI_DEBUG, BS_DDISK, BSDD31, "TDDiskActor::ErasePersistentBuffer", (tabletId, creds.TabletId));
 

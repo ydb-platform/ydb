@@ -86,12 +86,14 @@ namespace NKikimr::NDDisk {
 
         Counters.Interface.Write.Request(selector.Size);
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
-            .Attribute("size", selector.Size));
+            .Attribute("size", selector.Size);
 
         TRope data;
         if (instr.PayloadId) {
@@ -154,12 +156,14 @@ namespace NKikimr::NDDisk {
 
         Counters.Interface.Read.Request(selector.Size);
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
-            .Attribute("size", selector.Size));
+            .Attribute("size", selector.Size);
 
         if (!chunkRef.ChunkIdx) {
             auto zero = TRcBuf::Uninitialized(selector.Size);

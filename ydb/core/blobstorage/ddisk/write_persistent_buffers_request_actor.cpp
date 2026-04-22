@@ -1,4 +1,5 @@
 #include "write_persistent_buffers_request_actor.h"
+#include "span_utils.h"
 
 #include <ydb/core/util/pb.h>
 
@@ -187,8 +188,9 @@ namespace NKikimr::NDDisk {
 
     void TWritePersistentBuffersRequestActor::Handle(TEvWritePersistentBuffers::TPtr ev) {
         auto cookie = NextCookie++;
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffers",
-            NWilson::EFlags::NONE, TActivationContext::ActorSystem()));
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffers",
+            NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
         auto [it, inserted] = Inflights.try_emplace(cookie, TInflight{
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,

@@ -1640,24 +1640,6 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
     }
 }
 
-<<<<<<< HEAD
-=======
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
-    const auto sessionIt = Sessions.find(ev->Sender);
-    if (sessionIt == Sessions.end()) {
-        return;
-    }
-    const auto& session = sessionIt->second;
-    if (ev->Cookie != session.Generation) {
-        return;
-    }
-    SRC_LOG_D("Received TEvNoSession, erase session to " << ev->Sender.ToString());
-    ReadActorByEventQueueId.erase(session.EventQueueId);
-    Sessions.erase(sessionIt);
-    ReInit("Received TEvNoSession");
-    ScheduleProcessState();
-}
-
 void TDqPqRdReadActor::SchedulePartitionCountTimer() {
     if (!CheckPartitionCountPeriod || SourceParams.GetStopAtCurrentEndOffsets() || PartitionCountTimerScheduled) {
         return;
@@ -1731,7 +1713,6 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCountResult::TPtr& ev
     }
 }
 
->>>>>>> a62410b9c71 (YQ-5215 abort query if partition count changed (#37570))
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const TTypeEnvironment& typeEnv,
     NPq::NProto::TDqPqTopicSource&& settings,

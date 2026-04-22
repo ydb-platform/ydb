@@ -1133,14 +1133,9 @@ private:
     bool WakeupScheduled = false;
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
-<<<<<<< HEAD
-=======
-    bool FinishedByOffsets = false;
-    THashSet<TPartitionKey> FinishedPartitions;
     const TDuration CheckPartitionCountPeriod;
     TInstant NextCheckPartitionTime = TInstant::Now();
     bool PartitionCountTimerScheduled = false;
->>>>>>> a62410b9c71 (YQ-5215 abort query if partition count changed (#37570))
 };
 
 ui32 ExtractPartitionsFromParams(

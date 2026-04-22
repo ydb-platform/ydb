@@ -482,45 +482,6 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup.PQRead(expected);
         }
     }
-<<<<<<< HEAD
-=======
-
-    Y_UNIT_TEST_F(StreamingModeNotReadHistoricalData, TFixture) {
-        const TString topicName = "StreamingModeNotReadHistoricalData";
-        PQCreateStream(topicName);
-        auto messages = std::vector{Message0, Message1};
-        PQWrite(messages, topicName);
-        Sleep(TDuration::MilliSeconds(100));
-
-        auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod, DefaultLateArrivalDelay, false, true);
-        settings.clear_disposition();
-        InitSource(std::move(settings));
-        
-        messages = std::vector{Message2};
-        PQWrite(messages, topicName);
-        auto expected = std::vector{
-            TWatermarkOr<TString>{Message2},
-        };
-        PQRead(expected);
-    }
-
-    Y_UNIT_TEST_F(TableMode, TFixture) {
-        const TString topicName = "TableMode";
-        PQCreateStream(topicName);
-        auto messages = std::vector{Message0, Message1, Message2};
-        PQWrite(messages, topicName);
-
-        Sleep(TDuration::MilliSeconds(1000));
-        auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod, DefaultLateArrivalDelay, false, false);
-        InitSource(std::move(settings));
-
-        auto expected = std::vector{
-            TWatermarkOr<TString>{Message0},
-            TWatermarkOr<TString>{Message1},
-            TWatermarkOr<TString>{Message2}
-        };
-        PQRead(expected);
-    }
 
     Y_UNIT_TEST_F(TestRescaling, TFixture) {
         const TString topicName = "TestRescaling";
@@ -551,7 +512,6 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         }
         UNIT_ASSERT_C(failed, "Failure timeout");
     }
->>>>>>> a62410b9c71 (YQ-5215 abort query if partition count changed (#37570))
 }
 
 } // namespace NYql::NDq

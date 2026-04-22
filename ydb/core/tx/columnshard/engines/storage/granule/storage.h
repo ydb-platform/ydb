@@ -131,7 +131,6 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
-    std::shared_ptr<IIndexAccessStub> IndexAccessStub;
     THashMap<TInternalPathId, std::shared_ptr<TGranuleMeta>> Tables;   // pathId into Granule that equal to Table
     std::shared_ptr<TGranulesStat> Stats;
 
@@ -154,12 +153,10 @@ public:
 
     TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<IIndexAccessStub>& indexAccessStub  )
+        const std::shared_ptr<IStoragesManager>& storagesManager)
         : Counters(counters)
         , DataAccessorsManager(dataAccessorsManager)
         , StoragesManager(storagesManager)
-        , IndexAccessStub(indexAccessStub)
         , Stats(std::make_shared<TGranulesStat>(Counters)) {
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(StoragesManager);
@@ -231,10 +228,6 @@ public:
         return StoragesManager;
     }
 
-    const std::shared_ptr<IIndexAccessStub>& GetIndexAccessStub() const {
-        return IndexAccessStub;
-    }
-
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
         return Counters;
     }
@@ -243,7 +236,7 @@ public:
     Returns granules for compaction in descending order of priority
     */
     std::vector<TGranuleOrdered> GetGranulesForCompaction(
-        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), 
+        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(),
         const std::optional<ui64> waitingPriority = std::nullopt
     ) const;
 };

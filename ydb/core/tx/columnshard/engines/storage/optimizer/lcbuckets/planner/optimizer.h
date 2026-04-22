@@ -20,7 +20,6 @@ private:
     std::map<ui64, std::shared_ptr<IPortionsLevel>, std::greater<ui64>> LevelsByWeight;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
-    const std::shared_ptr<IIndexAccessStub> IndexAccessStub;
 
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& info) const override {
         ui32 result = baseLevel;
@@ -147,7 +146,7 @@ public:
     ~TOptimizerPlanner() = default;
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IIndexAccessStub>& indexAccessStub,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
         std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo,
         std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const std::optional<ui64>& nodePortionsCountLimit);
 };

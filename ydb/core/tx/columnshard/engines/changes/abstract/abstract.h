@@ -40,6 +40,7 @@ class TColumnShard;
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
 class TVersionedIndex;
+class IIndexAccessStub;
 
 class TPortionEvictionFeatures {
 private:
@@ -113,12 +114,19 @@ private:
     ui64* LastGranuleId;
     ui64* LastPortionId;
     const TSnapshot Snapshot;
+    const std::shared_ptr<IIndexAccessStub> IndexAccessStub;
 
 public:
-    TFinalizationContext(ui64& lastGranuleId, ui64& lastPortionId, const TSnapshot& snapshot)
+    TFinalizationContext(ui64& lastGranuleId, ui64& lastPortionId, const TSnapshot& snapshot,
+        const std::shared_ptr<IIndexAccessStub>& indexAccessStub)
         : LastGranuleId(&lastGranuleId)
         , LastPortionId(&lastPortionId)
-        , Snapshot(snapshot) {
+        , Snapshot(snapshot)
+        , IndexAccessStub(indexAccessStub) {
+    }
+
+    const std::shared_ptr<IIndexAccessStub>& GetIndexAccessStub() const {
+        return IndexAccessStub;
     }
 
     ui64 NextGranuleId() {

@@ -143,7 +143,6 @@ private:
     mutable TInstant NextActualizations = TInstant::Zero();
 
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;
-    std::shared_ptr<IIndexAccessStub> IndexAccessStub;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter,

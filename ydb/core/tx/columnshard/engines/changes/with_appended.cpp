@@ -83,7 +83,7 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
         auto portionId = context.NextPortionId();
         constructor.SetPortionId(portionId);
         if (i.mustHaveIndex && i.indexData.Data.size() > 0) {
-            SaverContext.IndexAccessStub->RegisterPortion(portionId, i.indexData);
+            context.GetIndexAccessStub()->RegisterPortion(portionId, i.indexData);
         } else if (i.indexData.Data.size() == 0) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("zero_size_portion_hier_index", portionId);
         } else {

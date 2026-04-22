@@ -529,7 +529,7 @@ class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
 
 public:
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-            const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IIndexAccessStub>& indexAccessStub,
+            const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
             const TSettings& settings = {})
         : TBase(pathId, settings.NodePortionsCountLimit)
         , TSettings(settings)
@@ -537,7 +537,6 @@ public:
         , PortionsInfo(std::make_shared<TSimplePortionsGroupInfo>())
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
-        , IndexAccessStub(indexAccessStub)
     {
     }
 
@@ -677,7 +676,7 @@ private:
             targetLevel = MaxLevels - 1;
         }
 
-        TSaverContext saverContext(StoragesManager, IndexAccessStub);
+        TSaverContext saverContext(StoragesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         result->SetTargetCompactionLevel(targetLevel);
         result->SetPortionExpectedSize(ExpectedPortionSize);
@@ -716,7 +715,7 @@ private:
             targetLevel = MaxLevels - 1;
         }
 
-        TSaverContext saverContext(StoragesManager, IndexAccessStub);
+        TSaverContext saverContext(StoragesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         result->SetTargetCompactionLevel(targetLevel);
         result->SetPortionExpectedSize(ExpectedPortionSize);
@@ -875,7 +874,6 @@ private:
 private:
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
-    std::shared_ptr<IIndexAccessStub> IndexAccessStub;
 
     // Accumulator accumulates small portions by size-tiered compaction
     mutable std::deque<TAccumulator> Accumulator;
@@ -935,7 +933,7 @@ private:
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling compaction optimizer");
-        return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), context.GetIndexAccessStub(), Settings);
+        return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }
 
 private:

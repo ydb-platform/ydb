@@ -186,7 +186,7 @@ namespace NKikimr::NStorage {
         void RunCommonChecks(bool requireScepter = true);
 
         void Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
-            const std::function<void(TResult*)>& callback = {});
+            const std::function<void(TResult*)>& callback = {}, bool sendResult = true);
 
         void DetachQuery();
 

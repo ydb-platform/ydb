@@ -75,20 +75,18 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
     // Used to populate span buffers on specific nodes for the distributed collection test.
     class TRetroSpanWriterActor : public NActors::TActorBootstrapped<TRetroSpanWriterActor> {
     public:
-        TRetroSpanWriterActor(const NWilson::TTraceId& traceId, ui32 spanCount, const NActors::TActorId& edgeActorId)
+        TRetroSpanWriterActor(const NWilson::TTraceId& traceId, const NActors::TActorId& edgeActorId)
             : TraceId(traceId)
-            , SpanCount(spanCount)
             , EdgeActorId(edgeActorId)
         {}
 
         void Bootstrap() {
             const ui8 verbosity = 1;
-            for (ui32 i = 0; i < SpanCount; ++i) {
+            {
                 NRetroTracing::TUniversalSpan<NKikimr::TNamedSpan> span(
-                    verbosity, NWilson::TTraceId(TraceId), "TestDistributedSpan",
-                    NWilson::EFlags::AUTO_END);
+                        verbosity, NWilson::TTraceId(TraceId), "TestDistributedSpan",
+                        NWilson::EFlags::AUTO_END);
                 span.GetRetroSpanPtr()->SetName("TestDistributedSpan");
-                Cerr << "WRITE SPAN " << SelfId().ToString() << Endl;
             }
             Send(EdgeActorId, new NActors::TEvents::TEvGone);
             PassAway();
@@ -96,7 +94,6 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
 
     private:
         NWilson::TTraceId TraceId;
-        ui32 SpanCount;
         NActors::TActorId EdgeActorId;
     };
 
@@ -117,10 +114,9 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
         UNIT_ASSERT(traceId);
         UNIT_ASSERT(traceId.IsRetroTrace());
 
-        const ui32 spansPerNode = 3;
         for (ui32 nodeId : env.Runtime->GetNodes()) {
             const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-            env.Runtime->Register(new TRetroSpanWriterActor(traceId, spansPerNode, edge), nodeId);
+            env.Runtime->Register(new TRetroSpanWriterActor(traceId, edge), nodeId);
             auto ev = env.WaitForEdgeActorEvent<NActors::TEvents::TEvGone>(edge);
             UNIT_ASSERT(ev);
         }
@@ -132,7 +128,6 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
                     for (const auto& attr : span.attributes()) {
                         if (attr.key() == "type" && attr.value().string_value() == "RETRO") {
                             ++total;
-                            Cerr << total << " " << nodeId << " " << span.Getspan_id() << Endl;
                         }
                     }
                 }
@@ -154,13 +149,14 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
 
         ui32 retroSpansAfter = countRetroSpans();
 
-        Cerr << "RetroSpans before: " << retroSpansBefore << ", after: " << retroSpansAfter << Endl;
         UNIT_ASSERT_C(retroSpansAfter > retroSpansBefore,
             "Expected RETRO spans to appear after DemandRetroTrace. "
             "Before: " << retroSpansBefore << ", After: " << retroSpansAfter);
 
         ui32 newRetroSpans = retroSpansAfter - retroSpansBefore;
-        UNIT_ASSERT_VALUES_EQUAL(newRetroSpans, spansPerNode * nodeCount);
+        // in single-thread test environment thread_local span buffered is shared by all nodes
+        // so we expect each span to be uploaded multiple times
+        UNIT_ASSERT_VALUES_EQUAL(newRetroSpans, nodeCount * nodeCount);
     }
 }
 

@@ -16,6 +16,8 @@ on:
         type: string
 
 env:
+  # workflow_dispatch: branch selected in UI. schedule: repository default branch.
+  WORKFLOW_CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
@@ -28,12 +30,10 @@ jobs:
     outputs:
       matrix_include: ${{ steps.set-mute-matrix.outputs.matrix_include }}
     steps:
-      # workflow_dispatch: ref = branch selected in UI (so new scripts under .github/ are present).
-      # schedule: use repository default branch (same as previous hard-coded main for hourly runs).
       - name: Checkout branch list and mute files
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           path: config-repo
           sparse-checkout: |
             .github/config/
@@ -58,7 +58,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
       - name: Install dependencies
         run: |
@@ -93,12 +93,11 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.setup.outputs.matrix_include) }}
     steps:
-      # Всегда checkout main для получения актуальных скриптов
-      - name: Checkout main branch
+      - name: Checkout workflow branch
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
-          ref: main
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           fetch-depth: 0
 
       - name: Install dependencies

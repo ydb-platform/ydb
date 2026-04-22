@@ -230,10 +230,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2A\x32\2 size = 4\ncluster = \x12\x40\2 size = 2\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x5B\xFF\2 size = 3\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x5B\xFF\2 size = 3\n");
 
     }
 
@@ -292,10 +292,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x30\x2C\2 size = 2\ncluster = \x24\x38\2 size = 2\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE, WithForeign);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x80\xFF\2 size = 1\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE, WithForeign);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x80\xFF\2 size = 1\n");
     }
 
     Y_UNIT_TEST(EmptyCluster) {
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
 
         std::vector<TString> level = { "\x30\x30\2", "\x10\x10\2" };
         auto recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x22\x36\2 size = 6\ncluster = \x10\x10\2 size = 0\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xA2\xFF\2 size = 6\ncluster = \x10\x10\2 size = 0\n");
 
     }
 

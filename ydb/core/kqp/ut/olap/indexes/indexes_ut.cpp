@@ -19,11 +19,6 @@
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
 
-#include <algorithm>
-#include <iterator>
-#include <ranges>
-#include <unordered_set>
-
 namespace NKikimr::NKqp {
 static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
     if (useQueryService) {
@@ -2672,20 +2667,18 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
             const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
 
-            const auto& indexes = schema.GetIndexes();
-            const std::ranges::subrange indexesRange(indexes.begin(), indexes.end());
+            bool hasBloom = false;
+            bool hasNgram = false;
+            for (auto&& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "idx_bloom" && idx.HasBloomFilter()) {
+                    hasBloom = true;
+                } else if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
+                    hasNgram = true;
+                }
+            }
 
-            std::unordered_set<TString> bloomIndexNames;
-            std::ranges::transform(
-                indexesRange | std::ranges::views::filter([](const auto& index) {
-                    return (index.GetName() == "idx_bloom" && index.HasBloomFilter()) ||
-                        (index.GetName() == "idx_ngram" && index.HasBloomNGrammFilter());
-                }),
-                std::inserter(bloomIndexNames, bloomIndexNames.end()),
-                [](const auto& index) { return TString{index.GetName()}; });
-
-            UNIT_ASSERT_C(bloomIndexNames.contains("idx_bloom"), "idx_bloom should be present in table schema");
-            UNIT_ASSERT_C(bloomIndexNames.contains("idx_ngram"), "idx_ngram should be present in table schema");
+            UNIT_ASSERT_C(hasBloom, "idx_bloom should be present in table schema");
+            UNIT_ASSERT_C(hasNgram, "idx_ngram should be present in table schema");
         }
 
         auto runDataQuery = [&](const TString& query) {

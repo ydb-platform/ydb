@@ -2,6 +2,8 @@
 
 #include "const.h"
 
+#include <optional>
+
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
@@ -56,6 +58,19 @@ protected:
             return TConclusionStatus::Fail(
                 "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
         }
+
+        if (UseOldSizing && FalsePositiveProbability != bMeta->FalsePositiveProbability) {
+            return TConclusionStatus::Fail(
+                "cannot change false_positive_probability on a bloom ngram index created with deprecated sizing "
+                "(filter_size_bytes/hashes_count/records_count); drop and recreate the index instead");
+        }
+
+        if (!UseOldSizing && bMeta->UseOldSizing) {
+            return TConclusionStatus::Fail(
+                "cannot switch bloom ngram index from false_positive_probability mode to deprecated sizing "
+                "(filter_size_bytes/hashes_count/records_count) mode; drop and recreate the index instead");
+        }
+
         return TBase::CheckSameColumnsForModification(newMeta);
     }
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
@@ -82,23 +97,9 @@ protected:
             CaseSensitive = bFilter.GetCaseSensitive();
         }
 
-        const bool hasFpp = bFilter.HasFalsePositiveProbability();
-        const bool hasOldSizingParams = bFilter.HasFilterSizeBytes() || bFilter.HasRecordsCount() || bFilter.HasHashesCount();
-        UseOldSizing = hasOldSizingParams && !hasFpp;
         std::optional<ui32> filterSizeBytes;
         std::optional<ui32> recordsCount;
         std::optional<ui32> hashesCount;
-        NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
-        FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
-                                                                        : NDefaults::FalsePositiveProbability;
-
-        {
-            auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize);
-            if (conclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
-                return false;
-            }
-        }
 
         if (bFilter.HasFilterSizeBytes()) {
             const ui32 value = bFilter.GetFilterSizeBytes();
@@ -106,18 +107,19 @@ protected:
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect filter_size_bytes value");
                 return false;
             }
-
             filterSizeBytes = value;
         }
 
         if (bFilter.HasRecordsCount()) {
             const ui32 value = bFilter.GetRecordsCount();
-            if (!TConstants::CheckRecordsCount(value)) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect records_count value");
-                return false;
-            }
+            if (value != 0) {
+                if (!TConstants::CheckRecordsCount(value)) {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect records_count value");
+                    return false;
+                }
 
-            recordsCount = value;
+                recordsCount = value;
+            }
         }
 
         if (bFilter.HasHashesCount()) {
@@ -126,8 +128,28 @@ protected:
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect hashes_count value");
                 return false;
             }
-
             hashesCount = value;
+        }
+
+        const bool hasFpp = bFilter.HasFalsePositiveProbability();
+        UseOldSizing = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0;
+
+        NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
+        if (UseOldSizing) {
+            FalsePositiveProbability = hasFpp ? bFilter.GetFalsePositiveProbability()
+                                              : TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
+                                                    hashesCount, filterSizeBytes, recordsCount);
+        } else {
+            FalsePositiveProbability = hasFpp ? bFilter.GetFalsePositiveProbability()
+                                              : NDefaults::FalsePositiveProbability;
+        }
+
+        {
+            auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize);
+            if (conclusion.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+                return false;
+            }
         }
 
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
@@ -147,18 +169,27 @@ protected:
         auto* filterProto = proto.MutableBloomNGrammFilter();
         TBase::SerializeToProtoImpl(*filterProto);
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
-        const ui32 hashesCountValue = UseOldSizing ? HashesCount : TConstants::CalcHashesCount(FalsePositiveProbability);
-        const ui32 recordsCountValue = UseOldSizing ? RecordsCount : TConstants::CalcDeprecatedRecordsCount(FalsePositiveProbability);
-        AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
-        AFL_VERIFY(TConstants::CheckHashesCount(hashesCountValue));
-        AFL_VERIFY(TConstants::CheckRecordsCount(recordsCountValue));
         filterProto->SetNGrammSize(NGrammSize);
-        filterProto->SetHashesCount(hashesCountValue);
-        filterProto->SetFilterSizeBytes(FilterSizeBytes);
-        filterProto->SetRecordsCount(recordsCountValue);
-        filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
         filterProto->SetColumnId(GetColumnId());
         filterProto->SetCaseSensitive(CaseSensitive);
+        filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+
+        if (UseOldSizing) {
+            AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
+            AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
+            AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
+            filterProto->SetHashesCount(HashesCount);
+            filterProto->SetFilterSizeBytes(FilterSizeBytes);
+            filterProto->SetRecordsCount(RecordsCount);
+        } else {
+            const ui32 hashesCountValue = TConstants::CalcHashesCount(FalsePositiveProbability);
+            AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
+            AFL_VERIFY(TConstants::CheckHashesCount(hashesCountValue));
+            filterProto->SetHashesCount(hashesCountValue);
+            filterProto->SetFilterSizeBytes(FilterSizeBytes);
+            filterProto->ClearRecordsCount();
+        }
+
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 
@@ -169,13 +200,31 @@ public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionIndex, const ui32 columnId,
         const TReadDataExtractorContainer& dataExtractor, const double falsePositiveProbability, const ui32 nGrammSize,
-        const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive)
+        const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive,
+        const bool useDeprecatedSizing = false,
+        const std::optional<ui32> deprecatedFilterSizeBytes = std::nullopt,
+        const std::optional<ui32> deprecatedRecordsCount = std::nullopt,
+        const std::optional<ui32> deprecatedHashesCount = std::nullopt)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionIndex, dataExtractor, bitsStorageConstructor)
         , CaseSensitive(caseSensitive)
         , NGrammSize(nGrammSize)
         , FalsePositiveProbability(falsePositiveProbability)
+        , UseOldSizing(useDeprecatedSizing)
     {
         Initialize();
+        if (useDeprecatedSizing) {
+            if (deprecatedFilterSizeBytes) {
+                FilterSizeBytes = *deprecatedFilterSizeBytes;
+            }
+
+            if (deprecatedRecordsCount) {
+                RecordsCount = *deprecatedRecordsCount;
+            }
+
+            if (deprecatedHashesCount) {
+                HashesCount = *deprecatedHashesCount;
+            }
+        }
     }
 
     virtual TString GetClassName() const override {

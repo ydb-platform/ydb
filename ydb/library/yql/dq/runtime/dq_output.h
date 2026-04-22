@@ -82,18 +82,6 @@ struct TDqFillAggregator {
         return Counts[static_cast<ui32>(SoftLimit)].load() ? SoftLimit : NoLimit;
     }
 
-    // MIN semantics: block only when ALL channels are full (used by Scatter).
-    // Inverted priority: if any channel is free, production can continue.
-    EDqFillLevel GetMinFillLevel() const {
-        if (Counts[static_cast<ui32>(NoLimit)].load()) {
-            return NoLimit;
-        }
-        if (Counts[static_cast<ui32>(SoftLimit)].load()) {
-            return SoftLimit;
-        }
-        return HardLimit;
-    }
-
     bool IsEarlyFinished() {
         auto totalCount = TotalCount.load();
         return totalCount && totalCount == EarlyFinishedCount.load();
@@ -131,6 +119,7 @@ public:
     // Called on every fill level transition. Required by Scatter consumer.
     // Implementations that override this must also override SupportsLevelChangeCallback()
     // to return true.
+    // LevelCallback should be fast because it takes bufer internal mutex
     virtual void SetLevelChangeCallback(TLevelChangeCallback /*callback*/) {}
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;

@@ -16,7 +16,6 @@
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <atomic>
-#include <deque>
 #include <memory>
 #include <type_traits>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
@@ -1014,19 +1013,19 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
-// Lock-free adaptive scatter router with lazy channel activation.
+// Adaptive scatter router with lazy channel activation.
 //
-// Per-channel fill levels are stored as atomics, updated by LevelChangeCallback
-// from consumer Pop() threads (release). PickBest() reads them (acquire) and scans
-// only active channels — O(N) where N is small (2-10 channels typically).
+// Routing: producer thread calls PickBest() to choose a destination channel,
+// preferring the least-loaded one. Loads are read from ChannelLevels_ atomics,
+// updated by consumer threads via LevelChangeCallback (release/acquire).
 //
-// Lazy activation: starts with a single channel (primaryIdx); additional channels
-// are activated one at a time when all active channels leave NoLimit. This avoids
-// wasting resources (gRPC streams, buffers) when data volume is small.
+// Lazy activation: only primaryIdx is active at start; a new channel is activated
+// when all active channels leave NoLimit. Never deactivates. Keeps gRPC streams
+// and buffers from being spun up for small data volumes.
 //
-// Thread-safety: PickBest(), GetFillLevel(), ActivateNext() are called only from
-// the producer thread — no synchronization needed for IsActive_/InactiveQueue_.
-// ChannelLevels_ atomics are written by consumer threads via callback.
+// Thread-safety: ActiveChannels_, InactiveCursor_, RoundRobinPos_ are touched
+// only from the producer thread (single-threaded DqTaskRunner contract).
+// ChannelLevels_ is the sole cross-thread surface.
 class TScatterRouter {
 public:
     static constexpr ui32 kLevelCount = 3u;
@@ -1044,13 +1043,12 @@ public:
             ChannelLevels_[j].store(NoLimit, std::memory_order_relaxed);
         }
 
-        IsActive_.resize(channelCount, false);
-        IsActive_[primaryIdx] = true;
-        ActiveCount_ = 1;
-        RoundRobinPos_ = 0;
+        ActiveChannels_.reserve(channelCount);
+        ActiveChannels_.push_back(primaryIdx);
 
+        InactiveChannels_.reserve(channelCount - 1);
         for (ui32 i = 1; i < channelCount; ++i) {
-            InactiveQueue_.push_back((primaryIdx + i) % channelCount);
+            InactiveChannels_.push_back((primaryIdx + i) % channelCount);
         }
     }
 
@@ -1058,17 +1056,22 @@ public:
         return ChannelLevels_;
     }
 
-    ui32 ChannelCount() const { return ChannelCount_; }
-    ui32 ActiveCount() const { return ActiveCount_; }
+    ui32 ChannelCount() const { 
+        return ChannelCount_; 
+    }
+    ui32 ActiveCount() const { 
+        return static_cast<ui32>(ActiveChannels_.size()); 
+    }
 
     EDqFillLevel GetFillLevel() const {
-        if (!InactiveQueue_.empty()) {
-            return NoLimit;
-        }
         bool anySoft = false;
-        for (ui32 j = 0; j < ChannelCount_; ++j) {
-            if (!IsActive_[j]) continue;
-            const auto l = ChannelLevels_[j].load(std::memory_order_acquire);
+        for (const ui32 idx : ActiveChannels_) {
+            const auto l = ChannelLevels_[idx].load(std::memory_order_acquire);
+            if (l == NoLimit) return NoLimit;
+            if (l == SoftLimit) anySoft = true;
+        }
+        for (size_t i = InactiveCursor_; i < InactiveChannels_.size(); ++i) {
+            const auto l = ChannelLevels_[InactiveChannels_[i]].load(std::memory_order_acquire);
             if (l == NoLimit) return NoLimit;
             if (l == SoftLimit) anySoft = true;
         }
@@ -1076,50 +1079,78 @@ public:
     }
 
     std::pair<ui32, EDqFillLevel> PickBest() {
-        const ui32 start = RoundRobinPos_++ % ChannelCount_;
-        ui32 bestIdx = ChannelCount_;
-        EDqFillLevel bestLevel = HardLimit;
-        bool anyNoLimit = false;
+        const ui32 n = static_cast<ui32>(ActiveChannels_.size());
 
-        for (ui32 i = 0; i < ChannelCount_; ++i) {
-            const ui32 idx = (start + i) % ChannelCount_;
-            if (!IsActive_[idx]) continue;
+        if (n == 1) {
+            const ui32 idx = ActiveChannels_[0];
+            const auto lvl = ChannelLevels_[idx].load(std::memory_order_acquire);
+            if (lvl != NoLimit && HasPending()) {
+                // Scan inactive channels, skipping stubs (HardLimit), until we
+                // find one that is actually available. Stubs get activated into
+                // ActiveChannels_ so their callback can update the level later.
+                while (HasPending()) {
+                    const ui32 nextIdx = InactiveChannels_[InactiveCursor_];
+                    const auto nextLvl = ChannelLevels_[nextIdx].load(std::memory_order_acquire);
+                    const ui32 activated = ActivateNext();
+                    if (nextLvl < HardLimit) {
+                        return {activated, nextLvl};
+                    }
+                }
+                // All inactive were stubs; fall through to the current channel.
+            }
+            return {idx, lvl};
+        }
+
+        const ui32 start = RoundRobinPos_++ % n;
+        ui32 bestIdx = 0;
+        EDqFillLevel bestLevel = HardLimit;
+        bool initialized = false;
+
+        for (ui32 i = 0; i < n; ++i) {
+            const ui32 idx = ActiveChannels_[(start + i) % n];
             const auto lvl = ChannelLevels_[idx].load(std::memory_order_acquire);
             if (lvl == NoLimit) {
-                anyNoLimit = true;
-                bestIdx = idx;
-                bestLevel = NoLimit;
-                break;
+                return {idx, NoLimit};
             }
-            if (lvl < bestLevel || bestIdx == ChannelCount_) {
+            if (!initialized || lvl < bestLevel) {
                 bestLevel = lvl;
                 bestIdx = idx;
+                initialized = true;
             }
         }
 
-        if (!anyNoLimit && !InactiveQueue_.empty()) {
-            const ui32 nextIdx = InactiveQueue_.front();
-            ActivateNext();
-            return {nextIdx, NoLimit};
+        if (HasPending()) {
+            while (HasPending()) {
+                const ui32 nextIdx = InactiveChannels_[InactiveCursor_];
+                const auto nextLvl = ChannelLevels_[nextIdx].load(std::memory_order_acquire);
+                const ui32 activated = ActivateNext();
+                if (nextLvl < HardLimit) {
+                    return {activated, nextLvl};
+                }
+            }
+            // All inactive were stubs; fall through to best active channel.
         }
 
         return {bestIdx, bestLevel};
     }
 
 private:
-    void ActivateNext() {
-        if (InactiveQueue_.empty()) return;
-        const ui32 idx = InactiveQueue_.front();
-        InactiveQueue_.pop_front();
-        IsActive_[idx] = true;
-        ++ActiveCount_;
+    bool HasPending() const {
+        return InactiveCursor_ < InactiveChannels_.size();
+    }
+
+    ui32 ActivateNext() {
+        Y_ENSURE(HasPending());
+        const ui32 idx = InactiveChannels_[InactiveCursor_++];
+        ActiveChannels_.push_back(idx);
+        return idx;
     }
 
     const ui32 ChannelCount_;
     std::shared_ptr<std::atomic<EDqFillLevel>[]> ChannelLevels_;
-    TVector<bool> IsActive_;
-    std::deque<ui32> InactiveQueue_;
-    ui32 ActiveCount_ = 0;
+    TVector<ui32> ActiveChannels_;
+    TVector<ui32> InactiveChannels_;
+    size_t InactiveCursor_ = 0;
     ui32 RoundRobinPos_ = 0;
 };
 
@@ -1145,6 +1176,12 @@ public:
                     levels[i].store(to, std::memory_order_release);
                 }
             });
+            // Sync router's view from the actual fill level. Unbound remote channels
+            // (TChannelStub) report HardLimit; initializing to NoLimit would cause the
+            // router to route to a stub and crash.
+            if (auto levels = weakLevels.lock()) {
+                levels[i].store(Outputs[i]->GetFillLevel(), std::memory_order_relaxed);
+            }
         }
     }
 
@@ -1180,11 +1217,20 @@ public:
     }
 
     void Finish() override {
-        YQL_CLOG(DEBUG, ProviderDq) << "[Scatter] outputs=" << Outputs.size()
+        const ui64 total = PicksByLevel[0] + PicksByLevel[1] + PicksByLevel[2];
+        // Per-stage summary. TRACE in the common case to keep prod logs quiet;
+        // WARN when >10% of picks hit HardLimit — that means scatter was
+        // consistently back-pressured and upstream/downstream capacity is
+        // likely under-provisioned.
+        const bool backpressured = total > 0 && PicksByLevel[2] * 10 > total;
+        // TODO(anely-d): switch quiet case back to TRACE once ProviderDq log level is raised to 8 on cluster
+        const auto level = backpressured ? NLog::ELevel::WARN : NLog::ELevel::DEBUG;
+        YQL_CVLOG(level, NLog::EComponent::ProviderDq) << "[Scatter] outputs=" << Outputs.size()
             << " active=" << Router_.ActiveCount()
-            << " picks: NoLimit=" << PicksByLevel[0]
-            << " SoftLimit=" << PicksByLevel[1]
-            << " HardLimit=" << PicksByLevel[2];
+            << " picks total=" << total
+            << " noLimit=" << PicksByLevel[0]
+            << " softLimit=" << PicksByLevel[1]
+            << " hardLimit=" << PicksByLevel[2];
         for (auto& output : Outputs) {
             output->Finish();
         }

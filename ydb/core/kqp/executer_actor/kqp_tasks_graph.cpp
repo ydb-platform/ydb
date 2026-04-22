@@ -1173,9 +1173,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
 
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
                 const bool enableScatter = GetMeta().EnableScatterConnection;
-                // Old: scatter only for heavy downstream (Merge/StreamLookup)
-                // if (enableScatter && inputStageInfo.Tasks.size() > 1 && stageInfo.Tasks.size() > 1
-                //     && HasHeavyDownstream(downstreamMap, stageInfo.Id))
                 if (enableScatter && inputStageInfo.Tasks.size() > 1 && stageInfo.Tasks.size() > 1
                     && !HasStreamLookupDownstream(downstreamMap, stageInfo.Id))
                 {
@@ -3090,20 +3087,6 @@ void TKqpTasksGraph::ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes) 
     for (const auto& [shardId, nodeId] : GetMeta().ShardIdToNodeId) {
         GetMeta().ShardsOnNode[nodeId].push_back(shardId);
     }
-}
-
-bool TKqpTasksGraph::HasHeavyDownstream(const TDownstreamConnTypes& map, const NYql::NDq::TStageId& stageId) {
-    auto it = map.find(stageId);
-    if (it == map.end()) {
-        return false;
-    }
-    for (auto type : it->second) {
-        if (type == NKqpProto::TKqpPhyConnection::kMerge ||
-            type == NKqpProto::TKqpPhyConnection::kStreamLookup) {
-            return true;
-        }
-    }
-    return false;
 }
 
 bool TKqpTasksGraph::HasStreamLookupDownstream(const TDownstreamConnTypes& map, const NYql::NDq::TStageId& stageId) {

@@ -2046,6 +2046,15 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
         buffer->SetFillAggregator(Aggregator);
     }
     Serializer->Buffer = buffer;
+    // Transfer the level-change callback (if any) to the real buffer.
+    // The callback was a no-op on TChannelStub; now we register it so that
+    // future fill-level transitions are visible to scatter routers.
+    // We also fire it once to advance the router's stale HardLimit view to
+    // the buffer's actual initial level (typically NoLimit).
+    if (LevelChangeCallback_) {
+        buffer->SetLevelChangeCallback(LevelChangeCallback_);
+        LevelChangeCallback_(EDqFillLevel::HardLimit, buffer->GetFillLevel());
+    }
     Service.reset();
 }
 

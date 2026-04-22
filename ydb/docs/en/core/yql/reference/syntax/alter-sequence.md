@@ -1,6 +1,6 @@
 # ALTER SEQUENCE
 
-Modifies parameters of an existing `Sequence` object associated with a [Serial](../types/serial.md) column.
+Modifies the parameters of an existing [Sequence](../../../../concepts/glossary.md#sequence) object associated with a [Serial](../types/serial.md) column.
 
 ## Syntax
 
@@ -17,7 +17,7 @@ ALTER SEQUENCE [ IF EXISTS ] path_to_sequence
 
     The path is constructed as `<path_to_table>/_serial_column_<column_name>`,
     where `<path_to_table>` is the absolute path to the table, and `<column_name>` is the name of the column with the `Serial` data type.
-    For example, for the column `user_id` in the table `/local/users`, the corresponding `Sequence` path will be `/local/users/_serial_column_user_id`.
+    For example, for the column `user_id` in the table `/local/users`, the corresponding [Sequence](../../../../concepts/glossary.md#sequence) path will be `/local/users/_serial_column_user_id`.
 
 * `IF EXISTS` — when used, the statement does not return an error if the sequence does not exist at the specified path.
 
@@ -47,7 +47,7 @@ ALTER SEQUENCE `/Root/users/_serial_column_user_id`
     RESTART 1000;
 ```
 
-An alternative way to change the current value is to first set a new start value, and then `RESTART` the `Sequence`. After this, subsequent calls to `RESTART` without an explicit value will set the current value to 1000:
+An alternative way to change the current value is to first set a new start value, and then `RESTART` the [Sequence](../../../../concepts/glossary.md#sequence). After this, subsequent calls to `RESTART` without an explicit value will set the current value to 1000:
 
 ```yql
 ALTER SEQUENCE `/Root/users/_serial_column_user_id` INCREMENT BY 5 START WITH 1000;

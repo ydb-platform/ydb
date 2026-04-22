@@ -176,6 +176,14 @@ A **column family** or **column group** is a feature that allows storing a subse
 
 **Time to live** or **TTL** is a mechanism for automatically removing old rows from a table asynchronously in the background. It is explained in a separate article [{#T}](ttl.md).
 
+{% if feature_serial %}
+
+#### Sequence {#sequence}
+
+A **Sequence** is a schema object that generates a monotonically increasing series of integers. Each call returns a unique value. Sequences are used internally to implement [serial column types](../yql/reference/types/serial.md). A sequence object is created automatically when a serial column is defined and is destroyed together with its table.
+
+{% endif %}
+
 ### View {#view}
 
 A **view** logically represents a table formed by a given query. The view itself contains no data. The content of a view is generated every time you SELECT from it. Thus, any changes in the underlying tables are reflected immediately in the view.

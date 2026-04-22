@@ -1,6 +1,6 @@
 # ALTER SEQUENCE
 
-Изменяет параметры уже существующего объекта `Sequence`, привязанного к колонке [Serial](../types/serial.md) типа.
+Изменяет параметры уже существующего объекта [Sequence](../../../../concepts/glossary.md#sequence), привязанного к колонке [Serial](../types/serial.md) типа.
 
 ## Синтаксис
 
@@ -13,12 +13,13 @@ ALTER SEQUENCE [ IF EXISTS ] path_to_sequence
 
 ## Параметры
 
-* `path_to_sequence` - абсолютный путь до объекта `Sequence`.
+* `path_to_sequence` — абсолютный путь до объекта [Sequence](../../../../concepts/glossary.md#sequence).
 
     Путь формируется как `<path_to_table>/_serial_column_<column_name>`,
     где `<path_to_table>` — абсолютный путь до таблицы, `<column_name>` — имя колонки типа `Serial`.
-    Например, для таблицы с путём `/local/users` и колонки `user_id` путь к соответствующему `Sequence` будет `/local/users/_serial_column_user_id`.
-* `IF EXISTS` - при использовании этой конструкции, выражение не возвращает ошибку, если не существует `Sequence` по указаному пути.
+    Например, для таблицы с путём `/local/users` и колонки `user_id` путь к соответствующему [Sequence](../../../../concepts/glossary.md#sequence) будет `/local/users/_serial_column_user_id`.
+
+* `IF EXISTS` — при использовании этой конструкции выражение не возвращает ошибку, если по указанному пути не существует [Sequence](../../../../concepts/glossary.md#sequence).
 * `INCREMENT [ BY ] increment` - задает шаг изменения последовательности. Значение по умолчанию: 1.
 * `START [ WITH ] start_value` - устанавливает новое стартовое значение для последовательности. Изменение этого параметра через `ALTER SEQUENCE` не влияет на текущее значение последовательности, но будет использовано, если выполнить `ALTER SEQUENCE RESTART` без указания значения.  Значение по умолчанию: 1.
 * `RESTART [ [ WITH ] restart_value ]` - изменяет текущее значение последовательности на указанное в `restart_value`. Если значение не указано, текущее значение последовательности будет установлено в текущее стартовое значение.

@@ -5,9 +5,7 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 class TIndexMeta: public TSkipIndex {
 public:
-    static TString GetClassNameStatic() {
-        return "MIN_MAX";
-    }
+    static TString GetClassNameStatic();
 
 private:
     using TBase = TSkipIndex;

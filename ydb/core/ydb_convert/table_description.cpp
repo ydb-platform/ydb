@@ -1414,6 +1414,34 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             return false;
         }
 
+        if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+            if (index.index_columns_size() != 1) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Local min_max is applied to 1 column only, got columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]";
+                return false;
+            } 
+            if (!index.data_columns().empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Local bloom doesn't need data columns, got: [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]";
+                return false;
+            }
+            if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = "Local min_max index is disabled with EnableCsMinMaxIndex feature flag";
+                return false;
+            }
+            auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+            alterColumnTable->SetName(name);
+            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+            auto* upsertIndex = alterColumnTable->MutableAlterSchema()->AddUpsertIndexes();
+            upsertIndex->SetName(index.name());
+            upsertIndex->SetClassName(NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
+            auto min_max_proto = upsertIndex->MutableMinMaxIndex();
+            min_max_proto->SetColumnName(index.index_columns()[0]);
+            return true;
+        }
+
+
         if (index.index_columns_size() > 1) {
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Only one index column is supported for local bloom indexes";
@@ -1433,6 +1461,8 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         upsert->SetName(index.name());
 
         switch (index.type_case()) {
+            case Ydb::Table::TableIndex::kLocalMinMaxIndex:
+                Y_ABORT("Local min_max index is already handled");
             case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     status = Ydb::StatusIds::UNSUPPORTED;
@@ -1486,7 +1516,9 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             default:
                 status = Ydb::StatusIds::BAD_REQUEST;
                 const google::protobuf::Reflection* reflection = index.GetReflection();
-                error = TStringBuilder() << "Only local bloom indexes ans local min_max index are supported for column tables, got " << reflection->GetOneofFieldDescriptor(index, index.GetDescriptor()->FindOneofByName("type"))->camelcase_name();
+                const google::protobuf::Descriptor* descriptor = index.GetDescriptor();
+                error = TStringBuilder() << "Only local_bloom_filter_index, local_bloom_ngram_filter_index and local_min_max_index oneof variants are supported for column tables, got " 
+                        << reflection->GetOneofFieldDescriptor(index, descriptor->FindOneofByName("type"))->full_name();
                 return false;
         }
     } else if (OpType == EAlterOperationKind::RenameIndex) {

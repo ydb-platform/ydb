@@ -4,9 +4,7 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 class TIndexConstructor: public TSkipIndexConstructor {
 public:
-    static TString GetClassNameStatic() {
-        return "MINMAX";
-    }
+    static TString GetClassNameStatic();
 
 private:
     TString ColumnName;

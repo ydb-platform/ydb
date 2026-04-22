@@ -9,39 +9,217 @@ import logging
 import sys
 from collections import defaultdict
 
-# Add the parent directory to the path to import update_mute_issues
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Runnable as ``python3 .github/scripts/tests/mute/create_new_muted_ya.py``: expose package ``mute``.
+_mutedir = os.path.dirname(os.path.abspath(__file__))
+_tests_dir = os.path.dirname(_mutedir)
+_scripts_dir = os.path.dirname(_tests_dir)
+for _p in (_tests_dir, _scripts_dir, os.path.join(_scripts_dir, 'analytics')):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from mute_check import YaMuteCheck
-from update_mute_issues import (
+from mute.update_mute_issues import (
+    ORG_NAME,
+    PROJECT_ID,
+    close_unmuted_issues,
     create_and_add_issue_to_project,
     generate_github_issue_title_and_body,
+    get_issues_and_tests_from_project,
     get_muted_tests_from_issues,
-    close_unmuted_issues,
+    map_tests_to_manual_fast_unmute_issue_url,
 )
-
-# Add analytics directory to path for ydb_wrapper import
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+from mute.constants import (
+    get_delete_window_days,
+    get_manual_unmute_min_runs,
+    get_manual_unmute_window_days,
+    get_mute_window_days,
+    get_unmute_window_days,
+)
+from mute.naming import mute_file_line_to_tests_monitor_full_name
 from ydb_wrapper import YDBWrapper
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging — root INFO so ydb/grpc don't spam DEBUG (channel options, etc.).
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+for _noisy in ('grpc', 'grpc._cython.cygrpc', 'ydb'):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 dir = os.path.dirname(__file__)
-repo_path = f"{dir}/../../../"
+repo_path = os.path.normpath(os.path.join(dir, '..', '..', '..', '..')) + os.sep
 muted_ya_path = '.github/config/muted_ya.txt'
 
-# Constants for mute logic time windows
-MUTE_DAYS = 4
-UNMUTE_DAYS = 7
-DELETE_DAYS = 7
-
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
-    os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest_config.json')
+    os.path.join(dir, '..', '..', '..', 'config', 'mute_issue_and_digest_config.json')
 )
+
+def load_manual_unmute_config():
+    """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute.constants``."""
+    return get_manual_unmute_window_days(), get_manual_unmute_min_runs()
+
+
+def tests_monitor_query_days_window():
+    """How many calendar days of ``tests_monitor`` history we must load for mute/unmute/delete/fast-unmute."""
+    return max(
+        get_mute_window_days(),
+        get_unmute_window_days(),
+        get_delete_window_days(),
+        get_manual_unmute_window_days(),
+    )
+
+
+def grace_started_at_to_utc_date(value):
+    """Normalize ``grace_started_at`` from scan_query (datetime, date, or int microseconds)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.astimezone(datetime.timezone.utc).date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, int):
+        return datetime.datetime.fromtimestamp(
+            value / 1_000_000, tz=datetime.timezone.utc
+        ).date()
+    return None
+
+
+def merge_mute_aggregate_with_fast_unmute_grace(
+    all_data,
+    aggregated_for_mute_default,
+    grace_map,
+    manual_window_days,
+    mute_window_days,
+):
+    """Rebuild mute aggregation list so tests in post–fast-unmute grace use a ladder window.
+
+    Effective window = ``min(mute_window_days, manual_window_days + days_since_grace_started)`` calendar days.
+    """
+    if not grace_map:
+        return aggregated_for_mute_default
+
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    # Which ladder window lengths (eff) actually occur for grace rows. We aggregate only
+    # those periods — not every integer from manual_window_days..mute_window_days — so we
+    # skip redundant aggregate_test_data calls when few distinct eff values appear.
+    needed_effs = set()
+    for meta in grace_map.values():
+        gs_date = grace_started_at_to_utc_date(meta.get('grace_started_at'))
+        if gs_date is None:
+            continue
+        days_since = max(0, (today - gs_date).days)
+        needed_effs.add(min(mute_window_days, manual_window_days + days_since))
+
+    # Per eff: full_name -> aggregated row. Lets the loop below do dict lookups instead of
+    # rebuilding {full_name: row} from the agg list for every test (same result, less work).
+    maps_by_eff = {}
+    for d in sorted(needed_effs):
+        agg_list = aggregate_test_data(all_data, d)
+        maps_by_eff[d] = {t['full_name']: t for t in agg_list}
+
+    by_name = {t['full_name']: t for t in aggregated_for_mute_default}
+    merged = []
+    for fn, test in by_name.items():
+        meta = grace_map.get(fn)
+        if meta:
+            gs_date = grace_started_at_to_utc_date(meta.get('grace_started_at'))
+            if gs_date is not None:
+                days_since = max(0, (today - gs_date).days)
+                eff = min(mute_window_days, manual_window_days + days_since)
+                alt_map = maps_by_eff.get(eff)
+                if alt_map is not None:
+                    test = alt_map.get(fn, test)
+        merged.append(test)
+    return merged
+
+
+def load_fast_unmute_grace_map(ydb_wrapper, branch, build_type):
+    """Rows in ``fast_unmute_grace``: widening mute threshold after a test left fast-unmute."""
+    try:
+        table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
+    except KeyError:
+        logging.info('fast_unmute_grace not registered in ydb_qa_config — ladder disabled')
+        return {}
+
+    branch_esc = str(branch).replace("'", "''")
+    bt_esc = str(build_type).replace("'", "''")
+    query = f"""
+    SELECT full_name, grace_started_at
+    FROM `{table_path}`
+    WHERE branch = '{branch_esc}'
+        AND build_type = '{bt_esc}'
+    """
+    try:
+        rows = ydb_wrapper.execute_scan_query(query, query_name='fast_unmute_grace_load')
+    except Exception as exc:
+        logging.warning('Failed to load fast_unmute_grace: %s', exc)
+        return {}
+
+    out = {}
+    for row in rows:
+        fn = row.get('full_name')
+        if fn:
+            out[fn] = row
+    return out
+
+
+def delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, test_strings):
+    """Remove grace rows when tests are mute candidates again (wildcards skipped)."""
+    if not test_strings:
+        return
+    try:
+        table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
+    except KeyError:
+        return
+
+    for line in test_strings:
+        if '*' in line or '?' in line:
+            continue
+        full_name = mute_file_line_to_tests_monitor_full_name(line)
+        query = f"""
+        DECLARE $full_name AS Utf8;
+        DECLARE $branch AS Utf8;
+        DECLARE $build_type AS Utf8;
+        DELETE FROM `{table_path}`
+        WHERE full_name = $full_name
+            AND branch = $branch
+            AND build_type = $build_type;
+        """
+        try:
+            ydb_wrapper.execute_dml(
+                query,
+                {'$full_name': full_name, '$branch': branch, '$build_type': build_type},
+                query_name='fast_unmute_grace_delete_on_remute',
+            )
+        except Exception as exc:
+            logging.warning(
+                'Failed to delete grace row for mute line %r (monitor key %r): %s',
+                line,
+                full_name,
+                exc,
+            )
+
+
+def load_manual_unmute_full_names(ydb_wrapper, branch, build_type):
+    """Return the set of full_name registered for manual fast-unmute on this (branch, build_type)."""
+    try:
+        table_path = ydb_wrapper.get_table_path('fast_unmute_active')
+    except KeyError:
+        logging.info('fast_unmute_active not registered in ydb_qa_config — manual fast-unmute disabled')
+        return set()
+
+    branch_escaped = str(branch).replace("'", "''")
+    build_type_escaped = str(build_type).replace("'", "''")
+    query = f"""
+    SELECT full_name
+    FROM `{table_path}`
+    WHERE branch = '{branch_escaped}'
+        AND build_type = '{build_type_escaped}'
+    """
+    try:
+        rows = ydb_wrapper.execute_scan_query(query, query_name='manual_unmute_load_full_names')
+    except Exception as exc:
+        logging.warning('Failed to load fast_unmute_active: %s — manual fast-unmute disabled', exc)
+        return set()
+    return {row['full_name'] for row in rows if row.get('full_name')}
 
 
 def is_chunk_test(test):
@@ -107,7 +285,9 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
     return result
 
 
-def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, ydb_wrapper=None):
+def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=None, ydb_wrapper=None):
+    if days_window is None:
+        days_window = tests_monitor_query_days_window()
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
     
     def _run(w):
@@ -356,7 +536,15 @@ def is_mute_candidate(test):
     fail_count = test.get('fail_count', 0)
     result = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
 
-    logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{fail_count}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
+    logging.info(
+        'MUTE_CHECK: %s - runs:%s, fails:%s, state:%s, muted:%s, result:%s',
+        test.get('full_name'),
+        total_runs,
+        fail_count,
+        test.get('state'),
+        test.get('is_muted'),
+        result,
+    )
 
     return result
 
@@ -368,7 +556,16 @@ def is_unmute_candidate(test):
     result = total_runs >= 4 and total_fails == 0
 
     if test.get('is_muted', False):
-        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test.get('mute_count')}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
+        logging.info(
+            'UNMUTE_CHECK: %s - runs:%s, fails:%s, mute_count:%s, state:%s, muted:%s, result:%s',
+            test.get('full_name'),
+            total_runs,
+            total_fails,
+            test.get('mute_count'),
+            test.get('state'),
+            test.get('is_muted'),
+            result,
+        )
 
     return result
 
@@ -390,15 +587,30 @@ def is_delete_candidate(test):
     result = total_runs == 0 or only_skipped_while_muted
 
     if test.get('is_muted', False):
-        logging.debug(
-            f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, "
-            f"p:{pass_count}, f:{fail_count}, m:{mute_count}, s:{skip_count}, "
-            f"muted:{test.get('is_muted')}, only_skipped_while_muted:{only_skipped_while_muted}, result:{result}"
+        logging.info(
+            'DELETE_CHECK: %s - runs:%s, p:%s, f:%s, m:%s, s:%s, muted:%s, '
+            'only_skipped_while_muted:%s, result:%s',
+            test.get('full_name'),
+            total_runs,
+            pass_count,
+            fail_count,
+            mute_count,
+            skip_count,
+            test.get('is_muted'),
+            only_skipped_while_muted,
+            result,
         )
 
     return result
 
-def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
+def create_file_set(
+    aggregated_for_mute,
+    filter_func,
+    mute_check=None,
+    use_wildcards=False,
+    resolution=None,
+    debug_suffix='',
+):
     """Create a set of tests for output file based on a filter."""
     result_set = set()
     debug_list = []
@@ -428,8 +640,10 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
                 debug_string = create_debug_string(
                     test,
                     period_days=test.get('period_days'),
-                    date_window=test.get('date_window')
+                    date_window=test.get('date_window'),
                 )
+                if debug_suffix:
+                    debug_string += debug_suffix
                 debug_list.append(debug_string)
     
     # Force 100% output if it was not printed yet.
@@ -459,7 +673,21 @@ def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=F
         add_lines_to_file(debug_path, [line + '\n' for line in sorted_debug_list])
     logging.info(f"Created {os.path.basename(file_path)} with {len(sorted_test_set)} tests")
 
-def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete):
+def apply_and_add_mutes(
+    all_data,
+    output_path,
+    mute_check,
+    aggregated_for_mute,
+    aggregated_for_unmute,
+    aggregated_for_delete,
+    manual_unmute_full_names=None,
+    aggregated_for_manual_unmute=None,
+    manual_unmute_min_runs=None,
+    manual_unmute_window_days=None,
+    ydb_wrapper=None,
+    branch=None,
+    build_type=None,
+):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
     
@@ -476,8 +704,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         to_mute, to_mute_debug = create_file_set(
             aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
         )
-        write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
-        
+
         # 2. Unmute candidates.
         def is_unmute_non_chunk(test):
             if is_chunk_test(test):
@@ -498,9 +725,53 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         # Merge per-test and wildcard results.
         to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_patterns)))
         to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debugs)))
-        
+
+        # 2a. Manual fast-unmute candidates.
+        # A test is considered under manual fast-unmute when its full_name is
+        # registered in `fast_unmute_active` (populated when a
+        # user manually closes the mute issue). Such tests are evaluated on a
+        # shorter window and smaller min_runs threshold, so they get unmuted
+        # sooner when stable.
+        manual_unmute_full_names = set(manual_unmute_full_names or [])
+        if manual_unmute_full_names and aggregated_for_manual_unmute and manual_unmute_min_runs:
+            def is_manual_unmute_candidate(test):
+                if is_chunk_test(test):
+                    return False
+                fn = test.get('full_name')
+                if fn not in manual_unmute_full_names:
+                    return False
+                total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
+                total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
+                result = total_runs >= manual_unmute_min_runs and total_fails == 0
+                logging.info(
+                    'FAST_UNMUTE_CHECK: %s - runs:%s, fails:%s, min_runs:%s, window_days=%s, result:%s',
+                    fn,
+                    total_runs,
+                    total_fails,
+                    manual_unmute_min_runs,
+                    manual_unmute_window_days if manual_unmute_window_days is not None else '?',
+                    result,
+                )
+                return result
+
+            to_unmute_manual, to_unmute_manual_debug = create_file_set(
+                aggregated_for_manual_unmute,
+                is_manual_unmute_candidate,
+                mute_check,
+                resolution='to_unmute',
+                debug_suffix=' [fast-unmute]',
+            )
+            if to_unmute_manual:
+                logging.info(f"Manual fast-unmute added {len(to_unmute_manual)} test(s) to to_unmute")
+            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual)))
+            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_debug)))
+
+        write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
-        
+
+        if ydb_wrapper is not None and branch is not None and build_type is not None:
+            delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, to_mute)
+
         # 3. Delete-from-mute candidates (to_delete).
         def is_delete_non_chunk(test):
             if is_chunk_test(test):
@@ -668,7 +939,9 @@ def read_tests_from_file(file_path):
 
 def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', build_type=DEFAULT_BUILD_TYPE):
     tests_from_file = read_tests_from_file(file_path)
-    muted_tests_in_issues = get_muted_tests_from_issues()
+    issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
+    muted_tests_in_issues = get_muted_tests_from_issues(issues_index)
+    manual_fast_unmute_issue_by_test = map_tests_to_manual_fast_unmute_issue_url(issues_index)
     prepared_tests_by_suite = {}
     temp_tests_by_suite = {}
     
@@ -699,6 +972,14 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
         if issue_key in muted_tests_in_issues:
             logging.info(
                 f"test {full_name} ({build_type}) already have issue, {muted_tests_in_issues[issue_key][0]['url']}"
+            )
+            continue
+        if issue_key in manual_fast_unmute_issue_by_test:
+            logging.info(
+                'test %s (%s) skipped: existing issue with manual-fast-unmute label: %s',
+                full_name,
+                build_type,
+                manual_fast_unmute_issue_by_test[issue_key],
             )
             continue
 
@@ -1017,23 +1298,68 @@ def mute_worker(args):
         mute_check.load(input_muted_ya_path)
         logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
-        all_data = execute_query(
-            args.branch, build_type=build_type, days_window=7, ydb_wrapper=ydb_wrapper
-        )
+        mute_window_days = get_mute_window_days()
+        unmute_window_days = get_unmute_window_days()
+        delete_window_days = get_delete_window_days()
+
+        all_data = execute_query(args.branch, build_type=build_type, ydb_wrapper=ydb_wrapper)
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.
-        aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS for mute
-        aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS for unmute
-        aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS for delete
-    
+        aggregated_for_mute = aggregate_test_data(all_data, mute_window_days)
+        aggregated_for_unmute = aggregate_test_data(all_data, unmute_window_days)
+        aggregated_for_delete = aggregate_test_data(all_data, delete_window_days)
+
+        manual_unmute_window_days, manual_unmute_min_runs = load_manual_unmute_config()
+        manual_unmute_full_names = set()
+        aggregated_for_manual_unmute = None
+        if manual_unmute_window_days and manual_unmute_min_runs:
+            manual_unmute_full_names = load_manual_unmute_full_names(ydb_wrapper, args.branch, build_type)
+            if manual_unmute_full_names:
+                aggregated_for_manual_unmute = aggregate_test_data(all_data, manual_unmute_window_days)
+                logging.info(
+                    f"Manual fast-unmute: window={manual_unmute_window_days}d, min_runs={manual_unmute_min_runs}, "
+                    f"tests={len(manual_unmute_full_names)}"
+                )
+
         logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
-    
+
+        grace_map = load_fast_unmute_grace_map(ydb_wrapper, args.branch, build_type)
+        if grace_map:
+            ladder_base = manual_unmute_window_days or 2
+            aggregated_for_mute = merge_mute_aggregate_with_fast_unmute_grace(
+                all_data,
+                aggregated_for_mute,
+                grace_map,
+                ladder_base,
+                mute_window_days,
+            )
+            logging.info(
+                'Fast-unmute grace ladder: %d test(s), effective mute window min(%d, %d + days_since_grace)',
+                len(grace_map),
+                mute_window_days,
+                ladder_base,
+            )
+
         if args.mode == 'update_muted_ya':
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-            apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete)
+            apply_and_add_mutes(
+                all_data,
+                output_path,
+                mute_check,
+                aggregated_for_mute,
+                aggregated_for_unmute,
+                aggregated_for_delete,
+                manual_unmute_full_names=manual_unmute_full_names,
+                aggregated_for_manual_unmute=aggregated_for_manual_unmute,
+                manual_unmute_min_runs=manual_unmute_min_runs,
+                manual_unmute_window_days=manual_unmute_window_days,
+                ydb_wrapper=ydb_wrapper,
+                branch=args.branch,
+                build_type=build_type,
+            )
 
         elif args.mode == 'create_issues':
             file_path = args.file_path

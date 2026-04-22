@@ -1,5 +1,10 @@
-name: Alert Queued Jobs
+name: Telegram scheduled notifications
 
+# Scheduled Telegram output: (1) mute-issue digests from YDB digest_queue via send_digest.py,
+# (2) stuck GitHub Actions queue alerts via alert_queued_jobs.py. Same cron; separate jobs.
+
+# Digest: new mute issues are written to YDB digest_queue by mute/create_new_muted_ya.py (not sent from mute PR workflows).
+# Job send-digest runs send_digest.py which dequeues unsent rows and sends Telegram, then sets sent_at.
 # Digest schedule: mute_issue_and_digest_config.json (schedule_utc_hours + schedule_weekdays).
 # send_digest.py checks UTC hour and ISO weekday (1=Mon … 7=Sun) — defaults to Mon–Fri if weekdays omitted.
 
@@ -22,12 +27,12 @@ on:
         default: false
 
 concurrency:
-  group: alert-queued-jobs
+  group: telegram-scheduled-notifications
   cancel-in-progress: false
 
 jobs:
   check-queued-jobs:
-    name: Alert queued jobs
+    name: CI queue Telegram alerts
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
 
     steps:
@@ -56,7 +61,7 @@ jobs:
             --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"
 
   send-digest:
-    name: Send mute digest
+    name: Mute digest to Telegram
     runs-on: ubuntu-latest
 
     steps:
@@ -81,8 +86,8 @@ jobs:
           if [ "${{ inputs.force }}" = "true" ]; then
             ARGS="$ARGS --force"
           fi
-          if [ -n "${{ inputs.profile }}" ]; then
-            ARGS="$ARGS --profile ${{ inputs.profile }}"
+          if [ -n "${{ github.event.inputs.profile }}" ]; then
+            ARGS="$ARGS --profile ${{ github.event.inputs.profile }}"
           fi
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"

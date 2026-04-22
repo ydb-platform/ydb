@@ -3,14 +3,18 @@ import sys
 import requests
 from urllib.parse import quote_plus
 
-# Import shared GitHub issue utilities
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# Import shared GitHub issue utilities (``mute/`` → ``tests/`` → ``.github/scripts/``).
+_scripts_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 from github_issue_utils import parse_body, DEFAULT_BUILD_TYPE
 
 
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = '45'
+# GitHub issue label set by ``mute/fast_unmute_github.py`` while fast-unmute rows exist.
+MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 
@@ -271,6 +275,11 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
                   state
                   body
                   createdAt
+                  labels(first: 40) {
+                    nodes {
+                      name
+                    }
+                  }
                 }
               }
               fieldValues(first: 20) {
@@ -347,7 +356,6 @@ def generate_github_issue_title_and_body(test_data):
     branch = test_data[0]['branch']
     build_type = test_data[0].get('build_type', DEFAULT_BUILD_TYPE)
     test_full_names = [f"{d['full_name']}" for d in test_data]
-    test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
         f"{d['test_name']}: {d['state']} last {d['days_in_state']} days, at {d['date_window']}: success_rate {d['success_rate']}%, {d['summary']}"
         for d in test_data
@@ -362,8 +370,6 @@ def generate_github_issue_title_and_body(test_data):
 
     # Преобразование списка тестов в строку и кодирование
     test_string = "\n".join(test_full_names)
-
-    test_mute_strings_string = "\n".join(test_mute_strings)
 
     summary_string = "\n".join(summary)
 
@@ -388,12 +394,12 @@ def generate_github_issue_title_and_body(test_data):
         f"Build type:<!--build_type_list_start-->\n"
         f"{build_type}\n"
         f"<!--build_type_list_end-->\n\n"
-        f"**Add line to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**\n"
-        "```\n"
-        f"{test_mute_strings_string}\n"
-        "```\n\n"
         f"Owner: {owner}\n\n"
-        "**Read more in [mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**\n\n"
+        "**About this issue**\n"
+        "- Auto-created by the mute workflow.\n"
+        "- Bot closes when all listed tests are unmuted or no longer exist.\n"
+        "- Close as **Completed** to trigger fast-unmute.\n"
+        "- [mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md) — full details.\n\n"
         f"**Summary history:** \n {summary_string}\n"
         "\n\n"
         f"**Test run history:** [link]({test_run_history_link})\n\n"
@@ -408,11 +414,23 @@ def generate_github_issue_title_and_body(test_data):
 
 
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
+    """Project items → issue index.
+
+    Includes **open** issues and **closed** issues only when the GitHub label
+    ``manual-fast-unmute`` is present (fast-unmute without reopening the issue).
+    Other closed cards are skipped so downstream logic matches project 45 only.
+    """
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
     all_issues_with_contet = {}
     for issue in issues:
         content = issue['content']
         if content:
+            state = content.get('state')
+            label_nodes = (content.get('labels') or {}).get('nodes') or []
+            label_names = [n['name'] for n in label_nodes if n and n.get('name')]
+            if state == 'CLOSED' and MANUAL_FAST_UNMUTE_GITHUB_LABEL not in label_names:
+                continue
+
             body = content['body']
             parsed = parse_body(body)
 
@@ -451,6 +469,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['tests'] = []
             all_issues_with_contet[content['id']]['branches'] = parsed.branches
             all_issues_with_contet[content['id']]['build_type'] = parsed.build_type
+            all_issues_with_contet[content['id']]['labels'] = label_names
 
             for test in parsed.tests:
                 all_issues_with_contet[content['id']]['tests'].append(test)
@@ -460,26 +479,46 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     return all_issues_with_contet
 
 
-def get_muted_tests_from_issues():
-    issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
+def map_tests_to_manual_fast_unmute_issue_url(issues_dict):
+    """``(full_name, build_type)`` → issue URL for issues whose ``labels`` include fast-unmute.
+
+    Expects the filtered project index from ``get_issues_and_tests_from_project``.
+    """
+    out = {}
+    for _issue_id, info in (issues_dict or {}).items():
+        labels = info.get('labels') or []
+        if MANUAL_FAST_UNMUTE_GITHUB_LABEL not in labels:
+            continue
+        bt = info.get('build_type') or DEFAULT_BUILD_TYPE
+        url = info.get('url')
+        for test in info.get('tests') or []:
+            key = (test, bt)
+            if key not in out:
+                out[key] = url
+    return out
+
+
+def get_muted_tests_from_issues(issues_dict=None):
+    if issues_dict is None:
+        issues_dict = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
-    
+
     # First, collect all issues for each (test, build_type) key
-    for issue in issues:
-        if issues[issue]["state"] != 'CLOSED':
-            bt = issues[issue].get('build_type') or DEFAULT_BUILD_TYPE
-            for test in issues[issue]['tests']:
+    for issue in issues_dict:
+        if issues_dict[issue]["state"] != 'CLOSED':
+            bt = issues_dict[issue].get('build_type') or DEFAULT_BUILD_TYPE
+            for test in issues_dict[issue]['tests']:
                 key = (test, bt)
                 if key not in muted_tests:
                     muted_tests[key] = []
                 muted_tests[key].append(
                     {
-                        'url': issues[issue]['url'],
-                        'createdAt': issues[issue]['createdAt'],
-                        'status_updated': issues[issue]['status_updated'],
-                        'status': issues[issue]['status'],
-                        'state': issues[issue]['state'],
-                        'branches': issues[issue]['branches'],
+                        'url': issues_dict[issue]['url'],
+                        'createdAt': issues_dict[issue]['createdAt'],
+                        'status_updated': issues_dict[issue]['status_updated'],
+                        'status': issues_dict[issue]['status'],
+                        'state': issues_dict[issue]['state'],
+                        'branches': issues_dict[issue]['branches'],
                         'build_type': bt,
                         'id': issue,
                     }

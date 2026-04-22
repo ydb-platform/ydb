@@ -32,7 +32,7 @@ Specialized script for parsing GitHub issues and sending team-specific notificat
 **Documentation:** [README_parse_and_send.md](README_parse_and_send.md)
 
 ### 🚨 `alert_queued_jobs.py`
-Monitors the GitHub Actions queue and sends Telegram alerts when jobs are stuck (PR-check, Postcommit, etc.). Runs on a schedule and manually.
+Monitors the GitHub Actions queue and sends Telegram alerts when jobs are stuck (PR-check, Postcommit, etc.). Runs in **`.github/workflows/telegram_scheduled_notifications.yml`** (job **CI queue Telegram alerts**; same file also runs **Mute digest to Telegram** via `send_digest.py`).
 
 **Documentation:** [README_alert_queued_jobs.md](README_alert_queued_jobs.md) — vars/secrets, thresholds, local testing (dry-run), CLI.
 

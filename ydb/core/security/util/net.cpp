@@ -6,7 +6,6 @@
 #include <util/generic/strbuf.h>
 #include <util/network/address.h>
 
-#include <functional>
 #include <tuple>
 
 namespace NKikimr::NSecurity {
@@ -33,35 +32,36 @@ TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
         TStringBuf normalizedPeername,
         TMaybe<TIpv6Address::TIpType> target) -> TMaybe<THostAddressAndPort> {
         bool isOk = false;
-        auto res = ParseHostAndMayBePortFromString(normalizedPeername, 0, isOk);
+        auto [addrPort, host, port] =
+            ParseHostAndMayBePortFromString(normalizedPeername, 0, isOk);
         if (!isOk) {
             return Nothing();
         }
 
         if (target.Defined()) {
-            return (std::get<0>(res).Ip.Type() == target.GetRef())
-                ? MakeMaybe<THostAddressAndPort>(std::move(std::get<0>(res)))
+            return (addrPort.Ip.Type() == target.GetRef())
+                ? MakeMaybe<THostAddressAndPort>(std::move(addrPort))
                 : Nothing();
         } else {
-            return (std::get<0>(res).Ip.Type() == TIpv6Address::TIpType::Ipv6
-                    || std::get<0>(res).Ip.Type() == TIpv6Address::TIpType::Ipv4)
-                ? MakeMaybe<THostAddressAndPort>(std::move(std::get<0>(res)))
+            return (addrPort.Ip.Type() == TIpv6Address::TIpType::Ipv6
+                    || addrPort.Ip.Type() == TIpv6Address::TIpType::Ipv4)
+                ? MakeMaybe<THostAddressAndPort>(std::move(addrPort))
                 : Nothing();
         }
     };
 
     // ipv6:<ipv6> / ipv6:[<ipv6>] / ipv6:[<ipv6>]:<port>
     if (peername.SkipPrefix(IPV6_PREFIX)) {
-        return std::invoke(parsePeername, peername, TIpv6Address::TIpType::Ipv6);
+        return parsePeername(peername, TIpv6Address::TIpType::Ipv6);
     }
 
     // ipv4:<ipv4> / ipv4:<ipv4>:<port>
     if (peername.SkipPrefix(IPV4_PREFIX)) {
-        return std::invoke(parsePeername, peername, TIpv6Address::TIpType::Ipv4);
+        return parsePeername(peername, TIpv6Address::TIpType::Ipv4);
     }
 
     // <ipv6> / [<ipv6>] / [<ipv6>]:<port> / <ipv4> / <ipv4>:<port>
-    return std::invoke(parsePeername, peername, Nothing());
+    return parsePeername(peername, Nothing());
 }
 
 } // namespace

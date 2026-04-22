@@ -291,7 +291,7 @@ void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
     body(db, jsonExists);
 }
 
-void ValidateTokens(TQueryClient& db, const std::string& predicate, const std::vector<std::string>& expected,
+void ValidateTokens(TQueryClient& db, const std::string& predicate, std::vector<std::string> expected,
     const std::string& defaultOperator = "and")
 {
     auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
@@ -306,11 +306,11 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, const std::v
     auto plan = result.GetStats()->GetPlan();
     UNIT_ASSERT_C(plan, "Plan is empty");
 
-    Cerr << "PREDICATE: " << predicate << Endl;
-    auto ast = result.GetStats()->GetAst();
-    UNIT_ASSERT_C(ast, "AST is empty");
-    Cout << "AST: " << Endl << *ast << Endl;
-    Cout << "PLAN: " << Endl << *plan << Endl;
+    // Cerr << "PREDICATE: " << predicate << Endl;
+    // auto ast = result.GetStats()->GetAst();
+    // UNIT_ASSERT_C(ast, "AST is empty");
+    // Cout << "AST: " << Endl << *ast << Endl;
+    // Cout << "PLAN: " << Endl << *plan << Endl;
 
     NJson::TJsonValue planJson;
     auto success = NJson::ReadJsonTree(*plan, &planJson, true);
@@ -323,12 +323,15 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, const std::v
     auto tokens = SplitString(splitTokens, ", ");
     UNIT_ASSERT_VALUES_EQUAL_C(tokens.size(), expected.size(), "for predicate = " << predicate);
 
+    std::vector<std::string> actual;
     for (const auto& token : tokens) {
-        auto decoded = HexDecode(token);
-        if (std::find(expected.begin(), expected.end(), decoded) == expected.end()) {
-            UNIT_FAIL("Unexpected token: " << decoded);
-        }
+        actual.push_back(HexDecode(token));
     }
+
+    std::sort(actual.begin(), actual.end());
+    std::sort(expected.begin(), expected.end());
+
+    UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "for predicate = " << predicate);
 }
 
 void TestSelectJsonTokens(const std::function<void(TQueryClient&)>& body) {

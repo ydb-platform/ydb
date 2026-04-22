@@ -6,14 +6,19 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <ydb/core/util/struct_log/structured_message.h>
+
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
 
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \
         if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
             TVector<std::pair<TString, TString>> auditParts;                                                                    \
+            NKikimr::NStructLog::TStructuredMessage structMessage;                                                              \
             expr                                                                                                                \
             ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
+            MemStructLogAdapter(*sys, NActors::NLog::EPriority::PRI_NOTICE, NKikimrServices::AUDIT_LOG_WRITER, __FILE_NAME__, __LINE__, "Audit event", std::move(structMessage)); \
         }                                                                                                                       \
     } while (0) /**/
 
@@ -24,6 +29,7 @@
     do {                                                                                                                          \
         if (condition && !TStringBuf(value).empty()) {                                                                            \
             auditParts.emplace_back(key, value);                                                                                  \
+            structMessage.AppendValue({key}, TString(value));                                                                     \
         }                                                                                                                         \
     } while (0);
 

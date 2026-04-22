@@ -72,7 +72,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
             const int batchSize = 10;
             bool first = true;
             for (size_t offset = 0; offset < keys.Keys.size(); offset += batchSize) {
-                TStringStream ss;
+                TTLILogMessage ss;
 
                 LogKeyValue("Component", "DataShard", ss);
                 LogKeyValue("Type", "Keys", ss);
@@ -113,15 +113,21 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 
                     LogKeyValue("Op", rowOp, ss);
 
-                    ss << "Key: ";
-                    WriteTableRange(range, keyDef->KeyColumnTypes, ss);
+                    ss.Text << "Key: ";
+
+                    TStringStream keyValue;
+                    WriteTableRange(range, keyDef->KeyColumnTypes, ss.Text);
 
                     if (i + 1 < keys.Keys.size() && j + 1 < batchSize) {
-                        ss << ",";
+                        keyValue << ",";
                     }
+
+                    ss.Text << keyValue.Str();
+
+                    ss.Struct.AppendValue({"Key"}, keyValue.Str());
                 }
 
-                LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+                LOG_INTEGRITY_TRAILS(ctx, ss);
             }
         }
     }
@@ -133,23 +139,26 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
     }
 
     auto logFn = [&]() {
-        TStringStream ss;
+        TTLILogMessage ss;
 
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
 
-        ss << "BrokenLocks: [";
-        for (const auto& lock : locks) {
-            ss << lock << " ";
-        }
-        ss << "]";
+        ss.Text << "BrokenLocks: [";
 
-        return ss.Str();
+        TStringStream lockStr;
+        for (const auto& lock : locks) {
+            lockStr << lock << " ";
+        }
+        ss.Text << lockStr.Str() << "]";
+        ss.Struct.AppendValue({"BrokenLocks"}, lockStr.Str());
+
+        return ss;
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    LOG_INTEGRITY_TRAILS(ctx, logFn());
 }
 
 template <typename TxResult>
@@ -157,7 +166,7 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
     auto logFn = [&]() {
         TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
 
-        TStringStream ss;
+        TTLILogMessage ss;
 
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Finished", ss);
@@ -165,10 +174,11 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
         LogKeyValue("PhyTxId", ToString(txId), ss);
         LogKeyValue("Status", statusString, ss, true);
 
-        return ss.Str();
+        return ss;
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+
+    LOG_INTEGRITY_TRAILS(ctx, logFn());
 }
 
 }

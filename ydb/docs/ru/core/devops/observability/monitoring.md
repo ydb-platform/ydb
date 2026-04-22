@@ -6,9 +6,9 @@
 
 Перед началом работы ознакомьтесь с [описанием метрик](../../reference/observability/metrics/index.md) и [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).
 
-Определите, как развёрнут {{ ydb-short-name }}:
+Определите, как развернут {{ ydb-short-name }}:
 
-- по [одному из способов развёртывания кластера](../deployment-options/index.md) (Ansible, Kubernetes или вручную);
+- по [одному из способов развертывания кластера](../deployment-options/index.md) (Ansible, Kubernetes или вручную);
 - либо в конфигурации [быстрого старта](../../quickstart.md) (одноузловой локальный кластер).
 
 {% endnote %}
@@ -20,7 +20,7 @@
 - [Установите](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 - [Установите](https://grafana.com/docs/grafana/latest/setup-grafana/) Grafana.
 
-Полный цикл развёртывания Prometheus и Grafana в этом разделе не рассматривается — обратитесь к документации выбранных продуктов.
+Полный цикл развертывания Prometheus и Grafana в этом разделе не рассматривается — обратитесь к документации выбранных продуктов.
 
 ### Варианты подготовки конфигурации сбора метрик {#prometheus-config-variants}
 
@@ -30,7 +30,7 @@
 
 - Ansible (с TLS)
 
-  Рекомендуемый способ получить согласованный набор файлов (в том числе с TLS) — сгенерировать конфигурацию плейбуком развёртывания.
+  Рекомендуемый способ получить согласованный набор файлов (в том числе с TLS) — сгенерировать конфигурацию плейбуком развертывания.
 
   Перейдите в рабочий каталог сценария Ansible для вашего кластера:
 
@@ -93,7 +93,7 @@
   cat ydbd-database.yml
   ```
 
-  Шаблон `prometheus_ydb.yml` в репозитории может отличаться от конфигурации, оптимальной для вашего кластера; канонический вариант для промышленного окружения надёжнее получать генерацией через Ansible. При необходимости помощи с ручной сборкой TLS-конфигурации обратитесь к команде сопровождения {{ ydb-short-name }}.
+  Шаблон `prometheus_ydb.yml` в репозитории может отличаться от конфигурации, оптимальной для вашего кластера; канонический вариант для промышленного окружения надежнее получать генерацией через Ansible. При необходимости помощи с ручной сборкой TLS-конфигурации обратитесь к команде сопровождения {{ ydb-short-name }}.
 
 - Локальный однонодовый кластер (быстрый старт)
 
@@ -103,7 +103,7 @@
 
 ### Запуск Prometheus с подготовленной конфигурацией {#prometheus-start}
 
-Отредактированные файлы положите в **любую** удобную директорию на машине, где запускается Prometheus (рядом с бинарником или отдельно, например `/etc/prometheus`). В параметре `--config.file` укажите **полный или относительный путь** к `prometheus_ydb.yml`. Файлы `prometheus_ydb.yml`, `ydbd-storage.yml` и `ydbd-database.yml` держите в **одной** папке: в шаблоне к файлам списков целей обращаются **относительные** пути, и Prometheus ищет их относительно **рабочей директории процесса** при старте. Перед запуском Prometheus перейдите в эту папку и запустите процесс из неё:
+Отредактированные файлы положите в **любую** удобную директорию на машине, где запускается Prometheus (рядом с бинарником или отдельно, например `/etc/prometheus`). В параметре `--config.file` укажите **полный или относительный путь** к `prometheus_ydb.yml`. Файлы `prometheus_ydb.yml`, `ydbd-storage.yml` и `ydbd-database.yml` держите в **одной** папке: в шаблоне к файлам списков целей обращаются **относительные** пути, и Prometheus ищет их относительно **рабочей директории процесса** при старте. Перед запуском Prometheus перейдите в эту папку и запустите процесс из нее:
 
 ```bash
 cd <путь_к_каталогу_с_конфигами>
@@ -118,7 +118,7 @@ prometheus --config.file=prometheus_ydb.yml
 curl "http://localhost:9090/-/healthy"
 ```
 
-В веб-интерфейсе Prometheus (как правило, порт `9090`) откройте **Status** → **Target health** и убедитесь, что группы опроса метрик находятся в состоянии успешного сбора. Исключение — группа, связанная с топиками: при отсутствии топиков в базе данных для неё может отображаться ответ **`204 No content`** — это не обязательно признак ошибки конфигурации.
+В веб-интерфейсе Prometheus (как правило, порт `9090`) откройте **Status** → **Target health** и убедитесь, что группы опроса метрик находятся в состоянии успешного сбора. Исключение — группа, связанная с топиками: при отсутствии топиков в базе данных для нее может отображаться ответ **`204 No content`** — это не обязательно признак ошибки конфигурации.
 
 ### Настройка Grafana {#grafana-setup}
 
@@ -150,11 +150,11 @@ curl "http://localhost:9090/-/healthy"
 
 {% endcut %}
 
-После настройки Prometheus и Grafana приведённые ниже URL помогут убедиться, что на узле доступны те же подсистемы метрик и порты, которые указаны в `ydbd-storage.yml` и `ydbd-database.yml` в разделе [Настройка мониторинга с помощью Prometheus и Grafana](#prometheus-grafana).
+После настройки Prometheus и Grafana приведенные ниже URL помогут убедиться, что на узле доступны те же подсистемы метрик и порты, которые указаны в `ydbd-storage.yml` и `ydbd-database.yml` в разделе [Настройка мониторинга с помощью Prometheus и Grafana](#prometheus-grafana).
 
 ## Доступ к метрикам через веб-интерфейс {#web-metrics}
 
-Каждый узел кластера отдаёт собственный набор метрик по HTTP или HTTPS. Имена групп и метрик поясняются в [описании метрик](../../reference/observability/metrics/index.md). Мгновенные значения можно открыть в браузере по базовому пути `/counters/` на том же хосте и порту мониторинга (`--mon-port`), которые участвуют в опросе Prometheus:
+Каждый узел кластера отдает собственный набор метрик по HTTP или HTTPS. Имена групп и метрик поясняются в [описании метрик](../../reference/observability/metrics/index.md). Мгновенные значения можно открыть в браузере по базовому пути `/counters/` на том же хосте и порту мониторинга (`--mon-port`), которые участвуют в опросе Prometheus:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/
@@ -165,9 +165,9 @@ http://<ydb-server-address>:<ydb-port>/counters/
 - `<ydb-server-address>` – адрес сервера {{ ydb-short-name }};
 - `<ydb-port>` – порт {{ ydb-short-name }}, указанный в параметре `--mon-port` при запуске узла. Значение по умолчанию: `8765`.
 
-При включённом TLS на узле используйте схему `https://` в URL.
+При включенном TLS на узле используйте схему `https://` в URL.
 
-В шаблонном **`prometheus_ydb.yml`** хосты и порты целей совпадают с теми, что заданы в **`ydbd-storage.yml`** и **`ydbd-database.yml`**; для каждой группы метрик в `scrape_configs` задаётся **`metrics_path`**, обычно вида `/counters/counters=<имя_подсистемы>/prometheus`. Подсистемы (`auth`, `compile`, `grpc`, `kqp`, `pdisks`, `vdisks` и другие) совпадают с группами, которые видны на странице `/counters/` в браузере.
+В шаблонном **`prometheus_ydb.yml`** хосты и порты целей совпадают с теми, что заданы в **`ydbd-storage.yml`** и **`ydbd-database.yml`**; для каждой группы метрик в `scrape_configs` задается **`metrics_path`**, обычно вида `/counters/counters=<имя_подсистемы>/prometheus`. Подсистемы (`auth`, `compile`, `grpc`, `kqp`, `pdisks`, `vdisks` и другие) совпадают с группами, которые видны на странице `/counters/` в браузере.
 
 {% cut "Как определить значение параметра `<ydb-port>`" %}
 
@@ -203,7 +203,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 http://<ydb-server-address>:<ydb-port>/counters/counters=utils
 ```
 
-Тот же узел отдаёт метрики в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) по пути с суффиксом `/prometheus` (его использует Prometheus в `metrics_path`):
+Тот же узел отдает метрики в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) по пути с суффиксом `/prometheus` (его использует Prometheus в `metrics_path`):
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
@@ -226,4 +226,4 @@ curl "http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/pro
 - [Описание метрик](../../reference/observability/metrics/index.md)
 - [Справочник по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md)
 - [Быстрый старт](../../quickstart.md)
-- [Способы развёртывания](../deployment-options/index.md)
+- [Способы развертывания](../deployment-options/index.md)

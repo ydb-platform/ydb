@@ -117,8 +117,8 @@ namespace NKikimr::NDDisk {
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem());
         NPrivate::AddMessageWaitAttributes(span);
         span
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("sync_id", static_cast<long>(syncId));
+            .Attribute("tablet_id", static_cast<i64>(creds.TabletId))
+            .Attribute("sync_id", static_cast<i64>(syncId));
 
         syncIt = SyncsInFlight.emplace(syncId, TSyncInFlight{
             .Sender=ev->Sender,

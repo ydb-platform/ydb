@@ -944,12 +944,14 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         return;
     }
 
-    // Order must be monotonic in (PlanStep, TxId, PartIdx), so we collect
-    // sort keys first, sort, then allocate in a second pass.
+    // Option B: one record per user-level transaction (the post-rewrite,
+    // post-auto-mkdir-split TModifyScheme the user originally authored).
+    // Target cluster feeds the body back through IgniteOperation, which
+    // redoes decomposition — no sub-op replay path needed.
     struct TSortKey {
         TStepId PlanStep;
         TTxId TxId;
-        ui32 PartIdx;
+        ui32 UserTxIdx;
     };
     TVector<TSortKey> keys;
 
@@ -959,81 +961,74 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             continue;
         }
         const TOperation::TPtr& operation = opIt->second;
+        if (operation->UserLevelTransactions.empty()) {
+            continue;
+        }
 
+        // All parts of this operation share one PlanStep assigned by the
+        // coordinator. Read it from any live part.
+        TStepId planStep = InvalidStepId;
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
-            auto txStateIt = ss->TxInFlight.find(TOperationId(txId, partIdx));
-            if (txStateIt == ss->TxInFlight.end()) {
-                continue;
+            auto it = ss->TxInFlight.find(TOperationId(txId, partIdx));
+            if (it != ss->TxInFlight.end() && it->second.PlanStep != InvalidStepId) {
+                planStep = it->second.PlanStep;
+                break;
             }
-            if (!ss->PathsById.contains(txStateIt->second.TargetPathId)) {
-                continue;
-            }
-            keys.push_back({txStateIt->second.PlanStep, txId, partIdx});
+        }
+
+        for (ui32 i = 0; i < operation->UserLevelTransactions.size(); ++i) {
+            keys.push_back({planStep, txId, i});
         }
     }
 
     std::sort(keys.begin(), keys.end(), [](const TSortKey& a, const TSortKey& b) {
-        return std::tie(a.PlanStep, a.TxId, a.PartIdx) < std::tie(b.PlanStep, b.TxId, b.PartIdx);
+        return std::tie(a.PlanStep, a.TxId, a.UserTxIdx) < std::tie(b.PlanStep, b.TxId, b.UserTxIdx);
     });
 
     NIceDb::TNiceDb db(txc.DB);
-
-    // Persist NextSchemeChangeOrder once per batch, not once per record.
     bool anyAllocated = false;
 
     for (const auto& key : keys) {
-        const TTxId txId = key.TxId;
-        const ui32 partIdx = key.PartIdx;
-
-        auto txStateIt = ss->TxInFlight.find(TOperationId(txId, partIdx));
-        if (txStateIt == ss->TxInFlight.end()) {
+        auto opIt = ss->Operations.find(key.TxId);
+        if (opIt == ss->Operations.end()
+            || key.UserTxIdx >= opIt->second->UserLevelTransactions.size()) {
             continue;
         }
-        const TTxState& txState = txStateIt->second;
+        const auto& userTx = opIt->second->UserLevelTransactions[key.UserTxIdx];
 
-        auto pathIt = ss->PathsById.find(txState.TargetPathId);
-        if (pathIt == ss->PathsById.end()) {
-            continue;
+        TString body;
+        {
+            bool ok = userTx.SerializeToString(&body);
+            Y_DEBUG_ABORT_UNLESS(ok);
         }
-        const TPathElement::TPtr& path = pathIt->second;
-
-        auto opIt = ss->Operations.find(txId);
-        if (opIt == ss->Operations.end() || partIdx >= opIt->second->Parts.size()) {
-            continue;
-        }
-        const TOperation::TPtr& operation = opIt->second;
 
         ui64 order = ss->AllocateSchemeChangeOrderInMemory();
         anyAllocated = true;
 
-        TString body;
-        {
-            bool ok = operation->Parts[partIdx]->GetTransaction().SerializeToString(&body);
-            Y_DEBUG_ABORT_UNLESS(ok);
-        }
-
         ss->PersistSchemeChangeRecord(db, {
             .Order = order,
-            .TxId = txId,
-            .TxType = txState.TxType,
-            .PathId = txState.TargetPathId,
-            .Path = path->Name,
-            .ObjectType = path->PathType,
+            .TxId = key.TxId,
+            // OperationType is now read from the body (external EOperationType),
+            // not from the record column. Keep TxInvalid as a placeholder.
+            .TxType = TTxState::TxInvalid,
+            .PathId = {},
+            .Path = userTx.GetWorkingDir(),
+            .ObjectType = NKikimrSchemeOp::EPathTypeInvalid,
             .Status = NKikimrScheme::StatusSuccess,
-            .UserSid = path->Owner,
-            .SchemaVersion = ss->GetPathVersion(TPath::Init(txState.TargetPathId, ss)).GetGeneralVersion(),
+            .UserSid = "",
+            .SchemaVersion = 0,
             .CompletedAtUs = ctx.Now(),
-            .PlanStep = txState.PlanStep,
+            .PlanStep = key.PlanStep,
             .Body = body,
         });
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "DoPersistSchemeChangeRecords: logged entry"
+            "DoPersistSchemeChangeRecords: logged user-level entry"
                 << " order=" << order
-                << " txId=" << txId
-                << " partIdx=" << partIdx
-                << " path=" << path->Name
-                << " type=" << ui32(txState.TxType));
+                << " txId=" << key.TxId
+                << " userTxIdx=" << key.UserTxIdx
+                << " workingDir=" << userTx.GetWorkingDir()
+                << " opType=" << ui32(userTx.GetOperationType()));
     }
 
     if (anyAllocated) {

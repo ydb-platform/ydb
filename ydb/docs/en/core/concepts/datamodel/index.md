@@ -24,6 +24,10 @@ Scheme objects in {{ ydb-short-name }} databases:
 * [External Table](external_table.md)
 * [External Data Source](external_data_source.md)
 
+{% if feature_serial %}
+* [Sequence](../../yql/reference/types/serial.md) — a private schema object created automatically for each [serial](../../yql/reference/types/serial.md) column and destroyed together with its table.
+{% endif %}
+
 [Scheme objects](../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} all follow the same naming rules described in the section below.
 
 {% include [object naming rules](./_includes/object-naming-rules.md) %}

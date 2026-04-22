@@ -24,6 +24,10 @@
 * [Подключения к внешним БД](external_data_source.md)
 * [Внешние источники данных](external_table.md)
 
+{% if feature_serial %}
+* [Sequence](../../yql/reference/types/serial.md) — приватный схемный объект, создаваемый автоматически для каждой [серийной](../../yql/reference/types/serial.md) колонки и уничтожаемый вместе с таблицей.
+{% endif %}
+
 Все схемные объекты в {{ ydb-short-name }} имеют одинаковые требования к своим наименованиям.
 
 {% include [object naming rules](./_includes/object-naming-rules.md) %}

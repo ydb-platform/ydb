@@ -271,6 +271,24 @@ def _test_endpoints(cluster, expected_results):
             _test_endpoint(endpoint_url, endpoint_path, token, expected_status)
 
 
+def _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body=None):
+    headers = {'Content-Type': 'application/json'}
+    if token is not None:
+        headers['Authorization'] = token
+    body = {} if json_body is None else json_body
+    response = requests.post(
+        f'{base_url}{endpoint_path}',
+        headers=headers,
+        json=body,
+        verify=False,
+    )
+    token_desc = token if token is not None else 'null'
+    assert response.status_code == expected_status, (
+        f'POST {endpoint_path!r} token={token_desc!r}: expected {expected_status}, '
+        f'got {response.status_code}: {response.text[:500]}'
+    )
+
+
 def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
     _test_endpoints(ydb_cluster_with_enforce_user_token, EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN)
 
@@ -430,3 +448,217 @@ def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
         '/monitoring',
         all_ok,
     )
+
+
+OPERATOR_ENDPOINTS_LIST = [
+    '/actors/',
+    '/actors/configs_dispatcher',
+    '/actors/console_configs_provider',
+    '/actors/dnameserver',
+    '/actors/dsproxynode',
+    '/actors/feature_flags',
+    '/actors/icb',
+    '/actors/kqp_node',
+    '/actors/kqp_proxy',
+    '/actors/kqp_resource_manager',
+    '/actors/kqp_spilling_file',
+    '/actors/logger',
+    '/actors/memory_tracker',
+    '/actors/netclassifier',
+    '/actors/nodewarden',
+    '/actors/pql2',
+    '/actors/quoter_proxy',
+    '/actors/rb',
+    '/actors/statservice',
+    '/actors/tenant_pool',
+    '/cms',
+    '/grpc',
+    '/healthcheck',
+    '/internal',
+    '/jquery.tablesorter.css',
+    '/jquery.tablesorter.js',
+    '/memory/fragmentation',
+    '/memory/heap',
+    '/memory/peakheap',
+    '/memory/statistics',
+    '/nodetabmon',
+    '/static/css/bootstrap.min.css',
+    '/static/fonts/glyphicons-halflings-regular.eot',
+    '/static/fonts/glyphicons-halflings-regular.svg',
+    '/static/fonts/glyphicons-halflings-regular.ttf',
+    '/static/fonts/glyphicons-halflings-regular.woff',
+    '/static/js/bootstrap.min.js',
+    '/static/js/jquery.min.js',
+    '/tablet',
+    '/tablets',
+    '/trace',
+    '/ver',
+    '/viewer/cluster',
+    '/viewer/config',
+    '/viewer/healthcheck',
+    '/viewer/v2/json/config',
+    '/viewer/v2/json/nodelist',
+    '/viewer/v2/json/storage',
+]
+
+
+OPERATOR_CONTEXT_DEPENDENT_GET_PATHS = [
+    '/pdisk/info',
+    '/vdisk/vdiskstat',
+    '/vdisk/blobindexstat',
+]
+
+
+OPERATOR_UNRESOLVED_ENDPOINTS_LIST = [
+    '/actors/lease',
+    '/actors/row_dispatcher',
+    '/actors/schemeboard',
+    '/actors/sqsgc',
+    '/actors/yq_control_plane_proxy',
+    '/actors/yq_health',
+    '/fq_diag/fetcher',
+    '/fq_diag/local_worker_manager',
+    '/fq_diag/quotas',
+]
+
+
+OPERATOR_POST_PATHS = [
+    '/pdisk/restart',
+    '/pdisk/status',
+    '/vdisk/evict',
+]
+
+
+def test_operator_post_bs_controller_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    host = ydb_cluster_with_enforce_user_token.nodes[1].host
+    mon_port = ydb_cluster_with_enforce_user_token.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    }
+    for endpoint_path in OPERATOR_POST_PATHS:
+        for token, expected_status in expected_by_token.items():
+            _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body={})
+
+
+def test_operator_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in OPERATOR_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+def test_operator_context_dependent_get_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    }
+    expected_results = {
+        endpoint_path: expected_by_token for endpoint_path in OPERATOR_CONTEXT_DEPENDENT_GET_PATHS
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+def test_operator_unresolved_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 404,
+            'root@builtin': 404,
+        }
+        for endpoint_path in OPERATOR_UNRESOLVED_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+ADMIN_BASE_GET_PATHS = [
+    '/viewer/bscontrollerinfo',
+]
+
+
+ADMIN_CONTEXT_DEPENDENT_GET_PATHS = [
+    '/viewer/topic_data',
+    '/vdisk/getblob',
+]
+
+
+ADMIN_POST_PATHS = [
+    '/pdisk/restart?force=true',
+    '/pdisk/status?force=true',
+    '/vdisk/evict?force=true',
+]
+
+
+def test_admin_get_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 200,
+    }
+    expected_results = {
+        endpoint_path: expected_by_token for endpoint_path in ADMIN_BASE_GET_PATHS
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+def test_admin_context_dependent_get_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 400,
+    }
+    expected_results = {
+        endpoint_path: expected_by_token for endpoint_path in ADMIN_CONTEXT_DEPENDENT_GET_PATHS
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+def test_admin_post_bs_controller_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    host = ydb_cluster_with_enforce_user_token.nodes[1].host
+    mon_port = ydb_cluster_with_enforce_user_token.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 400,
+    }
+    for endpoint_path in ADMIN_POST_PATHS:
+        for token, expected_status in expected_by_token.items():
+            _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body={})

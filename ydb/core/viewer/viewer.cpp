@@ -70,6 +70,7 @@ public:
             TVector<TString> databaseAllowedSIDs;
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
+            TVector<TString> administrationAllowedSIDs;
             {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetDatabaseAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
@@ -97,8 +98,13 @@ public:
                     databaseAllowedSIDs.emplace_back(sid);
                     viewerAllowedSIDs.emplace_back(sid);
                     monitoringAllowedSIDs.emplace_back(sid);
+                    administrationAllowedSIDs.emplace_back(sid);
                 }
             }
+            JsonHandlerAccessDatabaseSids_ = databaseAllowedSIDs;
+            JsonHandlerAccessMonitoringSids_ = monitoringAllowedSIDs;
+            JsonHandlerAccessAdministrationSids_ = administrationAllowedSIDs;
+            JsonHandlerAccessConfigured_ = true;
             mon->RegisterActorPage({
                 .RelPath = "viewer",
                 .ActorSystem = ctx.ActorSystem(),
@@ -224,7 +230,7 @@ public:
                             .Path = name,
                             .Handler = ctx.SelfID,
                             .AuthMode = TMon::EAuthMode::Enforce,
-                            .AllowedSIDs = databaseAllowedSIDs,
+                            .AllowedSIDs = AllowedSidsForJsonHandlerPath(name),
                         });
                     }
                 }
@@ -459,6 +465,62 @@ private:
     TString CurrentWorkerName;
     NProtobufJson::TProto2JsonConfig Proto2JsonConfig;
 
+    bool JsonHandlerAccessConfigured_ = false;
+    TVector<TString> JsonHandlerAccessDatabaseSids_;
+    TVector<TString> JsonHandlerAccessMonitoringSids_;
+    TVector<TString> JsonHandlerAccessAdministrationSids_;
+
+    const TVector<TString>& AllowedSidsForJsonHandlerPath(const TString& path) const {
+        auto hasPrefix = [&](TStringBuf prefix) {
+            return TStringBuf(path).StartsWith(prefix);
+        };
+
+        const bool isAdministrationPath =
+            hasPrefix("/vdisk/getblob")
+            || hasPrefix("/vdisk/json/getblob")
+            || hasPrefix("/viewer/topic_data")
+            || hasPrefix("/viewer/json/topic_data")
+            || hasPrefix("/viewer/bscontrollerinfo")
+            || hasPrefix("/viewer/json/bscontrollerinfo");
+        if (isAdministrationPath) {
+            return JsonHandlerAccessAdministrationSids_;
+        }
+
+        const bool isMonitoringPath =
+            hasPrefix("/pdisk/info")
+            || hasPrefix("/pdisk/json/info")
+            || hasPrefix("/vdisk/vdiskstat")
+            || hasPrefix("/vdisk/json/vdiskstat")
+            || hasPrefix("/vdisk/blobindexstat")
+            || hasPrefix("/vdisk/json/blobindexstat")
+            || hasPrefix("/viewer/cluster")
+            || hasPrefix("/viewer/json/cluster")
+            || hasPrefix("/viewer/config")
+            || hasPrefix("/viewer/json/config")
+            || hasPrefix("/viewer/v2/json/config");
+        if (isMonitoringPath) {
+            return JsonHandlerAccessMonitoringSids_;
+        }
+
+        return JsonHandlerAccessDatabaseSids_;
+    }
+
+    bool CheckJsonHandlerPathAccess(const TRequestState& request, const TString& path) const {
+        if (!JsonHandlerAccessConfigured_) {
+            return true;
+        }
+        if (path == "/viewer/capabilities") {
+            return true;
+        }
+        const auto userTokenObject = request.GetUserTokenObject();
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
+                return true;
+            }
+        }
+        return IsTokenAllowed(userTokenObject, AllowedSidsForJsonHandlerPath(path));
+    }
+
     void Handle(TEvents::TEvWakeup::TPtr&) {
         DeleteOldSharedCacheData();
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
@@ -675,6 +737,13 @@ private:
         }
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
+            if (!CheckJsonHandlerPathAccess(TRequestState(msg), path)) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                    GETHTTPACCESSDENIED(TRequestState(msg), "text/plain", "Access denied"),
+                    0,
+                    NMon::IEvHttpInfoRes::EContentType::Custom));
+                return;
+            }
             auto sender(ev->Sender);
             try {
                 IActor* requestActor = handler->CreateRequestActor(this, ev);
@@ -762,6 +831,12 @@ private:
         }
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
+            if (!CheckJsonHandlerPathAccess(TRequestState(ev->Get()), path)) {
+                Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
+                    ev->Get()->Request->CreateResponseString(
+                        GETHTTPACCESSDENIED(ev->Get(), "text/plain", "Access denied"))));
+                return;
+            }
             auto sender(ev->Sender);
             try {
                 IActor* requestActor = handler->CreateRequestActor(this, ev);

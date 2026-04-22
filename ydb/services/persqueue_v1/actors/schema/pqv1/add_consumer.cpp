@@ -55,10 +55,8 @@ public:
     void DoAction() {
         Become(&TAddConsumerActor::StateWork);
 
-        auto database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
-
         Register(NPQ::NSchema::CreateAlterTopicOperationActor(SelfId(), {
-            .Database = database,
+            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TAddConsumerStrategy>(GetProtoRequest()->read_rule(), GetProtoRequest()->path()),

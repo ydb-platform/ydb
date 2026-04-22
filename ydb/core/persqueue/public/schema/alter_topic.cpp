@@ -380,7 +380,7 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
     return CreateAlterTopicOperationActor(parentId, {
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
-        .UserToken = settings.UserToken,
+        .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .Cookie = settings.Cookie,

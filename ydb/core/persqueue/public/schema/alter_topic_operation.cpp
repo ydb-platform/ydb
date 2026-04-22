@@ -117,11 +117,10 @@ private:
         }
 
         auto result = Settings.Strategy->ApplyChanges(TopicInfo, modifyScheme, *config, TopicInfo.Info->Description);
-        if (!result) {
-            return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
+        if (result) {
+            result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
         }
 
-        result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
         }

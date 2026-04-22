@@ -7,7 +7,7 @@ SRCS(
     common.cpp
     drop_topic.cpp
     drop_topic_operation.cpp
-    remove_consumer_operation.cpp
+    remove_consumer.cpp
     schema.cpp
     schema_operation.cpp
     validation.cpp

@@ -243,7 +243,7 @@ TResult FillProposeRequest( // create and alter
     partConfig->SetMaxCountInPartition(Max<i32>());
 
     if (settings.message_group_seqno_retention_period_ms() > 0 && settings.message_group_seqno_retention_period_ms() < settings.retention_period_ms()) {
-        error = TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << settings.message_group_seqno_retention_period_ms() << ") must be more then retention_period_ms (provided " << settings.retention_period_ms() << ")";
+        error = TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << settings.message_group_seqno_retention_period_ms() << ") must be more than retention_period_ms (provided " << settings.retention_period_ms() << ")";
         return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
     if (settings.message_group_seqno_retention_period_ms() >

@@ -2667,18 +2667,17 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
             const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
 
-            bool hasBloom = false;
-            bool hasNgram = false;
+            std::unordered_set<TString> bloomIndexNames;
             for (auto&& idx : schema.GetIndexes()) {
                 if (idx.GetName() == "idx_bloom" && idx.HasBloomFilter()) {
-                    hasBloom = true;
+                    bloomIndexNames.emplace(idx.GetName());
                 } else if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
-                    hasNgram = true;
+                    bloomIndexNames.emplace(idx.GetName());
                 }
             }
 
-            UNIT_ASSERT_C(hasBloom, "idx_bloom should be present in table schema");
-            UNIT_ASSERT_C(hasNgram, "idx_ngram should be present in table schema");
+            UNIT_ASSERT_C(bloomIndexNames.contains("idx_bloom"), "idx_bloom should be present in table schema");
+            UNIT_ASSERT_C(bloomIndexNames.contains("idx_ngram"), "idx_ngram should be present in table schema");
         }
 
         auto runDataQuery = [&](const TString& query) {

@@ -611,7 +611,9 @@ namespace NActors {
 
     void TTestActorRuntimeBase::CleanupActorSystems() {
         for (auto& [_, node]: Nodes) {
-            node->ActorSystem->Cleanup();
+            if (auto& actorSystem = node->ActorSystem) {
+                actorSystem->Cleanup();
+            }
         }
     }
 

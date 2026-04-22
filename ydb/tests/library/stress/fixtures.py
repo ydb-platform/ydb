@@ -17,14 +17,11 @@ class StressFixture:
 
         self.base_duration = yatest.common.get_param('stress_default_duration', default='60')
 
-    def setup_cluster(self, erasure=None, create_serverless_databases=True, **kwargs):
+    def setup_cluster(self, erasure=None, **kwargs):
         erasure = erasure or self.base_erasure
         self.config = KikimrConfigGenerator(
             binary_paths=self.all_binary_paths,
             erasure=erasure,
-            # enable_grpc_proxy=True,
-            # enable_console=True,
-            # enable_cms=True,
             **kwargs,
         )
 
@@ -35,92 +32,13 @@ class StressFixture:
         self.mon_endpoint = f"http://localhost:{self.cluster.nodes[1].mon_port}"
         self.http_proxy_endpoint = f"http://localhost:{self.cluster.nodes[1].http_proxy_port}"
 
-        if create_serverless_databases:
-            self._create_serverless_databases()
-
         self.driver = ydb.Driver(
             ydb.DriverConfig(
                 database=self.database,
                 endpoint=self.endpoint
             )
         )
-
         self.driver.wait(timeout=60)
         yield
         self.driver.stop()
         self.cluster.stop()
-
-    def _create_serverless_databases(self):
-        timeout_seconds = 30
-        self.shared_database_name = "/Root/shared_db"
-        # logger.info("setup ydb_hostel_db %s", database)
-
-        self.cluster.remove_database(
-            self.shared_database_name,
-            timeout_seconds=timeout_seconds
-        )
-
-        self.cluster.create_hostel_database(
-            self.shared_database_name,
-            storage_pool_units_count={
-                'hdd': 1
-            },
-            timeout_seconds=timeout_seconds
-        )
-        # encryption_key?
-        database_nodes = self.cluster.register_and_start_slots(self.shared_database_name, count=3, encryption_key=None)
-        self.cluster.wait_tenant_up(self.shared_database_name)
-
-        # try:
-        #     yield shared_database_name
-        # finally:
-        #     logger.info("destroy ydb_hostel_db for %s", database)
-
-        #     self.cluster.remove_database(
-        #         database,
-        #         timeout_seconds=timeout_seconds
-        #     )
-
-        #     self.cluster.unregister_and_stop_slots(database_nodes)
-        # self.cluster.create_hostel_database(
-        #     database_name=self.shared_database_name,
-        #     storage_pool_units_count={
-        #         "ssd": 1,  # или "rot" в зависимости от конфигурации
-        #     }
-        # )
-
-        self.serverless_database_name = "/Root/serverless_db"
-
-        self.cluster.remove_database(
-        self.serverless_database_name,
-        timeout_seconds=timeout_seconds
-        )
-
-        self.cluster.create_serverless_database(
-            self.serverless_database_name,
-            hostel_db=self.shared_database_name,
-            timeout_seconds=timeout_seconds,
-            schema_quotas=None, # нужны ли?
-            disk_quotas=None, # нужны ли?
-            attributes={
-                "cloud_id": "CLOUD_ID_VAL",
-                "folder_id": "FOLDER_ID_VAL",
-                "database_id": "DATABASE_ID_VAL",
-            },
-        )
-
-        # try:
-        #     yield database
-        # finally:
-        #     logger.info("destroy ydb_serverless_db for %s", database)
-        #     self.cluster.remove_database(
-        #         database,
-        #         timeout_seconds=timeout_seconds
-        #     )
-        #     self.cluster.create_serverless_database(
-        #         database_name=self.serverless_database_name,
-        #         hostel_db=self.shared_database_name
-        #     )
-
-        # self.cluster.wait_tenant_up(self.shared_database_name)
-        # self.cluster.wait_tenant_up(self.serverless_database_name)

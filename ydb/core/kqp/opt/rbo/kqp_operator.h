@@ -393,6 +393,9 @@ class TOpAggregate: public IUnaryOperator {
 public:
     TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
                  const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos);
+    TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
+                 const EOpPhase aggPhase, bool distinctAll, const std::optional<i64>& memoryLimit, const TPhysicalOpProps& props, TPositionHandle pos);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 
@@ -401,14 +404,26 @@ public:
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "Aggregate"; }
 
-
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    EOpPhase GetAggregationPhase() const { return AggregationPhase; }
+    TVector<TOpAggregationTraits> GetAggregationTraits() const {
+        return AggregationTraitsList;
+    }
+    TVector<TOpAggregationTraits>& GetAggregationTraits() {
+        return AggregationTraitsList;
+    }
+    TVector<TInfoUnit> GetKeyColumns() const { return KeyColumns; }
+    TVector<TInfoUnit>& GetKeyColumns() { return KeyColumns; }
+    bool IsDistinctAll() const { return DistinctAll; }
+    std::optional<i64> GetMemoryLimit() const { return MemoryLimit; }
 
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
     EOpPhase AggregationPhase;
     bool DistinctAll;
+    std::optional<i64> MemoryLimit;
 };
 
 class TOpFilter: public IUnaryOperator {

@@ -65,7 +65,7 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::PersQueue::V1::AddReadRuleResponse());
         } else {
-            ReplyWithError(status, status, ev->Get()->ErrorMessage);
+            ReplyWithError(status, ev->Get()->ErrorMessage);
         }
     }
 

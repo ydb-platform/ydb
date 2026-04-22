@@ -36,7 +36,7 @@ public:
 private:
     void Handle(NPQ::NSchema::TEvDropTopicResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
+            ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
             ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Topic::DropTopicResponse());
         }

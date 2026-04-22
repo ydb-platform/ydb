@@ -10,18 +10,12 @@ namespace NKikimr::NDDisk::NPrivate {
             return;
         }
 
-        const auto messageEnqueuedAtUs =
-            static_cast<i64>(TActivationContext::GetCurrentEventEnqueuedTimestamp().MicroSeconds());
-        const auto mailboxScheduledAtUs =
-            static_cast<i64>(TActivationContext::GetCurrentMailboxScheduledTimestamp().MicroSeconds());
         const auto messageWaitUs =
             static_cast<i64>(TActivationContext::GetCurrentEventDeliveryTimeUs());
         const auto mailboxQueueWaitUs =
             static_cast<i64>(TActivationContext::GetCurrentActivationTimeUs());
 
         span
-            .Event("Message enqueued", {{"timestamp_us", messageEnqueuedAtUs}})
-            .Event("Mailbox scheduled", {{"timestamp_us", mailboxScheduledAtUs}})
             .Attribute("message_wait_us", messageWaitUs)
             .Attribute("mailbox_queue_wait_us", mailboxQueueWaitUs);
     }

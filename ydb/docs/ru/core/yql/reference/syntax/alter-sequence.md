@@ -15,8 +15,8 @@ ALTER SEQUENCE [ IF EXISTS ] path_to_sequence
 
 * `path_to_sequence` - абсолютный путь до объекта `Sequence`.
 
-    Путь формируется как `<path_to_table>/_serial_column_{column_name}`,
-    где `<path_to_table>` — абсолютный путь до таблицы, a `{column_name}` — имя колонки типа `Serial`.
+    Путь формируется как `<path_to_table>/_serial_column_<column_name>`,
+    где `<path_to_table>` — абсолютный путь до таблицы, `<column_name>` — имя колонки типа `Serial`.
     Например, для таблицы с путём `/local/users` и колонки `user_id` путь к соответствующему `Sequence` будет `/local/users/_serial_column_user_id`.
 * `IF EXISTS` - при использовании этой конструкции, вызов не возвращает ошибку, если не существует `Sequence` по указаному пути.
 * `INCREMENT [ BY ] increment` - задает шаг изменения последовательности. Значение по умолчанию: 1.

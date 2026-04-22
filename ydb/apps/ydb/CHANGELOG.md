@@ -1,4 +1,8 @@
 
+## 2.31.0 ##
+
+* Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
+
 ## 2.30.0 ##
 
 * Added the `direct-read` option to the `ydb workload topic` command

@@ -6,6 +6,8 @@ TEST_SRCS(
     test_ydb_common.py
     test_ydb_flame_graph.py
     test_ydb_impex.py
+    test_ydb_interactive_ai.py
+    test_ydb_interactive_sql.py
     test_ydb_profile.py
     test_ydb_recursive_remove.py
     test_ydb_scheme.py
@@ -17,6 +19,7 @@ TEST_SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(YDB_CLI_WITH_ENABLED_AI_BINARY="ydb/tests/functional/ydb_cli/ai_interactive/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 IF (SANITIZER_TYPE)
@@ -28,6 +31,7 @@ ENDIF()
 
 DEPENDS(
     ydb/apps/ydb
+    ydb/tests/functional/ydb_cli/ai_interactive
 )
 
 PEERDIR(
@@ -40,8 +44,17 @@ PEERDIR(
     ydb/tests/oss/ydb_sdk_import
 )
 
+PY_SRCS(
+    ydb_cli_helpers.py
+    ydb_cli_interactive_helpers.py
+)
+
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
 END()
+
+RECURSE(
+    ai_interactive
+)

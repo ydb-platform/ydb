@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/http/simple
     library/cpp/retry
     library/cpp/yson/node
+    yt/yql/providers/yt/fmr/request_options
     yt/yql/providers/yt/fmr/table_data_service/client/proto_helpers
     yt/yql/providers/yt/fmr/table_data_service/discovery/file
     yt/yql/providers/yt/fmr/table_data_service/interface

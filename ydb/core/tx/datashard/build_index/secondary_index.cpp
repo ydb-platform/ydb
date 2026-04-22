@@ -1,3 +1,4 @@
+#include "build_index_scan_manager.h"
 #include "common_helper.h"
 #include "../datashard_impl.h"
 #include "../range_ops.h"
@@ -10,7 +11,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
@@ -130,6 +130,8 @@ protected:
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TUploadStatus UploadStatus;
 
+    const bool DisableChangeCollection;
+
     TBuildScanUpload(ui64 buildIndexId,
                      const TString& databaseName,
                      const TString& target,
@@ -138,7 +140,8 @@ protected:
                      const TActorId& progressActorId,
                      const TSerializedTableRange& range,
                      const TUserTable& tableInfo,
-                     const TIndexBuildScanSettings& scanSettings)
+                     const TIndexBuildScanSettings& scanSettings,
+                     bool disableChangeCollection)
         : TBase(&TThis::StateWork)
         , ScanSettings(scanSettings)
         , BuildIndexId(buildIndexId)
@@ -150,7 +153,8 @@ protected:
         , KeyColumnIds(tableInfo.KeyColumnIds)
         , KeyTypes(tableInfo.KeyColumnTypes)
         , TableRange(tableInfo.Range)
-        , RequestedRange(range) {
+        , RequestedRange(range)
+        , DisableChangeCollection(disableChangeCollection) {
     }
 
     template <typename TAddRow>
@@ -406,7 +410,8 @@ private:
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/,
-            true /*writeToIndexImplTable*/);
+            true /*writeToIndexImplTable*/,
+            DisableChangeCollection);
 
         Uploader = this->Register(actor, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
@@ -427,7 +432,7 @@ public:
                     TProtoColumnsCRef targetDataColumns,
                     const TUserTable& tableInfo,
                     const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings)
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings, false)
         , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
@@ -461,7 +466,7 @@ public:
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
                       const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings) {
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings, true) {
         Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
@@ -512,8 +517,31 @@ public:
         , Ev(std::move(ev)) {
     }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) {
+        auto& request = Ev->Get()->Record;
+        const ui64 buildId = request.GetId();
+        const ui64 seqNoGeneration = request.GetSeqNoGeneration();
+        const ui64 seqNoRound = request.GetSeqNoRound();
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        const auto& scans = Self->BuildIndexScanManager.GetScans();
+        if (const auto* old = scans.FindPtr(buildId)) {
+            if (old->SeqNoGeneration != seqNoGeneration || old->SeqNoRound != seqNoRound) {
+                Self->BuildIndexScanManager.PersistRemove(db, buildId, old->SeqNoGeneration, old->SeqNoRound);
+                Self->PendingBuildIndexFinalResponses.erase(buildId);
+            }
+        }
+
+        Self->BuildIndexScanManager.PersistAdd(db, buildId, seqNoGeneration, seqNoRound,
+            static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse));
+
         Self->HandleSafe(Ev, ctx);
+
+        if (Ev && !Self->GetScanManager().Get(buildId)) {
+            Self->BuildIndexScanManager.PersistRemove(db, buildId, seqNoGeneration, seqNoRound);
+        }
+
         return true;
     }
 
@@ -524,6 +552,64 @@ public:
 private:
     TEvDataShard::TEvBuildIndexCreateRequest::TPtr Ev;
 };
+
+class TDataShard::TTxHandleBuildIndexScanProgress: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHandleBuildIndexScanProgress(TDataShard* self, TEvDataShard::TEvBuildIndexProgressResponse::TPtr&& ev)
+        : TTransactionBase(self)
+        , Ev(std::move(ev)) {
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) {
+        auto& record = Ev->Get()->Record;
+        BuildId = record.GetId();
+        const ui64 seqNoGeneration = record.GetRequestSeqNoGeneration();
+        const ui64 seqNoRound = record.GetRequestSeqNoRound();
+
+        const auto& scans = Self->BuildIndexScanManager.GetScans();
+        if (const auto* info = scans.FindPtr(BuildId)) {
+            if (info->SeqNoGeneration == seqNoGeneration && info->SeqNoRound == seqNoRound) {
+                ShouldSkip = false;
+                NIceDb::TNiceDb db(txc.DB);
+                TString serialized;
+                Y_ENSURE(record.SerializeToString(&serialized));
+                Self->BuildIndexScanManager.PersistMarkFinalResponse(db, BuildId, seqNoGeneration, seqNoRound,
+                    serialized);
+            }
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) {
+        if (!ShouldSkip) {
+            auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+            copy->Record = Ev->Get()->Record;
+            Self->PendingBuildIndexFinalResponses[BuildId] = std::move(copy);
+            Self->SendPendingBuildIndexFinalResponses(ctx);
+        }
+    }
+
+private:
+    TEvDataShard::TEvBuildIndexProgressResponse::TPtr Ev;
+    ui64 BuildId = 0;
+    bool ShouldSkip = true;
+};
+
+void TDataShard::Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto status = ev->Get()->Record.GetStatus();
+    if (status == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
+        if (!StateReportPipe) {
+            NTabletPipe::TClientConfig clientConfig;
+            clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
+            StateReportPipe = ctx.Register(
+                NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+        }
+        NTabletPipe::SendData(ctx, StateReportPipe, ev->Release().Release());
+        return;
+    }
+    Execute(new TTxHandleBuildIndexScanProgress(this, std::move(ev)));
+}
 
 void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext&) {
     Execute(new TTxHandleSafeBuildIndexScan(this, std::move(ev)));
@@ -630,7 +716,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
             request.GetTargetName(),
             seqNo,
             request.GetTabletId(),
-            ev->Sender,
+            SelfId(),
             requestedRange,
             request.GetIndexColumns(),
             request.GetDataColumns(),

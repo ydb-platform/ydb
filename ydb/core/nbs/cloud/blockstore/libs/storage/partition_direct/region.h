@@ -8,6 +8,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -21,8 +23,11 @@ public:
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
-        TDuration writeHandoffDelay,
-        TDuration traceSamplePeriod);
+        ui64 vChunkSize,
+        TDuration writeHedgingDelay,
+        TDuration writeRequestTimeout,
+        TDuration traceSamplePeriod,
+        NMonitoring::TDynamicCounterPtr counters);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,

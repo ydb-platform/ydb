@@ -113,7 +113,8 @@ BEGIN_SIMPLE_ARROW_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     Y_UNUSED(valueBuilder);
     ui16 port = 0;
-    TStringBuf scheme, host;
+    TStringBuf scheme;
+    TStringBuf host;
     TString lowerUri(args[0].AsStringRef());
     std::transform(lowerUri.cbegin(), lowerUri.cbegin() + GetSchemePrefixSize(lowerUri),
                    lowerUri.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -128,7 +129,8 @@ struct TGetPortKernelExec: public TUnaryKernelExec<TGetPortKernelExec> {
             return sink(TBlockItem());
         }
         ui16 port = 0;
-        TStringBuf scheme, host;
+        TStringBuf scheme;
+        TStringBuf host;
         TString lowerUri(arg.AsStringRef());
         std::transform(lowerUri.cbegin(), lowerUri.cbegin() + GetSchemePrefixSize(lowerUri),
                        lowerUri.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -143,7 +145,8 @@ END_SIMPLE_ARROW_UDF(TGetPort, TGetPortKernelExec::Do);
 BEGIN_SIMPLE_ARROW_UDF(TGetTail, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     const TStringBuf url(args[0].AsStringRef());
-    TStringBuf host, tail;
+    TStringBuf host;
+    TStringBuf tail;
     SplitUrlToHostAndPath(url, host, tail);
     return tail.StartsWith('/')
                ? valueBuilder->NewString(tail)
@@ -156,7 +159,8 @@ struct TGetTailKernelExec: public TUnaryKernelExec<TGetTailKernelExec> {
             return sink(TBlockItem());
         }
         const TStringBuf url(arg.AsStringRef());
-        TStringBuf host, tail;
+        TStringBuf host;
+        TStringBuf tail;
         SplitUrlToHostAndPath(url, host, tail);
         if (tail.StartsWith('/')) {
             return sink(TBlockItem(TStringRef(tail)));

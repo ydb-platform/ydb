@@ -294,6 +294,7 @@ class TopicClientAsyncIO:
         decoder_executor: Optional[concurrent.futures.Executor] = None,
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
         event_handler: Optional[TopicReaderEvents.EventHandler] = None,
+        buffer_release_threshold: float = 0.5,
     ) -> TopicReaderAsyncIO:
 
         logger.debug("Create reader for topic=%s consumer=%s", topic, consumer)
@@ -629,6 +630,7 @@ class TopicClient:
         decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
         event_handler: Optional[TopicReaderEvents.EventHandler] = None,
+        buffer_release_threshold: float = 0.5,
     ) -> TopicReader:
         logger.debug("Create reader for topic=%s consumer=%s", topic, consumer)
         if not decoder_executor:

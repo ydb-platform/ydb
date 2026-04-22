@@ -110,7 +110,7 @@ TConclusionStatus TBloomIndexMeta::DoCheckModificationCompatibility(const IIndex
         return TConclusionStatus::Fail(
             "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
     }
-    AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
+
     return TBase::CheckSameColumnsForModification(newMeta);
 }
 
@@ -153,7 +153,6 @@ void TBloomIndexMeta::Initialize() {
     std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>(
         "", arrow::TypeTraits<arrow::BooleanType>::type_singleton()) };
     ResultSchema = std::make_shared<arrow::Schema>(fields);
-    AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
     HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
 }
 

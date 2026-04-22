@@ -8,6 +8,10 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 
 {% list tabs %}
 
+- Go
+
+  This functionality is not currently supported.
+
 - C++
 
   ```cpp
@@ -28,6 +32,14 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 
 - Python
 
-  Not supported at this time.
+  This functionality is not currently supported.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  This functionality is not currently supported.
 
 {% endlist %}

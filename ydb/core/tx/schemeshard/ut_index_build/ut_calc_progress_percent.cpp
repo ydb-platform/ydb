@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_index_build_info.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -4,7 +4,11 @@ FineBI is a powerful big data analytics tool. FineBI allows organizations to ana
 
 [PostgreSQL compatibility mode in {{ ydb-short-name }}](../../postgresql/intro.md) enables the use of [FineBI](https://intl.finebi.com/) to query and visualize data from {{ ydb-short-name }}. In this case FineBI works with {{ ydb-short-name }} just like with PostgreSQL.
 
-{% include [../../postgresql/_includes/alert_preview.md](../../postgresql/_includes/alert_preview.md) %}
+{% note warning %}
+
+At the moment, {{ ydb-short-name }}'s compatibility with PostgreSQL **is under development**, so not all PostgreSQL constructs and [functions](../../postgresql/functions.md) are supported yet. PostgreSQL compatibility is available for testing in the form of a Docker container, which can be deployed by following these [instructions](../../postgresql/docker-connect.md).
+
+{% endnote %}
 
 ## Prerequisites
 

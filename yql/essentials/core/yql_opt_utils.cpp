@@ -2486,7 +2486,8 @@ template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& 
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
     if (!prefix.StartsWith("_yql")) {
         YQL_ENSURE(prefix.Contains('.'));
-        TStringBuf table, column;
+        TStringBuf table;
+        TStringBuf column;
         SplitTableName(prefix, table, column);
         YQL_ENSURE(column.StartsWith("_yql"));
     }
@@ -2873,6 +2874,13 @@ bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* type
 bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
     static const char OptName[] = "EmitPruneKeys";
+    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
+}
+
+bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types)
+{
+    YQL_ENSURE(types);
+    static const char OptName[] = "PushdownFiltersOverWindow";
     return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
 }
 

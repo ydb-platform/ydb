@@ -292,16 +292,16 @@ Y_UNIT_TEST(RelCollector) {
 
     TKqpStatsStore kqpStats;
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
+    UNIT_ASSERT(KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
     kqpStats.SetStats(tables[1].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
+    UNIT_ASSERT(KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
     kqpStats.SetStats(tables[0].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
     kqpStats.SetStats(tables[2].Ptr()->Child(0), std::make_shared<TOptimizerStatistics>(BaseTable, 1, 1, 1));
 
     TVector<TString> labels;
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto label, auto, auto) { labels.emplace_back(label); }) == true);
+    UNIT_ASSERT(KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto label, auto, auto) { labels.emplace_back(label); }) == true);
     UNIT_ASSERT(labels.size() == 3);
     UNIT_ASSERT_STRINGS_EQUAL(labels[0], "orders");
     UNIT_ASSERT_STRINGS_EQUAL(labels[1], "customer");
@@ -320,10 +320,10 @@ Y_UNIT_TEST(RelCollectorBrokenEquiJoin) {
 
     TKqpStatsStore kqpStats;
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
+    UNIT_ASSERT(KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 }
 
-void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFactory, NYql::TExprContext& ctx) {
+void _KqpOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFactory, NYql::TExprContext& ctx) {
     NYql::TTypeAnnotationContext typeCtx;
     TKqpStatsStore kqpStats;
     auto pos = ctx.AppendPosition({});
@@ -360,7 +360,7 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
         auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
         rels.push_back(rel);
     };
-    auto res = DqOptimizeEquiJoinWithCosts(equiJoin, ctx, typeCtx, kqpStats, 2, *opt, providerCollect);
+    auto res = KqpOptimizeEquiJoinWithCosts(equiJoin, ctx, typeCtx, kqpStats, 2, *opt, providerCollect);
     UNIT_ASSERT(equiJoin.Ptr() != res.Ptr());
     UNIT_ASSERT(equiJoin.Ptr()->ChildrenSize() == res.Ptr()->ChildrenSize());
     UNIT_ASSERT(equiJoin.Maybe<TCoEquiJoin>());
@@ -373,14 +373,14 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
     UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
 }
 
-Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
+Y_UNIT_TEST(KqpOptimizeEquiJoinWithCostsNative) {
     NYql::TExprContext ctx;
     TBaseProviderContext pctx;
     std::function<IOptimizerNew*()> optFactory = [&]() {
         TCBOSettings settings{};
         return MakeNativeOptimizerNew(pctx, settings, ctx, false);
     };
-    _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
+    _KqpOptimizeEquiJoinWithCosts(optFactory, ctx);
 }
 
 } // KqpCBO

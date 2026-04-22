@@ -38,6 +38,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableHtapTx(GetEnableHtapTx());
     settings.SetAllowOlapDataQuery(GetAllowOlapDataQuery());
+    AugmentServerSettings(settings);
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
@@ -52,6 +53,14 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 
     TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableSettings);
     QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, querySettings);
+}
+
+void TFixture::AugmentServerSettings(NKikimr::Tests::TServerSettings&)
+{
+}
+
+void TFixture::AugmentWriteSessionSettings(NTopic::TWriteSessionSettings&)
+{
 }
 
 void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
@@ -391,6 +400,7 @@ auto TFixture::CreateTopicWriteSession(const std::string& topicPath,
     options.MessageGroupId(messageGroupId);
     options.PartitionId(partitionId);
     options.Codec(ECodec::RAW);
+    AugmentWriteSessionSettings(options);
     return client.CreateWriteSession(options);
 }
 

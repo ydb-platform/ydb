@@ -1,6 +1,7 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
@@ -1001,7 +1002,7 @@ public:
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
-                    TSet<ui32> bloomPrefixes;
+                    TMap<ui32, double> bloomPrefixes;
                     for (auto&& index : metadata->Indexes) {
                         const bool isLocalBloom = (index.Type == TIndexDescription::EType::LocalBloomFilter ||
                                     index.Type == TIndexDescription::EType::LocalBloomNgramFilter);
@@ -1017,8 +1018,22 @@ public:
                                 continue; // handled by OLAP path below
                             }
 
-                            // Row-store LocalBloomFilter: collect prefix lengths for de-duplication
-                            bloomPrefixes.insert(static_cast<ui32>(index.KeyColumns.size()));
+                            // Row-store LocalBloomFilter: collect prefix lengths + FPP
+                            {
+                                ui32 prefix = static_cast<ui32>(index.KeyColumns.size());
+                                double fpp = NTable::DefaultBloomFilterFpp;
+                                if (auto* desc = std::get_if<TIndexDescription::TLocalBloomFilterDescription>(&index.SpecializedIndexDescription)) {
+                                    if (desc->FalsePositiveProbability) {
+                                        fpp = *desc->FalsePositiveProbability;
+                                        if (fpp <= 0.0 || fpp >= 1.0) {
+                                            tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                                "false_positive_probability must be in range (0, 1)"));
+                                            return;
+                                        }
+                                    }
+                                }
+                                bloomPrefixes[prefix] = fpp;
+                            }
                             continue;
                         }
 
@@ -1052,8 +1067,10 @@ public:
                                 break;
                         }
                     }
-                    for (ui32 prefix : bloomPrefixes) {
-                        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
+                    for (const auto& [prefix, fpp] : bloomPrefixes) {
+                        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+                        entry->SetPrefixLength(prefix);
+                        entry->SetFalsePositiveProbability(fpp);
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
                         tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));
@@ -1488,7 +1505,7 @@ public:
 
                 } else {
                     result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
-                    result.AddIssues(modifySchemeResult.Issues);
+                    result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));
                 }
                 alterPromise.SetValue(result);
             });
@@ -1500,7 +1517,7 @@ public:
 
     }
 
-    NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
         return Gateway->AlterTopicPrepared(std::move(settings));
     }
 

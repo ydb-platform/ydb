@@ -475,7 +475,7 @@ private:
 
     TAtomicPtr<TState, /*EnableAcquireHazard*/ true> StateSnapshot_;
 
-    NThreading::TSpinLock SpinLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     TState State_;
 
     void Adjust()

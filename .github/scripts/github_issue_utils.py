@@ -11,6 +11,20 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+_GITHUB_TEAM_PREFIX = "TEAM:@ydb-platform/"
+
+
+def team_slug_from_monitor_owner(owner) -> str:
+    """Lowercase team slug from ``tests_monitor.owner`` / YQL ``owner`` (SQL-aligned).
+
+    Strips ``TEAM:@ydb-platform/`` then lowercases the remainder.
+    ``None`` → empty string (join keys / pandas use empty, not ``"unknown"``).
+    """
+    if owner is None:
+        return ""
+    s = str(owner).replace(_GITHUB_TEAM_PREFIX, "").strip()
+    return s.lower()
+
 
 DEFAULT_BUILD_TYPE = 'relwithdebinfo'
 DEFAULT_BRANCH = 'main'
@@ -58,12 +72,22 @@ def normalize_analytics_area(raw) -> str:
     return s
 
 
-def monitor_owner_to_team_key(owner) -> str:
-    """Lowercase slug like SQL ``Unicode::ToLower(ReplaceAll(owner, 'TEAM:@ydb-platform/', ''))``."""
-    if owner is None:
-        return ""
-    s = str(owner).replace("TEAM:@ydb-platform/", "").strip()
-    return s.lower()
+def canonical_team_slug(raw_owner_team) -> str:
+    """Lowercase team slug for routing (digest queue, Telegram ``teams``, GitHub project owner).
+
+    Uses :func:`team_slug_from_monitor_owner` for the core strip/lowercase. Maps ``None``,
+    empty, ``unknown`` (any case), and a bare ``TEAM:@ydb-platform/`` to the slug ``unknown``.
+    """
+    if raw_owner_team is None:
+        return "unknown"
+    raw = str(raw_owner_team).strip()
+    if not raw or raw.lower() == "unknown":
+        return "unknown"
+    return team_slug_from_monitor_owner(raw) or "unknown"
+
+
+# Backward-compatible alias used in older SQL comments and callers.
+monitor_owner_to_team_key = team_slug_from_monitor_owner
 
 
 def resolve_team_by_longest_area_prefix(normalized_area: str, area_to_owner: Dict[str, str]) -> Optional[str]:
@@ -131,7 +155,7 @@ def compute_effective_analytics_row(
     area_to_owner: Dict[str, str],
     min_area_by_owner: Dict[str, str],
 ) -> Tuple[str, str]:
-    otk = monitor_owner_to_team_key(row.get("owner"))
+    otk = team_slug_from_monitor_owner(row.get("owner"))
     key = (str(row["full_name"]), str(row["branch"]), str(row["build_type"]))
     g = gim_by_key.get(key, {})
     dw = row["date_window"]

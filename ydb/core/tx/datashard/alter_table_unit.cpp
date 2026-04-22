@@ -3,6 +3,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/library/aclib/aclib.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -193,7 +195,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 .WithPathId(streamPathId)
                 .WithTableId(tableId)
                 .WithSchemaVersion(newInfo->GetTableSchemaVersion())
-                .WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID)
+                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build())
                 .Build();
 
             const auto& record = *recordPtr;

@@ -6,7 +6,10 @@ checkstyle {
 }
 
 tasks.withType<Checkstyle>() {
-    exclude("**/codegen.collect**")
+    exclude(
+        "**/codegen.collect/**",
+        "**/generated/**"
+    )
 }
 
 tasks.named("compileJava") {
@@ -16,6 +19,5 @@ tasks.named("compileJava") {
 tasks.named("compileTestJava") {
     finalizedBy("checkstyleTest")
 }
-
 {# empty line #}
 {%- endif -%}

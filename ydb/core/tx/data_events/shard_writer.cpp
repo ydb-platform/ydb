@@ -5,6 +5,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -39,9 +40,14 @@ namespace NKikimr::NEvWrite {
         }
     }
 
+    TDuration TShardWriter::OverloadTimeout() noexcept {
+        ui32 overloadedDelayMs = std::min(AppData() ? AppData()->ColumnShardConfig.GetProxyOverloadedDelayMs() : OverloadedDelayMs, ui32(TDuration::Hours(1).MilliSeconds()));
+        return TDuration::MilliSeconds(overloadedDelayMs + RandomNumber<ui32>(overloadedDelayMs));
+    }
+
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const std::optional<TDuration> timeout, const TString& userSID)
+        const std::optional<TDuration> timeout, NACLib::TUserContext::TPtr userCtx)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
@@ -53,12 +59,15 @@ namespace NKikimr::NEvWrite {
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , Timeout(timeout)
         , RetryBySubscription(AppData()->FeatureFlags.GetEnableCsOverloadsSubscriptionRetries())
-        , UserSID(userSID) {
+        , UserCtx(userCtx) {
     }
 
     void TShardWriter::SendWriteRequest() {
         auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        ev->SetUserSID(UserSID);
+        if (UserCtx != nullptr) {
+            UserCtx->SerializeToEvent(ev->Record);
+        }
+
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
         if (Timeout) {
             ev->Record.SetTimeoutSeconds(Timeout->Seconds());

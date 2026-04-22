@@ -12,7 +12,10 @@ ELSE()
 ENDIF()
 
 SRCS(
+    common.cpp
     datastreams_ut.cpp
+    streaming_ddl_ut.cpp
+    streaming_sys_view_ut.cpp
 )
 
 PEERDIR(

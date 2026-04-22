@@ -10,6 +10,15 @@
             "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.1"
         }
     ],
+    "test_canonical_requests.Test.test_cluster_balance": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.0"
+        }
+    ],
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"

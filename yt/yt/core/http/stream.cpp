@@ -179,9 +179,9 @@ void THttpParser::MaybeFlushHeader(bool trailer)
         if (!Trailers_) {
             Trailers_ = New<THeaders>();
         }
-        Trailers_->Set(NextField_.Flush(), NextValue_.Flush());
+        Trailers_->Add(NextField_.Flush(), NextValue_.Flush());
     } else {
-        Headers_->Set(NextField_.Flush(), NextValue_.Flush());
+        Headers_->Add(NextField_.Flush(), NextValue_.Flush());
     }
 }
 
@@ -842,36 +842,31 @@ TFuture<void> THttpOutput::FinishChunked()
         .Apply(OnWriteFinish_);
 }
 
-TFuture<void> THttpOutput::WriteBody(const TSharedRef& smallBody)
+TFuture<void> THttpOutput::WriteBody(const TSharedRef& body)
+{
+    return WriteBody({&body, 1});
+}
+
+TFuture<void> THttpOutput::WriteBody(TRange<TSharedRef> parts)
 {
     if (HeadersFlushed_ || MessageFinished_) {
         THROW_ERROR(AnnotateError(TError("Cannot write body to partially flushed HTTP message")));
     }
 
-    TSharedRefArray writeRefs;
+    TSharedRefArrayBuilder writeRefs(2 + static_cast<bool>(Trailers_) + parts.size());
+    writeRefs.Add(GetHeadersPart(GetByteSize(parts)));
     if (Trailers_) {
-        writeRefs = TSharedRefArray(
-            std::array<TSharedRef, 4>{
-                GetHeadersPart(smallBody.Size()),
-                GetTrailersPart(),
-                CrLfBuffer(),
-                smallBody,
-            },
-            TSharedRefArray::TCopyParts{});
-    } else {
-        writeRefs = TSharedRefArray(
-            std::array<TSharedRef, 3>{
-                GetHeadersPart(smallBody.Size()),
-                CrLfBuffer(),
-                smallBody,
-            },
-            TSharedRefArray::TCopyParts{});
+        writeRefs.Add(GetTrailersPart());
+    }
+    writeRefs.Add(CrLfBuffer());
+    for (const auto& p : parts) {
+        writeRefs.Add(p);
     }
 
     HeadersFlushed_ = true;
     MessageFinished_ = true;
     Connection_->SetWriteDeadline(TInstant::Now() + Config_->WriteIdleTimeout);
-    return Connection_->WriteV(writeRefs)
+    return Connection_->WriteV(writeRefs.Finish())
         .Apply(OnWriteFinish_);
 }
 

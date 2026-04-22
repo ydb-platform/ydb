@@ -1,0 +1,19 @@
+package NKikimrConfig;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+message TLongTxServiceConfig {
+    message TRetrySettings {
+        optional uint32 StartDelayMs = 1;
+        optional uint32 MaxDelayMs = 2;
+    }
+
+    optional uint64 LocalSnapshotPromotionTimeSeconds = 1 [default = 120];
+    optional uint64 UnavailableNodeSnapshotsExpirationTimeSeconds = 2 [default = 60];
+    optional uint64 InsideDataCenterExchangeFanOut = 3 [default = 10];
+    optional uint64 MaxRemoteSnapshots = 4 [default = 5000];
+    optional uint64 SnapshotsExchangeIntervalSeconds = 5 [default = 10];
+    optional uint64 SnapshotsRegistryUpdateIntervalSeconds = 6 [default = 30];
+    optional TRetrySettings PublisherSettings = 7;
+    optional TRetrySettings SubscriberSettings = 8;
+}

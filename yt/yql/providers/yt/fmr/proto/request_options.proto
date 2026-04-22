@@ -195,6 +195,7 @@ message TSortedUploadTaskParams {
     string CookieYson = 3;
     uint32 SessionType = 4;
     uint64 Order = 5;
+    optional TSortingColumns SortingColumns = 6;
 }
 
 message TUploadTaskParams {

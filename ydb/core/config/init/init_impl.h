@@ -29,6 +29,7 @@
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <google/protobuf/text_format.h>
+#include <contrib/libs/protobuf/src/google/protobuf/io/tokenizer.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -64,14 +65,38 @@ constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log
 constexpr static ui32 DefaultLogSamplingRate = 0; // log settings
 
 template<typename T>
-bool ParsePBFromString(const TString &content, T *pb, bool allowUnknown = false) {
-    if (!allowUnknown) {
-        return ::google::protobuf::TextFormat::ParseFromString(content, pb);
+bool ParsePBFromString(const TString &content, T *pb, TString* error = nullptr, bool allowUnknown = false) {
+    class TProtoParseErrorCollector : public ::google::protobuf::io::ErrorCollector {
+    public:
+        void RecordError(int line, ::google::protobuf::io::ColumnNumber column, y_absl::string_view message) override {
+            if (Error.empty()) {
+                Error = TStringBuilder() << "line " << line + 1 << ", column " << column + 1 << ": " << message;
+            }
+        }
+
+        void RecordWarning(int, ::google::protobuf::io::ColumnNumber, y_absl::string_view) override {
+        }
+
+        const TString& GetError() const {
+            return Error;
+        }
+
+    private:
+        TString Error;
+    };
+
+    TProtoParseErrorCollector errorCollector;
+    ::google::protobuf::TextFormat::Parser parser;
+    parser.RecordErrorsTo(&errorCollector);
+    if (allowUnknown) {
+        parser.AllowUnknownField(true);
     }
 
-    ::google::protobuf::TextFormat::Parser parser;
-    parser.AllowUnknownField(true);
-    return parser.ParseFromString(content, pb);
+    const bool ok = parser.ParseFromString(content, pb);
+    if (!ok && error && errorCollector.GetError()) {
+        *error = errorCollector.GetError();
+    }
+    return ok;
 }
 
 struct TConfigRefs {
@@ -84,6 +109,31 @@ struct TFileConfigOptions {
     TString Description;
     TMaybe<TString> ParsedOption;
 };
+
+struct TYamlConfigs {
+    std::optional<TString> Main;
+    std::optional<TString> Storage;
+    TString MainSource;
+    std::optional<TString> StorageSource;
+    bool LoadedFromStore = false;
+};
+
+inline TString DescribeFetchConfigFailure(TStringBuf context, const IStorageConfigResult& result) {
+    TStringBuilder message;
+    message << "Failed to fetch config " << context;
+    if (const TString& endpoint = result.GetEndpoint(); endpoint) {
+        message << " at " << endpoint.Quote();
+    }
+    if (result.IsTransportError()) {
+        message << " (transport error)";
+    }
+    if (const TString& issue = result.GetPrimaryIssueMessage(); issue) {
+        message << ": " << issue;
+    } else if (const TString& issues = result.GetIssuesText(); issues) {
+        message << ": " << issues;
+    }
+    return message;
+}
 
 template <class TProto>
 using TAccessors = std::tuple<
@@ -118,9 +168,15 @@ auto MutableConfigPart(
         TString path = protoConfigFileProvider.Get(optname);
         const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
         // TODO(Enjeciton): CFG-UX-0 handle error collector errors
-        const bool result = ParsePBFromString(protoString, res);
+        TString parseError;
+        const bool result = ParsePBFromString(protoString, res, &parseError);
         if (!result) {
-            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            TStringBuilder message;
+            message << "Failed to parse protobuf file " << path.Quote();
+            if (parseError) {
+                message << ": " << parseError;
+            }
+            errorCollector.Fatal(message, "YDB-CFG24");
             return nullptr;
         }
 
@@ -160,9 +216,15 @@ auto MutableConfigPartMerge(
         TString path = protoConfigFileProvider.Get(optname);
         const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
         // TODO(Enjection): CFG-UX-0 handle error collector errors
-        const bool result = ParsePBFromString(protoString, &cfg);
+        TString parseError;
+        const bool result = ParsePBFromString(protoString, &cfg, &parseError);
         if (!result) {
-            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            TStringBuilder message;
+            message << "Failed to parse protobuf file " << path.Quote();
+            if (parseError) {
+                message << ": " << parseError;
+            }
+            errorCollector.Fatal(message, "YDB-CFG24");
             return nullptr;
         }
 
@@ -179,10 +241,8 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void ApplyMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigString,
-    const std::optional<TString>& storageYamlConfigString,
-    bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig,
-    const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
+void ApplyMainYamlConfig(TConfigRefs refs, const TYamlConfigs& yamlConfigs, NKikimrConfig::TAppConfig& appConfig,
+                         const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
@@ -198,7 +258,7 @@ struct TWithDefault {
 
     void EnsureDefined() const {
         if (Y_UNLIKELY(Default)) {
-            ythrow yexception() << "TWithDefault access through GetRef() assuming it is non-default";
+            throw TInitializationException("YDB-CFG06") << "TWithDefault access through GetRef() assuming it is non-default";
         }
     }
 
@@ -538,11 +598,11 @@ struct TCommonAppOptions {
         }
 
         if (!appConfig.HasDomainsConfig()) {
-            ythrow yexception() << "DomainsConfig is not provided";
+            throw TInitializationException("YDB-CFG07") << "DomainsConfig is not provided";
         }
 
         if (!appConfig.HasChannelProfileConfig()) {
-            ythrow yexception() << "ChannelProfileConfig is not provided";
+            throw TInitializationException("YDB-CFG08") << "ChannelProfileConfig is not provided";
         }
 
         if (NodeKind == NODE_KIND_YQ && InterconnectPort) {
@@ -572,7 +632,7 @@ struct TCommonAppOptions {
                 appConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true);
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::NameserviceConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             } else {
-                ythrow yexception() << "--suppress-version-check option is provided without static nameservice config";
+                throw TMisuseException() << "--suppress-version-check option is provided without static nameservice config";
             }
         }
 
@@ -817,23 +877,23 @@ struct TCommonAppOptions {
         if (NodeIdValue) {
             if (NodeIdValue.GetRef() == "static") {
                 if (!appConfig.HasNameserviceConfig() || !InterconnectPort) {
-                    ythrow yexception() << "'--node static' requires naming file and IC port to be specified";
+                    throw TMisuseException() << "'--node static' requires naming file and IC port to be specified";
                 }
 
                 try {
                     nodeId = FindStaticNodeId(appConfig, env);
                 } catch(TSystemError& e) {
-                    ythrow yexception() << "cannot detect host name: " << e.what();
+                    throw TInitializationException("YDB-CFG09") << "cannot detect host name: " << e.what();
                 }
 
                 if (!nodeId) {
-                    ythrow yexception() << "cannot detect node ID for " << env.HostName() << ":" << InterconnectPort
+                    throw TInitializationException("YDB-CFG10") << "cannot detect node ID for " << env.HostName() << ":" << InterconnectPort
                         << " and for " << env.FQDNHostName() << ":" << InterconnectPort << Endl;
                 }
                 return nodeId;
             } else {
                 if (!TryFromString(NodeIdValue.GetRef(), nodeId)) {
-                    ythrow yexception() << "wrong '--node' value (should be NUM, 'static')";
+                    throw TMisuseException() << "wrong '--node' value (should be NUM, 'static')";
                 }
             }
         }
@@ -949,7 +1009,7 @@ struct TCommonAppOptions {
             }
         } else {
             if (!NodeBrokerPort) {
-                ythrow yexception() << "NodeBrokerPort MUST be defined";
+                throw TInitializationException("YDB-CFG11") << "NodeBrokerPort MUST be defined";
             }
 
             for (const auto &node : appConfig.GetNameserviceConfig().GetNode()) {
@@ -969,10 +1029,10 @@ struct TCommonAppOptions {
     void ValidateTenant() const {
         if (TenantName) {
             if (!IsStartWithSlash(TenantName.GetRef())) { // ?
-                ythrow yexception() << "leading / in --tenant parametr is always required.";
+                throw TMisuseException() << "leading / in --tenant parameter is always required.";
             }
             if (NodeId && NodeKind != NODE_KIND_YQ) {
-                ythrow yexception() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
+                throw TMisuseException() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
             }
         }
     }
@@ -987,7 +1047,7 @@ struct TCommonAppOptions {
             out.DisableAll();
             out.EnableYQ();
         } else {
-            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
+            throw TMisuseException() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
         }
     }
 
@@ -997,7 +1057,7 @@ struct TCommonAppOptions {
 
     void ValidateStaticNodeConfig() const {
         if (!NodeId) {
-            ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
+            throw TMisuseException() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
         }
     }
 };
@@ -1025,7 +1085,7 @@ struct TMbusAppOptions {
             for (const auto &option : opts.Opts_) {
                 for (const TString &longName : option->GetLongNames()) {
                     if (longName.StartsWith("mbus-") && parseResult.Has(option.Get())) {
-                        ythrow yexception() << "option --" << longName << " is useless without --mbus option";
+                        throw TMisuseException() << "option --" << longName << " is useless without --mbus option";
                     }
                 }
             }
@@ -1138,10 +1198,7 @@ public:
         Option("auth-file", TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
 
-        bool loadedFromStore = false;
-
-        std::optional<TString> mainYamlConfigString;
-        std::optional<TString> storageYamlConfigString;
+        TYamlConfigs yamlConfigs;
 
         if (CommonAppOptions.ConfigDirPath) {
             AppConfig.SetConfigDirPath(CommonAppOptions.ConfigDirPath);
@@ -1149,27 +1206,31 @@ public:
             auto dir = fs::path(CommonAppOptions.ConfigDirPath.c_str());
 
             if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
-                storageYamlConfigString.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                yamlConfigs.Storage.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                yamlConfigs.StorageSource = TStringBuilder() << "storage YAML config file " << TString(path.string()).Quote();
                 if (csk) {
-                    csk->VerifyStorageConfig(*storageYamlConfigString);
+                    csk->VerifyStorageConfig(*yamlConfigs.Storage);
                 }
             }
 
             if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
-                mainYamlConfigString.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                yamlConfigs.Main.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                yamlConfigs.MainSource = TStringBuilder() << "main YAML config file " << TString(path.string()).Quote();
                 if (csk) {
-                    csk->VerifyMainConfig(*mainYamlConfigString);
+                    csk->VerifyMainConfig(*yamlConfigs.Main);
                 }
-                loadedFromStore = true;
+                yamlConfigs.LoadedFromStore = true;
             } else {
-                storageYamlConfigString.reset();
+                yamlConfigs.Storage.reset();
+                yamlConfigs.StorageSource.reset();
             }
         }
 
-        if (!mainYamlConfigString && CommonAppOptions.YamlConfigFile) {
-            mainYamlConfigString.emplace(ProtoConfigFileProvider.GetProtoFromFile(CommonAppOptions.YamlConfigFile, ErrorCollector));
+        if (!yamlConfigs.Main && CommonAppOptions.YamlConfigFile) {
+            yamlConfigs.Main.emplace(ProtoConfigFileProvider.GetProtoFromFile(CommonAppOptions.YamlConfigFile, ErrorCollector));
+            yamlConfigs.MainSource = TStringBuilder() << "YAML config file " << CommonAppOptions.YamlConfigFile.Quote();
             if (csk) {
-                csk->VerifyMainConfig(*mainYamlConfigString);
+                csk->VerifyMainConfig(*yamlConfigs.Main);
             }
         }
 
@@ -1177,17 +1238,21 @@ public:
             ParseSeedNodes(CommonAppOptions);
         }
 
-        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString && CommonAppOptions.NodeKind != NODE_KIND_YQ) {
+        if (CommonAppOptions.IsStaticNode() && !yamlConfigs.Main && CommonAppOptions.NodeKind != NODE_KIND_YQ) {
             if (CommonAppOptions.SeedNodesFile) {
-                InitConfigFromSeedNodes(mainYamlConfigString.emplace(), storageYamlConfigString);
-                Y_ABORT_UNLESS(mainYamlConfigString);
+                InitConfigFromSeedNodes(yamlConfigs.Main.emplace(), yamlConfigs.Storage);
+                Y_ABORT_UNLESS(yamlConfigs.Main);
+                yamlConfigs.MainSource = "main YAML config fetched from seed nodes";
+                if (yamlConfigs.Storage) {
+                    yamlConfigs.StorageSource = "storage YAML config fetched from seed nodes";
+                }
             } else {
-                ythrow yexception() << "YAML config is not provided for static node and no seed nodes given";
+                throw TInitializationException("YDB-CFG12") << "YAML config is not provided for static node and no seed nodes given";
             }
         }
 
-        if (mainYamlConfigString) {
-            ApplyMainYamlConfig(refs, *mainYamlConfigString, storageYamlConfigString, loadedFromStore, AppConfig);
+        if (yamlConfigs.Main) {
+            ApplyMainYamlConfig(refs, yamlConfigs, AppConfig);
         }
 
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
@@ -1211,8 +1276,8 @@ public:
             InitDynamicNode();
         }
 
-        if (mainYamlConfigString) {
-            ApplyMainYamlConfig(refs, *mainYamlConfigString, storageYamlConfigString, loadedFromStore, AppConfig);
+        if (yamlConfigs.Main) {
+            ApplyMainYamlConfig(refs, yamlConfigs, AppConfig);
         }
 
         // disable as early as possible to properly propagate it everywhere
@@ -1275,7 +1340,7 @@ public:
 
         std::vector<TString> errors;
         if (csk && csk->ValidateConfig(AppConfig, errors) == NYamlConfig::EValidationResult::Error) {
-            ythrow yexception() << errors.front();
+            throw TInitializationException("YDB-CFG13") << errors.front();
         }
 
         Logger.Out() << "configured" << Endl;
@@ -1385,11 +1450,11 @@ public:
         cf.FillClusterEndpoints(AppConfig, addrs);
 
         if (!cf.InterconnectPort) {
-            ythrow yexception() << "Either --node or --ic-port must be specified";
+            throw TMisuseException() << "Either --node or --ic-port must be specified";
         }
 
         if (addrs.empty()) {
-            ythrow yexception() << "List of Node Broker end-points is empty";
+            throw TInitializationException("YDB-CFG14") << "List of Node Broker end-points is empty";
         }
 
         TString domainName = DeduceNodeDomain(cf, AppConfig);
@@ -1581,23 +1646,26 @@ public:
                         if (item.Type() == NFyaml::ENodeType::Scalar) {
                             cf.SeedNodes.push_back(item.Scalar());
                         } else {
-                            ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at " << item.Path();
+                            throw TInitializationException("YDB-CFG15")
+                                << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at "
+                                << item.Path();
                         }
                     }
                 } else {
-                    ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings at root";
+                    throw TInitializationException("YDB-CFG16")
+                        << "Invalid format in seed nodes file: expected a list of strings at root";
                 }
             } catch (const std::exception& e) {
-                ythrow yexception() << "Failed to read or parse seed nodes file: " << e.what();
+                throw TInitializationException("YDB-CFG17") << "Failed to read or parse seed nodes file: " << e.what();
             }
         } else {
-            ythrow yexception() << "Seed nodes file not found: " << cf.SeedNodesFile;
+            throw TInitializationException("YDB-CFG18") << "Seed nodes file not found: " << cf.SeedNodesFile;
         }
     }
 
     void InitConfigFromSeedNodes(TString& mainYamlConfigString, std::optional<TString>& storageYamlConfigString) {
         if (!AppConfig.GetConfigDirPath()) {
-            ythrow yexception() << "Seed nodes file provided, but config dir path is not set";
+            throw TInitializationException("YDB-CFG19") << "Seed nodes file provided, but config dir path is not set";
         }
 
         std::vector<TString> hostOptions = {
@@ -1610,14 +1678,18 @@ public:
         hostOptions.erase(begin, end);
         auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger,
             hostOptions, CommonAppOptions.InterconnectPort);
-        if (!result) {
-            ythrow yexception() << "Failed to fetch config from seed nodes for static node";
+        if (!result || !result->IsSuccess()) {
+            throw TInitializationException("YDB-CFG20")
+                << (result
+                    ? DescribeFetchConfigFailure("from seed nodes for static node", *result)
+                    : TString("Failed to fetch config from seed nodes for static node"));
         }
 
         if (const auto& config = result->GetMainYamlConfig()) {
             mainYamlConfigString = *config;
         } else {
-            ythrow yexception() << "No main YAML config has been provided from seed nodes for static node";
+            throw TInitializationException("YDB-CFG21")
+                << "No main YAML config has been provided from seed nodes for static node";
         }
 
         storageYamlConfigString = result->GetStorageYamlConfig();
@@ -1666,7 +1738,7 @@ public:
                 }
                 errorMsg << "storage config";
             }
-            ythrow yexception() << errorMsg;
+            throw TInitializationException("YDB-CFG22") << errorMsg;
         } else if (storageYamlConfigString) {
             Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
                 << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
@@ -1688,12 +1760,14 @@ public:
 
     void InitConfigFromSeedNodesDynamic() {
         if (CommonAppOptions.SeedNodes.empty()) {
-            ythrow yexception() << "No seed nodes provided";
+            throw TInitializationException("YDB-CFG23") << "No seed nodes provided";
         }
 
         auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger, {}, 0);
-        if (!cfgResult) {
-            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+        if (!cfgResult || !cfgResult->IsSuccess()) {
+            Logger.Out() << (cfgResult
+                ? DescribeFetchConfigFailure("from seed nodes", *cfgResult)
+                : TString("Failed to fetch config from seed nodes")) << Endl;
             return;
         }
 
@@ -1731,7 +1805,7 @@ public:
             TFsPath fspath(path);
             TFileStat filestat;
             if (!fspath.Stat(filestat) || !filestat.IsFile()) {
-                ythrow yexception() << "File passed to --" << optName << " does not exist: " << path;
+                throw TMisuseException() << "File passed to --" << optName << " does not exist: " << path;
             }
         };
 

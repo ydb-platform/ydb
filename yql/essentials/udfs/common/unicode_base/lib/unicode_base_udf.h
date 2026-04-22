@@ -665,7 +665,8 @@ static void SplitToListImpl(
     const TIt& it,
     TTmpVector& result) {
     const std::string_view& original = input.AsStringRef();
-    size_t charPos = 0U, bytePos = 0U;
+    size_t charPos = 0U;
+    size_t bytePos = 0U;
     for (const auto& elem : it) {
         for (const size_t next = std::distance(start, elem.TokenStart()); charPos < next; ++charPos) {
             bytePos += WideCharSize(original[bytePos]);

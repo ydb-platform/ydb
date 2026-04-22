@@ -82,14 +82,14 @@ def post_install(self):
     # fix path for protos
     with self.yamakes["grpc++_reflection"] as m:
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1alpha")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1alpha")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1alpha")
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     with self.yamakes["grpcpp_channelz"] as m:
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/channelz")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/channelz")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/channelz")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     # fix induced deps
@@ -135,7 +135,6 @@ grpc = CMakeNinjaNixProject(
         "src/proto/grpc/health/v1/ya.make",
         "src/proto/grpc/reflection/v1/ya.make",
         "src/proto/grpc/reflection/v1alpha/ya.make",
-        "src/proto/grpc/status/ya.make",
     ],
     ignore_targets=[
         "check_epollexclusive",
@@ -208,7 +207,6 @@ grpc = CMakeNinjaNixProject(
         "src/proto/grpc/channelz/**/*.proto",
         "src/proto/grpc/health/**/*.proto",
         "src/proto/grpc/reflection/**/*.proto",
-        "src/proto/grpc/status/**/*.proto",
     ],
     copy_sources_except=[
         # Proto library with testing services

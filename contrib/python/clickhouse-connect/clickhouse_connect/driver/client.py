@@ -1,32 +1,70 @@
 import io
 import logging
 import warnings
+from abc import ABC, abstractmethod
 from datetime import tzinfo
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    BinaryIO,
+    Dict,
+    Generator,
+    Iterable,
+    Literal,
+    Optional,
+    Sequence,
+    Union,
+)
 
 import pytz
-
-from abc import ABC, abstractmethod
-from typing import Iterable, Literal, Optional, Any, Union, Sequence, Dict, Generator, BinaryIO, TYPE_CHECKING
 from pytz.exceptions import UnknownTimeZoneError
 
 from clickhouse_connect import common
 from clickhouse_connect.common import version
-from clickhouse_connect.datatypes.registry import get_from_name
-from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.datatypes import dynamic as dynamic_module
-from clickhouse_connect.driver import tzutil
-from clickhouse_connect.driver.common import dict_copy, StreamContext, coerce_int, coerce_bool
-from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
-from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError, DataError
+from clickhouse_connect.datatypes.base import ClickHouseType
+from clickhouse_connect.datatypes.registry import get_from_name
+from clickhouse_connect.driver import options, tzutil
+from clickhouse_connect.driver.binding import quote_identifier
+from clickhouse_connect.driver.common import (
+    StreamContext,
+    coerce_bool,
+    coerce_int,
+    dict_copy,
+)
+from clickhouse_connect.driver.constants import (
+    CH_VERSION_WITH_PROTOCOL,
+    PROTOCOL_VERSION_WITH_LOW_CARD,
+)
+from clickhouse_connect.driver.exceptions import (
+    DataError,
+    OperationalError,
+    ProgrammingError,
+)
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.options import check_arrow, check_pandas, check_numpy, check_polars, pd, arrow, pl, IS_PANDAS_2
-from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatus
-from clickhouse_connect.driver.query import QueryResult, to_arrow, to_arrow_batches, QueryContext, arrow_buffer, \
-    TzMode, TzSource, _resolve_tz_mode, _resolve_tz_source, _TZ_MODE_TO_UTC_TZ_AWARE, \
-    _VALID_TZ_SOURCES, _APPLY_SERVER_TZ_TO_TZ_SOURCE
-from clickhouse_connect.driver.binding import quote_identifier
+from clickhouse_connect.driver.options import (
+    check_arrow,
+    check_numpy,
+    check_pandas,
+    check_polars,
+)
+from clickhouse_connect.driver.query import (
+    _APPLY_SERVER_TZ_TO_TZ_SOURCE,
+    _TZ_MODE_TO_UTC_TZ_AWARE,
+    _VALID_TZ_SOURCES,
+    QueryContext,
+    QueryResult,
+    TzMode,
+    TzSource,
+    _resolve_tz_mode,
+    _resolve_tz_source,
+    arrow_buffer,
+    to_arrow,
+    to_arrow_batches,
+)
+from clickhouse_connect.driver.summary import QuerySummary
 
 if TYPE_CHECKING:
     import numpy
@@ -51,17 +89,17 @@ def _strip_utc_timezone_from_arrow(table: "arrow.Table") -> "arrow.Table":
     new_fields = []
     needs_cast = False
     for field in table.schema:
-        if arrow.types.is_timestamp(field.type) and tzutil.is_utc_timezone(field.type.tz):
-            new_fields.append(arrow.field(field.name, arrow.timestamp(field.type.unit)))
+        if options.arrow.types.is_timestamp(field.type) and tzutil.is_utc_timezone(field.type.tz):
+            new_fields.append(options.arrow.field(field.name, options.arrow.timestamp(field.type.unit)))
             needs_cast = True
         else:
             new_fields.append(field)
     if needs_cast:
-        return table.cast(arrow.schema(new_fields))
+        return table.cast(options.arrow.schema(new_fields))
     return table
 
 
-def _apply_arrow_tz_policy(table: "arrow.Table", tz_mode: str) -> "arrow.Table":
+def _apply_arrow_tz_policy(table: "options.arrow.Table", tz_mode: str) -> "options.arrow.Table":
     """Apply the tz_mode policy to an Arrow table before conversion.
 
     Handles UTC stripping when tz_mode is "naive_utc" and warns when
@@ -764,20 +802,20 @@ class Client(ABC):
         if dataframe_library == "pandas":
             check_pandas()
             self._add_integration_tag("pandas")
-            if not IS_PANDAS_2:
+            if not options.IS_PANDAS_2:
                 raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
 
-            def converter(table: arrow.Table) -> pd.DataFrame:
+            def converter(table: options.arrow.Table) -> options.pd.DataFrame:
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
-                return table.to_pandas(types_mapper=pd.ArrowDtype, safe=False)
+                return table.to_pandas(types_mapper=options.pd.ArrowDtype, safe=False)
 
         elif dataframe_library == "polars":
             check_polars()
             self._add_integration_tag("polars")
 
-            def converter(table: arrow.Table) -> pl.DataFrame:
+            def converter(table: options.arrow.Table) -> options.pl.DataFrame:
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
-                return pl.from_arrow(table)
+                return options.pl.from_arrow(table)
 
         else:
             raise ValueError(f"dataframe_library must be 'pandas' or 'polars', got '{dataframe_library}'")
@@ -818,26 +856,26 @@ class Client(ABC):
         if dataframe_library == "pandas":
             check_pandas()
             self._add_integration_tag("pandas")
-            if not IS_PANDAS_2:
+            if not options.IS_PANDAS_2:
                 raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
 
-            def converter(table: "arrow.Table") -> "pd.DataFrame":
+            def converter(table: "options.arrow.Table") -> "options.pd.DataFrame":
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
-                return table.to_pandas(types_mapper=pd.ArrowDtype, safe=False)
+                return table.to_pandas(types_mapper=options.pd.ArrowDtype, safe=False)
         elif dataframe_library == "polars":
             check_polars()
             self._add_integration_tag("polars")
 
-            def converter(table: arrow.Table) -> pl.DataFrame:
+            def converter(table: options.arrow.Table) -> options.pl.DataFrame:
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
-                return pl.from_arrow(table)
+                return options.pl.from_arrow(table)
         else:
             raise ValueError(f"dataframe_library must be 'pandas' or 'polars', got '{dataframe_library}'")
         settings = self._update_arrow_settings(settings, use_strings)
         raw_stream = self.raw_stream(
             query, parameters, settings, fmt="ArrowStream", external_data=external_data, transport_settings=transport_settings
         )
-        reader = arrow.ipc.open_stream(raw_stream)
+        reader = options.arrow.ipc.open_stream(raw_stream)
 
         def df_generator():
             for batch in reader:
@@ -1025,26 +1063,26 @@ class Client(ABC):
         """
         check_arrow()
 
-        if pd is not None and isinstance(df, pd.DataFrame):
+        if options.pd is not None and isinstance(df, options.pd.DataFrame):
             df_lib = "pandas"
-        elif pl is not None and isinstance(df, pl.DataFrame):
+        elif options.pl is not None and isinstance(df, options.pl.DataFrame):
             df_lib = "polars"
         else:
-            if pd is None and pl is None:
+            if options.pd is None and options.pl is None:
                 raise ImportError("A DataFrame library (pandas or polars) must be installed to use insert_df_arrow.")
             raise TypeError(f"df must be either a pandas DataFrame or polars DataFrame, got {type(df).__name__}")
 
         if df_lib == "pandas":
-            if not IS_PANDAS_2:
+            if not options.IS_PANDAS_2:
                 raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
 
-            non_arrow_cols = [col for col, dtype in df.dtypes.items() if not isinstance(dtype, pd.ArrowDtype)]
+            non_arrow_cols = [col for col, dtype in df.dtypes.items() if not isinstance(dtype, options.pd.ArrowDtype)]
             if non_arrow_cols:
                 raise ProgrammingError(
                     f"insert_df_arrow requires all columns to use PyArrow dtypes. Non-Arrow columns found: [{', '.join(non_arrow_cols)}]. "
                 )
             try:
-                arrow_table = arrow.Table.from_pandas(df, preserve_index=False)
+                arrow_table = options.arrow.Table.from_pandas(df, preserve_index=False)
             except Exception as e:
                 raise DataError(f"Failed to convert pandas DataFrame to Arrow table: {e}") from e
         else:

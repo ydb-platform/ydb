@@ -1,0 +1,105 @@
+name: Nightly-Build-Check
+run-name: "Nightly build check: ${{ inputs.build-target || 'ydb/apps/ydb' }}"
+
+on:
+  schedule:
+    - cron: "0 4 * * 1-5"  # 4:00 UTC (7:00 MSK), weekdays only
+  workflow_dispatch:
+    inputs:
+      build-target:
+        description: 'Path to build target'
+        type: string
+        default: "ydb/apps/ydb"
+      binary-name:
+        description: 'Binary name'
+        type: string
+        default: "ydb"
+      telegram-chat-id:
+        description: 'Telegram chat ID for failure notifications'
+        type: string
+        default: "311589523"
+      build-linux-amd:
+        type: boolean
+        description: Build for Linux (amd64)
+        default: false
+      build-linux-arm:
+        type: boolean
+        description: Build for Linux (arm64)
+        default: false
+      build-darwin-amd:
+        type: boolean
+        description: Build for MacOS (amd64)
+        default: false
+      build-darwin-arm:
+        type: boolean
+        description: Build for MacOS (arm64)
+        default: true
+      build-windows-amd:
+        type: boolean
+        description: Build for Windows (amd64)
+        default: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    # Skip scheduled runs in forks; manual dispatch still works everywhere
+    if: github.event_name != 'schedule' || github.repository == 'ydb-platform/ydb'
+    uses: ./.github/workflows/build_binaries.yml
+    with:
+      build-target: ${{ inputs.build-target || 'ydb/apps/ydb' }}
+      binary-name: ${{ inputs.binary-name || 'ydb' }}
+      # Scheduled runs always build main; manual dispatch uses the branch it was launched from.
+      ref: ${{ github.event_name == 'schedule' && 'main' || github.ref_name }}
+      build-linux-amd: ${{ github.event_name != 'schedule' && inputs.build-linux-amd || false }}
+      build-linux-arm: ${{ github.event_name != 'schedule' && inputs.build-linux-arm || false }}
+      build-darwin-amd: ${{ github.event_name != 'schedule' && inputs.build-darwin-amd || false }}
+      build-darwin-arm: ${{ github.event_name == 'schedule' || inputs.build-darwin-arm }}
+      build-windows-amd: ${{ github.event_name == 'schedule' || inputs.build-windows-amd }}
+
+  notify:
+    needs: build
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts/telegram
+      - name: Install dependencies
+        run: pip install requests
+      # Best-effort: if gh query fails (permissions/rate limits/transient errors),
+      # we still want to deliver the failure notification without the job list.
+      - name: Collect failed job names
+        id: failed-jobs
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "jobs=" >> "$GITHUB_OUTPUT"
+          if FAILED=$(gh run view ${{ github.run_id }} --repo ${{ github.repository }} \
+            --json jobs --jq '[.jobs[] | select(.conclusion == "failure") | .name] | join(", ")'); then
+            echo "Failed jobs: $FAILED"
+            echo "jobs=$FAILED" >> "$GITHUB_OUTPUT"
+          else
+            echo "Warning: failed to collect failed job names; continuing without them."
+          fi
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+        run: |
+          BUILD_TARGET="${{ inputs.build-target || 'ydb/apps/ydb' }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          CHAT_ID="${{ inputs.telegram-chat-id || '311589523' }}"
+          FAILED="${{ steps.failed-jobs.outputs.jobs }}"
+          if [ -n "$FAILED" ]; then
+            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. Failed jobs: ${FAILED}. [View run](${RUN_URL})"
+          else
+            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. [View run](${RUN_URL})"
+          fi
+          python .github/scripts/telegram/send_telegram_message.py \
+            --bot-token "$TELEGRAM_BOT_TOKEN" \
+            --chat-id "$CHAT_ID" \
+            --message "$MESSAGE"

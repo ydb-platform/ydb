@@ -78,11 +78,19 @@ namespace NActors {
         bool CheckCapturedSendingType(ESendingType type) const;
     };
 
+    struct TMailboxContext {
+        NHPTimer::STime ScheduledTimestamp = 0;
+        NHPTimer::STime EventEnqueuedTimestamp = 0;
+        ui64 ActivationTimeUs = 0;
+        ui64 EventDeliveryTimeUs = 0;
+    };
+
     struct TThreadContext {
         TWorkerContext WorkerContext;
         TLocalQueueContext LocalQueueContext;
         TThreadActivityContext ActivityContext;
         TExecutionContext ExecutionContext;
+        TMailboxContext MailboxContext;
         TExecutionStats *ExecutionStats = nullptr;
 
 
@@ -136,6 +144,16 @@ namespace NActors {
         ui64 OverwrittenTimePerMailboxTs() const;
         void SetOverwrittenTimePerMailboxTs(ui64 value);
         void ResetOverwrittenTimePerMailboxTs();
+
+        NHPTimer::STime MailboxScheduledTimestampTs() const;
+        void SetMailboxScheduledTimestampTs(NHPTimer::STime value);
+        NHPTimer::STime EventEnqueuedTimestampTs() const;
+        void SetEventEnqueuedTimestampTs(NHPTimer::STime value);
+        ui64 ActivationTimeUs() const;
+        void SetActivationTimeUs(ui64 value);
+        ui64 EventDeliveryTimeUs() const;
+        void SetEventDeliveryTimeUs(ui64 value);
+        void ResetMailboxContext();
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp

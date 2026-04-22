@@ -1,8 +1,6 @@
-#include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/meta_support_links.h>
 #include <ydb/mvp/meta/support_links/ut/mock_link_source.h>
-
-#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/mvp/meta/ut/meta_test_runtime.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -25,13 +23,6 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(MetaSupportLinks) {
-    class TTestActorRuntime : public NActors::TTestActorRuntimeBase {
-    public:
-        TTestActorRuntime() {
-            Initialize();
-        }
-    };
-
     class TSupportLinksTestActor : public NMVP::TMetaSupportLinksGetHandlerActor {
     public:
         NYdb::NTable::TDataQueryResult Result;
@@ -99,13 +90,6 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             return runtime.Register(new NMVP::TMetaSupportLinksHandlerActor(httpProxy, Location, Settings));
         }
     };
-
-    static NHttp::THttpIncomingRequestPtr BuildHttpRequest(TStringBuf url, TStringBuf method = "GET") {
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, TStringBuilder() << method << " " << url << " HTTP/1.1\r\nHost: localhost\r\n\r\n");
-        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
-        return request;
-    }
 
     static NYdb::NTable::TDataQueryResult MakeClusterInfoResult() {
         const TString resultSetString = R"(

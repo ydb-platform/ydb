@@ -251,9 +251,27 @@ ydb/tools/ydbd_slice/bin/ydbd_slice install <path_to_databases_config.yaml> all 
 
 ## Tracing setup
 
-1) Install unified agent
+1) Add tracing config to ydb configuration:
+- `ydb/tests/library/harness/resources/default_yaml.yml` for local_cluster configuration
+- `config.yaml` for slice configuration
+```
+tracing_config:
+   backend:
+     opentelemetry:
+       collector_url: grpc://localhost:4316
+       service_name: barkovbg
+```
+Object tracing_config has to be a child to "config"
 
-2) Create unified agent config on the path `/etc/yandex/unified_agent/conf.d`:
+2) There is no other configuration for a slice.
+Address: https://monitoring.yandex-team.ru/projects/kikimr/traces.
+Add filter "service=barkovbg" - where service is service_name from the config.
+
+3) The following instructions apply only to local development.
+
+4) Install unified agent
+
+5) Create unified agent config on the path `/etc/yandex/unified_agent/conf.d`:
 ```
 routes:
   - input:
@@ -277,20 +295,9 @@ routes:
           cluster: !expr "{$file('/Berkanavt/kikimr/cfg/cluster.txt')|ydb-other}"
 ```
 
-3) Restart unified agent `sudo service unified-agent status`
+6) Restart unified agent `sudo service unified-agent status`
 
-4) Add tracing config to ydb configuration:
-- `ydb/tests/library/harness/resources/default_yaml.yml` for local_cluster configuration
-- `config.yaml` for slice configuration
-```
-tracing_config:
-   backend:
-     opentelemetry:
-       collector_url: grpc://localhost:4316
-       service_name: barkovbg
-```
-
-5) View traces in Cloud Monitoring. Example URL:
+7) View traces in Cloud Monitoring. Example URL:
 ```
 https://monitoring-preprod.yandex.cloud/projects/aoedo0ji1lgce9l91har/traces?from=now-1h&to=now&refresh=60000&query=%7Bproject+%3D+%22kikimr%22%2C+service+%3D+%22barkovbg%22%7D
 ```

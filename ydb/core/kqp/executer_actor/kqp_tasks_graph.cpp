@@ -1422,11 +1422,19 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             }
 
             if (lockTxId && GetMeta().LockMode && !isTableImmutable) {
-                input.Meta.StreamLookupSettings->SetLockMode(
+                if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE
+                        && GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
                     // Unique Index needs read lock even in snapshot isolation mode.
-                    input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
-                        ? *GetMeta().LockMode
-                        : NKikimrDataEvents::OPTIMISTIC);
+                    input.Meta.StreamLookupSettings->SetLockMode(NKikimrDataEvents::OPTIMISTIC);
+                } else if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE) {
+                    input.Meta.StreamLookupSettings->SetLookupStrategy(NKqpProto::EStreamLookupStrategy::LOOKUP);
+                    input.Meta.StreamLookupSettings->SetLockMode(*GetMeta().LockMode);
+                } else {
+                    input.Meta.StreamLookupSettings->SetLockMode(*GetMeta().LockMode);
+                }
+            } else if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE
+                    && GetMeta().RequestIsolationLevel != NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
+                input.Meta.StreamLookupSettings->SetLookupStrategy(NKqpProto::EStreamLookupStrategy::LOOKUP);
             }
 
             if (!isTableImmutable) {
@@ -2427,8 +2435,11 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
     }
 
-    if (fullTextSource.HasTakeLimit())
-    {
+    for (const auto& token : fullTextSource.GetQuerySettings().GetTokens()) {
+        settings->MutableQuerySettings()->AddTokens(token);
+    }
+
+    if (fullTextSource.HasTakeLimit()) {
         auto value = ExtractPhyValue(
             stageInfo, fullTextSource.GetTakeLimit(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());

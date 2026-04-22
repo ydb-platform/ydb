@@ -198,7 +198,8 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        std::optional<std::unordered_set<std::string_view>> leftHints, rightHints;
+        std::optional<std::unordered_set<std::string_view>> leftHints;
+        std::optional<std::unordered_set<std::string_view>> rightHints;
         bool hasJoinStrategyHint = false;
         bool isMultiget = false;
         for (auto child : linkOptions->Children()) {
@@ -2299,7 +2300,8 @@ TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabel
 
 bool IsNoPullColumn(TStringBuf columnName) {
     if (columnName.Contains('.')) {
-        TStringBuf table, column;
+        TStringBuf table;
+        TStringBuf column;
         SplitTableName(columnName, table, column);
         columnName = column;
     }

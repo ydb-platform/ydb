@@ -400,6 +400,8 @@ def _do_compile_go(args):
     if args.embed:
         embed_config_name = create_embed_config(args)
         cmd.extend(['-embedcfg', embed_config_name])
+    if args.cover_cfg:
+        cmd.extend(['-coveragecfg', os.path.join(args.output_root, args.cover_cfg)])
     if args.asmhdr:
         cmd += ['-asmhdr', args.asmhdr]
     # Use .symabis (starting from 1.12 version)
@@ -555,15 +557,24 @@ def do_link_exe(args):
         extldflags.extend(cgo_peers)
     if len(extldflags) > 0:
         for p in args.ld_plugins:
-            res = subprocess.check_output([sys.executable, p, sys.argv[0]] + extldflags, cwd=args.build_root).decode().strip()
+            res = (
+                subprocess.check_output([sys.executable, p, sys.argv[0]] + extldflags, cwd=args.build_root)
+                .decode()
+                .strip()
+            )
             if res:
                 extldflags = json.loads(res)[1:]
         cmd.append('-extldflags={}'.format(' '.join(extldflags)))
     cmd.append(compile_args.output)
-    call(cmd, args.build_root)
+    with tempfile.NamedTemporaryFile(mode='w', delete_on_close=False) as response_file:
+        for arg in cmd[1:]:
+            print(arg, file=response_file)
+        response_file.close()
+        cmd = [cmd[0], '@' + response_file.name]
+        call(cmd, args.build_root)
 
 
-def gen_cover_info(args):
+def gen_cover_info(args, test_module: str):
     lines = []
     lines.extend(
         [
@@ -578,8 +589,8 @@ var (
     )
     for var, file in (x.split(':') for x in args.cover_info):
         lines.append(
-            '    coverRegisterFile("{file}", _cover0.{var}.Count[:], _cover0.{var}.Pos[:], _cover0.{var}.NumStmt[:])'.format(
-                file=file, var=var
+            '    coverRegisterFile("{file}", {test_module}.{var}.Count[:], {test_module}.{var}.Pos[:], {test_module}.{var}.NumStmt[:])'.format(
+                file=file, test_module=test_module, var=var
             )
         )
     lines.extend(
@@ -649,8 +660,8 @@ def create_strip_symlink():
 def gen_test_main(args, test_lib_args, xtest_lib_args):
     assert args and (test_lib_args or xtest_lib_args)
     test_miner = args.test_miner
-    test_module_path = test_lib_args.import_path if test_lib_args else xtest_lib_args.import_path
-    is_cover = args.cover_info and len(args.cover_info) > 0
+    cover_mode = args.cover_mode  # Go coverage per Go-package
+    is_cover = args.cover_info and len(args.cover_info) > 0  # deprecated
 
     # Prepare GOPATH
     # $BINDIR
@@ -661,8 +672,17 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
     go_path_root = os.path.join(args.output_root, '__go__')
     test_src_dir = os.path.join(go_path_root, 'src')
     target_os_arch = '_'.join([args.targ_os, args.targ_arch])
-    test_pkg_dir = os.path.join(go_path_root, 'pkg', target_os_arch, os.path.dirname(test_module_path))
-    os.makedirs(test_pkg_dir)
+    any_test_import_paths = []  # new coverage can support test and xtest together
+    test_import_path = test_lib_args.import_path if test_lib_args else None
+    if test_import_path:
+        any_test_import_paths.append(test_import_path)
+        test_pkg_dir = os.path.join(go_path_root, 'pkg', target_os_arch, os.path.dirname(test_import_path))
+        os.makedirs(test_pkg_dir, exist_ok=True)
+    xtest_import_path = xtest_lib_args.import_path if xtest_lib_args else None
+    if xtest_import_path:
+        any_test_import_paths.append(xtest_import_path)
+        xtest_pkg_dir = os.path.join(go_path_root, 'pkg', target_os_arch, os.path.dirname(xtest_import_path))
+        os.makedirs(xtest_pkg_dir, exist_ok=True)
 
     my_env = os.environ.copy()
     my_env['GOROOT'] = ''
@@ -682,76 +702,77 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
 
     # Get the list of "internal" tests
     if test_lib_args:
-        os.makedirs(os.path.join(test_src_dir, test_module_path))
-        os_symlink(test_lib_args.output, os.path.join(test_pkg_dir, os.path.basename(test_module_path) + '.a'))
-        cmd = [test_miner, '-benchmarks', '-tests', test_module_path]
+        os.makedirs(os.path.join(test_src_dir, test_import_path), exist_ok=True)
+        os_symlink(test_lib_args.output, os.path.join(test_pkg_dir, os.path.basename(test_import_path) + '.a'))
+        cmd = [test_miner, '-benchmarks', '-tests', test_import_path]
         tests = [x for x in (call(cmd, test_lib_args.output_root, my_env) or '').strip().split('\n') if len(x) > 0]
         if args.skip_tests:
             tests = filter_out_skip_tests(tests, args.skip_tests)
-    test_main_found = '#TestMain' in tests
 
     # Get the list of "external" tests
     if xtest_lib_args:
-        xtest_module_path = xtest_lib_args.import_path
-        os.makedirs(os.path.join(test_src_dir, xtest_module_path))
-        os_symlink(xtest_lib_args.output, os.path.join(test_pkg_dir, os.path.basename(xtest_module_path) + '.a'))
-        cmd = [test_miner, '-benchmarks', '-tests', xtest_module_path]
+        os.makedirs(os.path.join(test_src_dir, xtest_import_path), exist_ok=True)
+        os_symlink(xtest_lib_args.output, os.path.join(xtest_pkg_dir, os.path.basename(xtest_import_path) + '.a'))
+        cmd = [test_miner, '-benchmarks', '-tests', xtest_import_path]
         xtests = [x for x in (call(cmd, xtest_lib_args.output_root, my_env) or '').strip().split('\n') if len(x) > 0]
         if args.skip_tests:
             xtests = filter_out_skip_tests(xtests, args.skip_tests)
-    xtest_main_found = '#TestMain' in xtests
 
-    test_main_package = None
+    test_main_found = '#TestMain' in tests
+    xtest_main_found = '#TestMain' in xtests
     if test_main_found and xtest_main_found:
         assert False, 'multiple definition of TestMain'
-    elif test_main_found:
+    if test_main_found:
         test_main_package = '_test'
     elif xtest_main_found:
         test_main_package = '_xtest'
+    else:
+        test_main_package = None
 
     shutil.rmtree(go_path_root)
 
-    lines = ['package main', '', 'import (']
-    if test_main_package is None:
-        lines.append('    "os"')
-    lines.extend(['    "testing"', '    "testing/internal/testdeps"'])
-    lines.extend(['    _ "{}library/go/test/yatest"'.format(args.arc_project_prefix)])
+    has_tests = len(tests) > 0
+    has_xtests = len(xtests) > 0
 
-    if len(tests) > 0:
-        lines.append('    _test "{}"'.format(test_module_path))
-    elif test_lib_args:
-        lines.append('    _ "{}"'.format(test_module_path))
-
-    if len(xtests) > 0:
-        lines.append('    _xtest "{}"'.format(xtest_module_path))
-    elif xtest_lib_args:
-        lines.append('    _ "{}"'.format(xtest_module_path))
-
-    if is_cover:
-        lines.append('    _cover0 "{}"'.format(test_module_path))
-    lines.extend([')', ''])
-
-    if compare_versions('1.18', args.goversion) < 0:
-        kinds = ['Test', 'Benchmark', 'Example']
-    else:
-        kinds = ['Test', 'Benchmark', 'FuzzTarget', 'Example']
+    # Original template at https://github.com/golang/go/blob/fefb02adf45c4bcc879bd406a8d61f2a292c26a9/src/cmd/go/internal/load/test.go#L781
+    lines = (
+        [
+            'package main',
+            'import (',
+        ]
+        + (['    "os"'] if not test_main_package else [])  # else unused import os happened
+        # Skip "reflect", because os.Exit called inside TestMain and reflect functions not used
+        + (['    "internal/coverage/cfile"'] if cover_mode else [])
+        + (['    _cover_test "{}"'.format(test_import_path)] if is_cover and test_import_path else [])  # deprecated
+        + (['    _cover_xtest "{}"'.format(xtest_import_path)] if is_cover and xtest_import_path else [])  # deprecated
+        + [
+            '    "testing"',
+            '    "testing/internal/testdeps"',
+            f'    _ "{args.arc_project_prefix}library/go/test/yatest"',
+        ]
+        + (
+            [f'    _test "{test_import_path}"']
+            if has_tests
+            else ([f'    _ "{test_import_path}"'] if test_lib_args else [])
+        )
+        + (
+            [f'    _xtest "{xtest_import_path}"']
+            if has_xtests
+            else ([f'    _ "{xtest_import_path}"'] if xtest_lib_args else [])
+        )
+        + [')', '']
+    )
 
     var_names = []
-    for kind in kinds:
-        var_name = '{}s'.format(kind.lower())
+    for kind in ['Test', 'Benchmark', 'FuzzTarget', 'Example']:
+        var_name = kind[:1].lower() + kind[1:] + 's'
         var_names.append(var_name)
-        lines.append('var {} = []testing.Internal{}{{'.format(var_name, kind))
-        for test in [x for x in tests if x.startswith(kind)]:
-            lines.append('    {{"{test}", _test.{test}}},'.format(test=test))
-        for test in [x for x in xtests if x.startswith(kind)]:
-            lines.append('    {{"{test}", _xtest.{test}}},'.format(test=test))
-        lines.extend(['}', ''])
+        test_lines = [f'    {{"{test}", _test.{test}}},' for test in [x for x in tests if x.startswith(kind)]]
+        xtest_lines = [f'    {{"{xtest}", _xtest.{xtest}}},' for xtest in [x for x in xtests if x.startswith(kind)]]
+        lines.extend([f'var  {var_name} = []testing.Internal{kind}{{'] + test_lines + xtest_lines + ['}', ''])
 
-    if is_cover:
-        lines.extend(gen_cover_info(args))
-
-    lines.append('func main() {')
-    if is_cover:
+    lines.append('func init() {')
+    if is_cover:  # deprecated
         lines.extend(
             [
                 '    testing.RegisterCover(testing.Cover{',
@@ -762,21 +783,42 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
                 '    })',
             ]
         )
-    lines.extend(
-        [
-            '    m := testing.MainStart(testdeps.TestDeps{{}}, {})'.format(', '.join(var_names)),
-            '',
-        ]
-    )
-
-    if test_main_package:
-        lines.append('    {}.TestMain(m)'.format(test_main_package))
-    else:
-        lines.append('    os.Exit(m.Run())')
+    if cover_mode:
+        lines.extend(
+            [
+                f'    testdeps.CoverMode = "{cover_mode}"',
+                f'    testdeps.Covered = "in {', '.join(any_test_import_paths)}"',
+                f'    testdeps.CoverSelectedPackages =  []string{{"{'", "'.join(any_test_import_paths)}"}}',
+                '    testdeps.CoverSnapshotFunc = cfile.Snapshot',
+                '    testdeps.CoverProcessTestDirFunc = cfile.ProcessCoverTestDir',
+                '    testdeps.CoverMarkProfileEmittedFunc = cfile.MarkProfileEmitted',
+            ]
+        )
     lines.extend(['}', ''])
 
+    if is_cover:  # deprecated
+        # old coverage supported or only _cover_test, or only _cover_xtest, never both
+        lines.extend(gen_cover_info(args, '_cover_test' if test_import_path else '_cover_xtest'))
+
+    lines.extend(
+        [
+            'func main() {',
+            f'    m := testing.MainStart(testdeps.TestDeps{{}}, {', '.join(var_names)})',
+        ]
+        + (
+            [
+                f'    {test_main_package}.TestMain(m)',
+                # Skip os.Exit(int(reflect.ValueOf(m).Elem().FieldByName("exitCode").Int()))
+                # os.Exit(m.Run()) called in TestMain in devtools/ya/test/programs/test_tool/resolve_go_coverage/tests/data/testing/main_test.go
+            ]
+            if test_main_package
+            else ['    os.Exit(m.Run())']
+        )
+        + ['}', '']
+    )
+
     content = '\n'.join(lines)
-    # sys.stderr.write('{}\n'.format(content))
+    # sys.stderr.write('\n\n\nCONTENT _test_main.go\n\n\n' + content + '\n\n\n')
     return content
 
 
@@ -825,6 +867,8 @@ def do_link_test(args):
         if test_lib_args:
             xtest_lib_args.module_map[test_import_path] = test_lib_args.output
         need_append_ydx = args.ydx_file and args.srcs and args.vet_flags
+        # Сompile xtest sources without new coverage out config, because it in another package ..._test
+        xtest_lib_args.cover_cfg = None
         do_link_lib(xtest_lib_args)
 
     if need_append_ydx:
@@ -854,6 +898,7 @@ def do_link_test(args):
     if args.vet:
         dump_vet_report_for_tests(test_args, test_lib_args, xtest_lib_args)
     test_args.vet = False
+    test_args.cover_cfg = None
 
     do_link_exe(test_args)
 
@@ -886,6 +931,8 @@ if __name__ == '__main__':
     parser.add_argument('++test_srcs', nargs='*')
     parser.add_argument('++xtest_srcs', nargs='*')
     parser.add_argument('++cover_info', nargs='*')
+    parser.add_argument('++cover-mode', choices=['set', 'count', 'atomic'])
+    parser.add_argument('++cover-cfg')
     parser.add_argument('++ld_plugins', nargs='*')
     parser.add_argument('++output', nargs='?', default=None)
     parser.add_argument('++source-root', default=None)

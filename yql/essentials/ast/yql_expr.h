@@ -13,12 +13,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/checked_deref_ptr.h>
 
-// #define YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
-#ifdef YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
-    #define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
-#else
-    #define YQL_TYPE_ANN_PTR const TTypeAnnotationNode*
-#endif
+#define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
 
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -2443,13 +2438,7 @@ public:
 
     TExprNode& operator=(TExprNode&&) = delete;
 
-    ~TExprNode() {
-        Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
-                       UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
-        Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
-                       UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
-        DestroyPtrs();
-    }
+    ~TExprNode();
 
 private:
     static void DestroyNode(TExprNode::TPtr& node, TExprNode*& root);

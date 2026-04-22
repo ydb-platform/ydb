@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -94,6 +95,12 @@ enum class EFuseMapToMapReduceMode {
     Late     /* "late" */,
 };
 
+enum class ETmpSecurityMode {
+    Disable  /* "disable" */,
+    Auto     /* "auto" */,
+    Force    /* "force" */,
+};
+
 struct TYtSettings {
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
@@ -125,6 +132,8 @@ public:
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpAccount;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
+    NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -173,6 +182,10 @@ public:
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizerPartial;
     NCommon::TConfSetting<bool, Static> OmitInaccessibleRows;
     NCommon::TConfSetting<NSize::TSize, Static> _MinJobStateSizeToPassViaFile;
+    NCommon::TConfSetting<TDuration, Static> _SecureTmpWaitForAclDelay;
+    NCommon::TConfSetting<ui32, Static> _SecureTmpWaitForAclMaxAttempts;
+    NCommon::TConfSetting<NYT::TNode, Static> _SecureTmpAttributes;
+    NCommon::TConfSetting<ETmpSecurityMode, Static> TmpSecurity;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -373,9 +386,11 @@ public:
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
 EJoinCollectColumnarStatisticsMode GetJoinCollectColumnarStatisticsMode(const TYtSettings& settings);
-inline TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster) {
-    return settings.TablesTmpFolder.Get(cluster).GetOrElse(settings.TmpFolder.Get(cluster).GetOrElse({}));
-}
+
+using TSecureTmpStatePtr = std::shared_ptr<const std::atomic<bool>>;
+
+TString GetUserTablesTmpFolder(const TYtSettings& settings, const TString& cluster);
+TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster, const TSecureTmpStatePtr& useSecureTmp, const TYqlOperationOptions& operationOptions);
 
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYtConfiguration>;

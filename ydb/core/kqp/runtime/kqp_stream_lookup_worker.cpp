@@ -41,66 +41,7 @@ TStreamLookupShardReadResult::~TStreamLookupShardReadResult() {
 }
 
 namespace {
-std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
-    const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TOwnedTableRange& range) {
 
-    YQL_ENSURE(partitionInfo);
-
-    const auto& partitions = partitionInfo->GetTablePartitioning();
-
-    // Binary search of the index to start with.
-    size_t idxStart = 0;
-    size_t idxFinish = partitions.size();
-    while ((idxFinish - idxStart) > 1) {
-        size_t idxCur = (idxFinish + idxStart) / 2;
-        const auto& partCur = partitions[idxCur].Range->EndKeyPrefix.GetCells();
-        YQL_ENSURE(partCur.size() <= keyColumnTypes.size());
-        int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
-                                          std::min(partCur.size(), range.From.size()));
-        if (cmp < 0) {
-            idxStart = idxCur;
-        } else {
-            idxFinish = idxCur;
-        }
-    }
-
-    std::vector<TCell> minusInf(keyColumnTypes.size());
-
-    std::vector<std::pair<ui64, TOwnedTableRange>> rangePartition;
-    for (size_t idx = idxStart; idx < partitions.size(); ++idx) {
-        TTableRange partitionRange{
-            idx == 0 ? minusInf : partitions[idx - 1].Range->EndKeyPrefix.GetCells(),
-            idx == 0 ? true : !partitions[idx - 1].Range->IsInclusive,
-            partitions[idx].Range->EndKeyPrefix.GetCells(),
-            partitions[idx].Range->IsInclusive
-        };
-
-        if (range.Point) {
-            int intersection = ComparePointAndRange(
-                range.From,
-                partitionRange,
-                keyColumnTypes,
-                keyColumnTypes);
-
-            if (intersection == 0) {
-                rangePartition.emplace_back(partitions[idx].ShardId, range);
-            } else if (intersection < 0) {
-                break;
-            }
-        } else {
-            int intersection = CompareRanges(range, partitionRange, keyColumnTypes);
-
-            if (intersection == 0) {
-                auto rangeIntersection = Intersect(keyColumnTypes, range, partitionRange);
-                rangePartition.emplace_back(partitions[idx].ShardId, rangeIntersection);
-            } else if (intersection < 0) {
-                break;
-            }
-        }
-    }
-
-    return rangePartition;
-}
 
 struct TReadState {
     std::vector<TOwnedTableRange> PendingKeys;
@@ -281,6 +222,9 @@ public:
                 }).second);
         }
     }
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
+    }
 
     std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
         if (ScheduledReads.empty()) {
@@ -302,7 +246,7 @@ public:
             auto range = std::move(UnprocessedKeys.front());
             UnprocessedKeys.pop_front();
 
-            auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
+            auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
                 if (range.Point) {
                     pointsPerShard[shardId].push_back(std::move(range));
@@ -460,7 +404,8 @@ public:
     bool AllRowsProcessed() final {
         return UnprocessedKeys.empty()
             && ReadStateByReadId.empty()
-            && ReadResults.empty();
+            && ReadResults.empty()
+            && ScheduledReads.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {
@@ -563,10 +508,21 @@ public:
 
     struct TUnprocessedLeftRow {
         TConstArrayRef<TCell> JoinKey;
+        TOwnedTableRange LookupKey;
 
-        explicit TUnprocessedLeftRow(TConstArrayRef<TCell> joinKey)
-            : JoinKey(std::move(joinKey))
-        {}
+        explicit TUnprocessedLeftRow(TConstArrayRef<TCell> joinKey, size_t keySize)
+            : JoinKey(joinKey)
+        {
+            if (joinKey.size() < keySize) {
+                std::vector <TCell> fromCells(keySize - joinKey.size());
+                fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
+                bool fromInclusive = true;
+                bool toInclusive = false;
+                LookupKey = TOwnedTableRange(fromCells, fromInclusive, joinKey, toInclusive);
+            } else {
+                LookupKey = TOwnedTableRange(joinKey);
+            }
+        }
     };
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
@@ -617,10 +573,15 @@ public:
         } else {
             auto [it, success] = PendingLeftRowsByKey.emplace(cellVec, TJoinKeyInfo(joinKeyId));
             if (success) {
-                UnprocessedRows.emplace_back(TUnprocessedLeftRow(cellVec));
+                UnprocessedRows.emplace_back(TUnprocessedLeftRow(cellVec, Settings.KeyColumns.size()));
             }
             it->second.ResultSeqNos.push_back(resultBatch);
             resultBatch->AddJoinKey(it->second.JoinKeyId);
+            if (!success) {
+                for (const auto& cachedRow : it->second.CachedRows) {
+                    resultBatch->TryBuildResultRow(cachedRow);
+                }
+            }
         }
     }
 
@@ -643,6 +604,10 @@ public:
 
     void AddInputRow(TConstArrayRef<TCell>) final {
         YQL_ENSURE(false);
+    }
+
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
     }
 
     std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
@@ -747,7 +712,7 @@ public:
             auto range = std::move(UnprocessedKeys.front());
             UnprocessedKeys.pop_front();
 
-            auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
+            auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
                 YQL_ENSURE(PendingLeftRowsByKey.contains(ExtractKeyPrefix(range)));
 
@@ -763,22 +728,7 @@ public:
             TUnprocessedLeftRow unprocessedRow = std::move(UnprocessedRows.front());
             UnprocessedRows.pop_front();
             bool hasRanges = false;
-            std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
-            if (unprocessedRow.JoinKey.size() < Settings.KeyColumns.size()) {
-                // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                std::vector <TCell> fromCells(Settings.KeyColumns.size() - unprocessedRow.JoinKey.size());
-                fromCells.insert(fromCells.begin(), unprocessedRow.JoinKey.begin(), unprocessedRow.JoinKey.end());
-                bool fromInclusive = true;
-                bool toInclusive = false;
-
-                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(),
-                    TOwnedTableRange(fromCells, fromInclusive, unprocessedRow.JoinKey, toInclusive)
-                );
-            } else {
-                // full pk, build point
-                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), TOwnedTableRange(unprocessedRow.JoinKey));
-            }
-
+            auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), TTableRange(unprocessedRow.LookupKey));
             for (auto[shardId, range] : partitions) {
                 hasRanges = true;
                 if (range.Point) {
@@ -908,7 +858,8 @@ public:
             && ReadStateByReadId.empty()
             && ResultRowsBySeqNo.empty()
             && PendingLeftRowsByKey.empty()
-            && FlushedResultRows.empty();
+            && FlushedResultRows.empty()
+            && ScheduledReads.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {
@@ -1191,7 +1142,7 @@ private:
         }
     }
 
-    TConstArrayRef<TCell> ExtractKeyPrefix(const TOwnedTableRange& range) {
+    TConstArrayRef<TCell> ExtractKeyPrefix(const TTableRange& range) {
         if (range.From.size() == Settings.LookupKeyColumns.size()) {
             return range.From;
         }

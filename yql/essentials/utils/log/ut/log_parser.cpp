@@ -15,7 +15,7 @@ TLogRow ParseJsonLogRow(TStringBuf str) {
         .ProcId = FromString<pid_t>(json["@fields"]["pid"].GetStringSafe()),
         .ThreadId = [&] {
             TString string = json["@fields"]["tid"].GetStringSafe();
-            if (string.substr(0, 2) == "0x") {
+            if (string.StartsWith("0x")) {
                 return IntFromString<ui64, 16, TStringBuf>(string.substr(2));
             } else {
                 return IntFromString<ui64, 10, TStringBuf>(string);
@@ -54,7 +54,7 @@ TLogRow ParseLegacyLogRow(TStringBuf str) {
         .Level = TLevelHelpers::FromString(match[2].str()),
         .ProcName = match[3].str(),
         .ProcId = FromString<pid_t>(match[4].str()),
-        .ThreadId = match[5].str().substr(0, 2) == "0x"
+        .ThreadId = match[5].str().starts_with("0x")
                         ? IntFromString<ui64, 16, TStringBuf>(match[5].str().substr(2))
                         : IntFromString<ui64, 10, TStringBuf>(match[5].str()),
         .Component = TComponentHelpers::FromString(match[6].str()),

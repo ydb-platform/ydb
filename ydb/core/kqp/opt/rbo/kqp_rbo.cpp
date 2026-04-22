@@ -26,9 +26,11 @@ TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IR
 }
 
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
-    if (props & ERuleProperties::RequireParents) {
-        root.ComputeParents();
-    }
+    // FIXME: Parents are currently always required, because we need to update them when a rule fires
+    root.ComputeParents();
+    //if (props & ERuleProperties::RequireParents) {
+    //    root.ComputeParents();
+    //}
     if (props & (ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics)) {
         if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
             Y_ENSURE(false, "RBO type annotation failed");
@@ -71,11 +73,18 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
-                    if (iter.Parent) {
-                        iter.Parent->Children[iter.ChildIndex] = op;
-                    } else if (!iter.SubplanIU) {
+                    // If the original operator had parents, update all parents
+                    if (iter.Current->Parents.size()) {
+                        for (auto & [parent, parentIdx] : iter.Current->Parents) {
+                            parent->Children[parentIdx] = op;
+                        }
+                    } 
+                    // Otherwise, if its not a subplan, it was root, so update root
+                    else if (!iter.SubplanIU) {
                         root.SetInput(op);
-                    } else {
+                    }
+                    // Finally, it's a subplan, so update the subplan 
+                    else {
                         root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
                     }
 
@@ -125,6 +134,10 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }
+
+    ui64 counter = 0;
+    rboCtx.ExecutionJson = root.GetExecutionJson(counter);
+    rboCtx.ExplainJson = root.GetExplainJson(counter);
 
     return ConvertToPhysical(root, rboCtx);
 }

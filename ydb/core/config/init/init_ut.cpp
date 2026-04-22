@@ -7,9 +7,11 @@
 #include <ydb/core/config/init/init.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/public/lib/ydb_cli/common/common.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NConfig;
+using NYdb::NConsoleClient::TInitializationException;
 
 Y_UNIT_TEST_SUITE(Init) {
     Y_UNIT_TEST(TWithDefaultParser) {
@@ -52,6 +54,54 @@ Y_UNIT_TEST_SUITE(Init) {
             };
 
             UNIT_ASSERT_EXCEPTION(parse(), NLastGetopt::TUsageException);
+        }
+    }
+
+    Y_UNIT_TEST(DefaultErrorCollectorPreservesStructuredErrorCode) {
+        auto errorCollector = MakeDefaultErrorCollector();
+
+        try {
+            errorCollector->Fatal("Failed to parse protobuf file: broken.pb", "YDB-CFG24");
+            UNIT_FAIL("Expected exception");
+        } catch (const TInitializationException& e) {
+            UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG24");
+            UNIT_ASSERT_VALUES_EQUAL(TString(e.what()), "Failed to parse protobuf file: broken.pb");
+        }
+    }
+
+    Y_UNIT_TEST(LoadBootstrapConfigReportsStructuredParseError) {
+        TProtoConfigFileProviderMock protoConfigFileProvider;
+        protoConfigFileProvider.SavedFiles["broken.pb"] = "not a protobuf";
+        auto errorCollector = MakeDefaultErrorCollector();
+        NKikimrConfig::TAppConfig appConfig;
+
+        try {
+            LoadBootstrapConfig(protoConfigFileProvider, *errorCollector, {"broken.pb"}, appConfig);
+            UNIT_FAIL("Expected exception");
+        } catch (const TInitializationException& e) {
+            UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG24");
+            TString msg = e.what();
+            UNIT_ASSERT_C(msg.StartsWith("Failed to parse protobuf file \"broken.pb\": "), msg);
+            UNIT_ASSERT_C(msg.Contains("line 1, column 5"), msg);
+            UNIT_ASSERT_C(msg.Contains("has no field named \"not\""), msg);
+        }
+    }
+
+    Y_UNIT_TEST(LoadBootstrapConfigReportsMissingFileError) {
+        auto protoConfigFileProvider = MakeDefaultProtoConfigFileProvider();
+        auto errorCollector = MakeDefaultErrorCollector();
+        NKikimrConfig::TAppConfig appConfig;
+        const TString missingPath = "/tmp/ydb_init_ut_missing.pb";
+
+        try {
+            LoadBootstrapConfig(*protoConfigFileProvider, *errorCollector, {missingPath}, appConfig);
+            UNIT_FAIL("Expected exception");
+        } catch (const TInitializationException& e) {
+            UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG25");
+            UNIT_ASSERT_VALUES_EQUAL(TString(e.what()), "File /tmp/ydb_init_ut_missing.pb does not exist");
         }
     }
 }
@@ -153,6 +203,26 @@ std::unique_ptr<NConfig::IEnv> GetEnvMock(const TString& hostName = "localhost",
 }
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(InitStructuredErrors) {
+    Y_UNIT_TEST(ParseSeedNodesReportsMissingFileError) {
+        TTempFileHandle configFile = CreateConfigFile("this content is never parsed");
+        const TString missingSeedNodesPath = configFile.Name() + ".missing";
+        TVector<TString> args;
+        PreFillArgs(args, configFile.Name());
+        args.push_back("--seed-nodes");
+        args.push_back(missingSeedNodesPath);
+
+        try {
+            Y_UNUSED(TransformConfig(args, GetEnvMock()));
+            UNIT_FAIL("Expected exception");
+        } catch (const TInitializationException& e) {
+            UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG18");
+            UNIT_ASSERT_VALUES_EQUAL(TString(e.what()), TStringBuilder() << "Seed nodes file not found: " << missingSeedNodesPath);
+        }
+    }
+}
 
 
 Y_UNIT_TEST_SUITE(StaticNodeSelectorsInit) {

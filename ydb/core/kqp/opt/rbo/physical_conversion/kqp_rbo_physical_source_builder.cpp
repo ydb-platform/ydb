@@ -56,10 +56,11 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 settings.SequentialInFlight = 1;
             }
 
+            TExprNode::TPtr ranges = Read->GetRanges() ? Read->GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read->TableCallable)
-                .Ranges<TCoVoid>().Build()
+                .Ranges(ranges)
                 .Columns().Add(columns).Build()
                 .Settings(settings.BuildNode(Ctx, Pos))
                 .ExplainPrompt<TCoNameValueTupleList>().Build()
@@ -83,11 +84,6 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 .Input(narrowMap)
             .Done().Ptr();
             // clang-format on
-
-            if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(Read)) {
-                source =
-                    NPhysicalConvertionUtils::BuildMultiConsumerHandler(source, Read->Props.NumOfConsumers.value(), Ctx, Pos);
-            }
             break;
         }
         default:

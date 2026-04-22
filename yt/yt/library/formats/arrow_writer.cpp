@@ -1088,6 +1088,38 @@ void SerializeFloatColumn(
         });
 }
 
+void SerializeAllNullStringLikeColumn(
+    const TTypedBatchColumn& typedColumn,
+    TRecordBatchSerializationContext* context)
+{
+    const auto* column = typedColumn.Column;
+    // Both Values and NullBitmap are absent, which means all values are null.
+    // We still need to emit the proper Arrow binary column structure:
+    // validity bitmap (all zeros), offsets (all zeros), empty data buffer.
+    context->AddFieldNode(
+        column->ValueCount,
+        /*nullCount*/ column->ValueCount);
+
+    // Validity bitmap: empty buffer (null bitmap in Arrow IPC means all-null).
+    context->AddBuffer(
+        /*size*/ 0,
+        [=] (TMutableRef /*dstRef*/) {
+        });
+
+    // Offsets: (valueCount + 1) zero int32 values.
+    context->AddBuffer(
+        sizeof(i32) * (column->ValueCount + 1),
+        [=] (TMutableRef dstRef) {
+            ::memset(dstRef.Begin(), 0, dstRef.Size());
+        });
+
+    // Data: empty buffer.
+    context->AddBuffer(
+        /*size*/ 0,
+        [=] (TMutableRef /*dstRef*/) {
+        });
+}
+
 void SerializeStringLikeColumn(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context)
@@ -2385,6 +2417,16 @@ void SerializeColumn(
     }
 
     auto simpleType = CastToV1Type(typedColumn.Type).first;
+
+    // Both Values and NullBitmap being absent means all values are null.
+    if (!column->Values && !column->NullBitmap) {
+        if (IsStringLikeType(simpleType) || IsTzType(typedColumn.Type)) {
+            SerializeAllNullStringLikeColumn(typedColumn, context);
+        } else {
+            SerializeNullColumn(typedColumn, context);
+        }
+        return;
+    }
 
     if (IsComplexTypeColumn(typedColumn.Type, config)) {
         SerializeComplexTypeColumn(typedColumn, context, config, buffers);

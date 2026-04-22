@@ -7,7 +7,7 @@ using namespace NKikimr::NMiniKQL::NTest::NWindow;
 Y_UNIT_TEST_SUITE(TCoreWinFramesCollectorTest) {
 
 Y_UNIT_TEST(BasicRowInterval) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(2, EDirection::Preceding),
@@ -48,7 +48,7 @@ Y_UNIT_TEST(BasicRowInterval) {
 }
 
 Y_UNIT_TEST(BasicRowIntervalUnimportant) {
-    TTestCase<ui64, ESortOrder::Unimportant> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Unimportant> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(2, EDirection::Preceding),
@@ -89,7 +89,7 @@ Y_UNIT_TEST(BasicRowIntervalUnimportant) {
 }
 
 Y_UNIT_TEST(BothLeftRowIntervals) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(3, EDirection::Preceding),
@@ -130,7 +130,7 @@ Y_UNIT_TEST(BothLeftRowIntervals) {
 }
 
 Y_UNIT_TEST(BothRightRowIntervals) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(1, EDirection::Following),
@@ -171,7 +171,7 @@ Y_UNIT_TEST(BothRightRowIntervals) {
 }
 
 Y_UNIT_TEST(MaxValueLeftInterval) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(std::numeric_limits<ui64>::max(), EDirection::Preceding),
@@ -212,7 +212,7 @@ Y_UNIT_TEST(MaxValueLeftInterval) {
 }
 
 Y_UNIT_TEST(MaxValueRightInterval) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(0, EDirection::Following),
@@ -253,11 +253,11 @@ Y_UNIT_TEST(MaxValueRightInterval) {
 }
 
 Y_UNIT_TEST(BasicRangeInterval) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{5, EDirection::Preceding},
-                TInputRange<TRangeVariant>{5, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(15), TYield(), TYield(), ui64(20), ui64(25), ui64(30)},
@@ -294,11 +294,11 @@ Y_UNIT_TEST(BasicRangeInterval) {
 }
 
 Y_UNIT_TEST(RangeIntervalPowersOfTwo) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{4, EDirection::Preceding},
-                TInputRange<TRangeVariant>{4, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(4), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(4), EDirection::Following}
             }
         },
         .InputElements = {TYield(), TYield(), ui64(1), TYield(), ui64(2), ui64(4), ui64(8), ui64(16), ui64(32)},
@@ -340,7 +340,7 @@ Y_UNIT_TEST(RangeIntervalPowersOfTwo) {
 }
 
 Y_UNIT_TEST(SingleElement) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(2, EDirection::Preceding),
@@ -361,7 +361,7 @@ Y_UNIT_TEST(SingleElement) {
 }
 
 Y_UNIT_TEST(EmptyStream) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(2, EDirection::Preceding),
@@ -374,7 +374,7 @@ Y_UNIT_TEST(EmptyStream) {
 }
 
 Y_UNIT_TEST(YieldOnlyStream) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(2, EDirection::Preceding),
@@ -388,15 +388,15 @@ Y_UNIT_TEST(YieldOnlyStream) {
 }
 
 Y_UNIT_TEST(TwoRangeIntervals_OneInsideAnother) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{10, EDirection::Preceding},
-                TInputRange<TRangeVariant>{10, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Following}
             },
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{5, EDirection::Preceding},
-                TInputRange<TRangeVariant>{5, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50)},
@@ -448,15 +448,15 @@ Y_UNIT_TEST(TwoRangeIntervals_OneInsideAnother) {
 }
 
 Y_UNIT_TEST(TwoRangeIntervals_PartiallyOverlapLeft) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{15, EDirection::Preceding},
-                TInputRange<TRangeVariant>{5, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(15), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following}
             },
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{5, EDirection::Preceding},
-                TInputRange<TRangeVariant>{15, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(15), EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50)},
@@ -508,15 +508,15 @@ Y_UNIT_TEST(TwoRangeIntervals_PartiallyOverlapLeft) {
 }
 
 Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointLeft) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{30, EDirection::Preceding},
-                TInputRange<TRangeVariant>{20, EDirection::Preceding}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(30), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(20), EDirection::Preceding}
             },
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{10, EDirection::Preceding},
-                TInputRange<TRangeVariant>{10, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50), ui64(60)},
@@ -576,15 +576,15 @@ Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointLeft) {
 }
 
 Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointRight) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{10, EDirection::Preceding},
-                TInputRange<TRangeVariant>{10, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Following}
             },
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{20, EDirection::Following},
-                TInputRange<TRangeVariant>{30, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(20), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(30), EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50), ui64(60)},
@@ -644,15 +644,15 @@ Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointRight) {
 }
 
 Y_UNIT_TEST(TwoRangeIntervals_PartiallyOverlapRight) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{5, EDirection::Preceding},
-                TInputRange<TRangeVariant>{15, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(15), EDirection::Following}
             },
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{5, EDirection::Following},
-                TInputRange<TRangeVariant>{25, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(25), EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50), ui64(60)},

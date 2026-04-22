@@ -2,45 +2,149 @@ import argparse
 import json
 import logging
 import sys
+import warnings
 
-from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.stability.nemesis.internal.config import Settings, get_orchestrator_settings
-from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
-from ydb.tests.tools.nemesis.library import monitor
-from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch
+# Suppress noisy DeprecationWarnings from vendored Flask / Werkzeug / pkgutil
+# (pkgutil.find_loader, ast.Str, etc.) so they don't pollute --help and CLI output.
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster  # noqa: E402
+from ydb.tests.stability.nemesis.internal.config import Settings, get_orchestrator_settings  # noqa: E402
+from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services  # noqa: E402
+from ydb.tests.tools.nemesis.library import monitor  # noqa: E402
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch  # noqa: E402
+
+
+_DESCRIPTION = """\
+Nemesis — chaos / stability testing tool for YDB clusters.
+
+Deploys an orchestrator + per-host agents that inject faults
+(kill nodes, block network, break disks, …) on a schedule and
+monitor cluster health.
+
+User commands:
+  install
+                        Deploy nemesis binary and systemd units to every host listed in
+                        the cluster YAML, then start the services.  The first host becomes
+                        the orchestrator; the rest become agents.
+  stop
+                        Stop nemesis-agent systemd services on every cluster host.
+
+Commands used by the test framework (not intended for direct use):
+  run
+                        Start the Flask application (orchestrator or agent depending on
+                        --nemesis-type / NEMESIS_TYPE).  Normally launched by systemd
+                        after ``install``.
+  liveness
+                        Run orchestrator liveness checks once and print a JSON report to
+                        stdout.  Designed to be called as a subprocess with a timeout.
+
+Examples:
+  # Install and start nemesis on the cluster (two-file config):
+  nemesis install \\
+      --yaml-config-location /path/to/config.yaml \\
+      --database-config-location /path/to/databases.yaml
+
+  # Install with a single combined YAML:
+  nemesis install --yaml-config-location /path/to/cluster.yaml
+
+  # Stop all services:
+  nemesis stop --yaml-config-location /path/to/config.yaml
+"""
 
 
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Nemesis App - Stability testing application",
-        allow_abbrev=False
+        prog="nemesis",
+        description=_DESCRIPTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
 
-    # Positional command argument
     parser.add_argument(
         'command',
-        nargs='?',
-        choices=['run', 'stop', 'liveness', 'install'],
-        help='Command to run: install (install and run nemesis services), stop (stop nemesis services), liveness (run liveness checks), run (run agent)'
+        choices=['install', 'stop', 'run', 'liveness'],
+        help=(
+            "install — deploy and start services on the cluster; "
+            "stop — stop services on the cluster; "
+            "run — start the Flask app (used by systemd); "
+            "liveness — one-shot liveness check (JSON to stdout)"
+        ),
     )
 
-    # Optional settings arguments (override env and defaults)
-    parser.add_argument('--nemesis-type', choices=['orchestrator', 'agent'],
-                        help='Type of nemesis: orchestrator or agent')
-    parser.add_argument('--app-host', help='Host to bind the application to')
-    parser.add_argument('--app-port', type=int, help='Port to bind the application to')
-    parser.add_argument('--yaml-config-location', help='Path to cluster.yaml config file or to cluster template')
-    parser.add_argument('--database-config-location', help='Path to database.yaml config file')
-    parser.add_argument('--static-location', help='Path to static files directory')
-    parser.add_argument('--mon-port', type=int, default=8765, help='Monitoring port for liveness checks')
-    parser.add_argument(
-        '--install-root',
-        help='Remote install root on cluster hosts (default from NEMESIS_INSTALL_ROOT / Settings.install_root)',
+    # ---- Cluster configuration ----
+    cfg = parser.add_argument_group("cluster configuration")
+    cfg.add_argument(
+        '--yaml-config-location',
+        metavar='PATH',
+        help=(
+            'Path to the cluster YAML config (contains config.hosts, '
+            'config.bridge_config, etc.).  '
+            'When only one config file is used, this is the combined '
+            'cluster + database template.'
+        ),
     )
-    parser.add_argument(
+    cfg.add_argument(
+        '--database-config-location',
+        metavar='PATH',
+        help=(
+            'Path to the database template YAML (contains domains, '
+            'dynamic_slots, etc.).  Required only when the cluster '
+            'layout is split into two files.'
+        ),
+    )
+
+    # ---- Network / ports ----
+    net = parser.add_argument_group("network")
+    net.add_argument(
+        '--app-host',
+        metavar='HOST',
+        help='Address to bind the HTTP API to (default: "::", all interfaces).',
+    )
+    net.add_argument(
+        '--app-port',
+        type=int,
+        metavar='PORT',
+        help='Port for the HTTP API (default: 31434).',
+    )
+    net.add_argument(
+        '--mon-port',
+        type=int,
+        default=8765,
+        metavar='PORT',
+        help='Monitoring port for /sensors endpoint (default: 8765).',
+    )
+
+    # ---- Deployment layout ----
+    deploy = parser.add_argument_group("deployment layout (install / run)")
+    deploy.add_argument(
+        '--nemesis-type',
+        choices=['orchestrator', 'agent'],
+        help='Role of this process: orchestrator or agent (set automatically by install).',
+    )
+    deploy.add_argument(
+        '--static-location',
+        metavar='PATH',
+        help='Path to the static files directory served by the orchestrator UI.',
+    )
+    deploy.add_argument(
+        '--install-root',
+        metavar='PATH',
+        help=(
+            'Remote install root on cluster hosts where binaries and configs '
+            'are placed (default: /Berkanavt/nemesis).  '
+            'Override via NEMESIS_INSTALL_ROOT env var.'
+        ),
+    )
+    deploy.add_argument(
         '--kikimr-logs-directory',
-        help='Kikimr logs path for agent safety wardens (default from KIKIMR_LOGS_DIRECTORY)',
+        metavar='PATH',
+        help=(
+            'Kikimr log directory on agents, used by safety wardens to grep '
+            'for error markers (default: /Berkanavt/kikimr/logs/).  '
+            'Override via KIKIMR_LOGS_DIRECTORY env var.'
+        ),
     )
 
     return parser.parse_args()

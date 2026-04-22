@@ -730,7 +730,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
             } else {
                 Y_ABORT("Unreachable");
             }
-        } else if (subType == "BLOOM_FILTER" || subType == "BLOOM_NGRAM_FILTER") {
+        } else if (subType == "BLOOM_FILTER" || subType == "BLOOM_NGRAM_FILTER" || subType == "MIN_MAX") {
             if (!isLocalIndex) {
                 Ctx_.Error() << subType << " index can only be LOCAL";
                 return false;
@@ -740,6 +740,8 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
                 indexes.back().Type = TIndexDescription::EType::LocalBloomFilter;
             } else if (subType == "BLOOM_NGRAM_FILTER") {
                 indexes.back().Type = TIndexDescription::EType::LocalBloomNgramFilter;
+            } else if (subType == "MIN_MAX") {
+                indexes.back().Type = TIndexDescription::EType::LocalMinMax;
             } else {
                 YQL_ENSURE(false, "Unreachable");
             }
@@ -748,7 +750,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
             return false;
         }
     } else if (isLocalIndex) {
-        AltNotImplemented("local", indexType);
+        Ctx_.Error() << "local index must specify subtype with USING";
         return false;
     }
 
@@ -779,6 +781,11 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         if (indexes.back().Type == TIndexDescription::EType::LocalBloomFilter ||
             indexes.back().Type == TIndexDescription::EType::LocalBloomNgramFilter) {
             Ctx_.Error() << "COVER is not supported for local bloom indexes";
+            return false;
+        }
+
+        if (indexes.back().Type == TIndexDescription::EType::LocalMinMax) {
+            Ctx_.Error() << "COVER is not supported for local MIN_MAX index";
             return false;
         }
 
@@ -3725,7 +3732,8 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
         }
         case TRule_type_name_composite_TBlock1::kAlt13: {
             auto& callableType = block.GetAlt13().GetRule_type_name_callable1();
-            TMaybe<std::pair<TVector<TNodePtr>, bool>> requiredArgs, optionalArgs;
+            TMaybe<std::pair<TVector<TNodePtr>, bool>> requiredArgs;
+            TMaybe<std::pair<TVector<TNodePtr>, bool>> optionalArgs;
             bool namedArgsStarted = false;
             size_t optionalArgsCount = 0;
             if (callableType.HasBlock4()) {
@@ -5815,6 +5823,7 @@ bool TSqlTranslation::ParseViewQuery(
     const TString& service,
     const TDeferredAtom& cluster)
 {
+    Token(beforeToken);
     if (!body.HasBlock2()) {
         Error() << "Empty view body is not allowed";
         return false;
@@ -6166,7 +6175,15 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
     }
 }
 
-TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context) {
+TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPathIgnoreAt(const TRule_object_ref& node, TObjectOperatorContext& context, bool useTablePrefix) {
+    return DoParseObjectPath(node, context, /* ignoreAt = */ true, useTablePrefix);
+}
+
+TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context) {
+    return DoParseObjectPath(node, context, /* ignoreAt = */ false, /* useTablePrefix = */ true);
+}
+
+TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix) {
     // object_ref: (cluster_expr .)? id_or_at
 
     if (node.HasBlock1()) {
@@ -6176,12 +6193,11 @@ TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, T
     }
 
     const auto& [hasAt, objectId] = Id(node.GetRule_id_or_at2(), *this);
-    if (hasAt) {
+    if (!ignoreAt && hasAt) {
         Error() << "'@' is not allowed prefix for object name";
         return Nothing();
     }
-
-    return BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId);
+    return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId) : objectId);
 }
 
 bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {

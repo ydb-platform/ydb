@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // We should be able to get read hints
         auto readHint =
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.MarkFresh(ELocation::DDisk0, 30 * DefaultBlockSize);
         dirtyMap.MarkFresh(ELocation::DDisk2, 40 * DefaultBlockSize);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -119,13 +119,27 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "123{[D.....P.++..][10..19][0..9]};",
             readHint.DebugPrint());
+
+        // Counters on primary PBuffers contains one record with 40960 bytes
+        for (auto location: TLocationMask::MakePrimaryPBuffers()) {
+            auto counters = dirtyMap.GetPBufferCounters(location);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalBytesCount);
+
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLockedRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentLockedBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.TotalLockedRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.TotalLockedBytesCount);
+        }
     }
 
     Y_UNIT_TEST(ShouldReadAfterWriteFinishedFromLastLsn)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -155,13 +169,42 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "124{[D.....P.+.*.][10..19][0..9]};",
             readHint.DebugPrint());
+
+        readHint.RangeHints[0].Lock.Arm();
+
+        {
+            // PBuffer0 contains two records, one locked for read
+            auto counters = dirtyMap.GetPBufferCounters(ELocation::PBuffer0);
+            UNIT_ASSERT_VALUES_EQUAL(2, counters.CurrentRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(81920, counters.CurrentBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(2, counters.TotalRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(81920, counters.TotalBytesCount);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentLockedRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentLockedBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalLockedRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalLockedBytesCount);
+        }
+        {
+            // HOPBuffer0 contains one records, one locked for read
+            auto counters = dirtyMap.GetPBufferCounters(ELocation::HOPBuffer0);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalBytesCount);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentLockedRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentLockedBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalLockedRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalLockedBytesCount);
+        }
     }
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndErase)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Without write, we should not get flush hints
         auto flushHint = dirtyMap.MakeFlushHint(1);
@@ -278,13 +321,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Should remove inflight items
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+
+        // All current counters back to zero.
+        for (auto location: TLocationMask::MakePrimaryPBuffers()) {
+            auto counters = dirtyMap.GetPBufferCounters(location);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(0, counters.CurrentBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(2, counters.TotalRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(81920, counters.TotalBytesCount);
+        }
     }
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable additional Hand-off
         auto desired = TLocationMask::Make(true, true, true, true, false);
@@ -332,7 +384,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, true, true, true, false);
@@ -379,7 +431,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, false, true, true, true);
@@ -426,7 +478,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0
         // Disable DDisk0
@@ -477,7 +529,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
         // Enable 4 DDisks. Available DDisks is enough for a quorum.
         auto desired = TLocationMask::Make(true, true, true, true, false);
         dirtyMap.UpdateConfig(desired, {});
@@ -520,7 +572,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Only 3 DDisks available by default. For some requests, ddisk will not
         // be sufficient for quorum.
@@ -561,7 +613,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -594,7 +646,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
         TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         dirtyMap.WriteFinished(
@@ -623,7 +675,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.RestorePBuffer(
             123,
@@ -653,7 +705,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Block written to four PBuffers
         dirtyMap.RestorePBuffer(
@@ -688,13 +740,26 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "123{[D.....P+++*.][10..19][0..9]};",
             readHint.DebugPrint());
+
+        for (auto location:
+             {ELocation::PBuffer0,
+              ELocation::PBuffer1,
+              ELocation::PBuffer2,
+              ELocation::HOPBuffer0})
+        {
+            auto counters = dirtyMap.GetPBufferCounters(location);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.CurrentRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
+            UNIT_ASSERT_VALUES_EQUAL(1, counters.TotalRecordsCount);
+            UNIT_ASSERT_VALUES_EQUAL(40960, counters.TotalBytesCount);
+        }
     }
 
     Y_UNIT_TEST(ShouldFlushFromHandOff)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Block written to two primary PBuffers and one hand-off PBuffer
         dirtyMap.RestorePBuffer(
@@ -731,7 +796,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -791,7 +856,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.RestorePBuffer(
             123,

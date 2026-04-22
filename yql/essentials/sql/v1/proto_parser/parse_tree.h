@@ -8,6 +8,8 @@ using namespace NSQLv1Generated;
 
 TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_query& rule Y_LIFETIME_BOUND);
 
+bool IsEmptyQuery(google::protobuf::Message* message);
+
 const TRule_tuple_or_expr* GetTupleOrExpr(const TRule_smart_parenthesis& msg Y_LIFETIME_BOUND);
 
 bool IsSelect(const TRule_smart_parenthesis& msg);

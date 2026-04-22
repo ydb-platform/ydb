@@ -7,9 +7,15 @@
 namespace NSQLTranslationV1 {
 
 TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_stmt_list& rule) {
-    TVector<const TRule_sql_stmt_core*> statements(Reserve(1 + rule.GetBlock3().size()));
-    statements.emplace_back(&rule.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
-    for (const auto& block : rule.GetBlock3()) {
+    if (!rule.HasBlock2()) {
+        return {};
+    }
+
+    const auto& block = rule.GetBlock2();
+
+    TVector<const TRule_sql_stmt_core*> statements(Reserve(1 + block.GetBlock2().size()));
+    statements.emplace_back(&block.GetRule_sql_stmt1().GetRule_sql_stmt_core2());
+    for (const auto& block : block.GetBlock2()) {
         statements.emplace_back(&block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
     }
     return statements;
@@ -24,6 +30,21 @@ TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_query& rule) {
         case NSQLv1Generated::TRule_sql_query::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
+}
+
+bool IsEmptyQuery(google::protobuf::Message* message) {
+    YQL_ENSURE(message);
+
+    auto ast = static_cast<const TSQLv1ParserAST&>(*message);
+    const auto& sqlQuery = ast.GetRule_sql_query();
+
+    if (sqlQuery.GetAltCase() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1 &&
+        !sqlQuery.GetAlt_sql_query1().GetRule_sql_stmt_list1().HasBlock2())
+    {
+        return true;
+    }
+
+    return false;
 }
 
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {

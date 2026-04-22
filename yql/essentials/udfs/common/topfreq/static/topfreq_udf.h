@@ -364,7 +364,8 @@ public:
             }
 
             if (name == GetName) {
-                ui32 indexF, indexV;
+                ui32 indexF;
+                ui32 indexV;
                 auto itemType = builder.Struct()->AddField<ui64>("Frequency", &indexF).AddField("Value", valueType, &indexV).Build();
                 auto resultType = builder.List()->Item(itemType).Build();
 

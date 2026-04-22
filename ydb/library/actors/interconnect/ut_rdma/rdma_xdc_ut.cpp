@@ -1087,7 +1087,10 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
     if (GetParam() == NInterconnect::NRdma::ECqMode::POLLING) {
         flags = TTestICCluster::RDMA_POLLING_CQ;
     }
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags);
+    // Heavy payload validation in this test may starve progress long enough to trip default DeadPeer=2s.
+    // Use the same relaxed connectivity envelope as SendMixBigShuffle.
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
     std::mutex mtx;
     mtx.lock();
     TEventsForTest events(500);

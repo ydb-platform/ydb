@@ -18,6 +18,7 @@ enum class EStatus {
     NOT_FOUND,
     NOT_TOPIC,
     UNAUTHORIZED,
+    UNAUTHORIZED_WITH_DESCRIBE_ACCESS,
     UNKNOWN_ERROR
 };
 
@@ -26,9 +27,11 @@ struct TTopicInfo {
 
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
+    bool CdcStream = false;
 
     ui64 CreateStep = 0;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 };
 
@@ -48,6 +51,7 @@ struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopics
 struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NACLib::EAccessRights AccessRights;
+    bool ForceSyncVersion = false;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

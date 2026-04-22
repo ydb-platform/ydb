@@ -191,20 +191,15 @@ namespace {
                         }
 
                         // TODO(alexvru): checksumming here
-                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, false, false, {}, NWilson::TTraceId(), false);
+                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, false, true, false, {}, NWilson::TTraceId(), false);
                     }
                 }
             }
 
             for (auto& [vDiskId, ev]: vDiskToEv) {
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Send multiput"), (VDisk, vDiskId.ToString()));
-
-                ui32 blobsSize = 0;
-                for (const auto& item: ev->Record.GetItems()) {
-                    blobsSize += item.GetBuffer().size();
-                }
-
-                SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), blobsSize);
+                const size_t bytes = ev->GetBufferBytes();
+                SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), bytes);
             }
         }
 

@@ -16,9 +16,34 @@ enum EWriteMode {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TDDiskConfig
+{
+    optional bool UseSQPoll = 1;
+    optional bool UseIOPoll = 2;
+    optional bool ForcePDiskFallback = 3;
+}
+
+message TPBufferConfig
+{
+    // Initial number of chunks occupied by PB, default 4
+    optional uint32 InitChunks = 1;
+
+    // In memory cache limit in bytes, default 128MiB
+    optional uint64 MaxInMemoryCache = 2;
+
+    // default 8
+    optional uint32 MaxChunkRestoreInflight = 3;
+
+    // default 5000ms
+    optional uint32 UpdateFreeSpaceInfoMilliseconds = 4;
+
+    // Storage limit for one tablet in bytes, default 4TiB
+    optional uint64 PerTabletStorageLimit = 5;
+}
+
 message TStorageServiceConfig
 {
-    // Schemeshard directory for volumes.
+    // SchemeShard directory for volumes.
     optional string SchemeShardDir = 1;
 
     // Channel configuration.
@@ -32,7 +57,7 @@ message TStorageServiceConfig
     // Number of reties before pipe client reports failure.
     optional uint32 PipeClientRetryCount = 6;
 
-    // Mimimum timeout before pipe client reconnect attempt.
+    // Minimum timeout before pipe client reconnect attempt.
     optional uint32 PipeClientMinRetryTime = 7;
 
     // Maximum timeout before pipe client reconnect attempt.
@@ -60,5 +85,17 @@ message TStorageServiceConfig
     optional uint32 PBufferReplyTimeoutMicroseconds = 15;
 
     // Delay (in microseconds) before writing to handoff persistent buffers.
-    optional uint32 WriteHandoffDelay = 16;
+    optional uint32 WriteHedgingDelay = 16;
+
+    // Size of VChunk (in bytes). Default is 128 MB.
+    optional uint64 VChunkSize = 17;
+
+    // Thread pool size.
+    optional uint32 ThreadPoolSize = 18;
+
+    optional TDDiskConfig GlobalDDiskConfig = 19;
+    optional TPBufferConfig GlobalPBufferConfig = 20;
+
+    // Timeout (in milliseconds) for write request handlers.
+    optional uint32 WriteRequestTimeout = 21;
 }

@@ -73,7 +73,7 @@ SELECT
     tm.days_in_state_filtered AS days_in_state_filtered,
     CAST(CASE
         WHEN (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN 'Skipped'
-        WHEN tm.days_in_mute_state >= 30 THEN 'MUTED: delete candidate'
+        WHEN tm.days_in_mute_state > 30 THEN 'MUTED: delete candidate'
         ELSE 'MUTED: in sla' 
     END
     as String) AS resolution,
@@ -104,5 +104,5 @@ LEFT JOIN $gim_latest AS gim
     AND tm.branch = gim.branch
     AND tm.build_type = gim.build_type
 WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
-    AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
+    AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%')
     AND tm.is_test_chunk = 0;

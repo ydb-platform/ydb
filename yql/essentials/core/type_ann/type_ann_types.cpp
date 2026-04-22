@@ -257,7 +257,8 @@ namespace NYql::NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            bool isUniversal1, isUniversal2;
+            bool isUniversal1;
+            bool isUniversal2;
             if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isUniversal1)) {
                 return IGraphTransformer::TStatus::Error;
             }

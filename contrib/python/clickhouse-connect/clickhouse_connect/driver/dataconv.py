@@ -9,7 +9,7 @@ from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import int_size
 from clickhouse_connect.driver.errors import NONE_IN_NULLABLE_COLUMN
 from clickhouse_connect.driver.types import ByteSource
-from clickhouse_connect.driver.options import np
+from clickhouse_connect.driver import options
 
 
 MONTH_DAYS = (0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365)
@@ -104,6 +104,7 @@ def build_lc_nullable_column(index: Sequence, keys: array.array, null_obj: Any):
 
 
 def to_numpy_array(column: Sequence):
+    np = options.np
     arr = np.empty((len(column),), dtype=np.object)
     arr[:] = column
     return arr

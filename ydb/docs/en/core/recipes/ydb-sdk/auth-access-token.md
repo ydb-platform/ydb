@@ -2,13 +2,17 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Below are examples of the code for authentication using a token in different {{ ydb-short-name }} SDKs.
+Below are examples of authentication with a token in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
+  {% list tabs %}
+
+  - Native SDK
+
+    ```go
     package main
 
     import (
@@ -18,125 +22,131 @@ Below are examples of the code for authentication using a token in different {{ 
       "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  {% cut "If you use a connector to create a connection to {{ ydb-short-name }}" %}
+    {% cut "If you use a connector to create a connection to {{ ydb-short-name }}" %}
 
-  ```go
-  package main
+      ```go
+      package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+      import (
+        "context"
+        "database/sql"
+        "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+        "github.com/ydb-platform/ydb-go-sdk/v3"
+      )
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+      func main() {
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+        nativeDriver, err := ydb.Open(ctx,
+          os.Getenv("YDB_CONNECTION_STRING"),
+          ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+        )
+        if err != nil {
+          panic(err)
+        }
+        defer nativeDriver.Close(ctx)
+        connector, err := ydb.Connector(nativeDriver)
+        if err != nil {
+          panic(err)
+        }
+        db := sql.OpenDB(connector)
+        defer db.Close()
+        ...
+      }
+      ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "If you use a connection string" %}
+    {% cut "If you use a connection string" %}
 
-  ```go
-  package main
+      ```go
+      package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+      import (
+        "context"
+        "database/sql"
+        "os"
 
-    _ "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+        _ "github.com/ydb-platform/ydb-go-sdk/v3"
+      )
 
-  func main() {
-    db, err := sql.Open("ydb", "grpcs://localohost:2135/local?token="+os.Getenv("YDB_TOKEN"))
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close()
-    ...
-  }
-  ```
+      func main() {
+        db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
+        if err != nil {
+          panic(err)
+        }
+        defer db.Close()
+        ...
+      }
+      ```
 
-  {% endcut %}
+    {% endcut %}
 
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String accessToken) {
-      AuthProvider authProvider = new TokenAuthProvider(accessToken);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localohost:2135/local")
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String accessToken) {
+        AuthProvider authProvider = new TokenAuthProvider(accessToken);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localhost:2135/local")
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      // Connect with the specified token value
-      Properties props1 = new Properties();
-      props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        // Connection with an explicit authentication token value
+        Properties props1 = new Properties();
+        props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
+            doWork(connection);
+        }
 
-      // Connect with the token value read from the specified file path
-      Properties props2 = new Properties();
-      props2.setProperty("tokenFile", "~/.ydb_token");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Connection with the token read from the specified file
+        Properties props2 = new Properties();
+        props2.setProperty("tokenFile", "~/.ydb_token");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and authentication parameters as above (for example `spring.datasource.url` with query parameters or `spring.datasource.*` for the token and token file).
+
+  {% endlist %}
+
+- JavaScript
 
   {% include [auth-access-token](../../_includes/nodejs/auth-access-token.md) %}
 

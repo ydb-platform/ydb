@@ -141,6 +141,18 @@ struct TSqsEvents {
         EvActionCounterChanged,
         EvLocalCounterChanged,
 
+        EvDeduplicateMessageBatch,
+        EvDeduplicateMessageBatchResponse,
+
+        EvGetMessageGroups,
+        EvGetMessageGroupsResponse,
+
+        /// Periodic wakeup for deferred LogBroker topic creation (SQS service self-schedules).
+        EvPeriodicCreateTopic,
+
+        /// Result of deferred PersQueue topic creation (see deferred_create_topic.cpp).
+        EvDeferredTopicCreationResult,
+
         EvEnd,
     };
 
@@ -575,6 +587,15 @@ struct TSqsEvents {
     struct TEvQueueLeaderDecRef : public NActors::TEventLocal<TEvQueueLeaderDecRef, EvQueueLeaderDecRef> {
     };
 
+    struct TEvPeriodicCreateTopic : public NActors::TEventLocal<TEvPeriodicCreateTopic, EvPeriodicCreateTopic> {
+    };
+
+    struct TEvDeferredTopicCreationResult : public NActors::TEventLocal<TEvDeferredTopicCreationResult, EvDeferredTopicCreationResult> {
+        TString UserName;
+        TString QueueName;
+        bool Success = false;
+    };
+
     struct TEvGetQueueId : public NActors::TEventLocal<TEvGetQueueId, EvGetQueueId> {
         TString RequestId;
         TString UserName;
@@ -710,6 +731,29 @@ struct TSqsEvents {
         std::vector<TMessageResult> Statuses;
     };
 
+    struct TEvDeduplicateMessageBatch : public NActors::TEventLocal<TEvDeduplicateMessageBatch, EvDeduplicateMessageBatch> {
+        TString RequestId;
+        TString SenderId;
+        std::vector<TString> DeduplicationMessageIds;
+    };
+
+    struct TEvDeduplicateMessageBatchResponse : public NActors::TEventLocal<TEvDeduplicateMessageBatchResponse, EvDeduplicateMessageBatchResponse> {
+        TEvDeduplicateMessageBatchResponse(std::unordered_map<TString, std::pair<TString, ui64>>&& blockedDeduplicationMessageIds)
+            : StatusCode(Ydb::StatusIds::SUCCESS)
+            , BlockedDeduplicationMessageIds(std::move(blockedDeduplicationMessageIds))
+        {
+        }
+
+        TEvDeduplicateMessageBatchResponse(Ydb::StatusIds::StatusCode statusCode)
+            : StatusCode(statusCode)
+        {
+        }
+
+        Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::SUCCESS;
+        // deduplication message id -> sequenceNumber
+        std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds;
+    };
+
     // Request to try to receive message batch.
     // While processing this request leader doesn't perform long polling.
     struct TEvReceiveMessageBatch : public NActors::TEventLocal<TEvReceiveMessageBatch, EvReceiveMessageBatch> {
@@ -739,6 +783,32 @@ struct TSqsEvents {
             TString SenderId;
         };
         std::vector<TMessageResult> Messages;
+    };
+
+    struct TEvGetMessageGroups : public NActors::TEventLocal<TEvGetMessageGroups, EvGetMessageGroups> {
+        TEvGetMessageGroups(TString requestId)
+            : RequestId(std::move(requestId))
+        {
+        }
+
+        TString RequestId;
+    };
+
+    struct TEvGetMessageGroupsResponse : public NActors::TEventLocal<TEvGetMessageGroupsResponse, EvGetMessageGroupsResponse> {
+
+        TEvGetMessageGroupsResponse(std::vector<TString>&& messageGroups)
+            : StatusCode(Ydb::StatusIds::SUCCESS)
+            , MessageGroups(std::move(messageGroups))
+        {
+        }
+
+        TEvGetMessageGroupsResponse(Ydb::StatusIds::StatusCode statusCode)
+            : StatusCode(statusCode)
+        {
+        }
+
+        Ydb::StatusIds::StatusCode StatusCode;
+        std::vector<TString> MessageGroups;
     };
 
     struct TEvDeleteMessageBatch : public NActors::TEventLocal<TEvDeleteMessageBatch, EvDeleteMessageBatch> {

@@ -56,6 +56,7 @@ class ClusterKillTabletByTypeNemesis(MonitoredAgentActor):
                 self._logger.info("=== INJECT_FAULT SUCCESS ===")
             except Exception as e:
                 self._logger.error("tablet_kill failed: %s", e)
+                raise
         else:
             self._prepare_state()
             if self._tablet_ids:
@@ -171,6 +172,7 @@ class ClusterChangeTabletGroupNemesis(MonitoredAgentActor):
                 self.on_success_inject_fault()
             except Exception as e:
                 self._logger.error("change_tablet_group failed: %s", e)
+                raise
         else:
             self._prepare_state()
             if self._tablet_ids:
@@ -209,6 +211,7 @@ class ClusterBulkChangeTabletGroupNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("bulk change tablet group failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload

@@ -13,6 +13,7 @@ struct TVolumeConfig
     const ui32 BlockSize = 0;
     const ui64 BlockCount = 0;
     const ui64 BlocksPerStripe = 0;
+    const ui64 VChunkSize = 0;
 };
 
 using TVolumeConfigPtr = std::shared_ptr<TVolumeConfig>;

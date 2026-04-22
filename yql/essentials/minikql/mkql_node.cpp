@@ -1602,7 +1602,8 @@ bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ign
         return false;
     }
 
-    TCallablePayload parsedPayload(Payload_), parsedPayloadToCompare(typeToCompare.Payload_);
+    TCallablePayload parsedPayload(Payload_);
+    TCallablePayload parsedPayloadToCompare(typeToCompare.Payload_);
     for (size_t index = 0; index < typeToCompare.ArgumentsCount_; ++index) {
         if (parsedPayload.GetArgumentName(index) != parsedPayloadToCompare.GetArgumentName(index)) {
             return false;

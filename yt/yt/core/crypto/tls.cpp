@@ -49,22 +49,22 @@ constexpr auto TlsBufferSize = 1_MB;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Get all saved SSL errors for current thread.
+// Gets all saved SSL errors for current thread.
 TError GetLastSslError(TString message)
 {
     auto lastSslError = ERR_peek_last_error();
-    TStringBuilder errorStr;
+    TStringBuilder errorBuilder;
     ERR_print_errors_cb([] (const char* str, size_t len, void* ctx) {
         auto& out = *reinterpret_cast<TStringBuilder*>(ctx);
-        if (!out.GetLength()) {
+        if (out.GetLength() > 0) {
             out.AppendString(", ");
         }
         out.AppendString(TStringBuf(str, len));
         return 1;
-    }, &errorStr);
+    }, &errorBuilder);
     return TError(NRpc::EErrorCode::SslError, std::move(message), TError::DisableFormat)
         << TErrorAttribute("ssl_last_error_code", lastSslError)
-        << TErrorAttribute("ssl_error", errorStr.Flush());
+        << TErrorAttribute("ssl_error", errorBuilder.Flush());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,16 +109,13 @@ TString GetFingerprintSHA256(const TX509Ptr& certificate)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TSslContextImpl
+class TSslContextImpl
     : public TRefCounted
 {
+public:
     TSslContextImpl()
     {
         Reset();
-    }
-
-    ~TSslContextImpl()
-    {
     }
 
     SSL_CTX* GetContext() const

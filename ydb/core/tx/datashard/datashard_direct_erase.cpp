@@ -148,16 +148,17 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         if (auto collector = params.GetChangeCollector()) {
+            auto userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_TTL).Build();
             if (!volatileDependencies.empty()) {
                 if (!params.GlobalTxId) {
                     throw TNeedGlobalTxId();
                 }
 
-                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, BUILTIN_ACL_CDC_TTL)) {
+                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, userCtx)) {
                     pageFault = true;
                 }
             } else {
-                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, BUILTIN_ACL_CDC_TTL)) {
+                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, userCtx)) {
                     pageFault = true;
                 }
             }

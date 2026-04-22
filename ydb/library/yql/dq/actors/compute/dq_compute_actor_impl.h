@@ -198,7 +198,6 @@ protected:
         , Task(task, std::move(arena))
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
-        , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
@@ -348,7 +347,6 @@ protected:
             TxId,
             Task.GetId(),
             RuntimeSettings.CollectFull(),
-            CanAllocateExtraMemory,
             NActors::TActivationContext::ActorSystem());
     }
 
@@ -391,8 +389,7 @@ protected:
         TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
         TStringBuilder failureReason = TStringBuilder()
             << "Mkql memory limit exceeded, allocated by task " << Task.GetId() << ": " << GetMkqlMemoryLimit()
-            << ", host: " << HostName()
-            << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
+            << ", host: " << HostName();
 
         if (!memoryConsumptionDetails.empty()) {
             failureReason << ", memory manager details for current node: " << memoryConsumptionDetails;
@@ -2683,7 +2680,6 @@ protected:
     TString LogPrefix;
     const TComputeRuntimeSettings RuntimeSettings;
     TComputeMemoryLimits MemoryLimits;
-    const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;

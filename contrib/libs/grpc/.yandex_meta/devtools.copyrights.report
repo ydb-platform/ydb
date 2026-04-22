@@ -29,17 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 05bdd09fb9fdb384a61f2eb54df462d6
-BELONGS src/proto/grpc/status/ya.make
-    License text:
-        // Copyright 2016 Google Inc.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/proto/grpc/status/status.proto [1:1]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 06745079442081a41390888905fc6bdb
 BELONGS ya.make
     License text:

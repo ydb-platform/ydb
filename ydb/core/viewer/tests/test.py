@@ -70,25 +70,42 @@ class TestViewer(object):
         return requests.post("http://localhost:%s/login" % cls.cluster.nodes[1].mon_port, json=request)
 
     @classmethod
+    def _split_cookies_from_headers(cls, headers):
+        if not headers or 'Cookie' not in headers:
+            return headers, {}
+        headers = dict(headers)
+        cookie_str = headers.pop('Cookie')
+        cookies = {}
+        for part in cookie_str.split(';'):
+            part = part.strip()
+            if '=' in part:
+                name, value = part.split('=', 1)
+                cookies[name.strip()] = value.strip()
+        return headers, cookies
+
+    @classmethod
     def call_viewer_api_get(cls, url, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.get("http://localhost:%s%s" % (port, url), headers=headers)
+        return requests.get("http://localhost:%s%s" % (port, url), headers=headers, cookies=cookies)
 
     @classmethod
     def call_viewer_api_post(cls, url, body=None, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers)
+        return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers, cookies=cookies)
 
     @classmethod
     def call_viewer_api_delete(cls, url, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.delete("http://localhost:%s%s" % (port, url), headers=headers)
+        return requests.delete("http://localhost:%s%s" % (port, url), headers=headers, cookies=cookies)
 
     @classmethod
     def get_result(cls, result):
@@ -178,6 +195,13 @@ class TestViewer(object):
         return cls.call_viewer_delete(url, params)
 
     @classmethod
+    def _make_request(cls, method, url, headers=None, **kwargs):
+        if headers is None:
+            headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
+        return method(url, headers=headers, cookies=cookies, **kwargs)
+
+    @classmethod
     def wait_for_cluster_ready(cls):
         wait_time = 0
         max_wait_time = 300
@@ -187,10 +211,10 @@ class TestViewer(object):
                 while True:
                     try:
                         print("Waiting for node %s to be ready" % node_id)
-                        result_counter = cls.get_result(requests.get("http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port, headers=cls.default_headers))
+                        result_counter = cls.get_result(cls._make_request(requests.get, "http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port))
                         if result_counter['status_code'] != 200:
                             break
-                        result = cls.get_result(requests.get("http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port, headers=cls.default_headers))
+                        result = cls.get_result(cls._make_request(requests.get, "http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port))
                         if 'status_code' in result and result.status_code != 200:
                             break
                         if 'SystemStateInfo' not in result or len(result['SystemStateInfo']) == 0:
@@ -266,16 +290,18 @@ class TestViewer(object):
                 all_good = False
                 print("Waiting for database %s to be ready" % database)
                 while True:
-                    result = cls.get_result(requests.get(
+                    result = cls.get_result(cls._make_request(
+                        requests.get,
                         "http://localhost:%s/viewer/tenantinfo?database=%s" %
-                        (cls.cluster.nodes[1].mon_port, database), headers=cls.default_headers))  # force connect between nodes
+                        (cls.cluster.nodes[1].mon_port, database)))  # force connect between nodes
                     if 'status_code' in result and result['status_code'] != 200:
                         break
                     if 'CoresUsed' not in result['TenantInfo'][0]:
                         break
-                    result = cls.get_result(requests.get(
+                    result = cls.get_result(cls._make_request(
+                        requests.get,
                         "http://localhost:%s/viewer/healthcheck?database=%s" %
-                        (cls.cluster.nodes[1].mon_port, database), headers=cls.default_headers))  # force connect between nodes
+                        (cls.cluster.nodes[1].mon_port, database)))  # force connect between nodes
                     if 'status_code' in result and result['status_code'] != 200:
                         break
                     if result['self_check_result'] != 'GOOD':
@@ -301,16 +327,18 @@ class TestViewer(object):
                         bad += 1
                 if bad > 0:
                     break
-                result = cls.get_result(requests.get(
+                result = cls.get_result(cls._make_request(
+                    requests.get,
                     "http://localhost:%s/storage/groups?fields_required=all" %
-                    (cls.cluster.nodes[1].mon_port), headers=cls.default_headers))  # force connect between nodes
+                    (cls.cluster.nodes[1].mon_port)))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if len(result['StorageGroups']) < 5:
                     break
-                result = cls.get_result(requests.get(
+                result = cls.get_result(cls._make_request(
+                    requests.get,
                     "http://localhost:%s/viewer/cluster" %
-                    (cls.cluster.nodes[1].mon_port), headers=cls.default_headers))  # force connect between nodes
+                    (cls.cluster.nodes[1].mon_port)))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if 'StorageTotal' not in result or result['StorageTotal'] == 0:
@@ -727,6 +755,30 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_content_and_tabletcounters_missing_params(cls):
+        """Stable 400 for missing path / tablet selector (avoid browse / scheme timeouts)."""
+        result = {}
+        result['content_no_path'] = cls.get_viewer("/viewer/content", {
+            'database': cls.dedicated_db,
+        })
+        result['content_whitespace_path'] = cls.get_viewer("/viewer/content", {
+            'database': cls.dedicated_db,
+            'path': '   ',
+        })
+        result['tabletcounters_no_path_no_tablet'] = cls.get_viewer("/viewer/tabletcounters", {
+            'database': cls.dedicated_db,
+        })
+        assert result['content_no_path'].get('status_code') == 400, result['content_no_path']
+        assert "Parameter 'path' is required" in result['content_no_path'].get('text', ''), result['content_no_path']
+        assert result['content_whitespace_path'].get('status_code') == 400, result['content_whitespace_path']
+        assert "Parameter 'path' is required" in result['content_whitespace_path'].get('text', ''), result['content_whitespace_path']
+        assert result['tabletcounters_no_path_no_tablet'].get('status_code') == 400, result['tabletcounters_no_path_no_tablet']
+        assert (
+            "Parameter 'path' or 'tablet_id' is required" in result['tabletcounters_no_path_no_tablet'].get('text', '')
+        ), result['tabletcounters_no_path_no_tablet']
+        return result
+
+    @classmethod
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result
@@ -899,6 +951,15 @@ class TestViewer(object):
     def test_viewer_query_issue_13945(cls):
         result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT AsList();',
+            'schema': 'multi'
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+
+    @classmethod
+    def test_viewer_query_issues_printing(cls):
+        result = cls.get_viewer_db("/viewer/query", {
+            'query': '$y = SELECT CAST(1 AS Uint32) + 1 AS Data; SELECT CAST(Data AS List<List<Int32>>) FROM $y',
             'schema': 'multi'
         })
         cls.delete_keys_recursively(result, {'Version', 'version'})
@@ -1319,7 +1380,8 @@ class TestViewer(object):
         # Make raw HTTP request to get multipart response
         port = cls.cluster.nodes[1].mon_port
         headers = {'Accept': 'multipart/x-mixed-replace'}
-        response = requests.get("http://localhost:%s%s?%s" % (port, path, urlencode(params)), headers=headers)
+        response = cls._make_request(requests.get, "http://localhost:%s%s?%s" % (port, path, urlencode(params)),
+                                     headers={**cls.default_headers, **headers})
 
         if response.status_code != 200:
             return {"status_code": response.status_code, "text": response.text}
@@ -1532,6 +1594,29 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def assert_access_denied(cls, response, case_name):
+        assert response.get('status_code') == 403, f"{case_name}: expected status_code=403, got {response}"
+        text = response.get('text', '')
+        assert (
+            text == 'Access denied'
+            or text == 'Administration access required when force=true'
+            or 'SID is not allowed' in text
+        ), (
+            f"{case_name}: expected access denied/admin-force message or HTML SID rejection, got {response}"
+        )
+
+    @classmethod
+    def assert_force_retry_possible(cls, response, expected, case_name):
+        has_force_retry_possible = 'forceRetryPossible' in response
+        assert has_force_retry_possible == expected, (
+            f"{case_name}: expected forceRetryPossible present={expected}, got {response}"
+        )
+        if expected:
+            assert response.get('forceRetryPossible') is True, (
+                f"{case_name}: expected forceRetryPossible=true, got {response}"
+            )
+
+    @classmethod
     def test_security(cls):
         result = {}
         result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
@@ -1642,16 +1727,46 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
+        # /pdisk/restart had undefined behavior when pdisk_id is empty or had more than two '-' parts
+        result['restart_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['restart_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-2-3',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['restart_pdisk_missing_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={}, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+
+        result['status_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '',
+            'status': 'ACTIVE',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['status_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '1-2-3',
+            'status': 'ACTIVE',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+
         result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
+        cls.assert_force_retry_possible(result['restart_pdisk_root'], True, 'restart_pdisk_root')
         result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         }), ['debugMessage'])
+        cls.assert_force_retry_possible(result['restart_pdisk_monitoring'], False, 'restart_pdisk_monitoring')
         result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
         }, headers={
@@ -1669,24 +1784,41 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         }), ['debugMessage'])
+        cls.assert_access_denied(result['restart_pdisk_database_force'], 'restart_pdisk_database_force')
         result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
         }), ['debugMessage'])
+        cls.assert_access_denied(result['restart_pdisk_viewer_force'], 'restart_pdisk_viewer_force')
         result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         }), ['debugMessage'])
+        cls.assert_access_denied(result['restart_pdisk_monitoring_force'], 'restart_pdisk_monitoring_force')
         result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
+
+        result['status_pdisk_monitoring_force'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        cls.assert_access_denied(result['status_pdisk_monitoring_force'], 'status_pdisk_monitoring_force')
+        result['evict_vdisk_monitoring_force'] = cls.post_viewer("/vdisk/evict", body={
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        cls.assert_access_denied(result['evict_vdisk_monitoring_force'], 'evict_vdisk_monitoring_force')
         return result
 
     @classmethod

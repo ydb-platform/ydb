@@ -59,19 +59,28 @@ namespace NTabletFlatExecutor {
 
         class TBackupLogic {
         public:
-            void Start(IOps *ops, TActorId owner, TActorId changelogWriter, ui64 inFlightBytesLimit) {
-                Ops = ops;
+            TBackupLogic(TCommitManager* manager)
+                : Manager(manager)
+            {
+            }
+
+            void Start(TActorId owner, TActorId changelogWriter, ui64 inFlightBytesLimit) {
                 Owner = owner;
                 Writer = changelogWriter;
                 InFlightBytesLimit = inFlightBytesLimit;
                 Running = true;
+
+                Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(1);
             }
 
             void Stop() {
                 if (Running) {
-                    Ops->Send(Writer, new TEvents::TEvPoisonPill);
+                    Manager->Ops->Send(Writer, new TEvents::TEvPoisonPill);
+
+                    Manager->MonCo->Simple()[TMonCo::BACKUP_RUNNING].Set(0);
+                    Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(0);
                 }
-                *this = TBackupLogic();
+                *this = TBackupLogic(Manager);
             }
 
             bool IsRunning() const {
@@ -95,11 +104,12 @@ namespace NTabletFlatExecutor {
                     return;
                 }
 
-                auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs);
+                auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs, TActivationContext::Monotonic());
                 ui64 evSize = ev->GetTotalSize();
                 if (evSize <= InFlightBytesLimit - InFlightBytes) {
                     InFlightBytes += evSize;
-                    Ops->Send(Writer, ev.Release());
+                    Manager->Ops->Send(Writer, ev.Release());
+                    Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(InFlightBytes);
                 } else {
                     InFlightOverflow = true;
                     auto error = TStringBuilder()
@@ -114,18 +124,23 @@ namespace NTabletFlatExecutor {
             void OnProcessedBytes(ui64 bytes) {
                 Y_ENSURE(InFlightBytes >= bytes);
                 InFlightBytes -= bytes;
+                Manager->MonCo->Simple()[TMonCo::BACKUP_CHANGELOG_INFLIGHT_BYTES].Set(InFlightBytes);
             }
 
             void OnSnapshotCompleted(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-                Ops->Send(Writer, ev->ReleaseBase().Release());
+                Manager->Ops->Send(Writer, ev->ReleaseBase().Release());
             }
 
             TActorId GetWriter() const {
                 return Writer;
             }
 
+            ui64 GetInFlightBytes() const {
+                return InFlightBytes;
+            }
+
         private:
-            IOps* Ops = nullptr;
+            TCommitManager* Manager = nullptr;
             TActorId Owner;
             TActorId Writer;
             bool Running = false;
@@ -142,6 +157,7 @@ namespace NTabletFlatExecutor {
             , Turns_(steppedCookieAllocatorFactory.Sys(NBoot::TCookie::EIdx::TurnLz4))
             , Annex(steppedCookieAllocatorFactory.Data())
             , Turns(1, Turns_.Get(), NBlockIO::BlockSize)
+            , BackupLogic(this)
         {
 
         }

@@ -7,6 +7,7 @@
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
@@ -14,6 +15,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -28,8 +31,11 @@ public:
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
-        TDuration writeHandoffDelay,
-        TDuration traceSamplePeriod);
+        ui64 vChunkSize,
+        TDuration writeHedgingDelay,
+        TDuration writeRequestTimeout,
+        TDuration traceSamplePeriod,
+        NMonitoring::TDynamicCounterPtr counters);
 
     ~TVChunk();
 
@@ -72,7 +78,7 @@ private:
     void OnWriteBlocksResponse(
         TTracedPromise<TWriteBlocksLocalResponse> promise,
         TBlockRange64 range,
-        const TWriteRequestExecutor::TResponse& response,
+        const TBaseWriteRequestExecutor::TResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
     void DoFlush();
@@ -92,11 +98,16 @@ private:
     const ui32 BlockSize;
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
-    const TDuration WriteHandoffDelay;
+    const TDuration WriteHedgingDelay;
+    const TDuration WriteRequestTimeout;
     const TDuration TraceSamplePeriod;
 
     TBlocksDirtyMap BlocksDirtyMap{BlockSize, BlocksCount};
     bool DirtyMapRestored = false;
+
+    TVChunkCounters Counters;
+
+    void UpdatePendingCounters();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

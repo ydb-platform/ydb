@@ -77,7 +77,8 @@ void TestUnary(const T aa) {
 template <typename T>
 void TestBinary(const T ll, const T rr) {
     using Test = TWide<typename THalfOf<T>::Type>;
-    const Test lt(ll), rt(rr);
+    const Test lt(ll);
+    const Test rt(rr);
 
     {
         const auto exp = ll & rr;

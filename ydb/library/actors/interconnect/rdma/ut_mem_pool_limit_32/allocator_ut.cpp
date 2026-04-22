@@ -6,6 +6,7 @@
 
 #include <util/random/fast.h>
 #include <util/random/random.h>
+#include <util/system/info.h>
 
 #include <thread>
 
@@ -49,6 +50,13 @@ TEST_F(TAllocatorSuite32, SlotPoolLimit) {
         regions.push_back(reg);
     }
 
+    // Expected behavior check: even with exhausted RDMA pool, clone falls back
+    // to regular memory and preserves size.
+    auto cloned = regions.front()->Clone();
+    ASSERT_TRUE(cloned) << "clone failed";
+    ASSERT_TRUE(cloned->GetData().data()) << "invalid cloned address";
+    ASSERT_TRUE(cloned->GetData().size() == regions.front()->GetSize()) << "invalid cloned size";
+
     regions.erase(regions.begin()); // free one region
 
     {
@@ -59,6 +67,34 @@ TEST_F(TAllocatorSuite32, SlotPoolLimit) {
     }
 
     regions.clear();
+
+    {
+        static const ui64 pageAlignMask = NSystemInfo::GetPageSize() - 1;
+        std::vector<NInterconnect::NRdma::TMemRegionPtr> pageAlignedRegions;
+        pageAlignedRegions.reserve(8);
+        size_t j = 0;
+        for (;; ++j) {
+            auto reg = pool->Alloc(sz, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED);
+            if (!reg) {
+                UNIT_ASSERT(j == 8); // 32 / 4
+                break;
+            }
+            ASSERT_TRUE(reg->GetAddr()) << "invalid address";
+            ASSERT_TRUE(reg->GetSize() == sz) << "invalid size of allocated chunk";
+            ASSERT_TRUE((reinterpret_cast<ui64>(reg->GetAddr()) & pageAlignMask) == 0ull) << "source is not page aligned";
+            pageAlignedRegions.push_back(reg);
+        }
+
+        // One more fallback-triggered scope: exhausted pool + page-aligned source clone.
+        auto clonedAligned = pageAlignedRegions.front()->Clone();
+        ASSERT_TRUE(clonedAligned) << "clone failed";
+        ASSERT_TRUE(clonedAligned->GetData().data()) << "invalid cloned address";
+        ASSERT_TRUE(clonedAligned->GetData().size() == pageAlignedRegions.front()->GetSize()) << "invalid cloned size";
+        ASSERT_TRUE((reinterpret_cast<ui64>(clonedAligned->GetData().data()) & pageAlignMask) == 0ull)
+            << "cloned region is not page aligned";
+
+        pageAlignedRegions.clear();
+    }
 }
 
 TEST_F(TAllocatorSuite32, SlotPoolHugeAlloc) {

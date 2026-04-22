@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 TDirectTxUpload::TDirectTxUpload(TEvDataShard::TEvUploadRowsRequest::TPtr& ev)
-    : TCommonUploadOps(ev, true, true)
+    : TCommonUploadOps(ev, true, !ev->Get()->Record.GetDisableChangeCollection())
 {
 }
 

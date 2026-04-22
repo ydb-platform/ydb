@@ -341,7 +341,7 @@ FILE_INCLUDE third_party/address_sorting/LICENSE found in files: third_party/upb
         third_party/upb/upb/wire/types.h [4:6]
 
 KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
-BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/proto/grpc/reflection/v1/ya.make src/proto/grpc/reflection/v1alpha/ya.make src/proto/grpc/status/ya.make ya.make
+BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/proto/grpc/reflection/v1/ya.make src/proto/grpc/reflection/v1alpha/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -1742,7 +1742,6 @@ BELONGS src/proto/grpc/channelz/ya.make src/proto/grpc/health/v1/ya.make src/pro
         src/proto/grpc/health/v1/health.proto [3:13]
         src/proto/grpc/reflection/v1/reflection.proto [3:13]
         src/proto/grpc/reflection/v1alpha/reflection.proto [3:13]
-        src/proto/grpc/status/status.proto [3:13]
 
 SKIP     LicenseRef-scancode-generic-cla 60c79976a6f1daa58457b943cb911512
 BELONGS ya.make

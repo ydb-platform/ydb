@@ -74,6 +74,11 @@ constexpr std::array<ELocation, 5> PBufferLocations{
     ELocation::HOPBuffer0,
     ELocation::HOPBuffer1};
 
+constexpr std::array<ELocation, 2> HandOffPBuffersLocations{
+    ELocation::HOPBuffer0,
+    ELocation::HOPBuffer1,
+};
+
 bool IsDDisk(ELocation location);
 bool IsPBuffer(ELocation location);
 
@@ -152,8 +157,10 @@ public:
     [[nodiscard]] size_t Count() const;
     [[nodiscard]] bool HasDDisk() const;
     [[nodiscard]] bool OnlyDDisk() const;
+    [[nodiscard]] bool OnlyDDiskAndNotEmpty() const;
     [[nodiscard]] bool HasPBuffer() const;
     [[nodiscard]] bool OnlyPBuffer() const;
+    [[nodiscard]] bool OnlyPBufferAndNotEmpty() const;
     [[nodiscard]] std::optional<ELocation> GetLocation(size_t tryNumber) const;
 
     bool operator==(const TLocationMask& other) const;

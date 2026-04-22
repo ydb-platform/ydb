@@ -1,5 +1,8 @@
 #include "kqp_rbo_physical_aggregation_builder.h"
 #include "kqp_rbo_physical_convertion_utils.h"
+
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;

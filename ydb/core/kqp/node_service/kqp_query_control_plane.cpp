@@ -141,15 +141,6 @@ public:
                 (executer, executerId),
                 (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 
-        NRm::EKqpMemoryPool memoryPool;
-        if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
-            memoryPool = NRm::EKqpMemoryPool::ScanQuery;
-        } else if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::DATA) {
-            memoryPool = NRm::EKqpMemoryPool::DataQuery;
-        } else {
-            memoryPool = NRm::EKqpMemoryPool::Unspecified;
-        }
-
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
 
@@ -164,10 +155,11 @@ public:
             rlPath.ConstructInPlace(runtimeSettings.GetRlPath());
         }
 
-        TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
-            txId, TInstant::Now(), ResourceManager_->GetCounters(),
-            poolId, msg.GetMemoryPoolPercent(),
-            msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+        if (!TxInfo) {
+            TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+                poolId, msg.GetMemoryPoolPercent(),
+                msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+        }
 
         auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
 
@@ -182,14 +174,13 @@ public:
                 .LockNodeId = lockNodeId,
                 .LockMode = lockMode,
                 .Task = &dqTask,
-                .TxInfo = txInfo,
+                .TxInfo = TxInfo,
                 .ReportStatsSettings = reportStatsSettings,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
                 .SerializedGUCSettings = serializedGUCSettings,
                 .NumberOfTasks = tasksCount,
                 .OutputChunkMaxSize = msg.GetOutputChunkMaxSize(),
-                .MemoryPool = memoryPool,
                 .WithSpilling = runtimeSettings.GetUseSpilling(),
                 .StatsMode = runtimeSettings.GetStatsMode(),
                 .WithProgressStats = runtimeSettings.GetWithProgressStats(),
@@ -333,6 +324,7 @@ public:
 private:
     TIntrusivePtr<TKqpCounters> Counters_;
     std::shared_ptr<TNodeState> State_;
+    TIntrusivePtr<NRm::TTxState> TxInfo;
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TActorId ExecuterId;

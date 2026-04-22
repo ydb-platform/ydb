@@ -60,14 +60,14 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvReadResult> ReadFromDDisk(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvWritePersistentBufferResult> WriteToPBuffer(
         const THostConnection& connection,
@@ -75,7 +75,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
     WriteToManyPBuffers(
@@ -86,14 +86,14 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvWriteResult> WriteToDDisk(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvSyncWithPersistentBufferResult>
     SyncWithPBuffer(
@@ -101,14 +101,14 @@ public:
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
     EraseFromPBuffer(
         const THostConnection& connection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvListPersistentBufferResult>
     ListPBufferEntries(const THostConnection& connection) = 0;

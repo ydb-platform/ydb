@@ -1,6 +1,6 @@
 # Bulk upsert of data
 
-{{ ydb-short-name }} supports bulk upsert of many records without atomicity guarantees. The upsert process is split into multiple independent parallel transactions, each covering a single partition. For that reason, this approach is more effective than using YQL. If successful, the `BulkUpsert` method guarantees inserting all the data transmitted by the query.
+{{ ydb-short-name }} supports bulk insert of many rows without atomicity guarantees. The write is split into several independent transactions, each touching a single partition, with parallel execution. This makes the approach more efficient than plain YQL. On success, the `BulkUpsert` method guarantees that all data passed in the request is inserted.
 
 {% note warning %}
 
@@ -8,11 +8,15 @@ When you load data to [column-oriented tables](../../concepts/datamodel/table.md
 
 {% endnote %}
 
-Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for bulk upsert:
+Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk insert:
 
 {% list tabs %}
 
-- Go (native)
+- Go
+
+  {% list tabs %}
+
+  - Native SDK
 
   {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
 
@@ -221,13 +225,18 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   {% endcut %}
 
-- Go (database/sql)
+  - database/sql
 
-  The implementation of {{ ydb-short-name }} `database/sql` doesn't support bulk nontransactional upsert of data.
+    The {{ ydb-short-name }} `database/sql` driver does not support non-transactional bulk insert.
+    For bulk insert, use [transactional insert](./upsert.md).
 
-  For bulk upsert, use [transactional upsert](./upsert.md).
+  {% endlist %}
 
 - Java
+
+  {% list tabs %}
+
+  - Native SDK
 
   ```java
     private static final String TABLE_NAME = "bulk_upsert";
@@ -281,7 +290,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
     }
   ```
 
-- JDBC
+  - JDBC
 
   ```java
     private static final int BATCH_SIZE = 1000;
@@ -309,6 +318,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
         }
     }
   ```
+
+    In Spring Boot, Hibernate, JOOQ, and other ORM stacks on JDBC you can run native YQL (including from repositories and `@Query`). The driver tries to optimize large inserts; `UPDATE`, `INSERT`, `DELETE`, `UPSERT` through JDBC are batched on the driver side when appropriate.
+
+  {% endlist %}
 
 - Python
 
@@ -394,5 +407,9 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
     ```
 
   {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}

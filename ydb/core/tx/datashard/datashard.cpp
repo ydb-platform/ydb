@@ -292,6 +292,7 @@ void TDataShard::Die(const TActorContext& ctx) {
 
     NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BuildIndexPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe);
 
@@ -889,6 +890,20 @@ ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
     return it->second.Changes.back().LockOffset + 1;
 }
 
+void TDataShard::FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId) {
+    if (userCtx != nullptr) {
+        userSID = userCtx->GetUserSID();
+        if (userCtx->GetUserTraceId()) {
+            NActorsProto::TTraceId serializedTraceId;
+            userCtx->GetUserTraceId().Serialize(&serializedTraceId);
+            userTraceId = serializedTraceId.GetData();
+        }
+    } else {
+        userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        userTraceId.clear();
+    }
+}
+
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord"
         << ": record: " << (GetChangeRecordDebugPrint() ? ChangeRecordDebugSerializer->DebugString(record) : ToString(record))
@@ -906,11 +921,17 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
+
+        TString userSID;
+        TString userTraceId;
+        FillUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
+
         db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(record.GetUserSID()));
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(userSID),
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserTraceId>(userTraceId));
 
         auto res = ChangesQueue.emplace(record.GetOrder(), record);
         Y_ENSURE(res.second, "Duplicate change record: " << record.GetOrder());
@@ -989,12 +1010,17 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::LockChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
+
+        TString userSID;
+        TString userTraceId;
+        FillUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
+
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(record.GetUserSID())
-        );
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userSID),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userTraceId));
     }
 }
 
@@ -1600,10 +1626,20 @@ void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperati
     );
 }
 
+void TDataShard::SendPendingBuildIndexFinalResponses(const TActorContext& ctx) {
+    for (auto& [buildId, response] : PendingBuildIndexFinalResponses) {
+        auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        copy->Record = response->Record;
+        SendViaSchemeshardPipe(ctx, CurrentSchemeShardId, BuildIndexPipe, std::move(copy));
+    }
+}
+
 void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
     if (!txId) {
-        for (const auto& op : TransQueue.GetSchemaOperations())
+        for (const auto& op : TransQueue.GetSchemaOperations()) {
             NotifySchemeshard(ctx, op.first);
+        }
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 
@@ -3046,7 +3082,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
     }
 
     ui64 txInfly = TxInFly();
-    TDuration lag = GetDataTxCompleteLag();
+    TDuration lag = GetTxCompleteLag();
     if (txInfly > 1 && lag > TDuration::MilliSeconds(MaxTxLagMilliseconds)) {
         reject = true;
         rejectReasons |= ERejectReasons::OverloadByLag;
@@ -3376,7 +3412,10 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
             datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
         }
 
-        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), ev->Get()->Record.GetUserSID()), 
+        auto userCtx = NACLib::TUserContextBuilder()
+            .DeserializeFromEventHandle(*ev.Get())
+            .Build();
+        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), userCtx),
             ctx );
     }
 }
@@ -3470,8 +3509,10 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
 
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), 
-                        event->Get()->Record.GetUserSID()), ctx);
+                    auto userCtx = NACLib::TUserContextBuilder()
+                        .DeserializeFromEventHandle(*event.Get())
+                        .Build();
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {
@@ -3584,6 +3625,14 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         return;
     }
 
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            BuildIndexPipe = TActorId();
+            SendPendingBuildIndexFinalResponses(ctx);
+        }
+        return;
+    }
+
     if (ev->Get()->ClientId == DbStatsReportPipe) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             DbStatsReportPipe = TActorId();
@@ -3648,6 +3697,12 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
     if (ev->Get()->ClientId == StateReportPipe) {
         StateReportPipe = TActorId();
         ReportState(ctx, State);
+        return;
+    }
+
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        BuildIndexPipe = TActorId();
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 
@@ -4007,11 +4062,11 @@ void TDataShard::DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TAc
 }
 
 void TDataShard::UpdateLagCounters(const TActorContext &ctx) {
-    TDuration dataTxCompleteLag = GetDataTxCompleteLag();
-    TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(dataTxCompleteLag.MilliSeconds());
-    if (dataTxCompleteLag > TDuration::Minutes(5)) {
+    TDuration txCompleteLag = GetTxCompleteLag();
+    TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(txCompleteLag.MilliSeconds());
+    if (txCompleteLag > TDuration::Minutes(5)) {
         LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Tx completion lag (" << dataTxCompleteLag << ") is > 5 min on tablet "
+                   "Tx completion lag (" << txCompleteLag << ") is > 5 min on tablet "
                    << TabletID());
     }
 

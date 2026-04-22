@@ -1,11 +1,21 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/generic/hash.h>
+
+namespace NKikimrConfig {
+    class TTableProfilesConfig;
+    class TCompactionPolicy;
+    class TExecutionPolicy;
+    class TStoragePolicy;
+    class TPartitioningPolicy;
+    class TCachingPolicy;
+    class TReplicationPolicy;
+    class TTableProfile;
+}
 
 namespace NKikimr {
 

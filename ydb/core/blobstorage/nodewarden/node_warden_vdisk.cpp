@@ -88,15 +88,7 @@ namespace NKikimr::NStorage {
 
         // find underlying PDisk and determine its media type
         auto pdiskIt = LocalPDisks.find({vslotId.NodeId, vslotId.PDiskId});
-        if (pdiskIt == LocalPDisks.end()) {
-            // VDisk config may arrive before corresponding PDisk is started (e.g. during bootstrap/config updates).
-            // Defer starting the VDisk until PDisk appears.
-            STLOG(PRI_NOTICE, BS_NODE, NW23, "StartLocalVDiskActor: PDisk not found yet, deferring",
-                (VDiskId, vdisk.GetVDiskId()),
-                (VSlotId, vslotId),
-                (PDiskGuid, pdiskGuid));
-            return;
-        }
+        Y_VERIFY_S(pdiskIt != LocalPDisks.end(), "PDiskId# " << vslotId.NodeId << ":" << vslotId.PDiskId << " not found");
         auto& pdisk = pdiskIt->second;
         Y_VERIFY_S(pdisk.Record.GetPDiskGuid() == pdiskGuid, "PDiskId# " << vslotId.NodeId << ":" << vslotId.PDiskId << " PDiskGuid mismatch");
         const NPDisk::EDeviceType deviceType = TPDiskCategory(pdisk.Record.GetPDiskCategory()).Type();
@@ -198,8 +190,38 @@ namespace NKikimr::NStorage {
         auto *as = TActivationContext::ActorSystem();
 
         if (ddisk) {
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
-                NDDisk::TDDiskConfig{}, AppData()->Counters));
+            NDDisk::TDDiskConfig ddiskConfig{};
+            NDDisk::TPersistentBufferFormat pbufferFormat{};
+            if (Cfg->DDiskConfig) {
+                if (Cfg->DDiskConfig->HasUseSQPoll()) {
+                    ddiskConfig.UseSQPoll = Cfg->DDiskConfig->GetUseSQPoll();
+                }
+                if (Cfg->DDiskConfig->HasUseIOPoll()) {
+                    ddiskConfig.UseIOPoll = Cfg->DDiskConfig->GetUseIOPoll();
+                }
+                if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
+                    ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
+                }
+            }
+            if (Cfg->PBufferConfig) {
+                if (Cfg->PBufferConfig->HasInitChunks()) {
+                    pbufferFormat.InitChunks = Cfg->PBufferConfig->GetInitChunks();
+                }
+                if (Cfg->PBufferConfig->HasMaxInMemoryCache()) {
+                    pbufferFormat.MaxInMemoryCache = Cfg->PBufferConfig->GetMaxInMemoryCache();
+                }
+                if (Cfg->PBufferConfig->HasMaxChunkRestoreInflight()) {
+                    pbufferFormat.MaxChunkRestoreInflight = Cfg->PBufferConfig->GetMaxChunkRestoreInflight();
+                }
+                if (Cfg->PBufferConfig->HasUpdateFreeSpaceInfoMilliseconds()) {
+                    pbufferFormat.UpdateFreeSpaceInfoMilliseconds = Cfg->PBufferConfig->GetUpdateFreeSpaceInfoMilliseconds();
+                }
+                if (Cfg->PBufferConfig->HasPerTabletStorageLimit()) {
+                    pbufferFormat.PerTabletStorageLimit = Cfg->PBufferConfig->GetPerTabletStorageLimit();
+                }
+            }
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
+                std::move(ddiskConfig), AppData()->Counters));
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -227,6 +249,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
             vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
             vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+            vdiskConfig->HullCompFreeSpaceThresholdPerMille = HullCompFreeSpaceThresholdPerMille;
             vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;

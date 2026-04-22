@@ -120,6 +120,8 @@ namespace NKikimr::NDDisk {
         template <typename T>
         void FillPool(TSpscCircularQueue<std::unique_ptr<T>>& pool);
 
+        void InitUring();
+
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
 
     private:
@@ -338,7 +340,7 @@ namespace NKikimr::NDDisk {
             template<typename TEvent>
             TPendingEvent(TAutoPtr<TEventHandle<TEvent>> ev, const char *name)
                 : Ev(ev.Release())
-                , QueueSpan(TWilson::DDiskInternals, NWilson::TTraceId(Ev->TraceId), name, NWilson::EFlags::AUTO_END,
+                , QueueSpan(TWilson::DDiskTopLevel, NWilson::TTraceId(Ev->TraceId), name, NWilson::EFlags::AUTO_END,
                     TActivationContext::ActorSystem())
             {}
 
@@ -629,25 +631,25 @@ namespace NKikimr::NDDisk {
                 ui32 OffsetInBytes;
                 ui32 Size;
                 std::vector<TPersistentBufferSectorInfo> Sectors;
-                std::map<ui64, TRope> DataParts;
-                ui32 PartsCount;
+                TRope Data;
                 ui64 VChunkIndex;
                 TInstant Timestamp;
-
-                TRope JoinData(ui32 sectorSize);
+                std::unordered_set<ui64> ReadInflight;
             };
             std::map<ui64, TRecord> Records;
-            ui32 Size = 0;
+            ui64 Size = 0;
         };
 
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
+        std::map<TInstant, std::set<std::tuple<ui64, ui32, ui64>>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
 
         ui64 CalcPersistentBufferInMemoryCacheSize();
         TString PersistentBufferToString();
 
-        void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);
+        void SanitizePersistentBufferInMemoryCache();
+        void SanitizePersistentBufferInMemoryCache(ui64 tabletId, ui32 generation, ui64 lsn, TPersistentBuffer::TRecord& record);
 
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 
@@ -690,12 +692,15 @@ namespace NKikimr::NDDisk {
             ui32 OffsetInBytes;
             ui32 Size;
             std::vector<TPersistentBufferSectorInfo> Sectors;
-            TRope Data;
+            std::map<ui64, TRope> DataParts;
+            ui32 PartsCount;
 
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
             std::optional<TString> ErrorMessage = std::nullopt;
 
             NHPTimer::STime StartTs{};
+
+            TRope JoinData(ui32 sectorSize);
         };
 
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
@@ -723,7 +728,8 @@ namespace NKikimr::NDDisk {
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
-        void ReplyReadPersistentBuffer(ui64 operationCookie, ui64 vChunkIndex = 0, ui32 offsetInBytes = 0, ui32 size = 0, TRope&& data = {});
+        void ReplyReadPersistentBuffer(ui64 operationCookie);
+        void ReplyReadPersistentBuffer(TDDiskActor::TPersistentBuffer::TRecord& pr, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, std::optional<TString> errorMessage);
 
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();

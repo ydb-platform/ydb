@@ -575,7 +575,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
         auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig,
-                                  Ydb::StatusIds::ALREADY_EXISTS);
+                                  EOperation::Alter);
         if (status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(status, status == Ydb::StatusIds::ALREADY_EXISTS ? static_cast<size_t>(NYds::EErrorCodes::IN_USE) :
                                                                                     static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
@@ -626,7 +626,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const auto& pqConfig = appData->PQConfig;
         auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
-        auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
+        auto status = CheckConfig(*tabletConfig, serviceTypes, error, pqConfig, EOperation::Alter);
         if (status != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(status, status == Ydb::StatusIds::ALREADY_EXISTS? static_cast<size_t>(NYds::EErrorCodes::IN_USE) :
                                                                                     static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
@@ -690,7 +690,7 @@ namespace NKikimr::NDataStreams::V1 {
 
                 auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
                 status = CheckConfig(*tabletConfig, serviceTypes, error,
-                                     pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
+                                     pqConfig, EOperation::Alter);
             }
 
             if (status != Ydb::StatusIds::SUCCESS) {
@@ -1174,7 +1174,7 @@ namespace NKikimr::NDataStreams::V1 {
         size_t issueCode = static_cast<size_t>(messageAndCode.PQCode);
         Ydb::StatusIds::StatusCode status;
         if (messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK) {
-            status = CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
+            status = CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, EOperation::Alter);
             if (status == Ydb::StatusIds::ALREADY_EXISTS) {
                 issueCode = static_cast<size_t>(NYds::EErrorCodes::IN_USE);
             }

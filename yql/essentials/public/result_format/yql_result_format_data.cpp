@@ -731,7 +731,7 @@ void TDataBuilder::OnBeginOptional() {
 
 void TDataBuilder::OnBeforeOptionalItem() {
     Top().Add();
-    Push(&Top().AsList()[0]);
+    Push(Top().AsList().data());
 }
 
 void TDataBuilder::OnAfterOptionalItem() {

@@ -897,8 +897,8 @@ class TestQueryTruncation:
     def test_long_query_truncated(self, ydb_setup):
         driver, database_path, table_path, _, cluster = ydb_setup
 
-        # 25000-char query — exceeds the 20000-byte limit.
-        marker = 'trunc_test_' + 'Q' * 14989
+        # Query exceeding the 20000-byte limit.
+        marker = 'trunc_test_' + 'Q' * 19989
         query_pool = ydb.QuerySessionPool(driver)
         query_pool.execute_with_retries(
             "SELECT '%s' AS v" % marker

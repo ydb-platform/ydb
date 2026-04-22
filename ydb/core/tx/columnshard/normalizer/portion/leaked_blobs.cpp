@@ -27,18 +27,20 @@ class TLeakedBlobsNormalizerChanges: public INormalizerChanges {
 private:
     THashSet<TLogoBlobID> Leaks;
     const ui64 TabletId;
+    const ui64 TablePathId;
+    const TString TablePath;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
-    const bool PrintLeakedBlobIds;
     const NActors::NLog::EPriority LogLevel;
     ui64 LeakeadBlobsSize;
 
 public:
-    TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, NColumnShard::TBlobGroupSelector dsGroupSelector,
-        const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
+    TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, const ui64 tablePathId, TString tablePath, NColumnShard::TBlobGroupSelector dsGroupSelector,
+        const NActors::NLog::EPriority logLevel)
         : Leaks(std::move(leaks))
         , TabletId(tabletId)
+        , TablePathId(tablePathId)
+        , TablePath(std::move(tablePath))
         , DsGroupSelector(dsGroupSelector)
-        , PrintLeakedBlobIds(printLeakedBlobIds)
         , LogLevel(logLevel) {
         LeakeadBlobsSize = 0;
         for (const auto& blob : Leaks) {
@@ -58,42 +60,27 @@ public:
 
     void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
         ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)(
-            "normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "apply_on_complete")("changes", DebugStringImpl(PrintLeakedBlobIds));
+            "normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "apply_on_complete")("changes", DebugString());
     }
 
     ui64 GetSize() const override {
         return Leaks.size();
     }
 
-    TString DebugStringImpl(bool printLeakedBlobIds) const {
+    TString DebugString() const override {
         TStringBuilder sb;
         sb << "tablet=" << TabletId;
         sb << ";leaked_blob_count=" << Leaks.size();
         sb << ";leaked_blobs_size=" << LeakeadBlobsSize;
-        if (printLeakedBlobIds) {
-            sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), Leaks.end(), ",") << "]";
-        } else {
-            auto blobSampleEnd = Leaks.begin();
-            for (ui64 i = 0; i < 10 && blobSampleEnd != Leaks.end(); ++i, ++blobSampleEnd) {
-            }
-            sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), blobSampleEnd, ",");
-            if (blobSampleEnd != Leaks.end()) {
-                sb << ",...";
-            }
-            sb << "]";
-        }
         return sb;
-    }
-
-    TString DebugString() const override {
-        // we do not want to print millions of blob ids twice, see ApplyOnComplete
-        return DebugStringImpl(false);
     }
 };
 
 class THiveHistoryCollector {
 private:
     const ui64 TabletId;
+    const ui64 TablePathId;
+    const TString TablePath;
     const ui32 TabletGeneration;
     const bool Enabled;
     const NActors::NLog::EPriority LogLevel;
@@ -108,7 +95,7 @@ private:
             return;
         }
         Finished = true;
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "hive_channel_history")("status", "failed")("reason", reason)("hive_tablet_id", HiveTabletId);
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "hive_channel_history")("status", "failed")("reason", reason)("hive_tablet_id", HiveTabletId);
     }
 
     void SendRequestToHive(const TActorContext& ctx, const ui64 hiveTabletId) {
@@ -121,8 +108,10 @@ private:
     }
 
 public:
-    THiveHistoryCollector(const ui64 tabletId, const ui32 tabletGeneration, const bool enabled, const NActors::NLog::EPriority logLevel)
+    THiveHistoryCollector(const ui64 tabletId, const ui64 tablePathId, TString tablePath, const ui32 tabletGeneration, const bool enabled, const NActors::NLog::EPriority logLevel)
         : TabletId(tabletId)
+        , TablePathId(tablePathId)
+        , TablePath(std::move(tablePath))
         , TabletGeneration(tabletGeneration)
         , Enabled(enabled)
         , LogLevel(logLevel) {
@@ -172,7 +161,7 @@ public:
                 return;
             }
             ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
-                "tablet_id", TabletId)("event", "hive_channel_history_redirect")("from_hive_tablet_id", HiveTabletId)(
+                "tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "hive_channel_history_redirect")("from_hive_tablet_id", HiveTabletId)(
                 "to_hive_tablet_id", redirectedHiveTabletId)("redirects_count", RedirectsCount);
             SendRequestToHive(ctx, redirectedHiveTabletId);
             return;
@@ -208,7 +197,7 @@ public:
                 }
                 chunkHistory << historyEntries[idx];
             }
-            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)(
+            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)(
                 "analyze_leaked_blobs", 1)("event", "hive_channel_history")("status", "ok")("hive_tablet_id", HiveTabletId)(
                 "records_count", recordsCount)("chunk_idx", chunkIdx)("chunks_total", chunksTotal)(
                 "now_ms", nowMs)("current_generation", TabletGeneration)(
@@ -258,6 +247,8 @@ private:
     ui64 KeepCount = 0;
     TActorId CSActorId;
     ui64 CSTabletId;
+    ui64 TablePathId = 0;
+    TString TablePath;
     bool PrintLeakedBlobIds = false;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
     i32 WaitingCount = 0;
@@ -276,12 +267,12 @@ private:
     void PrintFoundLeakedBlobsStats() const {
         const ui64 leakedBlobsSize = CalculateBlobsSize(BSBlobIds);
         const ui64 csBlobsSize = CalculateBlobsSize(CSBlobIds);
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("event", "found_leaked_blobs_stats")("analyze_leaked_blobs", 1)("leaked_blobs_count", BSBlobIds.size())("leaked_blobs_size", leakedBlobsSize)("cs_blob_ids_count", CSBlobIds.size())("cs_blob_ids_size", csBlobsSize)("bs_total_blobs_count", TotalBlobsCount)("bs_total_blobs_size", TotalBlobsSize)("bs_do_not_keep_count", DoNotKeepCount)("bs_keep_count", KeepCount);
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "found_leaked_blobs_stats")("analyze_leaked_blobs", 1)("leaked_blobs_count", BSBlobIds.size())("leaked_blobs_size", leakedBlobsSize)("cs_blob_ids_count", CSBlobIds.size())("cs_blob_ids_size", csBlobsSize)("bs_total_blobs_count", TotalBlobsCount)("bs_total_blobs_size", TotalBlobsSize)("bs_do_not_keep_count", DoNotKeepCount)("bs_keep_count", KeepCount);
     }
 
     void PrintLeakedBlobIdsChunks() const {
         if (!PrintLeakedBlobIds) {
-            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("analyze_leaked_blobs", 1)("tablet_id", CSTabletId)("event", "found_leaked_blob_ids")("status", "not_requested");
+            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("analyze_leaked_blobs", 1)("tablet_id", CSTabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "found_leaked_blob_ids")("status", "not_requested");
             return;
         }
 
@@ -292,7 +283,7 @@ private:
         currentChunk.reserve(ChunkSize);
 
         auto printChunk = [&](const TVector<TString>& chunk) {
-            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("event", "found_leaked_blob_ids_chunk")("analyze_leaked_blobs", 1)("chunk_idx", chunkIdx)("chunks_total", chunksTotal)("chunk_size", chunk.size())("blob_ids", JoinStrings(chunk.begin(), chunk.end(), ","));
+            ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "found_leaked_blob_ids_chunk")("analyze_leaked_blobs", 1)("chunk_idx", chunkIdx)("chunks_total", chunksTotal)("chunk_size", chunk.size())("blob_ids", JoinStrings(chunk.begin(), chunk.end(), ","));
             ++chunkIdx;
         };
 
@@ -322,7 +313,7 @@ private:
             CSActorId, 
             std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
                 std::make_shared<TLeakedBlobsNormalizerChanges>(
-                    std::move(BSBlobIds), CSTabletId, DsGroupSelector, PrintLeakedBlobIds, LogLevel
+                    std::move(BSBlobIds), CSTabletId, TablePathId, TablePath, DsGroupSelector, LogLevel
                 )
             )
         );
@@ -330,17 +321,19 @@ private:
     }
 
 public:
-    TRemoveLeakedBlobsActor(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, TActorId csActorId, ui64 csTabletId,
+    TRemoveLeakedBlobsActor(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, const ui64 tablePathId, TString tablePath, TActorId csActorId, ui64 csTabletId,
         const ui32 tabletGeneration, const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds,
         const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIds(std::move(csBlobIDs))
         , CSActorId(csActorId)
         , CSTabletId(csTabletId)
+        , TablePathId(tablePathId)
+        , TablePath(std::move(tablePath))
         , PrintLeakedBlobIds(printLeakedBlobIds)
         , LogLevel(logLevel)
         , DsGroupSelector(dsGroupSelector)
-        , HiveHistoryCollector(csTabletId, tabletGeneration, printLeakedBlobIds, logLevel) {
+        , HiveHistoryCollector(csTabletId, tablePathId, TablePath, tabletGeneration, printLeakedBlobIds, logLevel) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -424,6 +417,8 @@ public:
 class TRemoveLeakedBlobsTask: public INormalizerTask {
     TVector<TTabletChannelInfo> Channels;
     THashSet<TLogoBlobID> CSBlobIDs;
+    ui64 TablePathId = 0;
+    TString TablePath;
     ui64 TabletId;
     ui32 TabletGeneration;
     TActorId ActorId;
@@ -432,11 +427,13 @@ class TRemoveLeakedBlobsTask: public INormalizerTask {
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
 public:
-    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, ui64 tabletId, ui32 tabletGeneration,
+    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, const ui64 tablePathId, TString tablePath, ui64 tabletId, ui32 tabletGeneration,
         TActorId actorId,
         const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIDs(std::move(csBlobIDs))
+        , TablePathId(tablePathId)
+        , TablePath(std::move(tablePath))
         , TabletId(tabletId)
         , TabletGeneration(tabletGeneration)
         , ActorId(actorId)
@@ -447,12 +444,12 @@ public:
     void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
         NActors::TActivationContext::Register(
             new TRemoveLeakedBlobsActor(
-                std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, TabletGeneration, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
+                std::move(Channels), std::move(CSBlobIDs), TablePathId, std::move(TablePath), ActorId, TabletId, TabletGeneration, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
     }
 };
 
 void TLeakedBlobsStats::PrintToLog() const {
-    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "stats")("stopped_on_portions", StoppedOnPortions)("stopped_on_indices", StoppedOnIndices)("stopped_on_columns", StoppedOnColumns)("stopped_on_blobs_to_delete", StoppedOnBlobsToDelete)("portions_loaded", PortionsLoaded)("portions_skipped", PortionsSkipped)("portions_only_indices_in_bs", PortionsOnlyIndicesInBs)("portions_in_bs", PortionsInBs)("indices_loaded", IndicesLoaded)("indices_inplaced", IndicesInplaced)("indices_in_foreign_storage", IndicesInForeignStorage)("indices_need_column_v2", IndicesNeedColumnV2)("indices_have_its_own_blob", IndicesHaveItsOwnBlob)("columns_loaded", ColumnsLoaded)("blobs_to_delete_loaded", BlobsToDeleteLoaded)("completed", Completed);
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "stats")("stopped_on_portions", StoppedOnPortions)("stopped_on_indices", StoppedOnIndices)("stopped_on_columns", StoppedOnColumns)("stopped_on_blobs_to_delete", StoppedOnBlobsToDelete)("portions_loaded", PortionsLoaded)("portions_skipped", PortionsSkipped)("portions_only_indices_in_bs", PortionsOnlyIndicesInBs)("portions_in_bs", PortionsInBs)("indices_loaded", IndicesLoaded)("indices_inplaced", IndicesInplaced)("indices_in_foreign_storage", IndicesInForeignStorage)("indices_need_column_v2", IndicesNeedColumnV2)("indices_have_its_own_blob", IndicesHaveItsOwnBlob)("columns_loaded", ColumnsLoaded)("blobs_to_delete_loaded", BlobsToDeleteLoaded)("completed", Completed);
 }
 
 TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::TInitContext& info)
@@ -465,21 +462,22 @@ TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::T
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
-    ReadParamsFromDescription();
     AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
-    NIceDb::TNiceDb db(txc.DB);
 
+    NIceDb::TNiceDb db(txc.DB);
     NColumnShard::TTablesManager tablesManager(
         controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId);
     if (!tablesManager.InitFromDB(db, nullptr)) {
         ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
-            "tablet_id", TabletId)("error", "can't initialize tables manager");
+            "tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
     if (!tablesManager.HasPrimaryIndex()) {
         return std::vector<INormalizerTask::TPtr>{};
     }
 
+    LoadTableIdentity(db);
+    ReadParamsFromDescription();
     if (Stats.WannaPrint()) {
         Stats.PrintToLog();
     }
@@ -496,7 +494,17 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     Stats.OnCompleted();
     Stats.PrintToLog();
     return std::vector<INormalizerTask::TPtr>{ std::make_shared<TRemoveLeakedBlobsTask>(
-        std::move(Channels), std::move(Result), TabletId, txc.Generation, TabletActorId, DsGroupSelector, PrintLeakedBlobIds, LogLevel) };
+        std::move(Channels), std::move(Result), TablePathId, TablePath, TabletId, txc.Generation, TabletActorId, DsGroupSelector, PrintLeakedBlobIds, LogLevel) };
+}
+
+void TLeakedBlobsNormalizer::LoadTableIdentity(NIceDb::TNiceDb& db) {
+    if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::OwnerPathId, TablePathId)) {
+        TablePathId = 0;
+    }
+    if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::OwnerPath, TablePath)) {
+        TablePath = "<unknown>";
+    }
+    Stats.SetTableIdentity(TablePathId, TablePath);
 }
 
 
@@ -746,7 +754,7 @@ void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
 
     BatchCursor = TBatchCursor(BatchSize);
     Stats.SetLogLevel(LogLevel);
-    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("batch_size", BatchSize)("print_leaked_blob_ids", PrintLeakedBlobIds)("log_level", static_cast<ui32>(LogLevel));
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)("batch_size", BatchSize)("print_leaked_blob_ids", PrintLeakedBlobIds)("log_level", static_cast<ui32>(LogLevel));
 }
 
 }   // namespace NKikimr::NOlap

@@ -220,6 +220,8 @@ private:
 
 class TLeakedBlobsStats {
     const ui64 TabletId;
+    ui64 TablePathId = 0;
+    TString TablePath = "<unknown>";
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
     ui64 StoppedOnPortions = 0;
     ui64 StoppedOnIndices = 0;
@@ -247,6 +249,11 @@ public:
 
     void SetLogLevel(const NActors::NLog::EPriority logLevel) {
         LogLevel = logLevel;
+    }
+
+    void SetTableIdentity(const ui64 tablePathId, const TString& tablePath) {
+        TablePathId = tablePathId;
+        TablePath = tablePath;
     }
 
     void OnStoppedOnPortions() {
@@ -357,8 +364,11 @@ private:
     TBatchCursor BatchCursor{1000000};
     TLeakedBlobsStats Stats;
     THashSet<TLogoBlobID> Result;
+    ui64 TablePathId = 0;
+    TString TablePath = "<unknown>";
 
     void ReadParamsFromDescription();
+    void LoadTableIdentity(NIceDb::TNiceDb& db);
 
     TConclusionStatus LoadPortionBlobIds(TDbWrapper& wrapper, const TVersionedIndex& versionedIndex);
     TConclusionStatus LoadPortions(TDbWrapper& wrapper, const TVersionedIndex& versionedIndex);

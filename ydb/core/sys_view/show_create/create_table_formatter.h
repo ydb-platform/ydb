@@ -15,12 +15,14 @@
 #include <util/stream/str.h>
 
 namespace NKikimr {
+class TFeatureFlags;
+
 namespace NSysView {
 
 class TCreateTableFormatter {
 public:
-    TCreateTableFormatter()
-        : Alloc(__LOCATION__)
+    explicit TCreateTableFormatter(const NKikimr::TFeatureFlags& featureFlags)
+        : Alloc(__LOCATION__), FeatureFlags(featureFlags)
     {
         Alloc.Release();
     }
@@ -69,6 +71,7 @@ private:
 
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;
+    const NKikimr::TFeatureFlags& FeatureFlags;
 };
 
 } // NSysView

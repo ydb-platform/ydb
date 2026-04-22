@@ -565,8 +565,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             break;
         }
         case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
-            Stream << " LOCAL USING min_max ON ";
-            break;
+            ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Ydb::Table::TableIndex::kLocalMinMaxIndex is not available for row tables");
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableIndex::TYPE_NOT_SET");
@@ -1758,6 +1757,22 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
 
 void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
         const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    if (FeatureFlags.GetEnableCsMinMaxIndex() && indexDesc.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex) {
+        const auto& minMaxIndex = indexDesc.GetMinMaxIndex();
+        if (!minMaxIndex.HasColumnId()) {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "ColumnId must be in MIN_MAX index description");
+        }
+        const auto& columnName = columns.at(minMaxIndex.GetColumnId())->GetName();
+        Stream << "ALTER TABLE ";
+        EscapeName(fullPath, Stream);
+        Stream << "\nADD INDEX ";
+        EscapeName(indexDesc.GetName(), Stream);
+        Stream << " LOCAL USING min_max ON (";
+        EscapeName(columnName, Stream);
+        Stream << ");";
+        return;
+    }
+
     Stream << "ALTER OBJECT ";
     EscapeName(fullPath, Stream);
     Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
@@ -1882,6 +1897,18 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                 json[NIndexParameters::CaseSensitive] = bloomNGrammFilter.GetCaseSensitive();
             }
 
+            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            break;
+        }
+        case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+            const auto& minMaxIndex = indexDesc.GetMinMaxIndex();
+            Stream << ", TYPE=MIN_MAX, ";
+            Stream << "FEATURES=";
+            NJson::TJsonValue json;
+            if (!minMaxIndex.HasColumnId()) {
+                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "ColumnId must be in MIN_MAX index description");
+            }
+            json[NIndexParameters::ColumnName] = columns.at(minMaxIndex.GetColumnId())->GetName();
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
             break;
         }

@@ -54,7 +54,7 @@ class StressFixture:
         return ports
 
     def _create_serverless_databases(self):
-        timeout_seconds = 30
+        timeout_seconds = 120
         self.shared_database_name = "/Root/shared_db"
 
         self.cluster.remove_database(

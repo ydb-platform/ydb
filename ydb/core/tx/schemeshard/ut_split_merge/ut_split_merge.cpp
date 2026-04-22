@@ -786,6 +786,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         AsyncMergeWithInflyLimit(20, 0);
     }
 
+    Y_UNIT_TEST(SequentialSplitFirstShard) {
+        // Split the first (leftmost) shard 19 times to produce 20 partitions.
+        // Each split inserts a new shard at position 0, incrementing Position
+        // of all existing shards by 1.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 100500
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Each iteration splits shard 0 at "key%02u" for i = 19, 18, ..., 01.
+        // Because "key01" < "key02" < ... < "key19" lexicographically, the new
+        // boundary is always less than all previous ones, keeping shard 0 as
+        // the leftmost shard throughout.
+        for (ui32 i = 19; i >= 1; --i) {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            const auto& parts = describe.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL((ui32)parts.size(), 20 - i);
+
+            const ui64 firstTabletId = parts[0].GetDatashardId();
+            TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "key%02u" } } } }
+            )", firstTabletId, i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionCount(20)});
+    }
+
 }
 
 namespace {

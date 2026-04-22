@@ -282,7 +282,7 @@ public:
             context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
-            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo, TVector<TTableShardInfo>(tableInfo->GetPartitions()));
+            context.SS->UpdatePartitioning(dstPath.Base()->PathId, tableInfo, TVector<TTableShardInfo>(tableInfo->GetPartitions()));
         } else if (srcPath->IsColumnTable()) {
             auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
             auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());

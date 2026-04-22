@@ -219,6 +219,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasPerTabletStorageLimit()) {
                     pbufferFormat.PerTabletStorageLimit = Cfg->PBufferConfig->GetPerTabletStorageLimit();
                 }
+                if (Cfg->PBufferConfig->HasMaxBarriersLimit()) {
+                    pbufferFormat.MaxBarriersLimit = Cfg->PBufferConfig->GetMaxBarriersLimit();
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));

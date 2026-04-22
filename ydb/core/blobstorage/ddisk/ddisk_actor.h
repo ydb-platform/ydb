@@ -664,19 +664,49 @@ namespace NKikimr::NDDisk {
             static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
             static constexpr ui32 HeaderChecksumOffset = 24;
             static constexpr ui32 HeaderChecksumSize = 8;
+            static constexpr ui32 MaxBarriersPerHeader = 29;
+
+            struct TRecord {
+                ui64 TabletId;
+                ui32 Generation;
+                ui64 VChunkIndex;
+                ui32 OffsetInBytes;
+                ui32 Size;
+                ui64 Lsn;
+                TPersistentBufferSectorInfo Locations[MaxSectorsPerBufferRecord];
+            };
+
+            struct TBarrier {
+                struct TBarrierRecord {
+                    ui64 TabletId;
+                    ui64 Lsn;
+                };
+                ui32 BarrierIdx;
+                ui64 BarrierLsn;
+                TBarrierRecord Barriers[MaxBarriersPerHeader];
+            };
 
             ui8 Signature[16];
             ui64 HeaderChecksum;
-            ui64 TabletId;
-            ui32 Generation;
-            ui64 VChunkIndex;
-            ui32 OffsetInBytes;
-            ui32 Size;
-            ui64 Lsn;
-            TPersistentBufferSectorInfo Locations[MaxSectorsPerBufferRecord];
+            enum {
+                RECORD,
+                BARRIER
+            } Type;
+            union {
+                TRecord Record;
+                TBarrier Barrier;
+            };
+        };
+        struct TEraseBarrier {
+            ui32 ChunkIdx;
+            ui32 SectorIdx;
+            TPersistentBufferHeader Header;
         };
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
+        std::vector<TEraseBarrier> PersistentBufferBarriers;
+        std::unordered_map<ui64, std::tuple<ui32, ui32>> PersistentBufferBarriersLocation;
+        ui32 FreeBarrierPosition = 0;
 
         struct TPersistentBufferDiskOperationInFlight {
             TActorId Sender;
@@ -734,6 +764,7 @@ namespace NKikimr::NDDisk {
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);
+        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn);
 
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);

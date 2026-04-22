@@ -173,6 +173,7 @@ struct TPersistentBufferFormat {
     ui32 MaxChunkRestoreInflight = 8;
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
     ui64 PerTabletStorageLimit = 4096_MB;
+    ui32 MaxBarriersLimit = 64;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \

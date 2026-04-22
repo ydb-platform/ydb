@@ -151,7 +151,14 @@ def build_matrix(
                         file=sys.stderr,
                     )
                 continue
-            out.append({'BASE_BRANCH': branch, 'BUILD_TYPE': preset})
+            preset_l = preset.strip().lower()
+            out.append(
+                {
+                    'BASE_BRANCH': branch,
+                    'BUILD_TYPE': preset,
+                    'MUTED_YA_RELATIVE': dedicated_relative(preset_l),
+                }
+            )
     return out
 
 

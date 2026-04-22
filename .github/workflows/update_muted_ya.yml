@@ -162,10 +162,10 @@ jobs:
       - name: Create PR branch and apply changes
         if: steps.mute_gate.outputs.skip != 'true' && env.changes == 'true'
         run: |
-          # Создаем PR ветку на основе целевой ветки
+          set -euo pipefail
+          # Путь к mute-файлу заранее в матрице (тот же dedicated_relative, что в mute_update_workflow_matrix).
+          OUT='${{ matrix.MUTED_YA_RELATIVE }}'
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
-
-          OUT=$(python3 .github/scripts/tests/resolve_muted_ya_path.py --print-dedicated-relative --preset "${{ env.BUILD_TYPE }}")
           mkdir -p "$(dirname "$OUT")"
           cp mute_update/new_muted_ya.txt "$OUT"
 

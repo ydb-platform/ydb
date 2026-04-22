@@ -1506,22 +1506,26 @@ static void CleanupRemovedNodeEntries(NKikimrBlobStorage::TStorageConfig& config
         }
     }
 
-    // remove PDisk entries whose node is gone and no remaining VDisk references them
+    // index (NodeID, PDiskID) of every VDisk that survived the cleanup above
+    THashSet<std::pair<ui32, ui32>> referencedPDisks;
+    referencedPDisks.reserve(ss.VDisksSize());
+    for (const auto& vdisk : ss.GetVDisks()) {
+        if (!vdisk.HasVDiskLocation()) {
+            continue;
+        }
+        const auto& loc = vdisk.GetVDiskLocation();
+        if (loc.HasNodeID()) {
+            referencedPDisks.emplace(loc.GetNodeID(), loc.GetPDiskID());
+        }
+    }
+
+    // Remove PDisks owned by a removed node that no VDisk references anymore.
     for (int i = ss.PDisksSize() - 1; i >= 0; --i) {
         const auto& pdisk = ss.GetPDisks(i);
         if (!pdisk.HasNodeID() || nodeIds.contains(pdisk.GetNodeID())) {
             continue;
         }
-        const auto pdiskNodeId = pdisk.GetNodeID();
-        const auto pdiskId = pdisk.GetPDiskID();
-        const bool referenced = std::any_of(ss.GetVDisks().begin(), ss.GetVDisks().end(),
-            [&](const auto& vdisk) {
-                return vdisk.HasVDiskLocation() &&
-                       vdisk.GetVDiskLocation().HasNodeID() &&
-                       vdisk.GetVDiskLocation().GetNodeID() == pdiskNodeId &&
-                       vdisk.GetVDiskLocation().GetPDiskID() == pdiskId;
-            });
-        if (!referenced) {
+        if (!referencedPDisks.contains(std::pair(pdisk.GetNodeID(), pdisk.GetPDiskID()))) {
             ss.MutablePDisks()->DeleteSubrange(i, 1);
         }
     }

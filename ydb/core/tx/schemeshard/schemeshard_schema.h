@@ -2368,6 +2368,21 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<SubscriberId>;
         using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAt>;
     };
+
+    // User-level TTxTransaction bodies (post-rewrite, pre-auto-mkdir-split)
+    // for every in-flight operation. Written when the operation is ignited,
+    // read at boot to restore TOperation::UserLevelTransactions, deleted
+    // when RemoveTx drops the operation. Required so DoPersistSchemeChangeRecords
+    // can emit a parent-level scheme change record even if a tablet restart
+    // happens between DoDoneParts and the record-persist tx.
+    struct UserLevelTransactions : Table<136> {
+        struct TxId :      Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct UserTxIdx : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Body :      Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, UserTxIdx>;
+        using TColumns = TableColumns<TxId, UserTxIdx, Body>;
+    };
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2501,7 +2516,8 @@ struct Schema : NIceDb::Schema {
         SharedShards,
         SchemeChangeRecords,
         SchemeChangeRecordDetails,
-        SchemeChangeSubscribers
+        SchemeChangeSubscribers,
+        UserLevelTransactions
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

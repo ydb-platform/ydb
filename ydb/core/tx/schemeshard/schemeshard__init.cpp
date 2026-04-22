@@ -3835,6 +3835,34 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Restore user-level TTxTransaction bodies onto the corresponding
+        // TOperation so DoPersistSchemeChangeRecords can emit parent records
+        // post-reboot.
+        {
+            auto rowset = db.Table<Schema::UserLevelTransactions>().Range().Select();
+            if (!rowset.IsReady()) return false;
+            THashMap<TTxId, TMap<ui32, NKikimrSchemeOp::TModifyScheme>> byTx;
+            while (!rowset.EndOfSet()) {
+                TTxId txId = rowset.GetValue<Schema::UserLevelTransactions::TxId>();
+                ui32 idx = rowset.GetValue<Schema::UserLevelTransactions::UserTxIdx>();
+                TString body = rowset.GetValue<Schema::UserLevelTransactions::Body>();
+                NKikimrSchemeOp::TModifyScheme tx;
+                if (tx.ParseFromString(body)) {
+                    byTx[txId][idx] = std::move(tx);
+                }
+                if (!rowset.Next()) return false;
+            }
+            for (auto& [txId, idxMap] : byTx) {
+                auto opIt = Self->Operations.find(txId);
+                if (opIt == Self->Operations.end()) continue;
+                opIt->second->UserLevelTransactions.clear();
+                opIt->second->UserLevelTransactions.reserve(idxMap.size());
+                for (auto& [idx, tx] : idxMap) {
+                    opIt->second->UserLevelTransactions.push_back(std::move(tx));
+                }
+            }
+        }
+
         // Read tx's shards
         {
             TTxShardsRows txShardsRows;

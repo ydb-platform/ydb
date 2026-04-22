@@ -3702,6 +3702,28 @@ void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const 
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(LastAssignedPlanStep)));
 }
 
+void TSchemeShard::PersistUserLevelTransaction(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx, const TString& body) const {
+    db.Table<Schema::UserLevelTransactions>().Key(txId, userTxIdx).Update(
+        NIceDb::TUpdate<Schema::UserLevelTransactions::Body>(body));
+}
+
+void TSchemeShard::PersistRemoveUserLevelTransactions(NIceDb::TNiceDb& db, TTxId txId) const {
+    auto rowset = db.Table<Schema::UserLevelTransactions>()
+        .GreaterOrEqual(txId, 0u)
+        .LessOrEqual(txId, Max<ui32>())
+        .Select();
+    if (!rowset.IsReady()) {
+        return;
+    }
+    while (!rowset.EndOfSet()) {
+        ui32 idx = rowset.GetValue<Schema::UserLevelTransactions::UserTxIdx>();
+        db.Table<Schema::UserLevelTransactions>().Key(txId, idx).Delete();
+        if (!rowset.Next()) {
+            return;
+        }
+    }
+}
+
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr) const {
     if (Subscribers.empty()) {
         return true;

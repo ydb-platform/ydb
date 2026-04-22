@@ -293,9 +293,8 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
-    // Persist the pre-split (post-rewrite) user-level transactions so the
-    // scheme change outbox can replay the original DDL on a target cluster,
-    // which will redo both auto-mkdir split and sub-op decomposition.
+    // Keep the pre-split (post-rewrite) user-level transactions in memory
+    // so DoPersistSchemeChangeRecords can emit parent-level records.
     operation->UserLevelTransactions = rewrittenTransactions;
 
     for (const auto& transaction : transactions) {
@@ -316,6 +315,19 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 break;
             default:
                 break;
+        }
+    }
+
+    // All parts accepted. Persist the user-level bodies so a reboot between
+    // now and DoPersistSchemeChangeRecords doesn't lose them. Direct DB
+    // access is safe here because the operation is past the undo-safe gate.
+    {
+        NIceDb::TNiceDb db(context.GetDB());
+        for (ui32 i = 0; i < rewrittenTransactions.size(); ++i) {
+            TString body;
+            if (rewrittenTransactions[i].SerializeToString(&body)) {
+                PersistUserLevelTransaction(db, txId, i, body);
+            }
         }
     }
 

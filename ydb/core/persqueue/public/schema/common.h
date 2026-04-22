@@ -95,7 +95,10 @@ TResult ProcessAddConsumer(
     const bool checkServiceType,
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 );
-TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter);
+TResult ProcessAlterConsumer(
+    Ydb::Topic::Consumer& consumer,
+    const Ydb::Topic::AlterConsumer& alter
+);
 
 TResult ApplyChangesInt(
     const Ydb::Topic::AlterTopicRequest& request,

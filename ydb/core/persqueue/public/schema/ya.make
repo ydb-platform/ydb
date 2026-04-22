@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    add_consumer.cpp
     alter_topic.cpp
     alter_topic_internal.cpp
     alter_topic_operation.cpp

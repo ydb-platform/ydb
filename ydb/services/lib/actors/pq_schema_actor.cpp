@@ -231,6 +231,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         return {};
     }
 
+    // TODO remove this function. use AddConsumer instead
     TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig* config,
         const Ydb::Topic::Consumer& rr,

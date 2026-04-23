@@ -172,14 +172,50 @@ jobs:
       - name: Collect PR description
         if: steps.changes_check.outputs.changes == 'true'
         run: |
-          python3 .github/scripts/tests/mute/build_pr_body.py \
-            --base-branch "${{ env.BASE_BRANCH }}" \
-            --build-type "${{ env.BUILD_TYPE }}" \
-            --to-delete-debug "mute_update/to_delete_debug.txt" \
-            --to-mute-debug "mute_update/to_mute_debug.txt" \
-            --to-mute "mute_update/to_mute.txt" \
-            --to-unmute-debug "mute_update/to_unmute_debug.txt" \
-            --output "pr_body_content.txt"
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import quote
+
+          base_branch = "${{ env.BASE_BRANCH }}"
+          build_type = "${{ env.BUILD_TYPE }}"
+          max_tests = 50
+
+          def read_lines(path: str) -> list[str]:
+              p = Path(path)
+              if not p.exists() or p.stat().st_size == 0:
+                  return []
+              return p.read_text(encoding="utf-8").splitlines()
+
+          def append_debug_section(parts: list[str], title: str, lines: list[str]) -> None:
+              if not lines:
+                  return
+              parts.append(f"**{title}: {len(lines)}**\n\n")
+              parts.append("```\n")
+              parts.append("\n".join(lines))
+              parts.append("\n```\n\n")
+
+          to_delete_debug = read_lines("mute_update/to_delete_debug.txt")
+          to_mute_debug = read_lines("mute_update/to_mute_debug.txt")
+          to_mute = read_lines("mute_update/to_mute.txt")
+          to_unmute_debug = read_lines("mute_update/to_unmute_debug.txt")
+
+          body: list[str] = [f"# Muted tests update for {base_branch} (build: {build_type})\n\n"]
+          append_debug_section(body, "Removed from mute", to_delete_debug)
+          append_debug_section(body, "Muted flaky", to_mute_debug)
+
+          if to_mute_debug and to_mute:
+              url = (
+                  "https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link"
+                  f"?branch={quote(base_branch, safe='')}"
+                  f"&build_type={quote(build_type, safe='')}"
+              )
+              for test_name in to_mute[:max_tests]:
+                  url += f"&full_name={quote(test_name.replace(' ', '/'), safe='')}"
+              body.append(f"[View history of muted flaky tests on Dashboard]({url})\n")
+
+          append_debug_section(body, "Unmuted stable", to_unmute_debug)
+          Path("pr_body_content.txt").write_text("".join(body), encoding="utf-8")
+          PY
           echo "PR_BODY_PATH=pr_body_content.txt" >> "$GITHUB_ENV"
 
       - name: Upload all generated files as artifacts

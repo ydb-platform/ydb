@@ -13,6 +13,6 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
     ui64 consumersCount,
     TDqSolomonReadParams readParams,
     std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-    const NSo::TSolomonReadActorConfig& cfg = {});
+    const NSo::TSolomonReadActorConfig& cfg);
 
 } // namespace NYql::NDq

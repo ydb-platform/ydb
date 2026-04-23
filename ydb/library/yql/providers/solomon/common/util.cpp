@@ -286,7 +286,7 @@ TSolomonReadActorConfig ParseSolomonReadActorConfig(
     cfg.RetryConfig.MaxRetries =
         ParseSettingWithMin<ui64>(settings, "retryMaxRetries", 10, 1);
     cfg.RetryConfig.MaxTime =
-        TDuration::MilliSeconds(ParseSettingWithMin<ui64>(settings, "retryMaxTimeSec", 30, 1));
+        TDuration::Seconds(ParseSettingWithMin<ui64>(settings, "retryMaxTimeSec", 30, 1));
 
     return cfg;
 }

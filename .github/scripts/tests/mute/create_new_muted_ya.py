@@ -36,6 +36,7 @@ from mute.constants import (
     get_unmute_window_days,
 )
 from mute.naming import mute_file_line_to_tests_monitor_full_name
+from mute.mute_utils import dedicated_relative
 from ydb_wrapper import YDBWrapper
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
@@ -46,7 +47,6 @@ for _noisy in ('grpc', 'grpc._cython.cygrpc', 'ydb'):
 
 dir = os.path.dirname(__file__)
 repo_path = os.path.normpath(os.path.join(dir, '..', '..', '..', '..')) + os.sep
-muted_ya_path = '.github/config/muted_ya.txt'
 
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', '..', 'config', 'mute_issue_and_digest_config.json')
@@ -55,6 +55,12 @@ _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
 def load_manual_unmute_config():
     """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute.constants``."""
     return get_manual_unmute_window_days(), get_manual_unmute_min_runs()
+
+
+def resolve_muted_ya_path(explicit_path: str | None, build_type: str) -> str:
+    if explicit_path and str(explicit_path).strip():
+        return str(explicit_path).strip()
+    return dedicated_relative(build_type)
 
 
 def tests_monitor_query_days_window():
@@ -769,9 +775,6 @@ def apply_and_add_mutes(
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
 
-        if ydb_wrapper is not None and branch is not None and build_type is not None:
-            delete_fast_unmute_grace_rows(ydb_wrapper, branch, build_type, to_mute)
-
         # 3. Delete-from-mute candidates (to_delete).
         def is_delete_non_chunk(test):
             if is_chunk_test(test):
@@ -1290,8 +1293,8 @@ def mute_worker(args):
         logging.info(f"Branch: {args.branch}")
         logging.info(f"build_type: {build_type}")
         
-        # Use provided muted_ya file or fallback to default.
-        input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
+        # Resolve muted_ya path from build_type when path isn't passed explicitly.
+        input_muted_ya_path = resolve_muted_ya_path(getattr(args, 'muted_ya_file', ''), build_type)
         logging.info(f"Using muted_ya file: {input_muted_ya_path}")
         
         mute_check = YaMuteCheck()
@@ -1361,8 +1364,20 @@ def mute_worker(args):
                 build_type=build_type,
             )
 
+        elif args.mode == 'sync_fast_unmute_grace':
+            to_mute, _ = create_file_set(
+                aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
+            )
+            delete_fast_unmute_grace_rows(ydb_wrapper, args.branch, build_type, to_mute)
+            logging.info(
+                "fast_unmute_grace cleanup completed for branch=%s build_type=%s; candidates=%d",
+                args.branch,
+                build_type,
+                len(to_mute),
+            )
+
         elif args.mode == 'create_issues':
-            file_path = args.file_path
+            file_path = resolve_muted_ya_path(getattr(args, 'file_path', ''), build_type)
             logging.info(f"Creating issues from file: {file_path}")
 
             profile_id = make_profile_id(args.branch, build_type)
@@ -1397,8 +1412,24 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
-    update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
     update_muted_ya_parser.add_argument(
+        '--muted_ya_file',
+        default='',
+        help='Path to input muted_ya.txt file (default: resolved from build-type policy)',
+    )
+    update_muted_ya_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type slice (default: relwithdebinfo)',
+    )
+
+    sync_fast_unmute_grace_parser = subparsers.add_parser(
+        'sync_fast_unmute_grace',
+        help='remove fast_unmute_grace rows for tests that are mute candidates again',
+    )
+    sync_fast_unmute_grace_parser.add_argument('--branch', default='main', help='Branch to get history')
+    sync_fast_unmute_grace_parser.add_argument(
         '--build-type',
         default=DEFAULT_BUILD_TYPE,
         dest='build_type',
@@ -1410,7 +1441,10 @@ if __name__ == "__main__":
         help='sync issues with muted_ya file: create missing, close orphaned, enqueue to digest',
     )
     create_issues_parser.add_argument(
-        '--file_path', default=muted_ya_path, required=False, help='Path to muted_ya.txt'
+        '--file_path',
+        default='',
+        required=False,
+        help='Path to muted_ya.txt (default: resolved from build-type policy)',
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
     create_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')

@@ -129,6 +129,12 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
+      - name: Sync fast-unmute grace for re-muted tests
+        run: |
+          .github/scripts/tests/mute/create_new_muted_ya.py sync_fast_unmute_grace \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build-type=${{ env.BUILD_TYPE }}
+
       - name: Generate new muted_ya.txt
         run: |
           .github/scripts/tests/mute/create_new_muted_ya.py update_muted_ya \
@@ -186,24 +192,26 @@ jobs:
                   return []
               return p.read_text(encoding="utf-8").splitlines()
 
-          def append_debug_section(parts: list[str], title: str, lines: list[str]) -> None:
+          def append_debug_section(
+              parts: list[str], title: str, lines: list[str], count_override: int | None = None
+          ) -> None:
               if not lines:
                   return
-              parts.append(f"**{title}: {len(lines)}**\n\n")
+              count = count_override if count_override is not None else len(lines)
+              parts.append(f"**{title}: {count}**\n\n")
               parts.append("```\n")
               parts.append("\n".join(lines))
               parts.append("\n```\n\n")
 
-          to_delete_debug = read_lines("mute_update/to_delete_debug.txt")
-          to_mute_debug = read_lines("mute_update/to_mute_debug.txt")
+          to_delete = read_lines("mute_update/to_delete.txt")
           to_mute = read_lines("mute_update/to_mute.txt")
-          to_unmute_debug = read_lines("mute_update/to_unmute_debug.txt")
+          to_unmute = read_lines("mute_update/to_unmute.txt")
 
           body: list[str] = [f"# Muted tests update for {base_branch} (build: {build_type})\n\n"]
-          append_debug_section(body, "Removed from mute", to_delete_debug)
-          append_debug_section(body, "Muted flaky", to_mute_debug)
+          append_debug_section(body, "Removed from mute", to_delete, count_override=len(to_delete))
+          append_debug_section(body, "Muted flaky", to_mute, count_override=len(to_mute))
 
-          if to_mute_debug and to_mute:
+          if to_mute:
               url = (
                   "https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link"
                   f"?branch={quote(base_branch, safe='')}"
@@ -213,7 +221,7 @@ jobs:
                   url += f"&full_name={quote(test_name.replace(' ', '/'), safe='')}"
               body.append(f"[View history of muted flaky tests on Dashboard]({url})\n")
 
-          append_debug_section(body, "Unmuted stable", to_unmute_debug)
+          append_debug_section(body, "Unmuted stable", to_unmute, count_override=len(to_unmute))
           Path("pr_body_content.txt").write_text("".join(body), encoding="utf-8")
           PY
           echo "PR_BODY_PATH=pr_body_content.txt" >> "$GITHUB_ENV"

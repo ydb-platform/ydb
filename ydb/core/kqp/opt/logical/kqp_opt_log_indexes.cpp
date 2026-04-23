@@ -851,10 +851,11 @@ TExprBase DoRewriteTopSortOverKMeansTree(
         .Build()
     .Done();
 
-    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
-
     const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+
+    const ui32 defaultLevelTop = withOverlap ? 4 : 10;
+    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(defaultLevelTop);
 
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
@@ -1017,10 +1018,11 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     auto prefixLeafRows = FilterLeafRows<TCoCmpGreaterOrEqual>(TExprBase(read), ctx, pos);
     auto prefixRootRows = FilterLeafRows<TCoCmpLess>(TExprBase(read), ctx, pos);
 
-    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
-
     const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+
+    const ui32 defaultLevelTop = withOverlap ? 4 : 10;
+    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(defaultLevelTop);
 
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;

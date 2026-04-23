@@ -4480,8 +4480,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid levels: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
             "Invalid levels: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
-            "levels should be set");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2", "");
 
         // clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
@@ -4499,8 +4498,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid clusters: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
             "Invalid clusters: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
-            "clusters should be set");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1", "");
 
         // clusters^levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",

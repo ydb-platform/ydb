@@ -446,9 +446,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
-                {"/Root/Vectors", 12} // same as posting
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14}, // default levelTop=10 reads all nodes: 2 + 4 + 8 = 14
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100}, // all 8 leaf clusters × ~12.5 rows = 100
+                {"/Root/Vectors", 100} // same as posting
             });
 
             // SELECT Key, Value --- same stats
@@ -457,9 +457,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12},
-                {"/Root/Vectors", 12}
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100},
+                {"/Root/Vectors", 100}
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
@@ -482,8 +482,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14}, // default levelTop=10 reads all nodes: 2 + 4 + 8 = 14
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100}, // all 8 leaf clusters × ~12.5 rows = 100
                 // no main table
             });
 
@@ -493,8 +493,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12},
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100},
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
@@ -518,10 +518,152 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
-                {"/Root/Vectors", 4} // same as posting
+                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 6}, // default levelTop=10 reads all nodes: 2 + 4 = 6
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 10}, // all 4 leaf clusters × ~2.5 rows = 10 (rows with prefix=7)
+                {"/Root/Vectors", 10} // same as posting
             });
+        }
+    }
+
+    Y_UNIT_TEST(VectorIndexAutoSearchTopSize) {
+        TKikimrRunner kikimr(GetAppConfig(true, false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
+        NSchemeShard::gVectorIndexSeed = 1337;
+
+        { // CREATE TABLE
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/VectorsTopSize` (
+                    Key Int32,
+                    Embedding String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // UPSERT VALUES
+            for (ui32 key = 0; key < 100; key++) {
+                TString embedding = "00\x02";
+                embedding[0] = 'a' + key % 26;
+                embedding[1] = 'A' + (key * 17) % 26;
+
+                auto query = Sprintf(R"(
+                    UPSERT INTO `/Root/VectorsTopSize` (Key, Embedding) VALUES (%u, "%s");
+                )", key, embedding.c_str());
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            }
+        }
+
+        { // ADD INDEX without overlap
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/VectorsTopSize`
+                    ADD INDEX idx_no_overlap
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // ADD INDEX with overlap (overlap_clusters=2 > 1, so withOverlap=true)
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/VectorsTopSize`
+                    ADD INDEX idx_with_overlap
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2, overlap_clusters=2);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        auto getReadsByTable = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            TMap<TString, ui64> readsByTable;
+            for (const auto& queryPhase : stats.query_phases()) {
+                for (const auto& tableAccess : queryPhase.table_access()) {
+                    readsByTable[tableAccess.name()] += tableAccess.reads().rows();
+                }
+            }
+            return readsByTable;
+        };
+
+        { // Without pragma, no-overlap index must behave same as pragma KMeansTreeSearchTopSize = "10"
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto explicitReads = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "10";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            UNIT_ASSERT_VALUES_EQUAL_C(autoReads, explicitReads,
+                "Auto TopSize for no-overlap index must equal explicit TopSize=10");
+        }
+
+        { // Without pragma, overlap index must behave same as pragma KMeansTreeSearchTopSize = "4"
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto explicitReads = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "4";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            UNIT_ASSERT_VALUES_EQUAL_C(autoReads, explicitReads,
+                "Auto TopSize for overlap index must equal explicit TopSize=4");
+        }
+
+        { // Explicit pragma overrides auto for no-overlap index
+            auto readsTopSize1 = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            // With TopSize=1 (default old value) we should read fewer rows than with auto TopSize=10
+            UNIT_ASSERT_C(
+                readsTopSize1["/Root/VectorsTopSize/idx_no_overlap/indexImplLevelTable"] <=
+                autoReads["/Root/VectorsTopSize/idx_no_overlap/indexImplLevelTable"],
+                "Explicit TopSize=1 must read no more level rows than auto TopSize=10");
+        }
+
+        { // Explicit pragma overrides auto for overlap index
+            auto readsTopSize10 = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "10";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            // With explicit TopSize=10 we should read more or equal rows than with auto TopSize=4
+            UNIT_ASSERT_C(
+                readsTopSize10["/Root/VectorsTopSize/idx_with_overlap/indexImplLevelTable"] >=
+                autoReads["/Root/VectorsTopSize/idx_with_overlap/indexImplLevelTable"],
+                "Explicit TopSize=10 must read no fewer level rows than auto TopSize=4");
         }
     }
 

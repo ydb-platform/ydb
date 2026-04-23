@@ -1620,6 +1620,7 @@ public:
     void AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& indexInfo);
 
     void PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreationConfig(NIceDb::TNiceDb& db, const TIndexBuildInfo& info);
     void PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue);
     void PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);

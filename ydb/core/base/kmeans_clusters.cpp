@@ -9,6 +9,7 @@
 #include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
+#include <cmath>
 #include <span>
 
 namespace NKikimr::NKMeans {
@@ -557,6 +558,29 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
     return CreateClusters(settings, maxRounds, error);
 }
 
+std::pair<ui32, ui32> ComputeOptimalClustersAndLevels(ui64 n, ui32 t, double p, ui64 sThresh) {
+    if (n == 0) {
+        return {MinClusters, MinLevels};
+    }
+    for (ui32 l = MinLevels; l <= MaxLevels; ++l) {
+        const double num = static_cast<double>(l) * t * p * n;
+        const double den = 1.0 + static_cast<double>(t) * (l - 1);
+        const double c = std::pow(num / den, 1.0 / (l + 1));
+        const ui32 clusters = std::clamp<ui32>(static_cast<ui32>(std::round(c)), MinClusters, MaxClusters);
+        const double s = clusters + static_cast<double>(clusters) * t * (l - 1)
+            + static_cast<double>(t) * n * p / std::pow(clusters, l);
+        if (s < static_cast<double>(sThresh)) {
+            return {clusters, l};
+        }
+    }
+    constexpr ui32 l = MaxLevels;
+    const double num = static_cast<double>(l) * t * p * n;
+    const double den = 1.0 + static_cast<double>(t) * (l - 1);
+    const double c = std::pow(num / den, 1.0 / (l + 1));
+    const ui32 clusters = std::clamp<ui32>(static_cast<ui32>(std::round(c)), MinClusters, MaxClusters);
+    return {clusters, l};
+}
+
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     error = "";
 
@@ -574,23 +598,23 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
-    if (!ValidateSettingInRange("levels",
-        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt,
+    if (settings.has_levels() && !ValidateSettingInRange("levels",
+        std::optional<ui64>(settings.levels()),
         MinLevels, MaxLevels,
         error))
     {
         return false;
     }
 
-    if (!ValidateSettingInRange("clusters",
-        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
+    if (settings.has_clusters() && !ValidateSettingInRange("clusters",
+        std::optional<ui64>(settings.clusters()),
         MinClusters, MaxClusters,
         error))
     {
         return false;
     }
 
-    if (settings.has_overlap_clusters() &&
+    if (settings.has_overlap_clusters() && settings.has_clusters() &&
         settings.overlap_clusters() > settings.clusters()) {
         error = TStringBuilder() << "overlap_clusters should be less than or equal to clusters";
         return false;
@@ -602,19 +626,21 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
-    ui64 clustersPowLevels = 1;
-    for (ui64 i = 0; i < settings.levels(); ++i) {
-        clustersPowLevels *= settings.clusters();
-        if (clustersPowLevels > MaxClustersPowLevels) {
-            error = TStringBuilder() << "Invalid clusters^levels: " << settings.clusters() << "^" << settings.levels() << " should be less than " << MaxClustersPowLevels;
+    if (settings.has_levels() && settings.has_clusters()) {
+        ui64 clustersPowLevels = 1;
+        for (ui64 i = 0; i < settings.levels(); ++i) {
+            clustersPowLevels *= settings.clusters();
+            if (clustersPowLevels > MaxClustersPowLevels) {
+                error = TStringBuilder() << "Invalid clusters^levels: " << settings.clusters() << "^" << settings.levels() << " should be less than " << MaxClustersPowLevels;
+                return false;
+            }
+        }
+
+        if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
+            error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters()
+                << " should be less than " << MaxVectorDimensionMultiplyClusters;
             return false;
         }
-    }
-
-    if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
-        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters()
-            << " should be less than " << MaxVectorDimensionMultiplyClusters;
-        return false;
     }
 
     error = "";

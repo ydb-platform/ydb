@@ -65,4 +65,11 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
 void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio);
 void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>& rowClusters, ui32 overlapClusters, double overlapRatio);
 
+// Compute optimal clusters count and levels count using the cost formula:
+//   S = C + C*T*(L-1) + T*N*P / C^L
+// where N = row count, T = search top size, P = mean cluster overlap factor.
+// Iterates L from 1 upward until S < sThresh.
+// Returns (clusters, levels).
+std::pair<ui32, ui32> ComputeOptimalClustersAndLevels(ui64 n, ui32 t, double p, ui64 sThresh);
+
 }

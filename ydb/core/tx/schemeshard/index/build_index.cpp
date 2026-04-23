@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
@@ -160,6 +161,18 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName)
         );
     }
+}
+
+void TSchemeShard::PersistBuildIndexCreationConfig(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+    NKikimrSchemeOp::TIndexCreationConfig serializableRepresentation;
+    for (const auto& description : info.ImplTableDescriptions) {
+        *serializableRepresentation.AddIndexImplTableDescriptions() = description;
+    }
+    *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
+        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
+    db.Table<Schema::IndexBuild>().Key(info.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::CreationConfig>(serializableRepresentation.SerializeAsString())
+    );
 }
 
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
@@ -421,7 +434,7 @@ void TSchemeShard::PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndex
     for (const auto& [_, row] : info.Sample.Rows) {
         clusters.push_back(TString(TSerializedCellVec::ExtractCell(row, 0).AsBuf()));
     }
-    for (ui32 i = info.KMeans.K; i <= 2*info.KMeans.K; i++) {
+    for (ui32 i = info.KMeans.K; i <= 2 * info.KMeans.K; i++) {
         db.Table<Schema::KMeansTreeSample>().Key(info.Id, i).Delete();
     }
     for (ui32 i = 0; i < info.Sample.Rows.size(); i++) {

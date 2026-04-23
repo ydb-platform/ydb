@@ -599,8 +599,9 @@ public:
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     TString createError;
                     Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
-                    indexInfo->KMeans.K = desc.settings().clusters();
-                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
+                    indexInfo->KMeans.K = desc.settings().has_clusters() ? desc.settings().clusters() : 0;
+                    indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex()
+                        + (desc.settings().has_levels() ? desc.settings().levels() : 0);
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
@@ -787,7 +788,10 @@ public:
         if (IsBuildVectorIndex()) {
             const auto inProgress = InProgressShards.size();
             const auto toUpload = ToUploadShards.size();
-            Y_ENSURE(KMeans.Level != 0 && KMeans.Levels != 0);
+            Y_ENSURE(KMeans.Level != 0);
+            if (KMeans.Levels == 0) {
+                return 0.f;
+            }
             if (!KMeans.NeedsAnotherLevel() && !KMeans.NeedsAnotherParent()
                 && toUpload == 0 && inProgress == 0) {
                 return 100.f;

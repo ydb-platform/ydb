@@ -1386,6 +1386,72 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    // Test that a vector index created without explicit clusters/levels has the auto-computed
+    // parameters persisted to the schema (visible in DescribeTable) and that search works.
+    Y_UNIT_TEST(VectorIndexAutoParams) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        // Create table with 10 rows and an index without explicit clusters/levels
+        auto session = DoCreateTableForVectorIndex(db);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2);
+            )"));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Verify that DescribeTable shows non-zero auto-computed clusters and levels
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
+            UNIT_ASSERT_C(settings.Clusters > 0,
+                "Expected non-zero auto-computed clusters, got " << settings.Clusters);
+            UNIT_ASSERT_C(settings.Levels > 0,
+                "Expected non-zero auto-computed levels, got " << settings.Levels);
+        }
+
+        // Verify that vector search queries work with the auto-computed index.
+        // Use a large KMeansTreeSearchTopSize so that all clusters are searched,
+        // guaranteeing exact top-3 results regardless of the computed cluster count.
+        {
+            const TString plainQuery(Q1_(R"(
+                $target = "\x67\x71\x02";
+                SELECT pk FROM `/Root/TestTable`
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )"));
+            const TString indexQuery(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1000";
+                $target = "\x67\x71\x02";
+                SELECT pk FROM `/Root/TestTable` VIEW index
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )"));
+            auto txSettings = TTxSettings::SerializableRW();
+            auto mainResults = DoPositiveQueryVectorIndex(session, txSettings, plainQuery);
+            absl::c_sort(mainResults);
+            UNIT_ASSERT_VALUES_EQUAL_C(mainResults.size(), 3, "main query returned wrong number of results");
+            auto indexResults = DoPositiveQueryVectorIndex(session, txSettings, indexQuery);
+            absl::c_sort(indexResults);
+            UNIT_ASSERT_VALUES_EQUAL_C(indexResults.size(), 3, "index query returned wrong number of results");
+            UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+        }
+    }
+
     Y_UNIT_TEST_QUAD(VectorIndexTruncateTable, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTruncateTable(true);

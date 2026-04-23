@@ -269,8 +269,9 @@ private:
                 return false;
             }
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            buildInfo.KMeans.K = settings.clusters();
-            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + settings.levels();
+            buildInfo.KMeans.K = settings.has_clusters() ? settings.clusters() : 0;
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex()
+                + (settings.has_levels() ? settings.levels() : 0);
             buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
             buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
             buildInfo.KMeans.OverlapClusters = settings.overlap_clusters()

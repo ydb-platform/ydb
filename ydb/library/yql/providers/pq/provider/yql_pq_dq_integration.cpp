@@ -211,6 +211,7 @@ public:
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(expandedRowType)
                     .Partitions(emptyList)
+                    .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
@@ -428,13 +429,23 @@ public:
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }
 
-                NYql::NConnector::NApi::TPredicate predicateProto;
-                auto serializedProto = topicSource.FilterPredicate().Ref().Content();
-                YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
+                NYql::NConnector::NApi::TPredicate filterPredicateProto;
+                auto filterSerializedProto = topicSource.FilterPredicate().Ref().Content();
+                YQL_ENSURE(filterPredicateProto.ParseFromString(filterSerializedProto));
 
-                TString predicateSql = NYql::FormatPredicate(predicateProto);
+                NYql::NConnector::NApi::TPredicate offsetPredicateProto;
+                auto offsetSerializedProto = topicSource.OffsetPredicate().Ref().Content();
+                YQL_ENSURE(offsetPredicateProto.ParseFromString(offsetSerializedProto));
+
+                TString filterPredicateSql = NYql::FormatPredicate(filterPredicateProto);
+                TString offsetPredicateSql = NYql::FormatPredicate(offsetPredicateProto);
+
+                Cerr << "Filter predicate: " << filterPredicateSql << Endl;
+                Cerr << "Offset predicate: " << offsetPredicateSql << Endl;
+
+                FormatPredicate(offsetPredicateProto, srcDesc);
                 if (sharedReading) {
-                    srcDesc.SetPredicate(predicateSql);
+                    srcDesc.SetPredicate(filterPredicateSql);
                     srcDesc.SetSharedReading(true);
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
@@ -472,8 +483,8 @@ public:
                     protoSettings.PackFrom(srcDesc);
                 }
 
-                if (sharedReading && !predicateSql.empty()) {
-                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
+                if (sharedReading && !filterPredicateSql.empty()) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + filterPredicateSql));
                 }
                 if (sharedReading && !watermarkExprSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
@@ -925,6 +936,109 @@ public:
             useSharedReading = false;
         }
         return useSharedReading;
+    }
+
+    bool FormatComparison(TPredicate_TComparison comparison, NPq::NProto::TDqPqTopicSource& srcDes) {
+        bool leftIsColumn = comparison.left_value().payload_case() == TExpression::kColumn;
+        bool leftIsValue = comparison.left_value().payload_case() == TExpression::kTypedValue;
+        bool rightIsColumn = comparison.right_value().payload_case() == TExpression::kColumn;
+        bool rightIsValue = comparison.right_value().payload_case() == TExpression::kTypedValue;
+
+        if (!(leftIsColumn && rightIsValue || leftIsValue && rightIsColumn)) {
+            return false;
+        }
+        bool inverted = rightIsColumn;
+        auto typedValue = comparison.right_value();
+        auto operation = comparison.operation();
+        if (inverted) {
+            auto typedValue = comparison.left_value();
+            switch (comparison.operation()) {
+            case TPredicate_TComparison::L:
+                operation = TPredicate_TComparison::G;
+                break;
+            case TPredicate_TComparison::LE:
+                operation = TPredicate_TComparison::GE;
+                break;
+            case TPredicate_TComparison::EQ:
+            case TPredicate_TComparison::NE:
+                break;
+            case TPredicate_TComparison::GE:
+                operation = TPredicate_TComparison::LE;
+                break;
+            case TPredicate_TComparison::G:
+                operation = TPredicate_TComparison::L;
+                break;
+            default:
+                throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
+            }
+        }
+
+        ui64 value = [v = typedValue.typed_value()]() -> ui64 {
+            switch(v.value().value_case())
+                case Ydb::Value::kInt32Value:
+                    return v.value.int32_value();
+                case Ydb::Value::kUint32Value:
+                    return v.value.uint32_value();
+                case Ydb::Value::kInt64Value:
+                    return v.value.int64_value();
+                case Ydb::Value::kUint64Value:
+                    return v.value.uint64_value();
+                default:
+                    throw yexception() << "UnimplementedValue, value " << static_cast<ui64>(v.value.value_case());
+        }();
+
+        auto* offset = srcDes.MutablePartitionOffset();
+
+        switch (comparison.operation()) {
+        case TPredicate_TComparison::L:
+            offset.SetEnd(value);
+            break;
+        case TPredicate_TComparison::LE:
+            offset.SetEnd(value + 1);
+            break;
+        case TPredicate_TComparison::EQ:
+            offset.SetBegin(value);
+            offset.SetEnd(value + 1);
+            break;
+        case TPredicate_TComparison::GE:
+            offset.SetBegin(value);
+            break;
+        case TPredicate_TComparison::G:
+            offset.SetBegin(value + 1);
+            break;
+        case TPredicate_TComparison::NE:
+        default:
+            throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
+        }
+    }
+
+    bool FormatPredicate(const TPredicate& predicate, NPq::NProto::TDqPqTopicSource& srcDesc) {
+        switch (predicate.payload_case()) {
+            case TPredicate::PAYLOAD_NOT_SET:
+                return true;
+            case TPredicate::kConjunction:
+                return false;
+                //return FormatConjunction(predicate.conjunction());
+            case TPredicate::kDisjunction:
+                //return FormatDisjunction(predicate.disjunction());
+                return false;
+            case TPredicate::kNegation:
+            case TPredicate::kCoalesce:
+            case TPredicate::kIf:
+            case TPredicate::kIsNull:
+            case TPredicate::kIsNotNull:
+            case TPredicate::kRegexp:
+            case TPredicate::kIn:
+                return false;
+                
+            case TPredicate::kComparison:
+                return FormatComparison(predicate.comparison(), srcDesc);
+            case TPredicate::kBoolExpression:
+                //return FormatExpression(predicate.bool_expression().value());
+                return false;
+            default:
+                false;
+        }
     }
 
 private:

@@ -336,15 +336,30 @@ public:
             }
         }
 
+        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
+        if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter222. Lambda is already not empty";
+            return node;
+        }
+
+        if (!dqPqTopicSource.OffsetPredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
         YQL_CLOG(INFO, ProviderPq) << "topicPartitionsCount " << topicPartitionsCount;
 
         TString sharedReadingPridicateSerializedProto;
-         // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
         if (UseSharedReadingForTopic(dqPqTopicSource)) {
+            // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
             NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-            if (sharedReadingPredicate.IsEmpty()) {
-                return node;
-            }
+            // if (sharedReadingPredicate.IsEmpty()) {
+            //     return node;
+            // }
 
             TStringBuilder err;
             NYql::NConnector::NApi::TPredicate predicateProto;
@@ -355,74 +370,86 @@ public:
             YQL_ENSURE(predicateProto.SerializeToString(&sharedReadingPridicateSerializedProto));
         }
 
-        auto settings = TPushdownSettings();
-        settings.EnableMember("_yql_sys_partition_id");
-        NPushdown::TPredicateNode partitionIdPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
+        TExprNode::TPtr partitionList = dqPqTopicSource.Partitions().Ptr();
+        {
+            auto settings = TPushdownSettings();
+            settings.EnableMember("_yql_sys_partition_id");
+            NPushdown::TPredicateNode partitionIdPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
 
-        if (partitionIdPredicate.IsEmpty()) {
-            return node;
-        }
-        
-        auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
-        auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
-            .Args({"_yql_sys_partition_id"})
-            .Body<TExprApplier>()
-                .Apply(partitionIdPredicate.ExprNode.Cast())
-                .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
-                .Build()
-            .Done();
+            if (!partitionIdPredicate.IsEmpty()) {
+                auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
+                auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
+                    .Args({"_yql_sys_partition_id"})
+                    .Body<TExprApplier>()
+                        .Apply(partitionIdPredicate.ExprNode.Cast())
+                        .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
+                        .Build()
+                    .Done();
 
-        TExprNode::TPtr filteredPathList = ctx.Builder(node.Pos())
-            .Callable("EvaluateExpr")
-                .Callable(0, "Map")
-                    .Callable(0, "Filter")
+                TExprNode::TPtr partitionList = ctx.Builder(node.Pos())
+                    .Callable("EvaluateExpr")
                         .Callable(0, "Map")
-                            .Callable(0, "Enumerate")
-                                .Callable(0, "Replicate")
-                                    .Callable(0, "Int32")
-                                        .Atom(0, "1")
+                            .Callable(0, "Filter")
+                                .Callable(0, "Map")
+                                    .Callable(0, "Enumerate")
+                                        .Callable(0, "Replicate")
+                                            .Callable(0, "Int32")
+                                                .Atom(0, "1")
+                                            .Seal()
+                                            .Callable(1, "Int32")
+                                                .Atom(0, ToString(topicPartitionsCount))
+                                            .Seal()
+                                        .Seal()
                                     .Seal()
-                                    .Callable(1, "Int32")
-                                        .Atom(0, ToString(topicPartitionsCount))
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                            .Lambda(1)
-                                .Param("item")
-                                .Callable("AsStruct")
-                                    .List(0)
-                                        .Atom(0, "_yql_sys_partition_id")
-                                        .Callable(1, "Nth")
-                                            .Arg(0, "item")
-                                            .Atom(1, "0", TNodeFlags::Default)
+                                    .Lambda(1)
+                                        .Param("item")
+                                        .Callable("AsStruct")
+                                            .List(0)
+                                                .Atom(0, "_yql_sys_partition_id")
+                                                .Callable(1, "Nth")
+                                                    .Arg(0, "item")
+                                                    .Atom(1, "0", TNodeFlags::Default)
+                                                .Seal()
+                                            .Seal()
                                         .Seal()
                                     .Seal()
                                 .Seal()
+                                .Add(1, newFilterLambda.Ptr())
+                            .Seal()
+                            .Lambda(1)
+                                .Param("item")
+                                .Callable("Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, "_yql_sys_partition_id", TNodeFlags::Default)
+                                .Seal()
                             .Seal()
                         .Seal()
-                        .Add(1, newFilterLambda.Ptr())
                     .Seal()
-                    .Lambda(1)
-                        .Param("item")
-                        .Callable("Member")
-                            .Arg(0, "item")
-                            .Atom(1, "_yql_sys_partition_id", TNodeFlags::Default)
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
-
-        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
-            return node;
+                    .Build();
+            }
         }
 
-        if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
-            
+        TString offsetPredicateSerializedProto;
+        {
 
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter222. Lambda is already not empty";
+            auto offsetSettings = TPushdownSettings();
+            offsetSettings.EnableMember("_yql_sys_offset");
+            NPushdown::TPredicateNode offsetPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), offsetSettings);
+            // rm
+            TStringBuilder err;
+            NYql::NConnector::NApi::TPredicate predicateProto;
+            if (!NYql::SerializeFilterPredicate(ctx, offsetPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+                ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                return node;
+            }
+            TString predicateSql = NYql::FormatPredicate(predicateProto);
+            Cerr  << "offset predicagte " << predicateSql << Endl;
+
+            YQL_ENSURE(predicateProto.SerializeToString(&offsetPredicateSerializedProto));
+
+        }
+
+        if (sharedReadingPridicateSerializedProto.empty() && !partitionList && offsetPredicateSerializedProto.empty()) {
             return node;
         }
 
@@ -438,7 +465,8 @@ public:
                         .Input<TDqPqTopicSource>()
                             .InitFrom(dqPqTopicSource)
                             .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
-                            .Partitions(filteredPathList)
+                            .Partitions(partitionList)
+                            .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                             .Build()
                         .Build()
                     .Build()
@@ -451,7 +479,8 @@ public:
                 .Input<TDqPqTopicSource>()
                     .InitFrom(dqPqTopicSource)
                     .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
-                    .Partitions(filteredPathList)
+                    .Partitions(partitionList)
+                    .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                     .Build()
                 .Build()
             .Done();

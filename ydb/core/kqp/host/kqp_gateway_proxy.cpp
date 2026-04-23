@@ -634,7 +634,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                     error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.KeyColumns);
                     return false;
                 }
-                if (!index.DataColumns.empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
+                if (!index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
                     error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.KeyColumns);
                     return false;

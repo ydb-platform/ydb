@@ -14,7 +14,6 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -22,10 +21,13 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/util/wildcard.h>
+#include <ydb/library/actors/interconnect/subscription_manager.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
+
+#include <optional>
 
 #include <util/generic/xrange.h>
 #include <util/string/vector.h>
@@ -1633,7 +1635,6 @@ void PreProcessResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse* res
     }
 }
 
-
 class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1> {
 private:
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1>;
@@ -1641,10 +1642,10 @@ private:
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    TVector<ui32> Nodes;
     THashMap<ui32, TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     ui32 NumWorkers;
     ui32 WorkerId;
+    std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1667,20 +1668,18 @@ public:
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersRequest> request(new TEvTabletCounters::TEvTabletLabeledCountersRequest());
         request->Record.SetTabletType(TabletType);
         request->Record.SetVersion(1);
-        ctx.Send(aggregatorServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Nodes.emplace_back(nodeId);
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (nodeId != ctx.SelfID.NodeId()) {
+            SessionSubscriptions->Arm(nodeId, TActivationContext::InterconnectProxy(nodeId));
+            flags |= IEventHandle::FlagSubscribeOnSession;
+        }
+        ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
         ++NodesRequested;
     }
 
-    void Die(const TActorContext& ctx) override {
-        for (const ui32 node : Nodes) {
-            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
-        }
-        TBase::Die(ctx);
-    }
-
     void Bootstrap(const TActorContext& ctx) {
+        SessionSubscriptions.emplace(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
             const TActorId nameserviceId = GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
@@ -1708,6 +1707,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleResponse);
             HFunc(TEvents::TEvUndelivered, Undelivered);
+            HFunc(TEvInterconnect::TEvNodeConnected, Connected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -1716,7 +1716,6 @@ public:
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
         Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
-        Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
             ++i;
@@ -1734,14 +1733,22 @@ public:
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev, const TActorContext&) {
+        SessionSubscriptions->Handle(ev);
+    }
+
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
@@ -1750,6 +1757,9 @@ public:
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         PreProcessResponse(ev->Get());
         PerNodeResponse[nodeId] = ev->Release();
         NodeResponseReceived(ctx);
@@ -1913,11 +1923,11 @@ protected:
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    TVector<ui32> Nodes;
     THashMap<ui32, THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     TString Group;
     ui32 NumWorkers;
     ui32 WorkerId;
+    std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
     TMerger Merger;
 
@@ -1949,20 +1959,18 @@ public:
             request->Record.SetGroup(Group);
         }
         // TODO: what if it's empty
-        ctx.Send(aggregatorServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Nodes.emplace_back(nodeId);
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (nodeId != ctx.SelfID.NodeId()) {
+            SessionSubscriptions->Arm(nodeId, TActivationContext::InterconnectProxy(nodeId));
+            flags |= IEventHandle::FlagSubscribeOnSession;
+        }
+        ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
         ++NodesRequested;
     }
 
-    void Die(const TActorContext& ctx) override {
-        for (const ui32 node : Nodes) {
-            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
-        }
-        TBase::Die(ctx);
-    }
-
     void Bootstrap(const TActorContext& ctx) {
+        SessionSubscriptions.emplace(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
             const TActorId nameserviceId = GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
@@ -1990,6 +1998,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleResponse);
             HFunc(TEvents::TEvUndelivered, Undelivered);
+            HFunc(TEvInterconnect::TEvNodeConnected, Connected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -1998,7 +2007,6 @@ public:
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
         Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
-        Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
             ++i;
@@ -2016,14 +2024,22 @@ public:
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " "  << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev, const TActorContext&) {
+        SessionSubscriptions->Handle(ev);
+    }
+
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
@@ -2033,6 +2049,9 @@ public:
         ui64 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
                    "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         PreProcessResponse(ev->Get());
 
         auto [it, emplaced] = PerNodeResponse.emplace(nodeId, ev->Release().Release());

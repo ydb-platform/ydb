@@ -407,11 +407,10 @@ public:
     }
 
     void HandlePoison() {
-        // PoisonTimeout is a safety net for the case where read actors never
-        // bootstrapped (e.g. node failure during query startup).  Once any
-        // consumer message has been received we know the read actors are alive
-        // and will send TEvConsumerFinished in their own PassAway(), so we can
-        // safely ignore the timeout and let the normal shutdown path run.
+        // PoisonTimeout is a safety net for the case where some read actors are never
+        // bootstrapped (e.g. node failure during query startup).  Once we know that all
+        // consumers are alive, we can safely ignore the timeout and let the normal
+        // shutdown path run.
         if (ConnectedConsumers.size() == ConsumersCount) {
             LOG_D("TDqSolomonMetricsQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
             return;

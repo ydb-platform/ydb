@@ -5,7 +5,6 @@ import logging
 import time as time_module
 import pytest
 
-from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
 from ydb.tests.library.stability.utils.collect_errors import AgentErrorsCollector, WardenResults
@@ -54,17 +53,6 @@ class ParallelWorkloadTestBase:
                 "Nemesis Teardown Summary",
                 attachment_type=allure.attachment_type.TEXT,
             )
-
-    @pytest.fixture(autouse=True, scope="session")
-    def health_checker_daemon(self, binary_deployer: StressUtilDeployer):
-        # if self.event_process_mode is not None:
-        #     reporter = HealthCheckReporter(binary_deployer.hosts)
-        #     reporter.start_healthchecks()
-        #     yield reporter
-        #     reporter.stop_healthchecks()
-        # else:
-        #     yield None
-        pass
 
     @pytest.fixture(autouse=True, scope="session")
     def stress_executor(self) -> StressRunExecutor:

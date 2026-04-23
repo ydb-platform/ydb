@@ -403,5 +403,3 @@ def __set_nemesis_dashboard(test_info: dict[str, str], start_time: float, end_ti
         start_time=monitoring_start,
         end_time=monitoring_end
     )}'>Nemesis Dashboard</a>"
-
-

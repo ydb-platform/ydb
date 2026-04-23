@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Tuple
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
 from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden

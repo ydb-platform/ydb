@@ -280,7 +280,7 @@ jobs:
           python .github/scripts/create_or_update_pr.py create_or_update \
             --base_branch="${{ env.BASE_BRANCH }}" \
             --branch_for_pr="${{ env.PR_BRANCH }}" \
-            --title="Update muted YA (${{ env.BUILD_TYPE }}) in ${{ env.BASE_BRANCH }}" \
+            --title="Update muted_ya (${{ env.BUILD_TYPE }}) in ${{ env.BASE_BRANCH }}" \
             --body="${{ env.PR_BODY_PATH }}"
         
       - name: Prepare PR comment

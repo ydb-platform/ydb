@@ -135,7 +135,7 @@ NFSv4 использует расширенную модель прав вмес
     ```
 
     Опции монтирования:
-    - `-t nfs` — тип файловой системы NFS.
+    - `-t nfs4` — тип файловой системы NFSv4.
     - `-o rw` — монтировать с правом чтения и записи.
 
     В данном примере хост сервер не принадлежит кластеру {{ ydb-short-name }}, при этом резервное копирование и восстановление будут корректно работать в случае, если один из хостов кластера назначен NFS-сервером.
@@ -247,7 +247,7 @@ NFSv4 ACL позволяют задать более гранулярные пр
 6. Настройте NFSv4 ACL на директории:
 
     ```bash
-    sudo nfs4_setfacl -s A::<uid>:rwaxtD,A:fi:OWNER@:rwat,A:di:OWNER@rwaxtD /home/st-shchetinin/nfs_acl_dir
+    sudo nfs4_setfacl -s A::<uid>:rwaxtD,A:fi:OWNER@:rwat,A:di:OWNER@:rwaxtD /mnt/ydb-backup
     ```
 
     Структура ACE (`A:flags:who:permissions`):

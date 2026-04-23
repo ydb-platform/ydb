@@ -36,23 +36,6 @@ private:
         }
     };
 
-    TConclusion<NKikimrTxColumnShard::TIndexPortionMeta> GetPortionMeta(const TPortionKey& key, NIceDb::TNiceDb& db) {
-        if (auto findMeta = PortionMetaCache.FindPtr(key)) {
-            return *findMeta;
-        }
-
-        auto rowset = db.Table<NColumnShard::Schema::IndexPortions>().Key(key.GetPathId(), key.GetPortionId()).Select();
-        if (!rowset.IsReady()) {
-            return TConclusionStatus::Fail("Not ready");
-        }
-        AFL_VERIFY(!rowset.EndOfSet());
-        NKikimrTxColumnShard::TIndexColumnMeta metaProto;
-        AFL_VERIFY(metaProto.ParseFromString(rowset.GetValue<NColumnShard::Schema::IndexPortions::Metadata>()));
-        auto emplaced = PortionMetaCache.emplace(key, metaProto.GetPortionMeta());
-        AFL_VERIFY(emplaced.second);
-        return emplaced.first->second;
-    }
-
 public:
     static TString GetClassNameStatic() {
         return ::ToString(ENormalizerSequentialId::RestoreV0ChunksMeta);
@@ -112,8 +95,6 @@ public:
         TColumnChunkLoadContext CLContext;
         ISnapshotSchema::TPtr Schema;
 
-        YDB_ACCESSOR_DEF(TUpdate, Update);
-
         void InitSchema(const NColumnShard::TTablesManager& tm);
 
     public:
@@ -154,6 +135,5 @@ public:
 
 private:
     std::shared_ptr<NColumnShard::TBlobGroupSelector> DsGroupSelector;
-    THashMap<TPortionKey, NKikimrTxColumnShard::TIndexPortionMeta> PortionMetaCache;
 };
 }   // namespace NKikimr::NOlap

@@ -795,7 +795,7 @@ private:
             .AppendTopics(topicReadSettings)
             .MaxMemoryUsageBytes(BufferSize)
             .ReadFromTimestamp(StartingMessageTimestamp)
-            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets());    // In table mode the query will not fail query by TEndPartitionSessionEvent.
+            .AutoPartitioningSupport(true /* !SourceParams.GetStopAtCurrentEndOffsets() */);    // In table mode the query will not fail query by TEndPartitionSessionEvent.
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
@@ -900,7 +900,7 @@ private:
     }
 
     void SchedulePartitionCountTimer() {
-        if (!CheckPartitionCountPeriod || SourceParams.GetStopAtCurrentEndOffsets() || PartitionCountTimerScheduled) {
+        if (!CheckPartitionCountPeriod || /* SourceParams.GetStopAtCurrentEndOffsets() || */ PartitionCountTimerScheduled) {
             return;
         }
         PartitionCountTimerScheduled = true;
@@ -1062,7 +1062,7 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
-            if (!Self.SourceParams.GetStopAtCurrentEndOffsets()) {  // streaming mode
+            if (true /* !Self.SourceParams.GetStopAtCurrentEndOffsets() */) {  // streaming mode
                 TStringBuilder message;
                 message << "Topic (" << Self.SourceParams.GetTopicPath() << ") with auto partitioning is not supported.";
                 SRC_LOG_E(message);

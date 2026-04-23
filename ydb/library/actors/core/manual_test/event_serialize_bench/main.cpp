@@ -24,6 +24,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
+#include <util/system/compiler.h>
 #include <util/system/sigset.h>
 
 #include <array>
@@ -44,6 +45,7 @@ enum EBenchEvents {
 
 constexpr ui32 Node1 = 1;
 constexpr ui32 Node2 = 2;
+constexpr size_t Payload256 = 256;
 constexpr size_t Payload4KB = 4 * 1024;
 constexpr size_t VPutLikeExtraChecks = 4;
 
@@ -145,7 +147,7 @@ struct TBlobIdRaw {
     ui64 RawX3;
 };
 
-struct TVDiskIdRaw {
+struct Y_PACKED TVDiskIdRaw {
     ui32 GroupID;
     ui32 GroupGeneration;
     ui8 Ring;
@@ -153,7 +155,7 @@ struct TVDiskIdRaw {
     ui8 VDisk;
 };
 
-struct TMsgQoSRaw {
+struct Y_PACKED TMsgQoSRaw {
     ui64 Cost;
     ui32 DeadlineSeconds;
     ui8 ExtQueueId;
@@ -167,16 +169,39 @@ struct TTimestampsRaw {
 };
 
 struct TVPutFlagsRaw {
-    ui8 IssueKeepFlag;
-    ui8 IsZeroEntry;
-    ui8 IgnoreBlock;
-    ui8 NotifyIfNotReady;
+    ui8 Bits = 0;
+
+    static constexpr ui8 IssueKeepFlagMask = 1u << 0;
+    static constexpr ui8 IsZeroEntryMask = 1u << 1;
+    static constexpr ui8 IgnoreBlockMask = 1u << 2;
+    static constexpr ui8 NotifyIfNotReadyMask = 1u << 3;
+
+    ui8 GetIssueKeepFlag() const {
+        return (Bits & IssueKeepFlagMask) != 0;
+    }
+
+    ui8 GetIsZeroEntry() const {
+        return (Bits & IsZeroEntryMask) != 0;
+    }
+
+    ui8 GetIgnoreBlock() const {
+        return (Bits & IgnoreBlockMask) != 0;
+    }
+
+    ui8 GetNotifyIfNotReady() const {
+        return (Bits & NotifyIfNotReadyMask) != 0;
+    }
 };
 
-struct TExtraBlockCheckRaw {
+struct Y_PACKED TExtraBlockCheckRaw {
     ui64 TabletId;
     ui32 Generation;
 };
+
+static_assert(sizeof(TVDiskIdRaw) == 11);
+static_assert(sizeof(TMsgQoSRaw) == 13);
+static_assert(sizeof(TVPutFlagsRaw) == 1);
+static_assert(sizeof(TExtraBlockCheckRaw) == 12);
 
 static_assert(std::is_trivially_copyable_v<TTripleInts>);
 static_assert(std::is_trivially_copyable_v<TBlobIdRaw>);
@@ -514,10 +539,10 @@ TTimestampsRaw MakeTimestampsRaw(ui64 base) {
 
 TVPutFlagsRaw MakeVPutFlagsRaw(ui64 base) {
     return {
-        .IssueKeepFlag = static_cast<ui8>((base >> 0) & 1),
-        .IsZeroEntry = static_cast<ui8>((base >> 1) & 1),
-        .IgnoreBlock = static_cast<ui8>((base >> 2) & 1),
-        .NotifyIfNotReady = static_cast<ui8>((base >> 3) & 1),
+        .Bits = static_cast<ui8>((((base >> 0) & 1) ? TVPutFlagsRaw::IssueKeepFlagMask : 0)
+            | (((base >> 1) & 1) ? TVPutFlagsRaw::IsZeroEntryMask : 0)
+            | (((base >> 2) & 1) ? TVPutFlagsRaw::IgnoreBlockMask : 0)
+            | (((base >> 3) & 1) ? TVPutFlagsRaw::NotifyIfNotReadyMask : 0)),
     };
 }
 
@@ -545,8 +570,8 @@ void FillVPutLikeRecord(NActorsBench::TVPutLike& record, ui64 base, ui32 payload
     blob->SetRawX2(blobId.RawX2);
     blob->SetRawX3(blobId.RawX3);
     record.SetChecksum(base * 19 + 5);
-    record.SetIssueKeepFlag(flags.IssueKeepFlag);
-    record.SetIsZeroEntry(flags.IsZeroEntry);
+    record.SetIssueKeepFlag(flags.GetIssueKeepFlag());
+    record.SetIsZeroEntry(flags.GetIsZeroEntry());
 
     auto* vdisk = record.MutableVDiskID();
     vdisk->SetGroupID(vdiskId.GroupID);
@@ -556,8 +581,8 @@ void FillVPutLikeRecord(NActorsBench::TVPutLike& record, ui64 base, ui32 payload
     vdisk->SetVDisk(vdiskId.VDisk);
 
     record.SetFullDataSize(Payload4KB);
-    record.SetIgnoreBlock(flags.IgnoreBlock);
-    record.SetNotifyIfNotReady(flags.NotifyIfNotReady);
+    record.SetIgnoreBlock(flags.GetIgnoreBlock());
+    record.SetNotifyIfNotReady(flags.GetNotifyIfNotReady());
     record.SetCookie(base * 23 + 9);
     record.SetHandleClass(static_cast<ui32>(base % 3 + 1));
 
@@ -1075,8 +1100,8 @@ struct TMessageTraits<TEvBenchFlatStructArrayMessage> {
     }
 };
 
-template <>
-struct TMessageTraits<TEvBenchPbVPutLikeMessage> {
+template <size_t PayloadBytes>
+struct TPbVPutLikeTraits {
     using TEvent = TEvBenchPbVPutLikeMessage;
 
     static constexpr TStringBuf Name() {
@@ -1084,12 +1109,18 @@ struct TMessageTraits<TEvBenchPbVPutLikeMessage> {
     }
 
     static constexpr TStringBuf TestName() {
-        return "vput-like-4k";
+        if constexpr (PayloadBytes == Payload256) {
+            return "vput-like-256";
+        } else if constexpr (PayloadBytes == Payload4KB) {
+            return "vput-like-4k";
+        } else {
+            return "vput-like";
+        }
     }
 
     static TEvent* Make(ui64 base) {
         THolder<TEvent> holder(new TEvent());
-        const ui32 payloadId = holder->AddPayload(TRope(GetSharedPayload(Payload4KB)));
+        const ui32 payloadId = holder->AddPayload(TRope(GetSharedPayload(PayloadBytes)));
         FillVPutLikeRecord(holder->Record, base, payloadId);
         return holder.Release();
     }
@@ -1110,8 +1141,8 @@ struct TMessageTraits<TEvBenchPbVPutLikeMessage> {
     }
 };
 
-template <>
-struct TMessageTraits<TEvBenchFlatVPutLikeMessage> {
+template <size_t PayloadBytes>
+struct TFlatVPutLikeTraits {
     using TEvent = TEvBenchFlatVPutLikeMessage;
 
     static constexpr TStringBuf Name() {
@@ -1119,7 +1150,13 @@ struct TMessageTraits<TEvBenchFlatVPutLikeMessage> {
     }
 
     static constexpr TStringBuf TestName() {
-        return "vput-like-4k";
+        if constexpr (PayloadBytes == Payload256) {
+            return "vput-like-256";
+        } else if constexpr (PayloadBytes == Payload4KB) {
+            return "vput-like-4k";
+        } else {
+            return "vput-like";
+        }
     }
 
     static TEvent* Make(ui64 base) {
@@ -1129,7 +1166,7 @@ struct TMessageTraits<TEvBenchFlatVPutLikeMessage> {
         frontend.template Field<typename TEvent::TChecksumTag>() = base * 19 + 5;
         frontend.template Field<typename TEvent::TFlagsTag>() = MakeVPutFlagsRaw(base);
         frontend.template Field<typename TEvent::TVDiskIdTag>() = MakeVDiskIdRaw(base);
-        frontend.template Field<typename TEvent::TFullDataSizeTag>() = Payload4KB;
+        frontend.template Field<typename TEvent::TFullDataSizeTag>() = PayloadBytes;
         frontend.template Field<typename TEvent::TCookieTag>() = base * 23 + 9;
         frontend.template Field<typename TEvent::THandleClassTag>() = static_cast<ui32>(base % 3 + 1);
         frontend.template Field<typename TEvent::TMsgQoSTag>() = MakeMsgQoSRaw(base);
@@ -1139,7 +1176,7 @@ struct TMessageTraits<TEvBenchFlatVPutLikeMessage> {
         auto extraChecks = holder->template Array<typename TEvent::TExtraChecksTag>();
         extraChecks.CopyFrom(checks.data(), checks.size());
 
-        holder->template Bytes<typename TEvent::TPayloadTag>().Set(TRope(GetSharedPayload(Payload4KB)));
+        holder->template Bytes<typename TEvent::TPayloadTag>().Set(TRope(GetSharedPayload(PayloadBytes)));
         return holder.Release();
     }
 
@@ -1155,7 +1192,8 @@ struct TMessageTraits<TEvBenchFlatVPutLikeMessage> {
         ui64 sum = SamplePayloadChecksum(ev.template Bytes<typename TEvent::TPayloadTag>().Rope());
         sum += blob.RawX1 + blob.RawX2 + blob.RawX3;
         sum += static_cast<ui64>(frontend.template Field<typename TEvent::TChecksumTag>());
-        sum += flags.IssueKeepFlag + flags.IsZeroEntry + flags.IgnoreBlock + flags.NotifyIfNotReady;
+        sum += flags.GetIssueKeepFlag() + flags.GetIsZeroEntry()
+            + flags.GetIgnoreBlock() + flags.GetNotifyIfNotReady();
         sum += vdisk.GroupID + vdisk.GroupGeneration + vdisk.Ring + vdisk.Domain + vdisk.VDisk;
         sum += static_cast<ui64>(frontend.template Field<typename TEvent::TFullDataSizeTag>());
         sum += static_cast<ui64>(frontend.template Field<typename TEvent::TCookieTag>());
@@ -1179,6 +1217,14 @@ struct TMessageTraits<TEvBenchFlatVPutLikeMessage> {
     static ui64 EffectiveWindow(ui64 window) {
         return window;
     }
+};
+
+template <>
+struct TMessageTraits<TEvBenchPbVPutLikeMessage> : TPbVPutLikeTraits<Payload4KB> {
+};
+
+template <>
+struct TMessageTraits<TEvBenchFlatVPutLikeMessage> : TFlatVPutLikeTraits<Payload4KB> {
 };
 
 template <class TTraits>
@@ -1621,6 +1667,8 @@ void RunBenchmarks(const TBenchConfig& config) {
         MaybeRunScenario<TArrayFlatTraits<1000, 1000>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchPbStructArrayMessage>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatStructArrayMessage>>(config, "local");
+        MaybeRunScenario<TPbVPutLikeTraits<Payload256>>(config, "local");
+        MaybeRunScenario<TFlatVPutLikeTraits<Payload256>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchPbVPutLikeMessage>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatVPutLikeMessage>>(config, "local");
         MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "local");
@@ -1638,6 +1686,8 @@ void RunBenchmarks(const TBenchConfig& config) {
         MaybeRunScenario<TArrayFlatTraits<1000, 1000>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchPbStructArrayMessage>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatStructArrayMessage>>(config, "interconnect");
+        MaybeRunScenario<TPbVPutLikeTraits<Payload256>>(config, "interconnect");
+        MaybeRunScenario<TFlatVPutLikeTraits<Payload256>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchPbVPutLikeMessage>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatVPutLikeMessage>>(config, "interconnect");
         MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "interconnect");

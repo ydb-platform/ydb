@@ -60,3 +60,52 @@ message TTripleArray10 {
 message TPayloadBytes {
     optional uint32 PayloadId = 1;
 }
+
+message TBlobId3x64 {
+    optional fixed64 RawX1 = 1;
+    optional fixed64 RawX2 = 2;
+    optional fixed64 RawX3 = 3;
+}
+
+message TVDiskId5x32 {
+    optional uint32 GroupID = 1;
+    optional uint32 GroupGeneration = 2;
+    optional uint32 Ring = 3;
+    optional uint32 Domain = 4;
+    optional uint32 VDisk = 5;
+}
+
+message TMsgQoSToy {
+    optional uint32 DeadlineSeconds = 1;
+    optional fixed64 Cost = 2;
+    optional uint32 ExtQueueId = 3;
+}
+
+message TTimestampsToy {
+    optional fixed64 SentByDSProxyUs = 1;
+    optional fixed64 ReceivedByVDiskUs = 2;
+    optional fixed64 SentByVDiskUs = 3;
+    optional fixed64 ReceivedByDSProxyUs = 4;
+}
+
+message TExtraBlockCheckToy {
+    optional fixed64 TabletId = 1;
+    optional uint32 Generation = 2;
+}
+
+message TVPutLike {
+    optional TBlobId3x64 BlobID = 1;
+    optional fixed64 Checksum = 2;
+    optional bool IssueKeepFlag = 3;
+    optional bool IsZeroEntry = 4;
+    optional TVDiskId5x32 VDiskID = 5;
+    optional fixed64 FullDataSize = 6;
+    optional bool IgnoreBlock = 7;
+    optional bool NotifyIfNotReady = 8;
+    optional fixed64 Cookie = 9;
+    optional uint32 HandleClass = 10;
+    optional TMsgQoSToy MsgQoS = 11;
+    optional TTimestampsToy Timestamps = 12;
+    repeated TExtraBlockCheckToy ExtraBlockChecks = 13;
+    optional uint32 PayloadId = 14;
+}

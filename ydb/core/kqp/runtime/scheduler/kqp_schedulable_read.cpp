@@ -93,8 +93,33 @@ TSchedulableReadFactory::TSchedulableReadFactory(TComputeSchedulerPtr scheduler)
 {}
 
 TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
+    const auto databaseAndPoolId = std::make_pair(databaseId, poolId);
+
+    if (auto readIt = ReadsCache.find(databaseAndPoolId); readIt != ReadsCache.end()) {
+        if (auto result = readIt->second.lock()) {
+            return result;
+        }
+        ReadsCache.erase(readIt);
+    }
+
     auto query = Scheduler->GetReadQuery(databaseId, poolId);
-    return std::make_shared<TSchedulableRead>(query);
+    auto result = std::make_shared<TSchedulableRead>(query);
+    ReadsCache.emplace(databaseAndPoolId, result);
+    return result;
+}
+
+void TSchedulableReadFactory::CleanupReadsCache() const {
+    std::list<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>> toRemove;
+
+    for (const auto& read : ReadsCache) {
+        if (read.second.expired()) {
+            toRemove.push_back(read.first);
+        }
+    }
+
+    for (const auto& key : toRemove) {
+        ReadsCache.erase(key);
+    }
 }
 
 } // namespace NKikimr::NKqp::NScheduler

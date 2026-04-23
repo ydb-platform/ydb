@@ -58,7 +58,7 @@ namespace NKikimr::NKqp::NScheduler {
     struct TSchedulableRead;
     class TSchedulableReadFactory;
     using TSchedulableReadPtr = std::shared_ptr<TSchedulableRead>;
-    using TSchedulableReadFactoryPtr = std::shared_ptr<TSchedulableReadFactory>;
+    using TSchedulableReadFactoryPtr = std::unique_ptr<TSchedulableReadFactory>;
 
     // These params are used when calculating delay for schedulable task, but are taken from the scheduler configuration.
     struct TDelayParams {

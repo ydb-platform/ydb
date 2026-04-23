@@ -221,7 +221,7 @@ public:
 
     void Handle(TEvGetReadFactory::TPtr& ev) {
         auto response = MakeHolder<TEvReadFactoryResponse>();
-        response->Factory = std::make_shared<TSchedulableReadFactory>(Scheduler);
+        response->Factory = std::make_unique<TSchedulableReadFactory>(Scheduler);
         Send(ev->Sender, response.Release(), 0, 0);
     }
 

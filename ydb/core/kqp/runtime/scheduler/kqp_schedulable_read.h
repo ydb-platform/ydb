@@ -26,14 +26,18 @@ private:
     TMonotonic LastRefill;
 };
 
+// Thread-unsafe and should be used by a single actor (i.e. Datashard)
 class TSchedulableReadFactory {
 public:
     explicit TSchedulableReadFactory(TComputeSchedulerPtr scheduler);
 
     TSchedulableReadPtr Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const;
 
+    void CleanupReadsCache() const;
+
 private:
     TComputeSchedulerPtr Scheduler;
+    mutable THashMap<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>, TSchedulableReadPtr::weak_type> ReadsCache;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

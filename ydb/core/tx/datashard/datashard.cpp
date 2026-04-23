@@ -8,6 +8,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -4058,6 +4059,10 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Stoped key access sampling at datashard: " << TabletID());
     }
 
+    if (SchedulableReadFactory && *SchedulableReadFactory) {
+        (*SchedulableReadFactory)->CleanupReadsCache();
+    }
+
     if (!PeriodicWakeupPending) {
         PeriodicWakeupPending = true;
         ctx.Schedule(TDuration::Seconds(5), new TEvPrivate::TEvPeriodicWakeup());
@@ -4952,7 +4957,7 @@ void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &c
 
 void TDataShard::Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev) {
     if (!SchedulableReadFactory) {
-        SchedulableReadFactory = ev->Get()->Factory;
+        SchedulableReadFactory = std::move(ev->Get()->Factory);
     }
     CheckMediatorStateRestored();
 }

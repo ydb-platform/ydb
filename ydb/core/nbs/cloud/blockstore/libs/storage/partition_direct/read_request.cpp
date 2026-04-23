@@ -30,7 +30,7 @@ class TReadSingleLocationRequestExecutor
 {
 public:
     TReadSingleLocationRequestExecutor(
-        NActors::TActorSystem* actorSystem,
+        NActors::TActorSystem const* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TReadHint readHint,
@@ -65,7 +65,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadRequestExecutor::TReadRequestExecutor(
-    NActors::TActorSystem* actorSystem,
+    NActors::TActorSystem const* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TReadHint readHint,
@@ -83,13 +83,12 @@ TReadRequestExecutor::TReadRequestExecutor(
     SubRequests.reserve(readHint.RangeHints.size());
 
     for (auto& hint: readHint.RangeHints) {
-        // Вычислить смещение в Sglist
+        // Вычислить смещение для Sglist
         const size_t offsetBlocks = hint.RequestRelativeRange.Start;
         const size_t offsetBytes = offsetBlocks * DefaultBlockSize;
         const size_t sizeBytes =
             hint.RequestRelativeRange.Size() * DefaultBlockSize;
 
-        // Создать подбуфер для этого подзапроса
         auto subRequest = std::make_shared<TReadBlocksLocalRequest>(
             Request->Headers.Clone(hint.VChunkRange));
 
@@ -102,14 +101,23 @@ TReadRequestExecutor::TReadRequestExecutor(
                     CreateSgListSubRange(fullSgList, offsetBytes, sizeBytes);
                 subRequest->Sglist =
                     Request->Sglist.Create(std::move(subSgList));
+            } else {
+                auto error =
+                    MakeError(E_CANCELLED, "Failed to acquire sglist guard");
+                LOG_ERROR(
+                    *ActorSystem,
+                    NKikimrServices::NBS_PARTITION,
+                    "TReadRequestExecutor: SubRequest %zu failed: %s",
+                    index,
+                    FormatError(error).c_str());
+
+                Promise.TrySetValue(TResponse{.Error = std::move(error)});
+                return;
             }
         }
 
-        // Создать TReadHint с одним hint
         TReadHint singleHint;
         singleHint.RangeHints.push_back(std::move(hint));
-
-        // Создать executor для этого hint
         auto executor = std::make_shared<TReadSingleLocationRequestExecutor>(
             ActorSystem,
             VChunkConfig,
@@ -125,49 +133,56 @@ TReadRequestExecutor::TReadRequestExecutor(
     }
 }
 
+TReadRequestExecutor::~TReadRequestExecutor()
+{
+    if (!Promise.IsReady()) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TReadRequestExecutor. Reply has not sent %s %s",
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str());
+
+        Y_ABORT_UNLESS(false);
+    }
+}
+
 void TReadRequestExecutor::Run()
 {
     for (size_t i = 0; i < SubRequests.size(); ++i) {
         auto future = SubRequests[i].Executor->GetFuture();
-        future.Subscribe(
-            [self = shared_from_this(),
-             i](const NThreading::TFuture<TResponse>& f)
-            {
-                Y_UNUSED(f);
-                self->OnSubRequestComplete(i);
-            });
+        future.Subscribe([self = shared_from_this(),
+                          i](const NThreading::TFuture<TResponse>& f)
+                         { self->OnSubRequestComplete(f.GetValue(), i); });
 
         SubRequests[i].Executor->Run();
     }
 }
 
-void TReadRequestExecutor::OnSubRequestComplete(size_t index)
+void TReadRequestExecutor::OnSubRequestComplete(
+    const TResponse& response,
+    size_t index)
 {
-    const auto& response = SubRequests[index].Executor->GetFuture().GetValue();
-
     if (HasError(response.Error)) {
-        // Первая ошибка - завершить весь запрос
-        if (Promise.TrySetValue(response)) {
-            // Успешно установили ошибку
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "TReadRequestExecutor: SubRequest %zu failed: %s",
-                index,
-                FormatError(response.Error).c_str());
-        }
+        // Даже при ошибке одного подзапроса завершаем весь запрос ошибкой
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TReadRequestExecutor: SubRequest %zu failed: %s",
+            index,
+            FormatError(response.Error).c_str());
+
+        Promise.TrySetValue(response);
         return;
     }
 
-    // Проверить, все ли подзапросы завершены
     if (++CompletedCount == SubRequests.size()) {
-        // Все успешно
         Promise.SetValue(TResponse{.Error = MakeError(S_OK)});
     }
 }
 
 NThreading::TFuture<TReadRequestExecutor::TResponse>
-TReadRequestExecutor::GetFuture()
+TReadRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();
 }
@@ -175,7 +190,7 @@ TReadRequestExecutor::GetFuture()
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
-    NActors::TActorSystem* actorSystem,
+    NActors::TActorSystem const* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TReadHint readHint,

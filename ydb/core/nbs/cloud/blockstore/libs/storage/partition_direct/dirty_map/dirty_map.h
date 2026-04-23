@@ -180,6 +180,8 @@ public:
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, ELocation location);
 
+    // MakeReadHint can work with multiple locations and returns multiple
+    // RangeHints
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);

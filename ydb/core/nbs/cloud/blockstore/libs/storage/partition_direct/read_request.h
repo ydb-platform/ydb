@@ -12,8 +12,11 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// работает с 1 readHint, выполняя запрос в 1 источник
 class TReadSingleLocationRequestExecutor;
 
+// Работает с N readHints, инкапсулируя логику разбиения исходного запроса на N
+// подзапросов, их отправкой в разные источники и сбором ответов.
 class TReadRequestExecutor
     : public std::enable_shared_from_this<TReadRequestExecutor>
 {
@@ -24,7 +27,7 @@ public:
     };
 
     TReadRequestExecutor(
-        NActors::TActorSystem* actorSystem,
+        NActors::TActorSystem const* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TReadHint readHint,
@@ -32,20 +35,23 @@ public:
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
 
+    ~TReadRequestExecutor();
+
     void Run();
-    NThreading::TFuture<TResponse> GetFuture();
+
+    NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
     struct TSubRequest
     {
         std::shared_ptr<TReadSingleLocationRequestExecutor> Executor;
-        // TReadRangeHint Hint;
-        size_t SglistOffset;   // Смещение в байтах
+        size_t SglistOffset;   // Смещение в байтах относительно начала
+                               // запрошенного диапазона
     };
 
-    void OnSubRequestComplete(size_t index);
+    void OnSubRequestComplete(const TResponse& response, size_t index);
 
-    NActors::TActorSystem* const ActorSystem;
+    NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TReadHint ReadHint;
@@ -55,7 +61,8 @@ private:
 
     TVector<TSubRequest> SubRequests;
     std::atomic<size_t> CompletedCount{0};
-    NThreading::TPromise<TResponse> Promise;
+    NThreading::TPromise<TResponse> Promise =
+        NThreading::NewPromise<TResponse>();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

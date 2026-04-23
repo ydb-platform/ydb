@@ -10,6 +10,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
+// help structure to sorting ranges in MakeRangeHints
 struct TOverlappingItem
 {
     ui64 Key;
@@ -58,15 +59,10 @@ public:
         const ui64 key = item->Key;
 
         auto it = Map.lower_bound(end);
-
-        // An existing entry with End >= end and Key >= key dominates the new
-        // item for every threshold — skip insertion.
         if (it != Map.end() && it->second->Key >= key) {
             return;
         }
 
-        // Remove entries with End <= end and Key <= key: they are dominated
-        // by the new item (larger-or-equal End AND larger-or-equal Key).
         while (it != Map.begin()) {
             auto prev = std::prev(it);
             if (prev->second->Key <= key) {
@@ -347,84 +343,7 @@ void TBlocksDirtyMap::RestorePBuffer(
     }
 }
 
-/*
-TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
-{
-    TReadHint result;
-
-    auto makeDefaultHint = [this](TBlockRange64 range)
-    {
-        // Filter out disabled locations.
-        auto locationMask = FilterLocations(DesiredDDisks, range);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            0,
-            TBlockRange64::WithLength(0, range.Size()),
-            range,
-            TRangeLock(this, range, locationMask));
-    };
-
-    auto makeHint =
-        [this](TLocationMask locationMask, ui64 lsn, TBlockRange64 range)
-    {
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        // Filter out disabled locations.
-        if (locationMask.HasDDisk()) {
-            locationMask = locationMask.LogicalAnd(DesiredDDisks);
-        }
-        locationMask = locationMask.Exclude(DisabledLocations);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            lsn,
-            TBlockRange64::WithLength(0, range.Size()),
-            range,
-            locationMask.OnlyDDiskAndNotEmpty()
-                ? TRangeLock(this, range, locationMask)
-                : TRangeLock(this, lsn));
-    };
-
-    if (!Inflight.HasOverlaps(range)) {
-        result.RangeHints.push_back(makeDefaultHint(range));
-        return result;
-    }
-
-    ui64 maxLsn = 0;
-    Inflight.EnumerateOverlapping(
-        range,
-        [&](TInflightMap::TFindItem& item)
-        {
-            const ui64 lsn = item.Key;
-            maxLsn = std::max(maxLsn, lsn);
-
-            return TInflightMap::EEnumerateContinuation::Continue;
-        });
-
-    const auto item = Inflight.GetValue(maxLsn);
-
-    // Read from DDisk if the range is not covered by the inflight range.
-    if (!item->Range.Contains(range)) {
-        result.RangeHints.push_back(makeDefaultHint(range));
-        return result;
-    }
-
-    if (item->Value.ReadMask().Empty()) {
-        // Reading from range without quorum is forbidden.
-        // Caller should wait until PBuffers quorum will be made.
-        result.WaitReady = item->Value.GetQuorumReadyFuture();
-        Y_ABORT_UNLESS(result.RangeHints.empty());
-    } else {
-        result.RangeHints.push_back(
-            makeHint(item->Value.ReadMask(), item->Key, item->Range));
-    }
-
-    return result;
-}*/
-
+// create single readRangeHint for specified paramaeters
 TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
     TLocationMask locationMask,
     ui64 lsn,
@@ -450,10 +369,28 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
                                  : TRangeLock(this, lsn)};
 }
 
+// Create multiple readRangeHints for specified range with possible overlapping
+// with infilght requests
+
+// Algorithm works via Sweep line + Pareto-optimal map for O(n log n) total
+// complexity.
+// 1. Going through all overlapping ranges and creating:
+//  - vector boundaries: edges of ranges. They are possible edges of resulting
+//  HintRanges for reading from different locations
+//  - vector overlappingItems: we use it for building resulting HintRanges
+// 2. Sorting both vectors and erasing duplicates
+// 3. Doing sweep-line algorithm.
+//  - going with each boundary edge through all matched overlapping item and
+//  storing overlappingItes.End with LSN into ParettoMap
+//  - for the boundary segmentEnd recieving best item (lsn and location mask)
+//  from pareto map
+//  - adding boundaries segment into resultHints with locations based on
+//  overlappingItems lsn info
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
     if (!Inflight.HasOverlaps(range)) {
+        // read from ddisk
         result.RangeHints.push_back(MakeReadRangeHint({}, 0, range, 0));
         return result;
     }
@@ -486,9 +423,6 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
     Sort(boundaries.begin(), boundaries.end());
     boundaries.erase(std::ranges::unique(boundaries).begin(), boundaries.end());
 
-    // Sort overlappingItems by Range.Start ascending, then Key descending.
-    // This allows sweep-line: as segmentStart grows, we activate items
-    // left-to-right.
     Sort(
         overlappingItems.begin(),
         overlappingItems.end(),
@@ -500,18 +434,11 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             return lhs.Key > rhs.Key;
         });
 
-    // Sweep line + Pareto-optimal map for O(n log n) total complexity.
-    //
-    // As segmentStart grows, we activate items with Range.Start <= segmentStart
-    // by inserting them into TParetoMaxMap. Each query "best item with
-    // Range.End >= segmentEnd" is answered in O(log n) via lower_bound.
     TParetoMaxMap paretoMap;
-
     result.RangeHints.reserve(boundaries.size() - 1);
 
     ui64 offsetBlocks = 0;
-    size_t nextItemIdx = 0;   // sweep-line pointer into overlappingItems
-
+    size_t nextItemIdx = 0;
     for (ui64 i = 0; i + 1 < boundaries.size(); ++i) {
         const ui64 segmentStart = boundaries[i];
         const ui64 nextBoundary = boundaries[i + 1];
@@ -519,15 +446,16 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         const auto segmentRange =
             TBlockRange64::MakeClosedInterval(segmentStart, segmentEnd);
 
-        // Activate all items whose Range.Start <= segmentStart.
+        // Activate all items whose Range.Start <= segmentStart
         while (nextItemIdx < overlappingItems.size() &&
                overlappingItems[nextItemIdx].Range.Start <= segmentStart)
         {
+            // attention: inserting overlappingItems, not boundaries
             paretoMap.Insert(&overlappingItems[nextItemIdx]);
             ++nextItemIdx;
         }
 
-        // Query: best item with Range.End >= segmentEnd.
+        // Best item with Range.End >= segmentEnd
         const TOverlappingItem* bestItem =
             paretoMap.BestWithEndAtLeast(segmentEnd);
 

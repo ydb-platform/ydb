@@ -113,8 +113,12 @@ namespace NKikimr {
                 WaitQueue.erase(it);
             }
 
+            void SendToken(const TEntry& entry) {
+                this->Send(entry.OwnerActorId, new TEvVDiskOperationToken, IEventHandle::FlagTrackDelivery);
+            }
+
             void Activate(TEntry&& entry) {
-                this->Send(entry.OwnerActorId, new TEvVDiskOperationToken);
+                SendToken(entry);
                 ++ActivePerPDisk[entry.PDiskId];
                 Active.emplace(entry.VDiskServiceId, std::move(entry));
             }
@@ -150,6 +154,23 @@ namespace NKikimr {
                 }
             }
 
+            size_t GrantAllWaitingOnce() {
+                size_t numGranted = 0;
+                while (!WaitQueue.empty()) {
+                    auto entry = DequeueWaiting(WaitQueue.begin());
+                    Activate(std::move(entry));
+                    ++numGranted;
+                }
+
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                    "GrantAllWaitingOnce"
+                    << ", broker service id: " << this->SelfId()
+                    << ", granted waiting VDisks: " << numGranted
+                    << ", active: " << Active.size()
+                    << ", waiting: " << WaitQueue.size());
+                return numGranted;
+            }
+
         public:
             static constexpr auto ActorActivityType() {
                 return NKikimrServices::TActivity::NODE_WARDEN;
@@ -158,6 +179,7 @@ namespace NKikimr {
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvAcquireVDiskOperationToken, Handle)
                 hFunc(TEvReleaseVDiskOperationToken, Handle)
+                hFunc(TEvents::TEvUndelivered, Handle)
                 hFunc(TEvents::TEvWakeup, Handle)
                 hFunc(NMon::TEvHttpInfo, Handle)
             )
@@ -181,24 +203,18 @@ namespace NKikimr {
 
                 if (const auto it = Active.find(vdiskServiceId); it != Active.end()) {
                     Y_ABORT_UNLESS(it->second.PDiskId == pdiskId);
-                    Y_ABORT_UNLESS(it->second.OwnerActorId == actorId);
-                    this->Send(actorId, new TEvVDiskOperationToken);
-
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
-                        "TEvAcquireVDiskOperationToken"
-                        << ", broker service id: " << this->SelfId()
-                        << ", VDisk service id: " << vdiskServiceId
-                        << ", PDiskId: " << pdiskId
-                        << ", actor id: " << actorId
-                        << ", token sent, active: " << Active.size()
-                        << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                        << ", waiting: " << WaitQueue.size());
-                    return;
-                }
-
-                if (CanActivate(pdiskId)) {
-                    TEntry entry{vdiskServiceId, pdiskId, {actorId}};
-                    Activate(std::move(entry));
+                    if (it->second.OwnerActorId != actorId) {
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                            "TEvAcquireVDiskOperationToken"
+                            << ", broker service id: " << this->SelfId()
+                            << ", VDisk service id: " << vdiskServiceId
+                            << ", PDiskId: " << pdiskId
+                            << ", stale active owner actor id: " << it->second.OwnerActorId
+                            << ", new owner actor id: " << actorId
+                            << ", action: update active owner");
+                        it->second.OwnerActorId = actorId;
+                    }
+                    SendToken(it->second);
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvAcquireVDiskOperationToken"
@@ -214,7 +230,33 @@ namespace NKikimr {
 
                 if (const auto it = FindWaiting(vdiskServiceId); it != WaitQueue.end()) {
                     Y_ABORT_UNLESS(it->PDiskId == pdiskId);
-                    Y_ABORT_UNLESS(it->OwnerActorId == actorId);
+                    if (it->OwnerActorId != actorId) {
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                            "TEvAcquireVDiskOperationToken"
+                            << ", broker service id: " << this->SelfId()
+                            << ", VDisk service id: " << vdiskServiceId
+                            << ", PDiskId: " << pdiskId
+                            << ", stale waiting owner actor id: " << it->OwnerActorId
+                            << ", new owner actor id: " << actorId
+                            << ", action: update waiting owner");
+                        it->OwnerActorId = actorId;
+                    }
+
+                    if (CanActivate(pdiskId)) {
+                        auto entry = DequeueWaiting(it);
+                        Activate(std::move(entry));
+
+                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                            "TEvAcquireVDiskOperationToken"
+                            << ", broker service id: " << this->SelfId()
+                            << ", VDisk service id: " << vdiskServiceId
+                            << ", PDiskId: " << pdiskId
+                            << ", actor id: " << actorId
+                            << ", token sent from queue, active: " << Active.size()
+                            << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
+                            << ", waiting: " << WaitQueue.size());
+                        return;
+                    }
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvAcquireVDiskOperationToken"
@@ -223,6 +265,22 @@ namespace NKikimr {
                         << ", PDiskId: " << pdiskId
                         << ", actor id: " << actorId
                         << ", enqueued, active: " << Active.size()
+                        << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
+                        << ", waiting: " << WaitQueue.size());
+                    return;
+                }
+
+                if (CanActivate(pdiskId)) {
+                    TEntry entry{vdiskServiceId, pdiskId, actorId};
+                    Activate(std::move(entry));
+
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                        "TEvAcquireVDiskOperationToken"
+                        << ", broker service id: " << this->SelfId()
+                        << ", VDisk service id: " << vdiskServiceId
+                        << ", PDiskId: " << pdiskId
+                        << ", actor id: " << actorId
+                        << ", token sent, active: " << Active.size()
                         << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
                         << ", waiting: " << WaitQueue.size());
                     return;
@@ -250,7 +308,17 @@ namespace NKikimr {
 
                 if (const auto it = Active.find(vdiskServiceId); it != Active.end()) {
                     Y_ABORT_UNLESS(it->second.PDiskId == pdiskId);
-                    Y_ABORT_UNLESS(it->second.OwnerActorId == actorId);
+                    if (it->second.OwnerActorId != actorId) {
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                            "TEvReleaseVDiskOperationToken"
+                            << ", broker service id: " << this->SelfId()
+                            << ", VDisk service id: " << vdiskServiceId
+                            << ", PDiskId: " << pdiskId
+                            << ", stale active owner actor id: " << actorId
+                            << ", current owner actor id: " << it->second.OwnerActorId
+                            << ", action: ignore stale release");
+                        return;
+                    }
                     Deactivate(it);
                     ProcessQueue();
 
@@ -268,7 +336,17 @@ namespace NKikimr {
 
                 if (const auto it = FindWaiting(vdiskServiceId); it != WaitQueue.end()) {
                     Y_ABORT_UNLESS(it->PDiskId == pdiskId);
-                    Y_ABORT_UNLESS(it->OwnerActorId == actorId);
+                    if (it->OwnerActorId != actorId) {
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                            "TEvReleaseVDiskOperationToken"
+                            << ", broker service id: " << this->SelfId()
+                            << ", VDisk service id: " << vdiskServiceId
+                            << ", PDiskId: " << pdiskId
+                            << ", stale waiting owner actor id: " << actorId
+                            << ", current queued owner actor id: " << it->OwnerActorId
+                            << ", action: ignore stale release");
+                        return;
+                    }
                     EraseWaiting(it);
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
@@ -280,6 +358,39 @@ namespace NKikimr {
                         << ", removed from queue, active: " << Active.size()
                         << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
                         << ", waiting: " << WaitQueue.size());
+                    return;
+                }
+
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                    "TEvReleaseVDiskOperationToken"
+                    << ", broker service id: " << this->SelfId()
+                    << ", VDisk service id: " << vdiskServiceId
+                    << ", PDiskId: " << pdiskId
+                    << ", actor id: " << actorId
+                    << ", action: ignore release for unknown VDisk");
+            }
+
+            void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+                if (ev->Get()->SourceType != TEvVDiskOperationToken::EventType) {
+                    return;
+                }
+
+                const auto actorId = ev->Sender;
+                for (auto it = Active.begin(); it != Active.end(); ++it) {
+                    if (it->second.OwnerActorId == actorId) {
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
+                            "TEvUndelivered"
+                            << ", broker service id: " << this->SelfId()
+                            << ", VDisk service id: " << it->second.VDiskServiceId
+                            << ", PDiskId: " << it->second.PDiskId
+                            << ", owner actor id: " << actorId
+                            << ", source type: " << ev->Get()->SourceType
+                            << ", reason: " << ev->Get()->Reason
+                            << ", action: drop active token owner and process queue");
+                        Deactivate(it);
+                        ProcessQueue();
+                        return;
+                    }
                 }
             }
 
@@ -289,10 +400,32 @@ namespace NKikimr {
             }
 
             void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+                const auto& cgi = ev->Get()->Request.GetParams();
+                const TString page = cgi.Get("page");
+                TString actionMessage;
+                if (cgi.Get("broker_action") == "grant_all_waiting_once") {
+                    const size_t numGranted = GrantAllWaitingOnce();
+                    actionMessage = TStringBuilder()
+                        << "Emergency action executed: granted tokens to " << numGranted << " waiting VDisk(s).";
+                }
+
                 TStringStream str;
                 TString nodeLimit = GetNodeLimit() ? ToString(GetNodeLimit()) : "unlimited";
                 TString perPDiskLimit = GetPerPDiskLimit() ? ToString(GetPerPDiskLimit()) : "unlimited";
                 HTML(str) {
+                    if (!actionMessage.empty()) {
+                        DIV_CLASS("alert alert-warning") {
+                            str << actionMessage;
+                        }
+                        str << "<script>"
+                               "if (window.history && window.history.replaceState) {"
+                               "const url = new URL(window.location.href);"
+                               "url.searchParams.delete('broker_action');"
+                               "window.history.replaceState({}, '', url.toString());"
+                               "}"
+                               "</script>";
+                    }
+
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-body") {
                             str << "Broker Service Id: " << this->SelfId() << "<br>";
@@ -300,6 +433,20 @@ namespace NKikimr {
                             str << "Per-PDisk Limit: " << perPDiskLimit << "<br>";
                             str << "Active VDisks: " << Active.size() << "<br>";
                             str << "Waiting VDisks: " << WaitQueue.size();
+                        }
+
+                        DIV_CLASS("panel-body") {
+                            STRONG() { str << "Emergency actions"; }
+                            str << "<br>";
+                            str << "Use this only as a manual recovery tool when you suspect a broker bug or a stuck waiter.";
+                            str << "<br><br>";
+                            str << "<form method=\"GET\">";
+                            if (!page.empty()) {
+                                str << "<input type=\"hidden\" name=\"page\" value=\"" << page << "\">";
+                            }
+                            str << "<input type=\"hidden\" name=\"broker_action\" value=\"grant_all_waiting_once\">";
+                            str << "<button type=\"submit\" class=\"btn btn-warning\">Grant tokens to all waiting VDisks once</button>";
+                            str << "</form>";
                         }
 
                         DIV_CLASS("panel-body") {

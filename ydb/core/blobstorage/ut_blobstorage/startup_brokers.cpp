@@ -91,6 +91,27 @@ namespace {
         UNIT_ASSERT_C(predicate(), message);
     }
 
+    TString FormatActorIdList(const TVector<TActorId>& items) {
+        TStringBuilder sb;
+        sb << "[";
+        bool first = true;
+        for (const auto& item : items) {
+            if (!first) {
+                sb << ", ";
+            }
+            first = false;
+            sb << item;
+        }
+        sb << "]";
+        return sb;
+    }
+
+    TString FormatActorIdSet(const THashSet<TActorId>& items) {
+        TVector<TActorId> ordered(items.begin(), items.end());
+        Sort(ordered);
+        return FormatActorIdList(ordered);
+    }
+
     void WriteStartupBacklogWhileNodeDown(TEnvironmentSetup& env, const TVector<TTargetVDisk>& targets) {
         const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
@@ -115,6 +136,25 @@ namespace {
         env.Sim(TDuration::Seconds(10));
     }
 
+    void SendBrokerAcquire(TEnvironmentSetup& env, const TActorId& ownerActorId,
+            const TActorId& brokerServiceId, const TActorId& vdiskServiceId)
+    {
+        env.Runtime->Send(new IEventHandle(brokerServiceId, ownerActorId,
+            new TEvAcquireVDiskOperationToken(vdiskServiceId)), ownerActorId.NodeId());
+    }
+
+    void SendBrokerRelease(TEnvironmentSetup& env, const TActorId& ownerActorId,
+            const TActorId& brokerServiceId, const TActorId& vdiskServiceId)
+    {
+        env.Runtime->Send(new IEventHandle(brokerServiceId, ownerActorId,
+            new TEvReleaseVDiskOperationToken(vdiskServiceId)), ownerActorId.NodeId());
+    }
+
+    void WaitForBrokerToken(TEnvironmentSetup& env, const TActorId& ownerActorId, TStringBuf message) {
+        auto* res = env.WaitForEdgeActorEvent<TEvVDiskOperationToken>(ownerActorId, false, env.Now() + TDuration::Seconds(30)).Get();
+        UNIT_ASSERT_C(res, message);
+    }
+
     struct TRestartScenario {
         TEnvironmentSetup Env;
         ui32 RestartedNodeId = 0;
@@ -132,6 +172,22 @@ namespace {
             Env.Sim(TDuration::Seconds(30));
 
             SelectTargets();
+        }
+
+        ui32 SelectPeerNodeForGroup(ui32 groupId) {
+            THashSet<ui32> nodes;
+            const auto groupInfo = Env.GetGroupInfo(groupId);
+            for (ui32 i = 0; i < groupInfo->GetTotalVDisksNum(); ++i) {
+                const ui32 nodeId = groupInfo->GetActorId(i).NodeId();
+                if (nodeId != RestartedNodeId && nodeId != Env.Settings.ControllerNodeId && nodes.emplace(nodeId).second) {
+                    return nodeId;
+                }
+            }
+
+            UNIT_FAIL("failed to choose peer node for group"
+                << " groupId# " << groupId);
+            
+            return 0;
         }
 
     private:
@@ -529,6 +585,83 @@ namespace {
 
 Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
 
+    Y_UNIT_TEST(StartupCatchupBrokerAllowsNewOwnerAfterActiveOwnerDies) {
+        TRestartScenario scenario;
+        ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 0, 0, 1, 0);
+
+        const TActorId brokerServiceId = MakeBlobStorageStartupCatchupBrokerID();
+        const TActorId vdiskServiceId = scenario.StartupTargets.front().VDiskActorId;
+        const TActorId firstOwnerActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+        const TActorId secondOwnerActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+
+        SendBrokerAcquire(scenario.Env, firstOwnerActorId, brokerServiceId, vdiskServiceId);
+        WaitForBrokerToken(scenario.Env, firstOwnerActorId,
+            "expected first owner to get startup catchup token");
+
+        scenario.Env.Runtime->DestroyActor(firstOwnerActorId);
+        scenario.Env.Sim(TDuration::Seconds(1));
+
+        SendBrokerAcquire(scenario.Env, secondOwnerActorId, brokerServiceId, vdiskServiceId);
+        WaitForBrokerToken(scenario.Env, secondOwnerActorId,
+            "expected new owner to get startup catchup token after previous owner died");
+    }
+
+    Y_UNIT_TEST(StartupCatchupBrokerAllowsNewOwnerAfterWaitingOwnerDies) {
+        TRestartScenario scenario;
+        ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 0, 0, 1, 0);
+
+        const TActorId brokerServiceId = MakeBlobStorageStartupCatchupBrokerID();
+        const TActorId holderVDiskServiceId = scenario.StartupTargets[0].VDiskActorId;
+        const TActorId queuedVDiskServiceId = scenario.StartupTargets[1].VDiskActorId;
+        const TActorId holderActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+        const TActorId staleWaitingOwnerActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+        const TActorId replacementWaitingOwnerActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+
+        SendBrokerAcquire(scenario.Env, holderActorId, brokerServiceId, holderVDiskServiceId);
+        WaitForBrokerToken(scenario.Env, holderActorId,
+            "expected holder actor to get startup catchup token");
+
+        SendBrokerAcquire(scenario.Env, staleWaitingOwnerActorId, brokerServiceId, queuedVDiskServiceId);
+        scenario.Env.Sim(TDuration::Seconds(1));
+        scenario.Env.Runtime->DestroyActor(staleWaitingOwnerActorId);
+        scenario.Env.Sim(TDuration::Seconds(1));
+
+        SendBrokerAcquire(scenario.Env, replacementWaitingOwnerActorId, brokerServiceId, queuedVDiskServiceId);
+        SendBrokerRelease(scenario.Env, holderActorId, brokerServiceId, holderVDiskServiceId);
+        WaitForBrokerToken(scenario.Env, replacementWaitingOwnerActorId,
+            "expected replacement owner to get startup catchup token after stale waiting owner died");
+    }
+
+    Y_UNIT_TEST(StartupCatchupBrokerDoesNotHangWhenQueuedOwnerDiesBeforeActivation) {
+        TRestartScenario scenario;
+        ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 0, 0, 1, 0);
+
+        const TActorId brokerServiceId = MakeBlobStorageStartupCatchupBrokerID();
+        const TActorId holderVDiskServiceId = scenario.StartupTargets[0].VDiskActorId;
+        const TActorId staleQueuedVDiskServiceId = scenario.StartupTargets[1].VDiskActorId;
+        const TActorId nextQueuedVDiskServiceId = scenario.StartupTargets[2].VDiskActorId;
+        const TActorId holderActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+        const TActorId staleQueuedOwnerActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+        const TActorId nextQueuedOwnerActorId = scenario.Env.Runtime->AllocateEdgeActor(scenario.RestartedNodeId, __FILE__, __LINE__);
+
+        SendBrokerAcquire(scenario.Env, holderActorId, brokerServiceId, holderVDiskServiceId);
+        WaitForBrokerToken(scenario.Env, holderActorId,
+            "expected holder actor to get startup catchup token");
+
+        // Queue one VDisk behind the holder and then kill its owner before the queue reaches it.
+        // After the holder releases token, the broker will try to activate this stale queue entry.
+        // Without TrackDelivery + Undelivered cleanup this dead entry would keep the only token forever.
+        SendBrokerAcquire(scenario.Env, staleQueuedOwnerActorId, brokerServiceId, staleQueuedVDiskServiceId);
+        SendBrokerAcquire(scenario.Env, nextQueuedOwnerActorId, brokerServiceId, nextQueuedVDiskServiceId);
+        scenario.Env.Sim(TDuration::Seconds(1));
+        scenario.Env.Runtime->DestroyActor(staleQueuedOwnerActorId);
+        scenario.Env.Sim(TDuration::Seconds(1));
+
+        SendBrokerRelease(scenario.Env, holderActorId, brokerServiceId, holderVDiskServiceId);
+        WaitForBrokerToken(scenario.Env, nextQueuedOwnerActorId,
+            "expected next queued owner to get startup catchup token after stale queued owner dies");
+    }
+
     Y_UNIT_TEST(LocalRecoveryBrokerSerializesStartupPerNode) {
         TRestartScenario scenario;
         TLocalRecoveryCapture capture;
@@ -630,8 +763,19 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
 
         // Wait until two Syncers have reached the broker, but only one token is granted.
         // The selected owner's completion event is stashed to keep that state stable.
-        WaitUntil(scenario.Env, [&] { return capture.HasOneGrantedAndAnotherWaitingPerNode(); },
-            "expected one Syncer to hold startup catchup token while another VDisk is already waiting");
+        for (ui32 i = 0; i < WaitIterations && !capture.HasOneGrantedAndAnotherWaitingPerNode(); ++i) {
+            scenario.Env.Sim(WaitStep);
+        }
+        UNIT_ASSERT_C(capture.HasOneGrantedAndAnotherWaitingPerNode(),
+            "expected one Syncer to hold startup catchup token while another VDisk is already waiting"
+            << "; queried# " << capture.QueriedVDisks.size()
+            << " queried_vdisks# " << FormatActorIdSet(capture.QueriedVDisks)
+            << " granted# " << capture.GrantedVDisks.size()
+            << " granted_vdisks# " << FormatActorIdList(capture.GrantedVDisks)
+            << " released# " << capture.ReleasedVDisks.size()
+            << " released_vdisks# " << FormatActorIdList(capture.ReleasedVDisks)
+            << " selected_owner# " << (capture.SelectedOwnerActor ? capture.SelectedOwnerActor->ToString() : TString("<none>"))
+            << " stashed# " << bool(capture.StashedCompletionEvent));
         UNIT_ASSERT_VALUES_EQUAL_C(capture.GrantedVDisks.size(), 1,
             "expected only one startup catchup token before releasing first Syncer; queriedVDisks# "
             << capture.QueriedVDisks.size());
@@ -668,6 +812,36 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             "expected startup catchup broker to pass token to another VDisk after Syncer death;"
             << " failedVDiskActorId# " << failedVDiskActorId
             << " secondVDiskActorId# " << capture.GrantedVDisks[1]);
+    }
+
+    Y_UNIT_TEST(StartupCatchupBrokerReleasesTokenWhenPeerIsOfflinePerNode) {
+        TRestartScenario scenario;
+        const ui32 offlinePeerNodeId = scenario.SelectPeerNodeForGroup(scenario.StartupTargets.front().GroupId);
+        TStartupCatchupCapture capture;
+        TScopedCaptureFilter guard(scenario.Env, capture);
+
+        // Keep one startup-catchup peer offline and verify that the first Syncer still
+        // eventually completes its startup wave, releases the token, and lets another
+        // VDisk proceed instead of blocking the broker forever.
+        scenario.Env.StopNode(offlinePeerNodeId);
+        scenario.Env.Sim(TDuration::Seconds(5));
+        RestartNodeForBrokerTest(scenario, {.MaxInProgressStartupCatchupCount = 1}, &scenario.StartupTargets);
+
+        WaitUntil(scenario.Env, [&] { return capture.HasOneGrantedAndAnotherWaitingPerNode(); },
+            "expected one Syncer to hold startup catchup token while another VDisk is already waiting");
+
+        const TActorId firstVDiskActorId = capture.SelectedVDiskActor();
+        capture.ResumeStashedEvent(scenario.Env);
+
+        WaitUntil(scenario.Env, [&] {
+            return capture.HasReleasedVDisk(firstVDiskActorId) && capture.GrantedVDisks.size() >= 2;
+        }, "expected startup catchup token to be released even when one peer is offline");
+
+        UNIT_ASSERT_C(capture.GrantedVDisks[1] != firstVDiskActorId,
+            "expected startup catchup broker to pass token to another VDisk after an offline-peer attempt;"
+            << " firstVDiskActorId# " << firstVDiskActorId
+            << " secondVDiskActorId# " << capture.GrantedVDisks[1]
+            << " offlinePeerNodeId# " << offlinePeerNodeId);
     }
 
     Y_UNIT_TEST(StartupCatchupBrokerSerializesStartupCatchupPerPDisk) {

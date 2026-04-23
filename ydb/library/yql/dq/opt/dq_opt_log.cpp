@@ -4,6 +4,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
@@ -680,4 +681,123 @@ TMaybeNode<TExprBase> UnorderedOverDqReadWrapMultiUsage(TExprBase node, TExprCon
     return node;
 }
 
+TMaybeNode<TExprBase> DqPushExtractMembersToDqJoin(TExprBase node, TExprContext& ctx) {
+    auto extract = node.Cast<TCoExtractMembers>();
+    auto maybeJoin = extract.Input().Maybe<TDqJoin>();
+    if (!maybeJoin) {
+        return node;
+    }
+
+    auto join = maybeJoin.Cast();
+
+    THashSet<TStringBuf> neededOutputColumns;
+    for (const auto& member : extract.Members()) {
+        neededOutputColumns.insert(member.Value());
+    }
+
+    const auto joinType = join.JoinType().Value();
+    const bool withLeftSide = joinType != "RightOnly" && joinType != "RightSemi";
+    const bool withRightSide = joinType != "LeftOnly" && joinType != "LeftSemi";
+
+    const auto* leftItemType = GetSeqItemType(join.LeftInput().Ref().GetTypeAnn());
+    const auto* rightItemType = GetSeqItemType(join.RightInput().Ref().GetTypeAnn());
+    if (!leftItemType || !rightItemType ||
+        leftItemType->GetKind() != ETypeAnnotationKind::Struct ||
+        rightItemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return node;
+    }
+
+    const auto* leftStructType = leftItemType->Cast<TStructExprType>();
+    const auto* rightStructType = rightItemType->Cast<TStructExprType>();
+
+    const bool leftIsSingleLabel = join.LeftLabel().Ref().IsAtom();
+    const bool rightIsSingleLabel = join.RightLabel().Ref().IsAtom();
+
+    TStringBuf leftLabel = leftIsSingleLabel ? join.LeftLabel().Cast<TCoAtom>().Value() : TStringBuf();
+    TStringBuf rightLabel = rightIsSingleLabel ? join.RightLabel().Cast<TCoAtom>().Value() : TStringBuf();
+
+    THashSet<TString> neededLeftInputColumns;
+    THashSet<TString> neededRightInputColumns;
+
+    for (const auto& keyTuple : join.JoinKeys()) {
+        auto leftCol = keyTuple.LeftColumn().Value();
+        auto leftLbl = keyTuple.LeftLabel().Value();
+        if (leftStructType->FindItem(leftCol)) {
+            neededLeftInputColumns.insert(TString(leftCol));
+        }
+        if (auto prefixed = FullColumnName(leftLbl, leftCol); leftStructType->FindItem(prefixed)) {
+            neededLeftInputColumns.insert(std::move(prefixed));
+        }
+
+        auto rightCol = keyTuple.RightColumn().Value();
+        auto rightLbl = keyTuple.RightLabel().Value();
+        if (rightStructType->FindItem(rightCol)) {
+            neededRightInputColumns.insert(TString(rightCol));
+        }
+        if (auto prefixed = FullColumnName(rightLbl, rightCol); rightStructType->FindItem(prefixed)) {
+            neededRightInputColumns.insert(std::move(prefixed));
+        }
+    }
+
+    if (withLeftSide) {
+        for (const auto& item : leftStructType->GetItems()) {
+            TString outputName = (leftIsSingleLabel && !leftLabel.empty())
+                ? FullColumnName(leftLabel, item->GetName())
+                : TString(item->GetName());
+            if (neededOutputColumns.contains(outputName)) {
+                neededLeftInputColumns.insert(TString(item->GetName()));
+            }
+        }
+    }
+
+    if (withRightSide) {
+        for (const auto& item : rightStructType->GetItems()) {
+            TString outputName = (rightIsSingleLabel && !rightLabel.empty())
+                ? FullColumnName(rightLabel, item->GetName())
+                : TString(item->GetName());
+            if (neededOutputColumns.contains(outputName)) {
+                neededRightInputColumns.insert(TString(item->GetName()));
+            }
+        }
+    }
+
+    if (neededLeftInputColumns.size() >= leftStructType->GetSize() &&
+        neededRightInputColumns.size() >= rightStructType->GetSize()) {
+        return node;
+    }
+
+    auto narrowInput = [&ctx, &join](TExprBase input, const TStructExprType* inputType,
+                                     const THashSet<TString>& neededColumns) -> TExprBase {
+        if (neededColumns.size() >= inputType->GetSize()) {
+            return input;
+        }
+        TExprNode::TListType memberAtoms;
+        for (const auto& item : inputType->GetItems()) {
+            if (neededColumns.contains(item->GetName())) {
+                memberAtoms.push_back(ctx.NewAtom(join.Pos(), item->GetName()));
+            }
+        }
+        return Build<TCoExtractMembers>(ctx, join.Pos())
+            .Input(input)
+            .Members(ctx.NewList(join.Pos(), std::move(memberAtoms)))
+            .Done();
+    };
+
+    auto newLeftInput = narrowInput(join.LeftInput(), leftStructType, neededLeftInputColumns);
+    auto newRightInput = narrowInput(join.RightInput(), rightStructType, neededRightInputColumns);
+
+    YQL_CLOG(DEBUG, CoreDq) << "PushExtractMembersToDqJoin: narrowed left "
+        << leftStructType->GetSize() << " -> " << neededLeftInputColumns.size()
+        << ", right " << rightStructType->GetSize() << " -> " << neededRightInputColumns.size();
+
+    return Build<TCoExtractMembers>(ctx, join.Pos())
+        .Input<TDqJoin>()
+            .InitFrom(join)
+            .LeftInput(newLeftInput)
+            .RightInput(newRightInput)
+            .Build()
+        .Members(extract.Members())
+        .Done();
 }
+
+} // namespace NYql::NDq

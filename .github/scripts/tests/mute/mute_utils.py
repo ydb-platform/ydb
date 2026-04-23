@@ -11,19 +11,6 @@ import json
 CONFIG_DIR = os.path.join('.github', 'config')
 MUTE_UPDATE_BUILD_TYPES_CONFIG = os.path.join(CONFIG_DIR, 'mute_update_build_types.json')
 
-# Dedicated file per preset (relwithdebinfo keeps historical name muted_ya.txt).
-DEDICATED_NAMES: dict[str, str] = {
-    'relwithdebinfo': 'muted_ya.txt',
-    'debug': 'muted_ya.txt',
-    'release': 'muted_ya.txt',
-    'release-asan': 'muted_ya_asan.txt',
-    'release-tsan': 'muted_ya_tsan.txt',
-    'release-msan': 'muted_ya_msan.txt',
-}
-
-_cached_muted_ya_paths: tuple[str, dict[str, str]] | None = None
-
-
 def _normalize_relative_path(path: str) -> str:
     return path.replace('\\', '/')
 
@@ -33,48 +20,32 @@ def _repo_root_from_this_file() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
 
-def _default_path_policy() -> tuple[str, dict[str, str]]:
-    default_path = _normalize_relative_path(os.path.join(CONFIG_DIR, 'muted_ya.txt'))
-    per_preset = {
-        preset: _normalize_relative_path(os.path.join(CONFIG_DIR, filename))
-        for preset, filename in DEDICATED_NAMES.items()
-    }
-    return default_path, per_preset
-
-
 def _load_muted_ya_path_policy() -> tuple[str, dict[str, str]]:
-    global _cached_muted_ya_paths
-    if _cached_muted_ya_paths is not None:
-        return _cached_muted_ya_paths
-
-    default_path, per_preset = _default_path_policy()
     cfg_path = os.path.join(_repo_root_from_this_file(), MUTE_UPDATE_BUILD_TYPES_CONFIG)
-    if not os.path.isfile(cfg_path):
-        _cached_muted_ya_paths = (default_path, per_preset)
-        return _cached_muted_ya_paths
+    with open(cfg_path, encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f'{cfg_path}: expected JSON object')
 
-    try:
-        with open(cfg_path, encoding='utf-8') as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            raw_default = data.get('default_muted_ya_path')
-            if isinstance(raw_default, str) and raw_default.strip():
-                default_path = _normalize_relative_path(raw_default.strip())
+    raw_default = data.get('default_muted_ya_path')
+    if not isinstance(raw_default, str) or not raw_default.strip():
+        raise ValueError(f'{cfg_path}: "default_muted_ya_path" must be a non-empty string')
+    default_path = _normalize_relative_path(raw_default.strip())
 
-            raw_paths = data.get('muted_ya_paths')
-            if isinstance(raw_paths, dict):
-                for preset, rel_path in raw_paths.items():
-                    preset_key = str(preset).strip().lower()
-                    if not preset_key:
-                        continue
-                    if isinstance(rel_path, str) and rel_path.strip():
-                        per_preset[preset_key] = _normalize_relative_path(rel_path.strip())
-    except (OSError, json.JSONDecodeError):
-        # Keep robust fallback for tools that rely on mute path resolution.
-        pass
-
-    _cached_muted_ya_paths = (default_path, per_preset)
-    return _cached_muted_ya_paths
+    per_preset: dict[str, str] = {}
+    raw_paths = data.get('muted_ya_paths', {})
+    if raw_paths is None:
+        raw_paths = {}
+    if not isinstance(raw_paths, dict):
+        raise ValueError(f'{cfg_path}: "muted_ya_paths" must be a JSON object')
+    for preset, rel_path in raw_paths.items():
+        preset_key = str(preset).strip().lower()
+        if not preset_key:
+            continue
+        if not isinstance(rel_path, str) or not rel_path.strip():
+            raise ValueError(f'{cfg_path}: muted_ya_paths["{preset_key}"] must be a non-empty string')
+        per_preset[preset_key] = _normalize_relative_path(rel_path.strip())
+    return default_path, per_preset
 
 
 def dedicated_relative(preset: str) -> str:
@@ -86,16 +57,11 @@ def dedicated_relative(preset: str) -> str:
 def resolve_for_workspace(repo_root: str, preset: str) -> tuple[str, bool]:
     """
     Returns (path relative to repo_root, used_fallback).
-    If the dedicated file is missing, use muted_ya.txt (backward compatible).
+    Path is resolved from config only; no filesystem fallback checks.
     """
+    _ = repo_root  # keep signature stable for callers
     rel = dedicated_relative(preset)
-    full = os.path.normpath(os.path.join(repo_root, rel))
-    if os.path.isfile(full):
-        return rel.replace('\\', '/'), False
-    fb = os.path.join(repo_root, CONFIG_DIR, 'muted_ya.txt')
-    if not os.path.isfile(fb):
-        raise FileNotFoundError(f'neither {full} nor fallback {fb} exists')
-    return os.path.join(CONFIG_DIR, 'muted_ya.txt').replace('\\', '/'), True
+    return rel.replace('\\', '/'), False
 
 
 def bash_exports_for_workspace(repo_root: str, preset: str) -> tuple[str, str, str]:

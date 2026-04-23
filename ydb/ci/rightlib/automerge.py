@@ -78,9 +78,9 @@ class PrAutomerger:
         pr.add_to_labels(pr_label_fail)
 
     def api_merge_pr(self, pr: PullRequest) -> bool:
-        """Merge via GitHub API (squash), same end result as native auto-merge in the mute PR workflow."""
+        """Merge via GitHub API (merge), same end result as native auto-merge in the mute PR workflow."""
         try:
-            pr.merge(merge_method="squash", commit_title=pr.title)
+            pr.merge(merge_method="merge", commit_title=pr.title)
             return True
         except GithubException as e:
             self.logger.error("merge API failed status=%s data=%r", e.status, e.data)

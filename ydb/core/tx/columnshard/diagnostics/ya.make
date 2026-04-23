@@ -9,8 +9,7 @@ PEERDIR(
     contrib/libs/opentelemetry-proto
     ydb/core/base/generated
     ydb/core/control/lib/generated
-    ydb/library/aclib/protos/identity
-    ydb/library/aclib/protos/acl
+    ydb/library/aclib/protos
     ydb/library/actors/core
     yql/essentials/core/issue/protos
 )

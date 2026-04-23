@@ -19,8 +19,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     yql/essentials/providers/result/expr_nodes
     yql/essentials/core/expr_nodes
-    ydb/library/aclib/protos/identity
-    ydb/library/aclib/protos/acl
+    ydb/library/aclib/protos
     library/cpp/protobuf/json
     library/cpp/getopt
 )

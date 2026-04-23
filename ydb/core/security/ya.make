@@ -21,8 +21,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/security/util
     ydb/library/aclib
-    ydb/library/aclib/protos/identity
-    ydb/library/aclib/protos/acl
+    ydb/library/aclib/protos
     ydb/library/login
     ydb/library/login/protos
     ydb/library/ncloud/impl

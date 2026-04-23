@@ -1,5 +1,8 @@
 package NACLibProto;
 
+option go_package = "a.yandex-team.ru/contrib/ydb/library/aclib/protos/acl;aclpb";
+option java_outer_classname = "Aclib";
+
 message TACE {
     optional uint32 AccessType = 1;
     optional uint32 AccessRight = 2;

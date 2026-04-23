@@ -10,8 +10,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
-    ydb/library/aclib/protos/identity
-    ydb/library/aclib/protos/acl
+    ydb/library/aclib/protos
     ydb/public/lib/yson_value
     ydb/services/metadata
     ydb/library/testlib/s3_recipe_helper

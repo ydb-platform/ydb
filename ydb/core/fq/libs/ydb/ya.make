@@ -27,8 +27,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/table
     ydb/library/query_actor
     ydb/core/base/generated
-    ydb/library/aclib/protos/identity
-    ydb/library/aclib/protos/acl
+    ydb/library/aclib/protos
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb.h)

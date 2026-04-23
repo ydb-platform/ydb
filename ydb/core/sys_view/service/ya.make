@@ -18,8 +18,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/graph/api
     ydb/core/graph/service
-    ydb/library/aclib/protos/identity
-    ydb/library/aclib/protos/acl
+    ydb/library/aclib/protos
 )
 
 END()

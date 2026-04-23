@@ -31,8 +31,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/kqp/query_data
     ydb/library/aclib
-    ydb/library/aclib/protos/identity
-    ydb/library/aclib/protos/acl
+    ydb/library/aclib/protos
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     ydb/core/kqp/opt/cbo

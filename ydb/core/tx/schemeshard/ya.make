@@ -371,7 +371,8 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
-    ydb/library/aclib/protos
+    ydb/library/aclib/protos/identity
+    ydb/library/aclib/protos/acl
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer

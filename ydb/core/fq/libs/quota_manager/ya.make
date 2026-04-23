@@ -13,7 +13,8 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources
     ydb/core/grpc_services/local_rpc
     ydb/core/protos
-    ydb/library/aclib/protos
+    ydb/library/aclib/protos/identity
+    ydb/library/aclib/protos/acl
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/table
 )

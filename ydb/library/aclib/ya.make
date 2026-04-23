@@ -3,7 +3,8 @@ LIBRARY()
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/protobuf/util
-    ydb/library/aclib/protos
+    ydb/library/aclib/protos/identity
+    ydb/library/aclib/protos/acl
 )
 
 SRCS(

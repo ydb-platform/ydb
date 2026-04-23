@@ -10,7 +10,7 @@ on:
         required: false
         default: ''
       build_types:
-        description: 'Comma-separated presets or "all" (default). Cannot request presets outside the allowed list passed to mute_check.py in this workflow. Matrix keeps only (branch, preset) where the mute file exists on origin/<branch>.'
+        description: 'Comma-separated presets or "all" (default). Cannot request presets outside .github/config/mute_update_build_types.json (default + per-branch overrides). Matrix keeps only (branch, preset) where the mute file exists on origin/<branch>.'
         required: false
         default: all
         type: string
@@ -19,6 +19,7 @@ env:
   # workflow_dispatch: branch selected in UI. schedule: repository default branch.
   WORKFLOW_CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
+  MUTE_BUILD_TYPES_CONFIG_PATH: .github/config/mute_update_build_types.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
   REVIEWERS: '["ci"]'
@@ -50,7 +51,7 @@ jobs:
           python3 config-repo/.github/scripts/tests/mute/mute_helper.py matrix \
             --branches-file "config-repo/${{ env.BRANCHES_CONFIG_PATH }}" \
             --git-cwd config-repo \
-            --allowed-build-types relwithdebinfo,release-asan
+            --build-types-config "config-repo/${{ env.MUTE_BUILD_TYPES_CONFIG_PATH }}"
 
   collect-testowners-and-sync:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]

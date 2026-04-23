@@ -33,6 +33,75 @@ def parse_allowed_build_types(raw: str) -> list[str]:
     return out
 
 
+def _normalize_build_types(items: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        t = str(item).strip().lower()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
+def load_build_type_policy(config_path: str) -> tuple[list[str], dict[str, list[str]]]:
+    """
+    Load branch build-type policy for mute updates.
+
+    Expected format:
+    {
+      "default_build_types": ["relwithdebinfo"],
+      "branch_overrides": {
+        "main": ["relwithdebinfo", "release-asan"],
+        "stable-26-1": ["relwithdebinfo"]
+      }
+    }
+    """
+    with open(config_path, encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f'{config_path}: expected JSON object')
+
+    defaults_raw = data.get('default_build_types')
+    if not isinstance(defaults_raw, list):
+        raise ValueError(f'{config_path}: "default_build_types" must be a JSON array')
+    defaults = _normalize_build_types(defaults_raw)
+    if not defaults:
+        raise ValueError(f'{config_path}: "default_build_types" must contain at least one build type')
+
+    overrides_raw = data.get('branch_overrides', {})
+    if overrides_raw is None:
+        overrides_raw = {}
+    if not isinstance(overrides_raw, dict):
+        raise ValueError(f'{config_path}: "branch_overrides" must be a JSON object')
+
+    overrides: dict[str, list[str]] = {}
+    for branch, raw_value in overrides_raw.items():
+        branch_name = str(branch).strip()
+        if not branch_name:
+            continue
+        if isinstance(raw_value, list):
+            values = raw_value
+        elif isinstance(raw_value, dict) and isinstance(raw_value.get('build_types'), list):
+            values = raw_value['build_types']
+        else:
+            raise ValueError(
+                f'{config_path}: override for branch "{branch_name}" must be an array or '
+                '{"build_types": [...]}'
+            )
+        normalized = _normalize_build_types(values)
+        if not normalized:
+            raise ValueError(f'{config_path}: override for branch "{branch_name}" has no valid build types')
+        overrides[branch_name] = normalized
+
+    return defaults, overrides
+
+
+def parse_requested_build_types(raw: str) -> set[str]:
+    return {p.strip().lower() for p in (raw or '').split(',') if p.strip()}
+
+
 def candidate_presets(
     *,
     allowed_base: list[str],
@@ -121,6 +190,7 @@ def build_matrix(
     git_cwd: str,
     branches_override: str,
     allowed_presets: list[str],
+    build_type_policy: tuple[list[str], dict[str, list[str]]] | None,
     event_name: str,
     build_types_raw: str,
     explicit_dispatch_types: bool,
@@ -131,26 +201,25 @@ def build_matrix(
     else:
         branch_list = load_branches(branches_file)
 
-    candidates = candidate_presets(
-        allowed_base=allowed_presets,
-        event_name=event_name,
-        build_types_raw=build_types_raw,
-    )
-    if event_name == 'workflow_dispatch' and explicit_dispatch_types and not candidates:
-        return []
+    requested_presets = parse_requested_build_types(build_types_raw)
 
     out: list[dict[str, str]] = []
     for branch in branch_list:
-        if not _ensure_branch_fetched(git_cwd, branch):
+        if build_type_policy is not None:
+            defaults, overrides = build_type_policy
+            branch_allowed = list(overrides.get(branch, defaults))
+        else:
+            branch_allowed = list(allowed_presets)
+
+        if event_name == 'workflow_dispatch':
+            raw = (build_types_raw or '').strip().lower()
+            if raw and raw != 'all':
+                branch_allowed = [p for p in branch_allowed if p in requested_presets]
+
+        if event_name == 'workflow_dispatch' and explicit_dispatch_types and not branch_allowed:
             continue
-        for preset in candidates:
-            if not _mute_file_exists_on_remote(git_cwd, branch, preset):
-                if event_name == 'workflow_dispatch' and explicit_dispatch_types:
-                    print(
-                        f'::notice::No {dedicated_relative(preset)} on origin/{branch} ({preset})',
-                        file=sys.stderr,
-                    )
-                continue
+
+        for preset in branch_allowed:
             preset_l = preset.strip().lower()
             out.append(
                 {
@@ -219,7 +288,7 @@ def prepare_mute_update_matrix_job(
     pr_branch_prefix: str,
     output_path: str,
 ) -> int:
-    """Fetch branch; if dedicated mute blob missing on origin — skip; else write it to output_path."""
+    """Fetch branch and write dedicated mute blob to output_path."""
     repo_root = os.path.abspath(repo_root)
     base_branch = base_branch.strip()
     build_type = build_type.strip().lower()
@@ -234,14 +303,6 @@ def prepare_mute_update_matrix_job(
 
     rel = dedicated_relative(build_type)
     print(f'origin/{base_branch}:{rel}')
-
-    if not _mute_file_exists_on_remote(repo_root, base_branch, build_type):
-        print(
-            f'::notice::No {rel} on origin/{base_branch} (preset={build_type}) — skip mute update.',
-            file=sys.stderr,
-        )
-        _append_github_output('skip', 'true')
-        return 0
 
     try:
         _git_show_origin_dedicated_to_file(repo_root, base_branch, build_type, output_path)
@@ -267,12 +328,24 @@ def cmd_matrix(args: argparse.Namespace) -> int:
     explicit_dispatch_types = event_name == 'workflow_dispatch' and raw_bt not in ('', 'all')
 
     try:
-        allowed_presets = parse_allowed_build_types(args.allowed_build_types)
+        allowed_presets: list[str] = []
+        policy: tuple[list[str], dict[str, list[str]]] | None = None
+        build_types_config = (args.build_types_config or '').strip()
+        allowed_raw = (args.allowed_build_types or '').strip()
+
+        if build_types_config:
+            policy = load_build_type_policy(build_types_config)
+        elif allowed_raw:
+            allowed_presets = parse_allowed_build_types(allowed_raw)
+        else:
+            raise ValueError('Pass either --build-types-config or --allowed-build-types')
+
         matrix = build_matrix(
             branches_file=args.branches_file,
             git_cwd=args.git_cwd,
             branches_override=override,
             allowed_presets=allowed_presets,
+            build_type_policy=policy,
             event_name=event_name,
             build_types_raw=build_types_raw,
             explicit_dispatch_types=explicit_dispatch_types,
@@ -283,8 +356,8 @@ def cmd_matrix(args: argparse.Namespace) -> int:
 
     if not matrix:
         print(
-            '::error::Mute update matrix is empty (fetch failures, no mute file on origin for allowed presets, '
-            'or workflow_dispatch build_types outside --allowed-build-types).',
+            '::error::Mute update matrix is empty (no branches/build_types from config/overrides, '
+            'or workflow_dispatch build_types outside policy).',
             file=sys.stderr,
         )
         return 1
@@ -347,8 +420,13 @@ def main() -> int:
     )
     pm.add_argument(
         '--allowed-build-types',
-        required=True,
-        help='Comma-separated build presets for the matrix (order preserved); mute paths by preset',
+        default='',
+        help='Legacy mode: comma-separated build presets for all branches (order preserved)',
+    )
+    pm.add_argument(
+        '--build-types-config',
+        default='',
+        help='Path to mute build-type policy JSON (default + branch overrides)',
     )
     pm.add_argument(
         '--branches-override',

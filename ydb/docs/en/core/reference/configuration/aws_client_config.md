@@ -18,7 +18,6 @@ aws_client_config:
   max_connections_count: 32
   executor_threads_count: 32
   ca_path: "/etc/ssl/certs"
-  ca_file: ""
 ```
 
 ## Parameters
@@ -32,9 +31,9 @@ aws_client_config:
 | `http_request_timeout_ms` | `0` (disabled) | HTTP-layer timeout in milliseconds applied by the HTTP client (Curl). `0` means no timeout. |
 | `connection_timeout_ms` | `10000` | TCP connect timeout in milliseconds. |
 | `enable_tcp_keep_alive` | `true` | Enables TCP keep-alive on client sockets. |
-| `tcp_keep_alive_interval_ms` | `30000` | Interval between TCP keep-alive probes in milliseconds. In Curl this value is rounded to whole seconds and must be at least 15000. |
+| `tcp_keep_alive_interval_ms` | `30000` (AWS SDK default) | Interval between TCP keep-alive probes in milliseconds. When not set in the YDB config, the AWS SDK default of 30000 ms is used. In Curl this value is rounded to whole seconds and must be at least 15000. |
 | `max_connections_count` | `32` | Maximum number of concurrent TCP connections that the HTTP client inside AWS SDK may open. |
-| `executor_threads_count` | `32` | Size of the thread pool used by AWS SDK clients when they access the same endpoint. Controls parallelism for asynchronous requests. |
+| `executor_threads_count` | `32` | Size of the thread pool allocated per unique S3 endpoint. Controls parallelism for asynchronous requests to that endpoint. |
 | `ca_path` | `"/etc/ssl/certs"` | Path to a directory with CA certificates used to verify TLS for outbound connections. |
 | `ca_file` | — | Path to a single CA certificate bundle file. Used when the trust store is not in the default location. |
 

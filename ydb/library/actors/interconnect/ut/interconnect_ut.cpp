@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <cstring>
+#include <new>
 #include <util/random/fast.h>
 #include <util/string/cast.h>
 #include <util/string/vector.h>
@@ -656,6 +657,107 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         {
             auto s = GetRdmaChecksumStatus(cluster, 2, 1);
             UNIT_ASSERT_VALUES_EQUAL(s, "On | SoftwareChecksum");
+        }
+    }
+
+    Y_UNIT_TEST(MonOverviewXdcCellWhenSessionIsNull) {
+        // Regression: the XDC cell on actors/interconnect/overview renders
+        // garbled text for peers whose Session is null (Connected="no").
+        // TInterconnectProxyTCP::Handle(TEvQueryStats) only writes the
+        // ExternalDataChannel and XDCFlags fields of TProxyStats inside
+        // `if (Session) { ... }`. Without default member initializers on
+        // those primitives, the null-session path leaves them reading
+        // whatever happened to be on the stack.
+        //
+        // Recommended repro:
+        //   ./ya make --build=release --sanitize=memory -DDEBUGINFO_LINES_ONLY \
+        //       -tA ydb/library/actors/interconnect/ut \
+        //       -F *MonOverviewXdcCellWhenSessionIsNull*
+        //
+        // Under MSAN, block (2) below triggers "use-of-uninitialized-value".
+        // Block (1) is deterministic under any build: it fails when the
+        // default initializers are missing from TProxyStats.
+        using TStats = TInterconnectProxyTCP::TProxyStats;
+
+        // Mirrors XdcFlagsToString() from interconnect_mon.cpp so we render
+        // the XDC cell exactly as the monitoring page does.
+        auto renderXdcCell = [](const TStats& s) {
+            TStringStream out;
+            out << (s.ExternalDataChannel ? "yes" : "no") << " (";
+            TString flags;
+            if (s.XDCFlags & TStats::XDCFlags::MSG_ZERO_COPY_SEND) {
+                flags.append("MSG_ZC_SEND|");
+            }
+            if (s.XDCFlags & TStats::XDCFlags::RDMA_READ) {
+                flags.append("RDMA_READ|");
+            }
+            if (flags.empty()) {
+                flags.append("_");
+            } else {
+                flags.pop_back();
+            }
+            out << flags << ")";
+            return out.Str();
+        };
+
+        // (1) Visual repro: dump the XDC cell to Cerr for several stack-poison
+        //     patterns. A disconnected peer (Session==nullptr) should render
+        //     something consistent and meaningful, but with the bug present
+        //     every poison pattern yields a different bogus value.
+        Cerr << "--- IC overview XDC cell for Session==nullptr (bug repro) ---" << Endl;
+        for (unsigned char poison : {0x00, 0x01, 0x03, 0xAA, 0xCC, 0xFF}) {
+            alignas(TStats) std::byte storage[sizeof(TStats)];
+            std::memset(storage, poison, sizeof(storage));
+            auto* stats = ::new (static_cast<void*>(storage)) TStats;
+            const TString rendered = renderXdcCell(*stats);
+            Cerr << "  poison=0x" << Sprintf("%02X", poison) << "  XDC=" << rendered << Endl;
+            stats->~TStats();
+        }
+        Cerr << "-------------------------------------------------------------" << Endl;
+
+        // (2) Deterministic repro across all build configurations.
+        {
+            alignas(TStats) std::byte storage[sizeof(TStats)];
+            std::memset(storage, 0xCC, sizeof(storage));
+            // Default-initialization (no `()`) — trivially-initialized
+            // members stay at 0xCC unless they have default initializers.
+            auto* stats = ::new (static_cast<void*>(storage)) TStats;
+
+            auto byteAt = [](const void* p) {
+                unsigned char b;
+                std::memcpy(&b, p, 1);
+                return static_cast<unsigned>(b);
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL_C(byteAt(&stats->Connected), 0u,
+                "TProxyStats::Connected must be default-initialized");
+            UNIT_ASSERT_VALUES_EQUAL_C(byteAt(&stats->ExternalDataChannel), 0u,
+                "TProxyStats::ExternalDataChannel must be default-initialized");
+            UNIT_ASSERT_VALUES_EQUAL_C(byteAt(&stats->XDCFlags), 0u,
+                "TProxyStats::XDCFlags must be default-initialized");
+
+            stats->~TStats();
+        }
+
+        // (3) MSAN repro: mirrors the XDC-cell rendering for a peer whose
+        //     Handle(TEvQueryStats) took the Session==nullptr branch.
+        //     Reading ExternalDataChannel/XDCFlags here is the actual bug.
+        {
+            TStats stats;
+            // Fields the real handler sets unconditionally.
+            stats.Path = "peer0001";
+            stats.State = "PendingActivation";
+            stats.TotalOutputQueueSize = 0;
+            stats.Connected = false;
+            stats.Port = 0;
+            stats.Ping = TDuration::Zero();
+            stats.ClockSkew = 0;
+            // ExternalDataChannel and XDCFlags intentionally NOT set —
+            // this is the Session==nullptr branch of Handle(TEvQueryStats).
+
+            const TString rendered = renderXdcCell(stats);
+            // Keep the read observable so the compiler cannot fold it.
+            UNIT_ASSERT(!rendered.empty());
         }
     }
 }

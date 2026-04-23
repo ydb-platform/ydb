@@ -137,7 +137,7 @@ public:
     {
         IgnoreMessages(DebugHint(), {
             TEvHive::TEvCreateTabletReply::EventType,
-            TEvFileStore::TEvUpdateConfigResponse::EventType
+            TEvFileStore::TEvUpdateConfigResponse::EventType,
         });
     }
 

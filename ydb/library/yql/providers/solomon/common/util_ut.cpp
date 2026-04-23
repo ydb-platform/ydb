@@ -263,10 +263,10 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
             {"truePointsFindRange",       "600"},
             {"metricsQueueBatchCountLimit", "200"},
             {"metricsQueuePrefetchSize",  "2000"},
-            {"maxPointsPerOneRequest",    "20000"},
+            {"maxPointsPerOneRequest",    "20000"},   // clamped to 10'000
             {"poisonTimeoutSec",          "3600"},
             {"roundRobinStageTimeoutMs",  "500"},
-            {"labelsListingLimit",        "200000"},
+            {"labelsListingLimit",        "200000"},  // clamped to 100'000
         }));
 
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxApiInflight,              8u);
@@ -276,14 +276,13 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
         UNIT_ASSERT_VALUES_EQUAL(cfg.TruePointsFindRangeSec,      600u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueueBatchCountLimit, 200u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueuePrefetchSize,    2000u);
-        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxPointsPerOneRequest,      20000u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxPointsPerOneRequest,      10'000u);
         UNIT_ASSERT_EQUAL(cfg.PoisonTimeout,          TDuration::Seconds(3600));
         UNIT_ASSERT_EQUAL(cfg.RoundRobinStageTimeout, TDuration::MilliSeconds(500));
-        UNIT_ASSERT_VALUES_EQUAL(cfg.LabelsListingLimit,          200000u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.LabelsListingLimit,          100'000u);
     }
 
     Y_UNIT_TEST(ClampBelowMinimum) {
-        // Values below the minimum (1) must be clamped to the minimum.
         auto cfg = ParseSolomonReadActorConfig(MakeSettings({
             {"maxPointsPerOneRequest", "0"},
             {"poisonTimeoutSec",       "0"},
@@ -292,7 +291,7 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
         }));
 
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxPointsPerOneRequest,      1u);
-        UNIT_ASSERT_EQUAL(cfg.PoisonTimeout,          TDuration::Seconds(1));
+        UNIT_ASSERT_EQUAL(cfg.PoisonTimeout,          TDuration::Seconds(60));
         UNIT_ASSERT_EQUAL(cfg.RoundRobinStageTimeout, TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(cfg.LabelsListingLimit,          1u);
     }
@@ -315,14 +314,27 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
             {"retryMinLongRetryDelayMs", "400"},
             {"retryMaxDelayMs",          "2000"},
             {"retryMaxRetries",          "5"},
-            {"retryMaxTimeMs",           "60000"},
+            {"retryMaxTimeSec",          "60"},
         }));
 
         UNIT_ASSERT_EQUAL(cfg.RetryConfig.MinDelay,          TDuration::MilliSeconds(100));
         UNIT_ASSERT_EQUAL(cfg.RetryConfig.MinLongRetryDelay, TDuration::MilliSeconds(400));
         UNIT_ASSERT_EQUAL(cfg.RetryConfig.MaxDelay,          TDuration::MilliSeconds(2000));
         UNIT_ASSERT_VALUES_EQUAL(cfg.RetryConfig.MaxRetries, 5u);
-        UNIT_ASSERT_EQUAL(cfg.RetryConfig.MaxTime,           TDuration::MilliSeconds(60000));
+        UNIT_ASSERT_EQUAL(cfg.RetryConfig.MaxTime,           TDuration::Seconds(60));
+    }
+
+    Y_UNIT_TEST(ClampAboveMaximum) {
+        // Fields with an upper bound (ParseSettingWithMinMax) are clamped to their max.
+        auto cfg = ParseSolomonReadActorConfig(MakeSettings({
+            {"maxListingPageSize",    "99999"},   // max = 20'000
+            {"maxPointsPerOneRequest", "99999"},  // max = 10'000
+            {"labelsListingLimit",    "999999"},  // max = 100'000
+        }));
+
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxListingPageSize,     20'000u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxPointsPerOneRequest, 10'000u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.LabelsListingLimit,     100'000u);
     }
 }
 

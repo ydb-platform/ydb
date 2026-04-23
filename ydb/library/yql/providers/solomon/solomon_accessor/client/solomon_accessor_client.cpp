@@ -531,19 +531,6 @@ private:
         headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
         headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
 
-        auto retryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
-            [](CURLcode, long httpCode) {
-                if (httpCode == 429 /* RESOURCE_EXHAUSTED */ || httpCode == 503 /* shard in not ready yet */) {
-                    return ERetryErrorClass::ShortRetry;
-                }
-                return ERetryErrorClass::NoRetry;
-            },
-            TDuration::MilliSeconds(50),
-            TDuration::MilliSeconds(200),
-            TDuration::MilliSeconds(1000),
-            10
-        );
-
         if (!body.empty()) {
             HttpGateway->Upload(
                 std::move(url),

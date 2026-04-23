@@ -2,7 +2,6 @@
 import pytest
 import requests
 
-
 EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
     '/counters': {
         None: 200,
@@ -239,6 +238,53 @@ assert len(EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN) == len(
 ), "Handlers list must be the same"
 
 
+def _graph_shard_devui_mon_paths_with_enforce(graph_shard_tablet_id):
+    q = f'TabletID={graph_shard_tablet_id}'
+    mon_ok = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    }
+    return {
+        f'/tablets/app/secure?{q}': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 403,
+            'root@builtin': 200,
+        },
+        f'/tablets/app?{q}': mon_ok,
+        f'/tablets?{q}': mon_ok,
+    }
+
+
+def _graph_shard_admin_actions_with_enforce(graph_shard_tablet_id):
+    q = f'TabletID={graph_shard_tablet_id}&action=change_backend&backend=1'
+    forbidden_on_app = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 403,
+    }
+    return {
+        f'/tablets/app?{q}': forbidden_on_app,
+        f'/tablets/app/secure?{q}': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 403,
+            'root@builtin': 200,
+        },
+    }
+
+
 def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     headers = {}
     if token is not None:
@@ -277,6 +323,26 @@ def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
 
 def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
     _test_endpoints(ydb_cluster_without_enforce_user_token, EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN)
+
+
+def test_graph_shard_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_graph_shard,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_graph_shard.graph_shard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_graph_shard,
+        _graph_shard_devui_mon_paths_with_enforce(tid),
+    )
+
+
+def test_graph_shard_admin_actions_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_graph_shard,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_graph_shard.graph_shard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_graph_shard,
+        _graph_shard_admin_actions_with_enforce(tid),
+    )
 
 
 def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):

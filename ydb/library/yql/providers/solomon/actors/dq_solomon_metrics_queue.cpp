@@ -10,6 +10,7 @@
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/solomon/events/events.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -78,24 +79,21 @@ public:
     TDqSolomonMetricsQueueActor(
         ui64 consumersCount,
         TDqSolomonReadParams&& readParams,
-        bool enableSolomonClientPostApi,
-        ui64 batchCountLimit,
-        ui64 prefetchSize,
-        TDuration truePointsFindRange,
-        ui64 maxListingPageSize,
-        ui64 maxApiInflight,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const NSo::TSolomonReadActorConfig& cfg)
         : ConsumersCount(consumersCount)
         , ReadParams(std::move(readParams))
-        , EnableSolomonClientPostApi(enableSolomonClientPostApi)
-        , BatchCountLimit(batchCountLimit)
-        , PrefetchSize(prefetchSize)
-        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
-        , MaxListingPageSize(maxListingPageSize)
-        , MaxApiInflight(maxApiInflight)
+        , EnableSolomonClientPostApi(cfg.EnablePostApi)
+        , BatchCountLimit(cfg.MetricsQueueBatchCountLimit)
+        , PrefetchSize(cfg.MetricsQueuePrefetchSize)
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - TDuration::Seconds(cfg.TruePointsFindRangeSec))
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + TDuration::Seconds(cfg.TruePointsFindRangeSec))
+        , MaxListingPageSize(cfg.MaxListingPageSize)
+        , MaxApiInflight(cfg.MaxApiInflight)
+        , PoisonTimeout(cfg.PoisonTimeout)
+        , RoundRobinStageTimeout(cfg.RoundRobinStageTimeout)
         , CredentialsProvider(credentialsProvider)
-        , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
+        , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider, cfg))
     {}
 
     void Bootstrap() {
@@ -233,7 +231,7 @@ private:
                 }
 
                 double avgLength = std::max<double>(1.0, sumLength * 1.0 / label.Values.size());
-                batchSize = std::min<ui64>(batchSize, MaxHttpGetRequestSize * 0.5 / avgLength);
+                batchSize = std::min<ui64>(batchSize, NSo::NConstants::MaxHttpGetRequestSize * 0.5 / avgLength);
             }
 
             for (ui64 i = 0; i * batchSize < label.Values.size(); i++) {
@@ -515,12 +513,10 @@ private:
     const TInstant TrueRangeTo;
     const ui64 MaxListingPageSize;
     const ui64 MaxApiInflight;
-    const ui64 MaxHttpGetRequestSize = 4_KB;
+    const TDuration PoisonTimeout;
+    const TDuration RoundRobinStageTimeout;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     const NSo::ISolomonAccessorClient::TPtr SolomonClient;
-
-    static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
-    static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
 
 
@@ -529,41 +525,10 @@ private:
 NActors::IActor* CreateSolomonMetricsQueueActor(
     ui64 consumersCount,
     TDqSolomonReadParams readParams,
-    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
+    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+    const NSo::TSolomonReadActorConfig& cfg)
 {
-    const auto& settings = readParams.Source.settings();
-
-    bool enableSolomonClientPostApi = false;
-    if (auto it = settings.find("enableSolomonClientPostApi"); it != settings.end()) {
-        enableSolomonClientPostApi = FromString<bool>(it->second);
-    }
-
-    ui64 batchCountLimit = 0;
-    if (auto it = settings.find("metricsQueueBatchCountLimit"); it != settings.end()) {
-        batchCountLimit = FromString<ui64>(it->second);
-    }
-    
-    ui64 prefetchSize = 1000;
-    if (auto it = settings.find("metricsQueuePrefetchSize"); it != settings.end()) {
-        prefetchSize = FromString<ui64>(it->second);
-    }
-
-    ui64 truePointsFindRange = 301;
-    if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
-        truePointsFindRange = FromString<ui64>(it->second);
-    }
-
-    ui64 maxListingPageSize = 20000;
-    if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
-        maxListingPageSize = FromString<ui64>(it->second);
-    }
-
-    ui64 maxApiInflight = 40;
-    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxApiInflight = FromString<ui64>(it->second);
-    }
-
-    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), enableSolomonClientPostApi, batchCountLimit, prefetchSize, TDuration::Seconds(truePointsFindRange), maxListingPageSize, maxApiInflight, credentialsProvider);
+    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), credentialsProvider, cfg);
 }
 
 } // namespace NYql::NDq

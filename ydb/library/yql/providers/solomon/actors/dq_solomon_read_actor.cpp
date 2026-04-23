@@ -95,15 +95,12 @@ public:
         const THolderFactory& holderFactory,
         NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
         TDqSolomonReadParams&& readParams,
-        ui64 computeActorBatchSize,
-        TDuration truePointsFindRange,
         ui64 metricsQueueConsumersCountDelta,
-        ui64 maxApiInflight,
-        ui64 maxDataInflightBytes,
         NActors::TActorId metricsQueueActor,
         IMemoryQuotaManager::TPtr memoryQuotaManager,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const NSo::TSolomonReadActorConfig& cfg
         )
         : InputIndex(inputIndex)
         , TxId(txId)
@@ -112,16 +109,17 @@ public:
         , ProgramBuilder(programBuilder)
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", TDqSolomonReadActor: ")
         , ReadParams(std::move(readParams))
-        , ComputeActorBatchSize(computeActorBatchSize)
-        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
+        , ComputeActorBatchSize(cfg.ComputeActorBatchSize)
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - TDuration::Seconds(cfg.TruePointsFindRangeSec))
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + TDuration::Seconds(cfg.TruePointsFindRangeSec))
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
-        , MaxApiInflight(maxApiInflight)
-        , MaxDataInflightBytes(maxDataInflightBytes)
+        , MaxApiInflight(cfg.MaxApiInflight)
+        , MaxDataInflightBytes(cfg.MaxDataInflightBytes)
+        , MaxPointsPerOneRequest(cfg.MaxPointsPerOneRequest)
         , MetricsQueueActor(metricsQueueActor)
         , MemoryQuotaManager(memoryQuotaManager)
         , CredentialsProvider(credentialsProvider)
-        , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
+        , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider, cfg))
     {
         assert(MaxPointsPerOneRequest != 0);
         Y_UNUSED(counters);
@@ -135,10 +133,11 @@ public:
                 }
                 return ERetryErrorClass::NoRetry;
             },
-            TDuration::MilliSeconds(50),
-            TDuration::MilliSeconds(200),
-            TDuration::MilliSeconds(1000),
-            10
+            cfg.RetryConfig.MinDelay,
+            cfg.RetryConfig.MinLongRetryDelay,
+            cfg.RetryConfig.MaxDelay,
+            cfg.RetryConfig.MaxRetries,
+            cfg.RetryConfig.MaxTime
         );
 
         UseMetricsQueue = ReadParams.Source.HasSelectors();
@@ -652,6 +651,7 @@ private:
     const ui64 MetricsQueueConsumersCountDelta;
     const ui64 MaxApiInflight;
     const ui64 MaxDataInflightBytes;
+    const ui64 MaxPointsPerOneRequest;
     IRetryPolicy<NSo::TGetDataResponse>::TPtr RetryPolicy;
 
     bool Bootstrapped = false;
@@ -673,13 +673,10 @@ private:
     ui64 CompletedTimeRanges = 0;
     ui64 CurrentInflight = 0;
     ui64 CurrentDataBytesInflight = 0;
-    const ui64 MaxPointsPerOneRequest = 10000;
-
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     NSo::ISolomonAccessorClient::TPtr SolomonClient;
     TType* DictType = nullptr;
-    std::vector<size_t> SystemColumnPositionIndex;
     THashMap<TString, size_t> Index;
     THashMap<TString, TString> AliasIndex;
 };
@@ -694,12 +691,13 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
     TCollectStatsLevel statsLevel,
     const TTxId& txId,
     const NActors::TActorId& computeActorId,
-    const THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
     const THashMap<TString, TString>& secureParams,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const NSo::TSolomonReadActorConfig& cfg)
 {
     const TString& tokenName = source.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -718,26 +716,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         metricsQueueActor = ActorIdFromProto(protoId);
     }
 
-    ui64 computeActorBatchSize = 100;
-    if (auto it = settings.find("computeActorBatchSize"); it != settings.end()) {
-        computeActorBatchSize = FromString<ui64>(it->second);
-    }
-
-    ui64 truePointsFindRange = 301;
-    if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
-        truePointsFindRange = FromString<ui64>(it->second);
-    }
-
-    ui64 maxApiInflight = 40;
-    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxApiInflight = FromString<ui64>(it->second);
-    }
-
-    ui64 maxDataInflightBytes = 50_MB;
-    if (auto it = settings.find("maxDataInflightBytes"); it != settings.end()) {
-        maxDataInflightBytes = FromString<ui64>(it->second);
-    }
-
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
@@ -749,15 +727,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         holderFactory,
         programBuilder,
         std::move(params),
-        computeActorBatchSize,
-        TDuration::Seconds(truePointsFindRange),
         metricsQueueConsumersCountDelta,
-        maxApiInflight,
-        maxDataInflightBytes,
         metricsQueueActor,
         memoryQuotaManager,
         counters,
-        credentialsProvider);
+        credentialsProvider,
+        cfg);
     return {actor, actor};
 }
 
@@ -774,6 +749,8 @@ void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServi
                 metricsQueueConsumersCountDelta = args.ReadRanges.size() - 1;
             }
 
+            const NSo::TSolomonReadActorConfig cfg = NSo::ParseSolomonReadActorConfig(settings.settings());
+
             return CreateDqSolomonReadActor(
                 std::move(settings),
                 args.InputIndex,
@@ -786,7 +763,8 @@ void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServi
                 args.SecureParams,
                 args.MemoryQuotaManager,
                 counters,
-                credentialsFactory);
+                credentialsFactory,
+                cfg);
         });
 }
 

@@ -70,6 +70,13 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
     }
 }
 
+template<typename T>
+void InsertSettingIfSet(NSo::NProto::TDqSolomonSource& source, const TString& name, const TMaybe<T>& value) {
+    if (value.Defined()) {
+        source.MutableSettings()->insert({ name, ToString(*value.Get()) });
+    }
+}
+
 class TSolomonDqIntegration: public TDqIntegrationBase {
     static constexpr ui64 DefaultMaxPartitions = 1000;
 
@@ -372,31 +379,15 @@ public:
         }
 
         auto& solomonConfig = State_->Configuration;
-        auto& sourceSettings = *source.MutableSettings();
 
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(500);
-        sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
-
-        auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(1000);
-        sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
-
-        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(false);
-        sourceSettings.insert({"enableSolomonClientPostApi", ToString(enableSolomonClientPostApi)});
-
-        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
-        sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
-
-        auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
-        sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
-
-        auto maxListingPageSize = solomonConfig->_MaxListingPageSize.Get().OrElse(20000);
-        sourceSettings.insert({"maxListingPageSize", ToString(maxListingPageSize)});
-
-        auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
-        sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
-
-        auto maxDataInflightBytes = solomonConfig->MaxDataInflightBytes.Get().OrElse(50_MB);
-        sourceSettings.insert({"maxDataInflightBytes", ToString(maxDataInflightBytes)});
+        InsertSettingIfSet(source, "metricsQueueBatchCountLimit", solomonConfig->MetricsQueueBatchCountLimit.Get());
+        InsertSettingIfSet(source, "metricsQueuePrefetchSize", solomonConfig->MetricsQueuePrefetchSize.Get());
+        InsertSettingIfSet(source, "enableSolomonClientPostApi", solomonConfig->_EnableSolomonClientPostApi.Get());
+        InsertSettingIfSet(source, "computeActorBatchSize", solomonConfig->ComputeActorBatchSize.Get());
+        InsertSettingIfSet(source, "truePointsFindRange", solomonConfig->_TruePointsFindRange.Get());
+        InsertSettingIfSet(source, "maxListingPageSize", solomonConfig->_MaxListingPageSize.Get());
+        InsertSettingIfSet(source, "maxApiInflight", solomonConfig->MaxApiInflight.Get());
+        InsertSettingIfSet(source, "maxDataInflightBytes", solomonConfig->MaxDataInflightBytes.Get());
 
         if (!selectors.empty()) {
             ui64 totalMetricsCount;
@@ -412,7 +403,8 @@ public:
                 NDq::CreateSolomonMetricsQueueActor(
                     std::min<ui64>(maxTasksPerStage ? maxTasksPerStage : DefaultMaxPartitions, totalMetricsCount),
                     readParams,
-                    credentialsProvider
+                    credentialsProvider,
+                    NSo::ParseSolomonReadActorConfig(source.settings())
                 ),
                 NActors::TMailboxType::HTSwap,
                 State_->ExecutorPoolId

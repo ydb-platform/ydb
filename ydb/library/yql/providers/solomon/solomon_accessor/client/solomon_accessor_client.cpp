@@ -5,6 +5,7 @@
 #include <library/cpp/threading/future/wait/wait.h>
 #include <util/string/join.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -303,18 +304,35 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
 class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
 public:
     TSolomonAccessorClient(
-        bool enableSolomonClientPostApi,
-        ui64 maxListingPageSize,
-        ui64 maxApiInflight,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
-        : EnableSolomonClientPostApi(enableSolomonClientPostApi)
-        , MaxListingPageSize(maxListingPageSize)
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const TSolomonReadActorConfig& cfg)
+        : EnableSolomonClientPostApi(cfg.EnablePostApi)
+        , MaxListingPageSize(cfg.MaxListingPageSize)
+        , LabelsListingLimit(cfg.LabelsListingLimit)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
-        HttpConfig.SetMaxInFlightCount(maxApiInflight);
+        HttpConfig.SetMaxInFlightCount(cfg.MaxApiInflight);
         HttpGateway = IHTTPGateway::Make(&HttpConfig);
+
+        HttpRetryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
+            [](CURLcode curlCode, long httpCode) {
+                if (curlCode != CURLE_OK) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                const auto& codes = NConstants::RetriableHttpCodes;
+                if (std::find(codes.begin(), codes.end(), httpCode) != codes.end()) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                return ERetryErrorClass::NoRetry;
+            },
+            cfg.RetryConfig.MinDelay,
+            cfg.RetryConfig.MinLongRetryDelay,
+            cfg.RetryConfig.MaxDelay,
+            cfg.RetryConfig.MaxRetries,
+            cfg.RetryConfig.MaxTime
+        );
 
         GrpcConfig.Locator = GetGrpcSolomonEndpoint();
         GrpcConfig.EnableSsl = Settings.GetUseSsl();
@@ -384,11 +402,11 @@ public:
     NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const TSelectors& selectors, TInstant from, TInstant to) const override final {        
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        TInstant sevenDaysAgo = TInstant::Now() - TDuration::Days(7); // points older then a week ago are automatically downsampled by solomon backend
+        TInstant sevenDaysAgo = TInstant::Now() - NConstants::DownsamplingCutoff;
 
         TInstant downsamplingFrom = from;
         TInstant downsamplingTo = Settings.GetDownsampling().GetDisabled() ? std::max(std::min(sevenDaysAgo, to), from) : to;
-        ui64 gridMs = Settings.GetDownsampling().GetDisabled() ? TDuration::Minutes(5).MilliSeconds() : Settings.GetDownsampling().GetGridMs();
+        ui64 gridMs = Settings.GetDownsampling().GetDisabled() ? NConstants::DefaultGridInterval.MilliSeconds() : Settings.GetDownsampling().GetGridMs();
 
         ui64 downsampledPointsCount = ceil((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / gridMs) + 1;
 
@@ -440,7 +458,7 @@ public:
         if (auto authInfo = GetAuthInfo()) {
             callMeta.Aux.emplace_back("authorization", *authInfo);
         }
-        callMeta.Aux.emplace_back("x-client-id", "yandex-query");
+        callMeta.Aux.emplace_back("x-client-id", TString(NConstants::ClientId));
 
         auto resultPromise = NThreading::NewPromise<TGetDataResponse>();
 
@@ -509,7 +527,7 @@ private:
         if (auto authInfo = GetAuthInfo()) {
             headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << *authInfo);
         }
-        headers.Fields.emplace_back("x-client-id: yandex-query");
+        headers.Fields.emplace_back(TStringBuilder() << "x-client-id: " << NConstants::ClientId);
         headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
         headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
 
@@ -533,17 +551,17 @@ private:
                 std::move(body),
                 std::move(callback),
                 false,
-                retryPolicy
+                HttpRetryPolicy
             );
         } else {
             HttpGateway->Download(
                 std::move(url),
                 std::move(headers),
                 0,
-                ListSizeLimit,
+                NConstants::MaxHttpGetResponseSize,
                 std::move(callback),
                 {},
-                retryPolicy
+                HttpRetryPolicy
             );
         }
     }
@@ -620,13 +638,13 @@ private:
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
-                .UnsafeWriteKey("limit").WriteLongLong(100000)
+                .UnsafeWriteKey("limit").WriteLongLong(LabelsListingLimit)
             .EndObject();
         } else {
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
             builder.AddUrlParam("to", to.ToString());
-            builder.AddUrlParam("limit", "100000");
+            builder.AddUrlParam("limit", ToString(LabelsListingLimit));
         }
 
         return { builder.Build(), w.Str() };
@@ -723,12 +741,13 @@ private:
 private:
     const bool EnableSolomonClientPostApi;
     const ui64 MaxListingPageSize;
-    const ui64 ListSizeLimit = 100_MB * 8;
+    const ui64 LabelsListingLimit;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
     THttpGatewayConfig HttpConfig;
     IHTTPGateway::TPtr HttpGateway;
+    IHTTPGateway::TRetryPolicy::TPtr HttpRetryPolicy;
     NYdbGrpc::TGRpcClientConfig GrpcConfig;
     std::unique_ptr<NYdbGrpc::TServiceConnection<DataService>> GrpcConnection;
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient;
@@ -739,25 +758,9 @@ private:
 ISolomonAccessorClient::TPtr
 ISolomonAccessorClient::Make(
     NYql::NSo::NProto::TDqSolomonSource source,
-    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider) {
-    const auto& settings = source.settings();
-
-    bool enableSolomonClientPostApi = false;
-    if (auto it = settings.find("enableSolomonClientPostApi"); it != settings.end()) {
-        enableSolomonClientPostApi = FromString<bool>(it->second);
-    }
-
-    ui64 maxListingPageSize = 20000;
-    if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
-        maxListingPageSize = FromString<ui64>(it->second);
-    }
-
-    ui64 maxApiInflight = 40;
-    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxApiInflight = FromString<ui64>(it->second);
-    }
-
-    return std::make_shared<TSolomonAccessorClient>(enableSolomonClientPostApi, maxListingPageSize, maxApiInflight, std::move(source), credentialsProvider);
+    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+    const TSolomonReadActorConfig& cfg) {
+    return std::make_shared<TSolomonAccessorClient>(std::move(source), credentialsProvider, cfg);
 }
 
 } // namespace NYql::NSo

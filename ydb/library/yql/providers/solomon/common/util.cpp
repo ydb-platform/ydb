@@ -2,6 +2,7 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -188,6 +189,89 @@ NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, 
     }
 
     return source;
+}
+
+namespace {
+
+template <typename T>
+T ParseSettingWithMin(
+    const google::protobuf::Map<TString, TString>& settings,
+    const TString& key,
+    T defaultValue,
+    T minValue)
+{
+    if (auto it = settings.find(key); it != settings.end()) {
+        T parsed;
+        if (!TryFromString<T>(it->second, parsed)) {
+            Cerr << "[Solomon] WARNING: setting '" << key << "' has invalid value '" << it->second
+                 << "', using default " << defaultValue << Endl;
+            return defaultValue;
+        }
+        if (parsed < minValue) {
+            Cerr << "[Solomon] WARNING: setting '" << key << "' value " << parsed
+                 << " is below minimum " << minValue << ", clamping." << Endl;
+            return minValue;
+        }
+        return parsed;
+    }
+    return defaultValue;
+}
+
+bool ParseBoolSetting(
+    const google::protobuf::Map<TString, TString>& settings,
+    const TString& key,
+    bool defaultValue)
+{
+    if (auto it = settings.find(key); it != settings.end()) {
+        bool parsed;
+        if (!TryFromString<bool>(it->second, parsed)) {
+            Cerr << "[Solomon] WARNING: setting '" << key << "' has invalid bool value '" << it->second
+                 << "', using default " << defaultValue << Endl;
+            return defaultValue;
+        }
+        return parsed;
+    }
+    return defaultValue;
+}
+
+} // anonymous namespace
+
+TSolomonReadActorConfig ParseSolomonReadActorConfig(
+    const google::protobuf::Map<TString, TString>& settings)
+{
+    TSolomonReadActorConfig cfg;
+
+    cfg.MaxApiInflight     = ParseSettingWithMin<ui64>(settings, "maxApiInflight",     40,    1);
+    cfg.MaxListingPageSize = ParseSettingWithMin<ui64>(settings, "maxListingPageSize", 20000, 1);
+    cfg.EnablePostApi      = ParseBoolSetting(settings, "enableSolomonClientPostApi",  false);
+
+    cfg.ComputeActorBatchSize  = ParseSettingWithMin<ui64>(settings, "computeActorBatchSize",       100,   1);
+    cfg.MaxDataInflightBytes   = ParseSettingWithMin<ui64>(settings, "maxDataInflightBytes",         50_MB, 1);
+    cfg.TruePointsFindRangeSec = ParseSettingWithMin<ui64>(settings, "truePointsFindRange",          301,   1);
+    cfg.MaxPointsPerOneRequest = ParseSettingWithMin<ui64>(settings, "maxPointsPerOneRequest",       10'000, 1);
+
+    cfg.MetricsQueueBatchCountLimit = ParseSettingWithMin<ui64>(settings, "metricsQueueBatchCountLimit", 100,  1);
+    cfg.MetricsQueuePrefetchSize    = ParseSettingWithMin<ui64>(settings, "metricsQueuePrefetchSize",    1000, 1);
+    cfg.PoisonTimeout = TDuration::Seconds(
+        ParseSettingWithMin<ui64>(settings, "poisonTimeoutSec", 3 * 3600, 1));
+    cfg.RoundRobinStageTimeout = TDuration::MilliSeconds(
+        ParseSettingWithMin<ui64>(settings, "roundRobinStageTimeoutMs", 3000, 1));
+
+    cfg.LabelsListingLimit = ParseSettingWithMin<ui64>(settings, "labelsListingLimit", 100'000, 1);
+
+    cfg.RetryConfig.MinDelay = TDuration::MilliSeconds(
+        ParseSettingWithMin<ui64>(settings, "retryMinDelayMs", 50, 1));
+    cfg.RetryConfig.MinLongRetryDelay = TDuration::MilliSeconds(
+        ParseSettingWithMin<ui64>(settings, "retryMinLongRetryDelayMs", 200, 1));
+    cfg.RetryConfig.MaxDelay = TDuration::MilliSeconds(
+        ParseSettingWithMin<ui64>(settings, "retryMaxDelayMs", 1000, 1));
+    cfg.RetryConfig.MaxRetries =
+        ParseSettingWithMin<ui64>(settings, "retryMaxRetries", 10, 1);
+    if (auto it = settings.find("retryMaxTimeMs"); it != settings.end()) {
+        cfg.RetryConfig.MaxTime = TDuration::MilliSeconds(FromString<ui64>(it->second));
+    }
+
+    return cfg;
 }
 
 } // namespace NYql::NSo

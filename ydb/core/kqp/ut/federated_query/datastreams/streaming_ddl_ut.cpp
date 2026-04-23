@@ -1,12 +1,10 @@
 #include "common.h"
 
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 #include <fmt/format.h>
 
@@ -732,16 +730,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {
         // Test that defaults are overridden for streaming queries
-        auto& kqpSettings = *SetupAppConfig().MutableKQPConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& kqpSettings = *appConfig.MutableKQPConfig();
         auto saveSettings = kqpSettings;
         Y_DEFER {
             kqpSettings = saveSettings;
+            UpdateConfig(appConfig);
         };
         auto& setting = *kqpSettings.AddSettings();
         setting.SetName("HashJoinMode");
         setting.SetValue("grace");
 
         const auto pqGateway = SetupMockPqGateway();
+
+        UpdateConfig(appConfig);
 
         const TString sourceBucket = TStringBuilder() << "test_streaming_query_with_s3_join";
         constexpr char objectContent[] = R"(
@@ -817,10 +819,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(StreamingQueryWithYdbJoin, TStreamingTestFixture) {
         // Test that defaults are overridden for streaming queries
-        auto& kqpSettings = *SetupAppConfig().MutableKQPConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& kqpSettings = *appConfig.MutableKQPConfig();
         auto saveSettings = kqpSettings;
         Y_DEFER {
             kqpSettings = saveSettings;
+            UpdateConfig(appConfig);
         };
         auto& setting = *kqpSettings.AddSettings();
         setting.SetName("HashJoinMode");
@@ -828,6 +832,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
+
+        UpdateConfig(appConfig);
 
         const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
         const TString outputTopicName = TStringBuilder() << "outputTopicName" << Name_;
@@ -1016,16 +1022,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, TStreamingTestFixture) {
-        auto& setupAppConfig = SetupAppConfig();
-        auto saveConfig = setupAppConfig;
+        auto& appConfig = SetupAppConfig();
+        auto saveConfig = appConfig;
         Y_DEFER {
-            setupAppConfig = saveConfig;
+            appConfig = saveConfig;
+            UpdateConfig(appConfig);
         };
-        setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
-        setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(WithFeatureFlag);
-
+        appConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+        appConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(WithFeatureFlag);
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
+
+        UpdateConfig(appConfig);
 
         const TString inputTopicName = TStringBuilder() << "sljInputTopicName" << Name_;
         const TString outputTopicName = TStringBuilder() << "sljOutputTopicName" << Name_;
@@ -1346,10 +1354,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Y_DEFER {
             appConfig = std::move(saveConfig);
             GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(saveEnableSecureScriptExecutions);
+            UpdateConfig(appConfig);
         };
 
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
         GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(true);
+        UpdateConfig(appConfig);
 
         const TString inputTopicName = TStringBuilder() << "streamingQueryUnderSecureScriptExecutionsInputTopic" << Name_;
         const TString outputTopicName = TStringBuilder() << "streamingQueryUnderSecureScriptExecutionsOutputTopic" << Name_;
@@ -1434,24 +1444,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            const auto edgeActor = runtime.AllocateEdgeActor();
             appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
 
-            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evProxy->Record.MutableConfig() = appConfig;
-
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
-            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evStorage->Record.MutableConfig() = appConfig;
-
-            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
-            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            Sleep(TDuration::Seconds(1));
+            UpdateConfig(appConfig);
 
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
@@ -1967,14 +1962,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
-        auto& setupAppConfig = SetupAppConfig();
-        auto& tableServiceConfig = *setupAppConfig.MutableTableServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
         auto saveConfig = tableServiceConfig;
         Y_DEFER {
             tableServiceConfig = saveConfig;
+            UpdateConfig(appConfig);
         };
         tableServiceConfig.SetEnableDqSourceStreamLookupJoin(true);
         const auto connectorClient = SetupMockConnectorClient();
+        UpdateConfig(appConfig);
 
         const TString inputTopicName = TStringBuilder() << "sljInputTopicName" << Name_;
         const TString outputTopicName = TStringBuilder() << "sljOutputTopicName" << Name_;
@@ -2348,12 +2345,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(DropStreamingQueryUnderLoad, TStreamingTestFixture) {
         LogSettings.Freeze = true;
-        auto& queryServiceConfig = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
         auto saveConfig = queryServiceConfig;
         Y_DEFER {
             queryServiceConfig = saveConfig;
         };
         queryServiceConfig.SetProgressStatsPeriodMs(1);
+        UpdateConfig(appConfig);
 
         const TString inputTopicName = TStringBuilder() << "inputTopic" << Name_;
         const TString outputTopicName = TStringBuilder() << "outputTopic" << Name_;
@@ -2418,13 +2417,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CreateStreamingQueryUnderTimeout, TStreamingWithSchemaSecretsTestFixture) {
-        auto& config = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableQueryServiceConfig();
         auto saveConfig = config;
         Y_DEFER {
             config = saveConfig;
+            UpdateConfig(appConfig);
         };
         config.SetQueryTimeoutDefaultSeconds(3);
         config.SetScriptOperationTimeoutDefaultSeconds(3);
+        UpdateConfig(appConfig);
 
         const TString inputTopicName = TStringBuilder() << "createStreamingQueryUnderTimeoutInputTopic" << Name_;
         const TString outputTopicName = TStringBuilder() << "createStreamingQueryUnderTimeoutOutputTopic" << Name_;
@@ -2995,9 +2997,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto saveConfig = config;
         Y_DEFER {
             config = std::move(saveConfig);
+            UpdateConfig(config);
         };
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        UpdateConfig(config);
 
         const TString topic = TStringBuilder() << "tableMode" << Name_;
 

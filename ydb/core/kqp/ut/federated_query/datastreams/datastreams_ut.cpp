@@ -56,12 +56,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(FailedWithoutAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
         const auto saveCfg = cfg;
         Y_DEFER {
             cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
         };
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
         const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         ExecSchemeQuery(fmt::format(
@@ -79,26 +82,32 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
         auto saveCfg = cfg;
         Y_DEFER {
             cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
         };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
         const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(sourceName);
     }
 
     Y_UNIT_TEST_F(ReadTopicFailedWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
         auto saveCfg = cfg;
         Y_DEFER {
             cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
         };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
         const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(sourceName);
@@ -127,13 +136,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
         auto saveCfg = cfg;
         Y_DEFER {
             cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
         };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
         const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         const TString topicName = TStringBuilder() << "topicName" << Name_;
@@ -173,14 +185,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
         auto saveCfg = cfg;
         Y_DEFER {
             cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
         };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.AddAvailableExternalDataSources("YdbTopics");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
         const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         const TString topicName = TStringBuilder() << "topicName" << Name_;
@@ -252,12 +267,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(InsertTopicBasic, TStreamingTestFixture) {
-        auto& config = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableQueryServiceConfig();
         auto saveConfig = config;
         Y_DEFER {
             config = saveConfig;
+            UpdateConfig(appConfig);
         };
         config.SetProgressStatsPeriodMs(1000);
+        UpdateConfig(appConfig);
 
         const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
@@ -1028,9 +1046,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto saveCfg = config;
         Y_DEFER {
             config = std::move(saveCfg);
+            UpdateConfig(config);
         };
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        UpdateConfig(config);
 
         const TString inputTopic = TStringBuilder() << "inputTopicName" << Name_;
         const TString outputTopic = TStringBuilder() << "outputTopicName" << Name_;
@@ -1184,8 +1204,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto saveCfg = appConfig;
         Y_DEFER {
             appConfig = std::move(saveCfg);
+            UpdateConfig(appConfig);
         };
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
+        UpdateConfig(appConfig);
         constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
 
         const TString inputTopicName = TStringBuilder() << "createExternalDataSourceAuthMethodIam" << Name_;

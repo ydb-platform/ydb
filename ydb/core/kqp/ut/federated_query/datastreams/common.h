@@ -77,6 +77,7 @@ public:
     // Local kikimr settings
 
     NKikimrConfig::TAppConfig& SetupAppConfig();
+    void UpdateConfig(NKikimrConfig::TAppConfig& appConfig);
 
     TIntrusivePtr<NTestUtils::IMockPqGateway> SetupMockPqGateway();
 

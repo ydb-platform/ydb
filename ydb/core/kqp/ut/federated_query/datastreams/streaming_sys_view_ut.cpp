@@ -362,12 +362,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
-        auto& config = *SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager();
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         auto saveConfig = config;
         Y_DEFER {
             config = saveConfig;
+            UpdateConfig(appConfig);
         };
         config.SetChannelBufferSize(1_KB);
+        UpdateConfig(appConfig);
         Setup();
 
         constexpr ui64 NUMBER_OF_QUERIES = 2010;
@@ -395,12 +398,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
     Y_UNIT_TEST_F(ReadSysViewWithRowSizeBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
-        auto& config = *SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager();
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         auto saveConfig = config;
         Y_DEFER {
             config = saveConfig;
+            UpdateConfig(appConfig);
         };
         config.SetChannelBufferSize(1_KB);
+        UpdateConfig(appConfig);
         Setup();
 
         constexpr ui64 NUMBER_OF_QUERIES = 50;
@@ -431,12 +437,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
     Y_UNIT_TEST_F(ReadSysViewWithMetadataSizeBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
-        auto& config = *SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager();
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         auto saveConfig = config;
         Y_DEFER {
             config = saveConfig;
+            UpdateConfig(appConfig);
         };
         config.SetChannelBufferSize(1_KB);
+        UpdateConfig(appConfig);
         Setup();
 
         constexpr ui64 NUMBER_OF_QUERIES = 50;

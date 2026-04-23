@@ -7,6 +7,7 @@
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <unordered_set>
 
 namespace NKikimr::NNodeWhiteboard {
 
@@ -16,6 +17,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
     struct TEvPrivate {
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvUpdateThreadPoolCounters,
             EvCleanupDeadTablets,
             EvEnd
         };
@@ -23,6 +25,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expected EvEnd < EventSpaceEnd");
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
+        struct TEvUpdateThreadPoolCounters : TEventLocal<TEvUpdateThreadPoolCounters, EvUpdateThreadPoolCounters> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
     };
 public:
@@ -57,9 +60,11 @@ public:
 
         SystemStateInfo.SetStartTime(TInstant::Now().MilliSeconds());
         SystemStateInfo.SetPID(GetPID());
+        Send(SelfId(), new TEvPrivate::TEvUpdateThreadPoolCounters());
         Send(SelfId(), new TEvPrivate::TEvUpdateRuntimeStats());
 
         auto utils = NKikimr::GetServiceCounters(AppData()->Counters, "utils");
+        ThreadPoolsGroup = utils->GetSubgroup("subsystem", "thread_pools");
         auto grpc = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "grpc");
         GrpcRequestBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("requestBytes", true);
         GrpcResponseBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("responseBytes", true);
@@ -92,6 +97,19 @@ protected:
     ui64 SavedGrpcResponseBytes = 0;
 
     TSystemThreadsMonitor ThreadsMonitor;
+
+    struct TThreadPoolCounters {
+        NMonitoring::TDynamicCounters::TCounterPtr Threads;
+        NMonitoring::TDynamicCounters::TCounterPtr SystemCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr UserCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr TotalCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
+        NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
+    };
+
+    TIntrusivePtr<NMonitoring::TDynamicCounters> ThreadPoolsGroup;
+    std::unordered_map<TString, TThreadPoolCounters> ThreadPoolCounters;
+    std::vector<TSystemThreadsMonitor::TSystemThreadPoolInfo> LatestThreadPools;
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
@@ -149,6 +167,10 @@ protected:
 
     static ui64 GetDifference(bool a, bool b) {
         return static_cast<ui64>(std::abs(static_cast<int>(b) - static_cast<int>(a)));
+    }
+
+    static i64 ToCorePercents(double usage, ui32 threads) {
+        return static_cast<i64>(usage * threads * 100 + 0.5);
     }
 
     template <typename PropertyType>
@@ -548,6 +570,7 @@ protected:
             hFunc(TEvWhiteboard::TEvTraceRequest, Handle);
             hFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
             hFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
+            hFunc(TEvPrivate::TEvUpdateThreadPoolCounters, Handle);
             hFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
         }
     }
@@ -1099,6 +1122,69 @@ protected:
         return loadAvg;
     }
 
+    TThreadPoolCounters& GetOrCreateThreadPoolCounters(const TString& name) {
+        auto& counters = ThreadPoolCounters[name];
+        if (!counters.Threads) {
+            auto group = ThreadPoolsGroup->GetSubgroup("pool", name);
+            counters.Threads = group->GetCounter("Threads");
+            counters.SystemCorePercents = group->GetCounter("SystemCorePercents", true);
+            counters.UserCorePercents = group->GetCounter("UserCorePercents", true);
+            counters.TotalCorePercents = group->GetCounter("TotalCorePercents", true);
+            counters.MajorPageFaults = group->GetCounter("MajorPageFaults", true);
+            counters.MinorPageFaults = group->GetCounter("MinorPageFaults", true);
+        }
+        return counters;
+    }
+
+    void UpdateThreadPoolCounters() {
+        std::unordered_set<TString> seenThreadPools;
+        seenThreadPools.reserve(LatestThreadPools.size());
+
+        for (const auto& threadPool : LatestThreadPools) {
+            auto& counters = GetOrCreateThreadPoolCounters(threadPool.Name);
+            seenThreadPools.insert(threadPool.Name);
+
+            counters.Threads->Set(threadPool.Threads);
+            *counters.SystemCorePercents += ToCorePercents(threadPool.SystemUsage, threadPool.Threads);
+            *counters.UserCorePercents += ToCorePercents(threadPool.UserUsage, threadPool.Threads);
+            *counters.TotalCorePercents += ToCorePercents(threadPool.SystemUsage + threadPool.UserUsage, threadPool.Threads);
+            *counters.MajorPageFaults += threadPool.MajorPageFaults;
+            *counters.MinorPageFaults += threadPool.MinorPageFaults;
+        }
+
+        for (auto& [name, counters] : ThreadPoolCounters) {
+            if (seenThreadPools.contains(name)) {
+                continue;
+            }
+            counters.Threads->Set(0);
+        }
+    }
+
+    void UpdateSystemStateThreads() {
+        SystemStateInfo.ClearThreads();
+        for (const auto& threadPool : LatestThreadPools) {
+            auto* threadInfo = SystemStateInfo.AddThreads();
+            threadInfo->SetName(threadPool.Name);
+            threadInfo->SetThreads(threadPool.Threads);
+            threadInfo->SetSystemUsage(threadPool.SystemUsage);
+            threadInfo->SetUserUsage(threadPool.UserUsage);
+            threadInfo->SetMajorPageFaults(threadPool.MajorPageFaults);
+            threadInfo->SetMinorPageFaults(threadPool.MinorPageFaults);
+            for (const auto& state : threadPool.States) {
+                threadInfo->MutableStates()->emplace(state.first, state.second);
+            }
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateThreadPoolCounters::TPtr&) {
+        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(1);
+
+        LatestThreadPools = ThreadsMonitor.GetThreadPools(TActivationContext::Now());
+        UpdateThreadPoolCounters();
+
+        Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateThreadPoolCounters());
+    }
+
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr&) {
         static constexpr int UPDATE_PERIOD_SECONDS = 15;
         static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(UPDATE_PERIOD_SECONDS);
@@ -1128,20 +1214,7 @@ protected:
             SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
             SumNetworkWriteThroughput = 0;
         }
-        auto threadPools = ThreadsMonitor.GetThreadPools(now);
-        SystemStateInfo.ClearThreads();
-        for (const auto& threadPool : threadPools) {
-            auto* threadInfo = SystemStateInfo.AddThreads();
-            threadInfo->SetName(threadPool.Name);
-            threadInfo->SetThreads(threadPool.Threads);
-            threadInfo->SetSystemUsage(threadPool.SystemUsage);
-            threadInfo->SetUserUsage(threadPool.UserUsage);
-            threadInfo->SetMajorPageFaults(threadPool.MajorPageFaults);
-            threadInfo->SetMinorPageFaults(threadPool.MinorPageFaults);
-            for (const auto& state : threadPool.States) {
-                threadInfo->MutableStates()->emplace(state.first, state.second);
-            }
-        }
+        UpdateSystemStateThreads();
         {
             if (SavedGrpcRequestBytes || SavedGrpcResponseBytes) {
                 auto requestBytes = GrpcRequestBytes->Val() - SavedGrpcRequestBytes;

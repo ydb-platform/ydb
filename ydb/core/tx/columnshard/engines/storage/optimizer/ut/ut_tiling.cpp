@@ -86,7 +86,7 @@ const auto& NeverLocked() {
 Y_UNIT_TEST_SUITE(TilingCoreUnits) {
 
     Y_UNIT_TEST(AccumulatorReturnsSimpleCompactionTask) {
-        TTestAccumulator::AccumulatorSettings settings;
+        TAccumulatorSettings settings;
         settings.Trigger.Bytes = 100;
         settings.Trigger.Portions = 100;
         settings.Compaction.Bytes = 150;
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     }
 
     Y_UNIT_TEST(MiddleLevelReturnsMaxIntersectionRange) {
-        TTestMiddleLevel::MiddleLevelSettings settings;
+        TMiddleLevelSettings settings;
         settings.TriggerHight = 2;
         settings.OverloadHight = 4;
 
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     }
 
     Y_UNIT_TEST(LastLevelReturnsCandidateWithIntersectedStablePortions) {
-        TTestLastLevel::LastLevelSettings settings;
+        TLastLevelSettings settings;
         settings.Compaction.Bytes = 1000;
         settings.Compaction.Portions = 10;
         settings.CandidatePortionsOverload = 3;
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.MiddleLevelSettings.TriggerHight = 2;
         settings.MiddleLevelSettings.OverloadHight = 4;
 
-        TTestTiling tiling(settings);
+        TTestTiling tiling(settings, TCounters{});
 
         tiling.AddPortion(MakePortion(1, 0, 1, 60));
         tiling.AddPortion(MakePortion(2, 2, 3, 60));

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -25,68 +26,27 @@ using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
 
 /// JSON layout matches TTilingOptimizer in tiling++.cpp (same proto blob).
 struct TPlannerSettings {
-    ui64 AccumulatorPortionSizeLimit = 512ULL * 1024;
+    TTilingSettings TilingSettings;
     ui64 LastLevelBytes = 10ULL * 1024 * 1024;
-    ui8 K = 10;
     ui64 PortionExpectedSize = 4ULL * 1024 * 1024;
-
-    ui64 LastLevelCompactionPortions = 1'000;
-    ui64 LastLevelCompactionBytes = 64ULL * 1024 * 1024;
-    ui64 LastLevelCandidatePortionsOverload = 10;
-
-    ui64 AccumulatorCompactionPortions = 1'000;
-    ui64 AccumulatorCompactionBytes = 64ULL * 1024 * 1024;
-    ui64 AccumulatorTriggerPortions = 1'000;
-    ui64 AccumulatorTriggerBytes = 2ULL * 1024 * 1024;
-    ui64 AccumulatorOverloadPortions = 10'000;
-    ui64 AccumulatorOverloadBytes = 256ULL * 1024 * 1024;
-
-    ui64 MiddleLevelTriggerHeight = 10;
-    ui64 MiddleLevelOverloadHeight = 15;
-
-    TCoreTiling::TLastLevelSettings MakeLastLevelSettings() const {
-        TCoreTiling::TLastLevelSettings s;
-        s.Compaction.Portions = LastLevelCompactionPortions;
-        s.Compaction.Bytes = LastLevelCompactionBytes;
-        s.CandidatePortionsOverload = LastLevelCandidatePortionsOverload;
-        return s;
-    }
-
-    TCoreTiling::TAccumulatorSettings MakeAccumulatorSettings() const {
-        TCoreTiling::TAccumulatorSettings s;
-        s.Compaction.Portions = AccumulatorCompactionPortions;
-        s.Compaction.Bytes = AccumulatorCompactionBytes;
-        s.Trigger.Portions = AccumulatorTriggerPortions;
-        s.Trigger.Bytes = AccumulatorTriggerBytes;
-        s.Overload.Portions = AccumulatorOverloadPortions;
-        s.Overload.Bytes = AccumulatorOverloadBytes;
-        return s;
-    }
-
-    TCoreTiling::TMiddleLevelSettings MakeMiddleLevelSettings() const {
-        TCoreTiling::TMiddleLevelSettings s;
-        s.TriggerHight = MiddleLevelTriggerHeight;
-        s.OverloadHight = MiddleLevelOverloadHeight;
-        return s;
-    }
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
         NJson::TJsonValue json(NJson::JSON_MAP);
-        json["accumulator_portion_size_limit"] = AccumulatorPortionSizeLimit;
+        json["accumulator_portion_size_limit"] = TilingSettings.AccumulatorPortionSizeLimit;
         json["last_level_bytes"] = LastLevelBytes;
-        json["k"] = (ui64)K;
+        json["k"] = (ui64)TilingSettings.K;
         json["portion_expected_size"] = PortionExpectedSize;
-        json["last_level_compaction_portions"] = LastLevelCompactionPortions;
-        json["last_level_compaction_bytes"] = LastLevelCompactionBytes;
-        json["last_level_candidate_portions_overload"] = LastLevelCandidatePortionsOverload;
-        json["accumulator_compaction_portions"] = AccumulatorCompactionPortions;
-        json["accumulator_compaction_bytes"] = AccumulatorCompactionBytes;
-        json["accumulator_trigger_portions"] = AccumulatorTriggerPortions;
-        json["accumulator_trigger_bytes"] = AccumulatorTriggerBytes;
-        json["accumulator_overload_portions"] = AccumulatorOverloadPortions;
-        json["accumulator_overload_bytes"] = AccumulatorOverloadBytes;
-        json["middle_level_trigger_height"] = MiddleLevelTriggerHeight;
-        json["middle_level_overload_height"] = MiddleLevelOverloadHeight;
+        json["last_level_compaction_portions"] = TilingSettings.LastLevelSettings.Compaction.Portions;
+        json["last_level_compaction_bytes"] = TilingSettings.LastLevelSettings.Compaction.Bytes;
+        json["last_level_candidate_portions_overload"] = TilingSettings.LastLevelSettings.CandidatePortionsOverload;
+        json["accumulator_compaction_portions"] = TilingSettings.AccumulatorSettings.Compaction.Portions;
+        json["accumulator_compaction_bytes"] = TilingSettings.AccumulatorSettings.Compaction.Bytes;
+        json["accumulator_trigger_portions"] = TilingSettings.AccumulatorSettings.Trigger.Portions;
+        json["accumulator_trigger_bytes"] = TilingSettings.AccumulatorSettings.Trigger.Bytes;
+        json["accumulator_overload_portions"] = TilingSettings.AccumulatorSettings.Overload.Portions;
+        json["accumulator_overload_bytes"] = TilingSettings.AccumulatorSettings.Overload.Bytes;
+        json["middle_level_trigger_height"] = TilingSettings.MiddleLevelSettings.TriggerHight;
+        json["middle_level_overload_height"] = TilingSettings.MiddleLevelSettings.OverloadHight;
         proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
     }
 
@@ -110,7 +70,7 @@ struct TPlannerSettings {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_portion_size_limit must be an unsigned integer");
                 }
-                AccumulatorPortionSizeLimit = value.GetUInteger();
+                TilingSettings.AccumulatorPortionSizeLimit = value.GetUInteger();
             } else if (name == "last_level_bytes") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: last_level_bytes must be an unsigned integer");
@@ -124,7 +84,7 @@ struct TPlannerSettings {
                 if (kv < 2 || kv > 255) {
                     return TConclusionStatus::Fail("tiling-core: k must be in [2, 255]");
                 }
-                K = static_cast<ui8>(kv);
+                TilingSettings.K = static_cast<ui8>(kv);
             } else if (name == "portion_expected_size") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: portion_expected_size must be an unsigned integer");
@@ -134,57 +94,57 @@ struct TPlannerSettings {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: last_level_compaction_portions must be an unsigned integer");
                 }
-                LastLevelCompactionPortions = value.GetUInteger();
+                TilingSettings.LastLevelSettings.Compaction.Portions = value.GetUInteger();
             } else if (name == "last_level_compaction_bytes") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: last_level_compaction_bytes must be an unsigned integer");
                 }
-                LastLevelCompactionBytes = value.GetUInteger();
+                TilingSettings.LastLevelSettings.Compaction.Bytes = value.GetUInteger();
             } else if (name == "last_level_candidate_portions_overload") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: last_level_candidate_portions_overload must be an unsigned integer");
                 }
-                LastLevelCandidatePortionsOverload = value.GetUInteger();
+                TilingSettings.LastLevelSettings.CandidatePortionsOverload = value.GetUInteger();
             } else if (name == "accumulator_compaction_portions") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_compaction_portions must be an unsigned integer");
                 }
-                AccumulatorCompactionPortions = value.GetUInteger();
+                TilingSettings.AccumulatorSettings.Compaction.Portions = value.GetUInteger();
             } else if (name == "accumulator_compaction_bytes") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_compaction_bytes must be an unsigned integer");
                 }
-                AccumulatorCompactionBytes = value.GetUInteger();
+                TilingSettings.AccumulatorSettings.Compaction.Bytes = value.GetUInteger();
             } else if (name == "accumulator_trigger_portions") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_trigger_portions must be an unsigned integer");
                 }
-                AccumulatorTriggerPortions = value.GetUInteger();
+                TilingSettings.AccumulatorSettings.Trigger.Portions = value.GetUInteger();
             } else if (name == "accumulator_trigger_bytes") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_trigger_bytes must be an unsigned integer");
                 }
-                AccumulatorTriggerBytes = value.GetUInteger();
+                TilingSettings.AccumulatorSettings.Trigger.Bytes = value.GetUInteger();
             } else if (name == "accumulator_overload_portions") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_overload_portions must be an unsigned integer");
                 }
-                AccumulatorOverloadPortions = value.GetUInteger();
+                TilingSettings.AccumulatorSettings.Overload.Portions = value.GetUInteger();
             } else if (name == "accumulator_overload_bytes") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: accumulator_overload_bytes must be an unsigned integer");
                 }
-                AccumulatorOverloadBytes = value.GetUInteger();
+                TilingSettings.AccumulatorSettings.Overload.Bytes = value.GetUInteger();
             } else if (name == "middle_level_trigger_height") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: middle_level_trigger_height must be an unsigned integer");
                 }
-                MiddleLevelTriggerHeight = value.GetUInteger();
+                TilingSettings.MiddleLevelSettings.TriggerHight = value.GetUInteger();
             } else if (name == "middle_level_overload_height") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling-core: middle_level_overload_height must be an unsigned integer");
                 }
-                MiddleLevelOverloadHeight = value.GetUInteger();
+                TilingSettings.MiddleLevelSettings.OverloadHight = value.GetUInteger();
             } else {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "tiling_core_unknown_setting_ignored")("setting", name);
@@ -194,6 +154,83 @@ struct TPlannerSettings {
     }
 };
 
+TTilingSettings MakeCoreSettings(const TPlannerSettings& settings) {
+    return settings.TilingSettings;
+}
+
+class TOptimizerPlannerAdapter: public IOptimizerPlanner {
+private:
+    using TBase = IOptimizerPlanner;
+    TCounters Counters;
+    TCoreTiling Core;
+    std::shared_ptr<IStoragesManager> StoragesManager;
+    std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
+    ui64 PortionExpectedSize;
+
+protected:
+    void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+        for (const auto& p : remove) {
+            Core.RemovePortion(p);
+        }
+        for (const auto& p : add) {
+            Core.AddPortion(p);
+        }
+        Core.DoActualize();
+    }
+
+    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
+        const auto isLocked = [dataLocksManager](TPortionInfo::TConstPtr p) -> bool {
+            return dataLocksManager && dataLocksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction).has_value();
+        };
+
+        const auto tasks = Core.GetOptimizationTasks(isLocked);
+        if (tasks.empty()) {
+            return {};
+        }
+
+        const auto& task = tasks.front();
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task.Portions, TSaverContext(StoragesManager));
+        result->SetTargetCompactionLevel(task.TargetLevel);
+        result->SetPortionExpectedSize(PortionExpectedSize);
+        return {result};
+    }
+
+    TOptimizationPriority DoGetUsefulMetric() const override {
+        return Core.DoGetUsefulMetric();
+    }
+
+    bool DoIsOverloaded() const override {
+        return Core.DoGetUsefulMetric().IsCritical();
+    }
+
+    void DoActualize(const TInstant /*currentInstant*/) override {
+    }
+
+    NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
+        return {};
+    }
+
+    std::vector<TTaskDescription> DoGetTasksDescription() const override {
+        return {};
+    }
+
+public:
+    TOptimizerPlannerAdapter(
+        const TInternalPathId pathId,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const TPlannerSettings& settings)
+        : TBase(pathId, std::nullopt)
+        , Counters()
+        , Core(MakeCoreSettings(settings), Counters)
+        , StoragesManager(storagesManager)
+        , PrimaryKeysSchema(primaryKeysSchema)
+        , PortionExpectedSize(settings.PortionExpectedSize) {
+        AFL_VERIFY(StoragesManager);
+        Y_UNUSED(PrimaryKeysSchema);
+    }
+};
 
 } // namespace
 
@@ -229,13 +266,13 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        Y_UNUSED(context);
-        return TConclusionStatus::Fail("tiling++ planner constructor is not implemented");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling++ compaction optimizer");
+        return std::make_shared<TOptimizerPlannerAdapter>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }
 
 public:
     static TString GetClassNameStatic() {
-        return "TILING";
+        return "tiling++";
     }
 
 private:

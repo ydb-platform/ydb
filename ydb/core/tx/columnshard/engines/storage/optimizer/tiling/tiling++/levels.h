@@ -3,6 +3,7 @@
 #include <util/generic/function_ref.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
 #include <ydb/library/intersection_tree/intersection_tree.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
@@ -12,19 +13,9 @@ template <std::totally_ordered TKey, typename TPortion>
 struct LastLevel : ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
-    struct LastLevelSettings {
-        struct Limit {
-            ui64 Portions;
-            ui64 Bytes;
-        };
+    TLastLevelSettings Settings;
 
-        Limit Compaction {1'000, 64 * 1024 * 1024};
-        ui64 CandidatePortionsOverload = 10;
-    };
-
-    LastLevelSettings Settings;
-
-    LastLevel(LastLevelSettings settings, const TCounters& counters)
+    LastLevel(TLastLevelSettings settings, const TCounters& counters)
         : TBase(counters.GetLastLevelCounters())
         , Settings(settings) {
     }
@@ -143,20 +134,9 @@ template <std::totally_ordered TKey, typename TPortion>
 struct Accumulator : ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
-    struct AccumulatorSettings {
-        struct Limit {
-            ui64 Portions;
-            ui64 Bytes;
-        };
+    TAccumulatorSettings Settings;
 
-        Limit Compaction {1'000, 64 * 1024 * 1024};
-        Limit Trigger {1'000, 2 * 1024 * 1024};
-        Limit Overload {10'000, 256 * 1024 * 1024};
-    };
-
-    AccumulatorSettings Settings;
-
-    Accumulator(AccumulatorSettings settings, const TCounters& counters)
+    Accumulator(TAccumulatorSettings settings, const TCounters& counters)
         : TBase(counters.GetAccumulatorCounters(0))
         , Settings(settings) {
     }
@@ -226,15 +206,10 @@ template <std::totally_ordered TKey, typename TPortion>
 struct MiddleLevel : ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
-    struct MiddleLevelSettings {
-        ui64 TriggerHight = 10;
-        ui64 OverloadHight = 15;
-    };
-
-    MiddleLevelSettings Settings;
+    TMiddleLevelSettings Settings;
     ui32 LevelIdx;
 
-    MiddleLevel(MiddleLevelSettings settings, ui32 levelIdx, const TCounters& counters)
+    MiddleLevel(TMiddleLevelSettings settings, ui32 levelIdx, const TCounters& counters)
         : TBase(counters.GetLevelCounters(levelIdx))
         , Settings(settings)
         , LevelIdx(levelIdx) {

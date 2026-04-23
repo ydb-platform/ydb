@@ -5,53 +5,30 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/levels.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-/// Owns a single TCounters instance for one tiling compaction graph. Declared as the first base of Tiling so
-/// ICompactionUnit can bind to tiling-level counters while sub-levels share the same TCounters via constructor args.
-struct TTilingCompactionCountersHolder {
-    TCounters Counters;
-};
-
 template <std::totally_ordered TKey, typename TPortion>
     requires CPortionInfoSlice<TKey, TPortion>
-struct Tiling : private TTilingCompactionCountersHolder, ICompactionUnit<TKey, TPortion> {
+struct Tiling : ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
 
-    using TAccumulatorSettings = typename Accumulator<TKey, TPortion>::AccumulatorSettings;
-    using TLastLevelSettings = typename LastLevel<TKey, TPortion>::LastLevelSettings;
-    using TMiddleLevelSettings = typename MiddleLevel<TKey, TPortion>::MiddleLevelSettings;
+    using TAccumulatorSettings = NTiling::TAccumulatorSettings;
+    using TLastLevelSettings = NTiling::TLastLevelSettings;
+    using TMiddleLevelSettings = NTiling::TMiddleLevelSettings;
+    using TilingSettings = TTilingSettings;
 
-    struct TilingSettings {
-        TAccumulatorSettings AccumulatorSettings;
-        TLastLevelSettings LastLevelSettings;
-        TMiddleLevelSettings MiddleLevelSettings;
-        ui64 AccumulatorPortionSizeLimit = 512ULL * 1024;
-        ui8 K = 10;
-        /// Exclusive upper bound on middle-level index (allowed middle indices: 2 .. MiddleLevelCount - 1).
-        ui64 MiddleLevelCount = TILING_LAYERS_COUNT;
-    };
-
-    Tiling(TilingSettings settings)
-        : TTilingCompactionCountersHolder{}
-        , TBase(Counters.GetTilingCounters())
+    Tiling(TilingSettings settings, const TCounters& counters)
+        : TBase(counters.GetTilingCounters())
         , Settings(std::move(settings))
-        , Accumulator(Settings.AccumulatorSettings, Counters)
-        , LastLevel(Settings.LastLevelSettings, Counters) {
+        , Accumulator(Settings.AccumulatorSettings, counters)
+        , LastLevel(Settings.LastLevelSettings, counters) {
         for (ui64 i = 2; i < Settings.MiddleLevelCount; ++i) {
-            MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion>(Settings.MiddleLevelSettings, i, Counters));
+            MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion>(Settings.MiddleLevelSettings, i, counters));
         }
-    }
-
-    /// Sub-levels update their own counters; skip ICompactionUnit's global counter to avoid double counting.
-    void AddPortion(typename TPortion::TConstPtr p) override {
-        DoAddPortion(p);
-    }
-    void RemovePortion(typename TPortion::TConstPtr p) override {
-        DoRemovePortion(p);
     }
 
     TilingSettings Settings;

@@ -3085,6 +3085,10 @@
             }
         }
     ],
+    "test.TestViewer.test_viewer_acl_write_invalid": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Token is not in correct format\n</p></body></html>"
+    },
     "test.TestViewer.test_viewer_autocomplete": {
         "/Root": {
             "Result": {
@@ -13102,6 +13106,7 @@
             }
         ]
     },
+    "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1></body></html>"

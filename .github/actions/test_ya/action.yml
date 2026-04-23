@@ -361,7 +361,7 @@ runs:
         # Check YDB configuration (after checkout from main)
         python3 .github/scripts/check_ydb_qa_config.py || true
 
-        eval "$(python3 .github/scripts/tests/mute/mute_check.py resolve-path --preset "${{ inputs.build_preset }}" --emit-bash-env)"
+        eval "$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}" --emit-bash-env)"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE (fallback=$MUTED_YA_IS_FALLBACK)"
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then

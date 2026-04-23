@@ -14,13 +14,13 @@ ANALYTICS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'analytics'
 
 # Keep imports working when this script is invoked directly.
 if TESTS_DIR not in sys.path:
-    sys.path.append(TESTS_DIR)
+    sys.path.insert(0, TESTS_DIR)
 if ANALYTICS_DIR not in sys.path:
-    sys.path.append(ANALYTICS_DIR)
+    sys.path.insert(0, ANALYTICS_DIR)
 
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute.mute_utils import pattern_to_re
-from mute_check import YaMuteCheck
+from mute.mute_check import YaMuteCheck
 from ydb_wrapper import YDBWrapper
 
 repo_path = f"{SCRIPT_DIR}/../../../../"

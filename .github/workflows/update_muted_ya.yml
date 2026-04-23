@@ -37,7 +37,7 @@ jobs:
           path: config-repo
           sparse-checkout: |
             .github/config/
-            .github/scripts/tests/mute/mute_check.py
+            .github/scripts/tests/mute/mute_helper.py
             .github/scripts/tests/mute/mute_utils.py
           sparse-checkout-cone-mode: false
 
@@ -47,7 +47,7 @@ jobs:
           INPUT_BUILD_TYPES: ${{ github.event.inputs.build_types || '' }}
         run: |
           set -euo pipefail
-          python3 config-repo/.github/scripts/tests/mute/mute_check.py matrix \
+          python3 config-repo/.github/scripts/tests/mute/mute_helper.py matrix \
             --branches-file "config-repo/${{ env.BRANCHES_CONFIG_PATH }}" \
             --git-cwd config-repo \
             --allowed-build-types relwithdebinfo,release-asan
@@ -114,7 +114,7 @@ jobs:
         id: mute_gate
         run: |
           set -euo pipefail
-          python3 .github/scripts/tests/mute/mute_check.py prepare-job \
+          python3 .github/scripts/tests/mute/mute_helper.py prepare-job \
             --repo-root . \
             --base-branch "${{ matrix.BASE_BRANCH }}" \
             --build-type "${{ matrix.BUILD_TYPE }}" \

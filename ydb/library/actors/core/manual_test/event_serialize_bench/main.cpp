@@ -360,8 +360,6 @@ struct TEvBenchFlatArrayMessage : TEventFlat<TEvBenchFlatArrayMessage, TEvBenchF
     using TBase = TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageTVersions>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
-    static constexpr bool UseAlignedInlinePayloadFormat = true;
-
     using TValuesTag = TEvBenchFlatArrayMessageTValuesTag;
     using TSchemeV1 = TEvBenchFlatArrayMessageTSchemeV1;
     using TScheme = TEvBenchFlatArrayMessageTVersions;

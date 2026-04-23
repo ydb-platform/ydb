@@ -2075,15 +2075,15 @@ namespace NActors {
         }
 
         bool SerializeAlignedInlinePayloadToArcadiaStream(TChunkSerializer* serializer, const TVector<TRope>& wirePayloads) const {
-            auto rope = SerializeAlignedInlinePayloadToRope(wirePayloads);
-            if (!rope) {
-                return false;
-            }
             void* data = nullptr;
             int size = 0;
-            for (auto it = rope->Begin(); it.Valid(); it.AdvanceToNextContiguousBlock()) {
-                const char* ptr = it.ContiguousData();
-                size_t len = it.ContiguousSize();
+            const auto flush = [&]() {
+                if (size) {
+                    serializer->BackUp(size);
+                    size = 0;
+                }
+            };
+            const auto appendBytes = [&](const char* ptr, size_t len) {
                 while (len) {
                     if (!size && !serializer->Next(&data, &size)) {
                         return false;
@@ -2095,10 +2095,47 @@ namespace NActors {
                     ptr += numBytesToCopy;
                     len -= numBytesToCopy;
                 }
+                return true;
+            };
+
+            const TAlignedInlineLayout layout = BuildAlignedInlineLayout(wirePayloads);
+            char buf[MaxNumberBytes];
+            static constexpr char ZeroPadding[MaxInlinePayloadPadding] = {};
+
+            const char marker = AlignedExtendedPayloadMarker;
+            if (!appendBytes(&marker, sizeof(marker))) {
+                return false;
             }
-            if (size) {
-                serializer->BackUp(size);
+            size_t encoded = SerializeVarint(wirePayloads.size(), buf);
+            if (!appendBytes(buf, encoded)) {
+                return false;
             }
+            for (size_t i = 0; i < wirePayloads.size(); ++i) {
+                encoded = SerializeVarint(wirePayloads[i].GetSize(), buf);
+                if (!appendBytes(buf, encoded)) {
+                    return false;
+                }
+                const ui8 padding = layout.Paddings[i];
+                if (!appendBytes(reinterpret_cast<const char*>(&padding), sizeof(padding))) {
+                    return false;
+                }
+            }
+
+            for (size_t i = 0; i < wirePayloads.size(); ++i) {
+                const size_t padding = layout.Paddings[i];
+                if (padding && !appendBytes(ZeroPadding, padding)) {
+                    return false;
+                }
+                flush();
+                if (!serializer->WriteRope(&wirePayloads[i])) {
+                    return false;
+                }
+            }
+
+            if (HeaderSize && !appendBytes(HeaderData(), HeaderSize)) {
+                return false;
+            }
+            flush();
             return true;
         }
 

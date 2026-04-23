@@ -96,6 +96,7 @@ struct TTestEnvOpts {
     bool EnableDynamicGroups;
     bool IsBridgeMode;
     bool EnableSimpleStateStorageConfig;
+    bool UseRingSpecificNodeSelection;
     bool EnableCmsLocksPriority;
     bool EnableCmsSmartAvailabilityMode;
 
@@ -124,6 +125,7 @@ struct TTestEnvOpts {
         , EnableDynamicGroups(false)
         , IsBridgeMode(false)
         , EnableSimpleStateStorageConfig(false)
+        , UseRingSpecificNodeSelection(true)
         , EnableCmsLocksPriority(false)
         , EnableCmsSmartAvailabilityMode(false)
     {

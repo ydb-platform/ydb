@@ -719,7 +719,8 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     } else {
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             if (options.NRings > 1) {
-                SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize);
+                SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize, 1,
+                                        options.UseRingSpecificNodeSelection);
             } else {
                 SetupStateStorage(*this, nodeIndex);
             }

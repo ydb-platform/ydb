@@ -786,9 +786,9 @@ TMaybeNode<TExprBase> DqPushExtractMembersToDqJoin(TExprBase node, TExprContext&
     auto newLeftInput = narrowInput(join.LeftInput(), leftStructType, neededLeftInputColumns);
     auto newRightInput = narrowInput(join.RightInput(), rightStructType, neededRightInputColumns);
 
-    YQL_CLOG(DEBUG, CoreDq) << "PushExtractMembersToDqJoin: narrowed left "
-        << leftStructType->GetSize() << " -> " << neededLeftInputColumns.size()
-        << ", right " << rightStructType->GetSize() << " -> " << neededRightInputColumns.size();
+    // YQL_CLOG(DEBUG, CoreDq) << "PushExtractMembersToDqJoin: narrowed left "
+    //     << leftStructType->GetSize() << " -> " << neededLeftInputColumns.size()
+    //     << ", right " << rightStructType->GetSize() << " -> " << neededRightInputColumns.size();
 
     return Build<TCoExtractMembers>(ctx, join.Pos())
         .Input<TDqJoin>()

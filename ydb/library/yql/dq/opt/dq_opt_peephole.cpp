@@ -891,116 +891,46 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
         .Done();
 }
 
-TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ctx, const TExprNode* neededMembers) {
+TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyBlockHashJoin>()) {
         return node;
     }
     const auto blockHashJoin = node.Cast<TDqPhyBlockHashJoin>();
     const auto pos = blockHashJoin.Pos();
 
+    // Extract table labels from TDqJoinBase API
     const TString leftTableLabel(GetTableLabel(blockHashJoin.LeftLabel()));
     const TString rightTableLabel(GetTableLabel(blockHashJoin.RightLabel()));
 
+    // Extract key columns using TDqJoinBase API
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
 
     const auto itemTypeLeft = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
     const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
 
-    const bool withRightSide = blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi";
-
-    const bool hasColumnPruning = (neededMembers != nullptr);
-    THashSet<TStringBuf> neededOutputColumns;
-    if (hasColumnPruning) {
-        for (const auto& member : neededMembers->Children()) {
-            neededOutputColumns.insert(member->Content());
-        }
-    }
-
-    THashSet<TString> neededLeftInputColumns;
-    THashSet<TString> neededRightInputColumns;
-
-    for (size_t i = 0; i < leftKeyColumnNodes.size(); i++) {
-        auto leftIdx = FindJoinKeyIndex(itemTypeLeft, leftKeyColumnNodes[i]->Content(), leftTableLabel, true, i);
-        if (leftIdx) {
-            neededLeftInputColumns.insert(TString(itemTypeLeft->GetItems()[*leftIdx]->GetName()));
-        }
-        auto rightIdx = FindJoinKeyIndex(itemTypeRight, rightKeyColumnNodes[i]->Content(), rightTableLabel, false, i);
-        if (rightIdx) {
-            neededRightInputColumns.insert(TString(itemTypeRight->GetItems()[*rightIdx]->GetName()));
-        }
-    }
-
-    if (hasColumnPruning) {
-        for (const auto& item : itemTypeLeft->GetItems()) {
-            if (neededOutputColumns.contains(GetColumnName(leftTableLabel, item))) {
-                neededLeftInputColumns.insert(TString(item->GetName()));
-            }
-        }
-        if (withRightSide) {
-            for (const auto& item : itemTypeRight->GetItems()) {
-                if (neededOutputColumns.contains(GetColumnName(rightTableLabel, item))) {
-                    neededRightInputColumns.insert(TString(item->GetName()));
-                }
-            }
-        }
-    } else {
-        for (const auto& item : itemTypeLeft->GetItems()) {
-            neededLeftInputColumns.insert(TString(item->GetName()));
-        }
-        if (withRightSide) {
-            for (const auto& item : itemTypeRight->GetItems()) {
-                neededRightInputColumns.insert(TString(item->GetName()));
-            }
-        }
-    }
-
-    auto narrowInput = [&](TExprNode::TPtr input, const TStructExprType* inputType,
-                           const THashSet<TString>& neededColumns)
-        -> std::pair<TExprNode::TPtr, const TStructExprType*>
-    {
-        if (neededColumns.size() >= inputType->GetSize()) {
-            return {std::move(input), inputType};
-        }
-        TExprNode::TListType memberAtoms;
-        TVector<const TItemExprType*> narrowedItems;
-        for (const auto& item : inputType->GetItems()) {
-            if (neededColumns.contains(item->GetName())) {
-                memberAtoms.push_back(ctx.NewAtom(pos, item->GetName()));
-                narrowedItems.push_back(item);
-            }
-        }
-        auto narrowed = ctx.Builder(pos)
-            .Callable("ExtractMembers")
-                .Add(0, std::move(input))
-                .Add(1, ctx.NewList(pos, std::move(memberAtoms)))
-            .Seal()
-            .Build();
-        return {std::move(narrowed), ctx.MakeType<TStructExprType>(narrowedItems)};
-    };
-
-    auto [effectiveLeftInput, effectiveLeftType] = narrowInput(
-        blockHashJoin.LeftInput().Ptr(), itemTypeLeft, neededLeftInputColumns);
-    auto [effectiveRightInput, effectiveRightType] = narrowInput(
-        blockHashJoin.RightInput().Ptr(), itemTypeRight, neededRightInputColumns);
-
     TExprNode::TListType leftRenames, rightRenames;
     std::vector<TString> fullColNames;
-    std::vector<bool> isOutputColumn;
     ui32 outputIndex = 0;
 
-    for (auto i = 0u; i < effectiveLeftType->GetSize(); i++) {
-        TString name = GetColumnName(leftTableLabel, effectiveLeftType->GetItems()[i]);
+    // Build renames and full column names for left side
+    for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
+        TString name(itemTypeLeft->GetItems()[i]->GetName());
+        if (leftTableLabel) {
+            name = leftTableLabel + "." + name;
+        }
         fullColNames.push_back(name);
-        isOutputColumn.push_back(!hasColumnPruning || neededOutputColumns.contains(name));
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
     }
 
-    if (withRightSide) {
-        for (auto i = 0u; i < effectiveRightType->GetSize(); i++) {
-            TString name = GetColumnName(rightTableLabel, effectiveRightType->GetItems()[i]);
+    // Build renames and full column names for right side
+    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
+        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            TString name(itemTypeRight->GetItems()[i]->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
             fullColNames.push_back(name);
-            isOutputColumn.push_back(!hasColumnPruning || neededOutputColumns.contains(name));
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
         }
@@ -1009,17 +939,19 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
 
+    // Process key types and conversions (similar to GraceJoin logic)
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
+
         auto leftName = leftKeyColumnNodes[i]->Content();
-        auto leftIndex = FindJoinKeyIndex(effectiveLeftType, leftName, leftTableLabel, true, i);
+        auto leftIndex = FindJoinKeyIndex(itemTypeLeft, leftName, leftTableLabel, true, i);
         YQL_ENSURE(leftIndex, "Left join key column '" << leftName << "' not found in left input type (left label: '" << leftTableLabel << "')");
-        const auto keyTypeLeft = effectiveLeftType->GetItems()[*leftIndex]->GetItemType();
+        const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
 
         auto rightName = rightKeyColumnNodes[i]->Content();
-        auto rightIndex = FindJoinKeyIndex(effectiveRightType, rightName, rightTableLabel, false, i);
+        auto rightIndex = FindJoinKeyIndex(itemTypeRight, rightName, rightTableLabel, false, i);
         YQL_ENSURE(rightIndex, "Right join key column '" << rightName << "' not found in right input type (right label: '" << rightTableLabel << "')");
-        const auto keyTypeRight = effectiveRightType->GetItems()[*rightIndex]->GetItemType();
+        const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
 
         bool hasOptional = false;
         auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
@@ -1027,24 +959,26 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         if (keyTypeLeft->Equals(*dryType)) {
             leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
         } else {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(effectiveLeftType->GetSize() + leftConvertedItems.size()));
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
             leftConvertedItems.emplace_back(leftName, dryType);
         }
         if (keyTypeRight->Equals(*dryType)) {
             rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
         } else {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(effectiveRightType->GetSize() + rightConvertedItems.size()));
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
             rightConvertedItems.emplace_back(rightName, dryType);
         }
     }
 
-    auto leftWideFlow = ExpandJoinInput(*effectiveLeftType,
-        ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {std::move(effectiveLeftInput)}),
+    // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)
+    auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
+        ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}),
         ctx, leftConvertedItems, pos);
-    auto rightWideFlow = ExpandJoinInput(*effectiveRightType,
-        ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {std::move(effectiveRightInput)}),
+    auto rightWideFlow = ExpandJoinInput(*itemTypeRight,
+        ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}),
         ctx, rightConvertedItems, pos);
 
+    // Convert wide flows to wide streams
     auto leftInput = ctx.Builder(pos)
         .Callable("FromFlow")
             .Add(0, std::move(leftWideFlow))
@@ -1057,9 +991,11 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    bool needsLeftToBlocks = true;
-    bool needsRightToBlocks = true;
-    bool needsFromBlocks = true;
+    // Check if we need to convert inputs to blocks
+    // For now, assume most inputs are scalar and need conversion to blocks
+    bool needsLeftToBlocks = true;  // TODO: check actual input types
+    bool needsRightToBlocks = true; // TODO: check actual input types
+    bool needsFromBlocks = true;    // TODO: check if output should be scalar
 
     if (needsLeftToBlocks) {
         leftInput = ctx.Builder(pos)
@@ -1090,6 +1026,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
+    // Convert blocks back to scalars if needed
     auto wideResult = std::move(blockJoinCore);
     if (needsFromBlocks) {
         wideResult = ctx.Builder(pos)
@@ -1099,10 +1036,13 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    const ui32 leftBase = effectiveLeftType->GetSize();
+    // Wide row layout: [L base][L converted][R base][R converted]
+    const ui32 leftBase = itemTypeLeft->GetSize();
     const ui32 leftConv = leftConvertedItems.size();
-    const ui32 rightBase = withRightSide ? effectiveRightType->GetSize() : 0;
-    const ui32 rightConv = withRightSide ? rightConvertedItems.size() : 0;
+    const ui32 rightBase = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
+        ? itemTypeRight->GetSize() : 0;
+    const ui32 rightConv = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
+        ? rightConvertedItems.size() : 0;
     const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
 
     TVector<ui32> keep;
@@ -1111,6 +1051,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const ui32 rightStart = leftBase + leftConv;
     for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
 
+    // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
             .Callable(0, "ToFlow")
@@ -1120,15 +1061,13 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
                 .Params("output", totalColumns)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 structIdx = 0U;
-                        for (ui32 i = 0; i < fullColNames.size(); i++) {
-                            if (isOutputColumn[i]) {
-                                parent.List(structIdx)
-                                    .Atom(0, fullColNames[i])
-                                    .Arg(1, "output", keep[i])
-                                .Seal();
-                                structIdx++;
-                            }
+                        ui32 i = 0U;
+                        for (const auto& colName : fullColNames) {
+                            parent.List(i)
+                                .Atom(0, colName)
+                                .Arg(1, "output", keep[i])
+                            .Seal();
+                            i++;
                         }
                         return parent;
                     })

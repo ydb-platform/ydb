@@ -103,9 +103,8 @@ public:
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
-        AddHandler(0, &TCoExtractMembers::Match, HNDL(RewriteExtractMembersOverBlockHashJoin));
+        AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
-        AddHandler(1, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
         AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForLargeOlapTable));
@@ -164,16 +163,6 @@ protected:
     TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewriteLength(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    TMaybeNode<TExprBase> RewriteExtractMembersOverBlockHashJoin(TExprBase node, TExprContext& ctx) {
-        auto extract = node.Cast<TCoExtractMembers>();
-        if (!extract.Input().Maybe<TDqPhyBlockHashJoin>()) {
-            return node;
-        }
-        TExprBase output = DqPeepholeRewriteBlockHashJoin(extract.Input(), ctx, extract.Members().Ptr().Get());
-        DumpAppliedRule("RewriteExtractMembersOverBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

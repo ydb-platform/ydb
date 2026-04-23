@@ -1,5 +1,7 @@
 #pragma once
 
+#include <google/protobuf/map.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>

@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxDataInflightBytes,        50_MB);
         UNIT_ASSERT_VALUES_EQUAL(cfg.TruePointsFindRangeSec,      301u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxPointsPerOneRequest,      10'000u);
-        UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueueBatchCountLimit, 100u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueueBatchCountLimit, 500u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueuePrefetchSize,    1000u);
         UNIT_ASSERT_EQUAL(cfg.PoisonTimeout,          TDuration::Hours(3));
         UNIT_ASSERT_EQUAL(cfg.RoundRobinStageTimeout, TDuration::Seconds(3));

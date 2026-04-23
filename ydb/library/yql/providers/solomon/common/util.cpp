@@ -268,7 +268,7 @@ TSolomonReadActorConfig ParseSolomonReadActorConfig(
     cfg.TruePointsFindRangeSec = ParseSettingWithMin<ui64>(settings, "truePointsFindRange",          301,   1);
     cfg.MaxPointsPerOneRequest = ParseSettingWithMinMax<ui64>(settings, "maxPointsPerOneRequest",       10'000, 1, 10'000);
 
-    cfg.MetricsQueueBatchCountLimit = ParseSettingWithMin<ui64>(settings, "metricsQueueBatchCountLimit", 100,  1);
+    cfg.MetricsQueueBatchCountLimit = ParseSettingWithMin<ui64>(settings, "metricsQueueBatchCountLimit", 500,  1);
     cfg.MetricsQueuePrefetchSize    = ParseSettingWithMin<ui64>(settings, "metricsQueuePrefetchSize",    1000, 1);
     cfg.PoisonTimeout = TDuration::Seconds(
         ParseSettingWithMin<ui64>(settings, "poisonTimeoutSec", 3 * 3600, 60));

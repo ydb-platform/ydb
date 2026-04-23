@@ -1145,7 +1145,9 @@ private:
                     } else {
                         AllocatedHolder->Output->Consume(std::move(value));
                     }
-                    ++Stats->TotalOutputsProduced;
+                    if (CollectBasic()) {
+                        ++Stats->TotalOutputsProduced;
+                    }
                     dataConsumed = true;
                     break;
                 }

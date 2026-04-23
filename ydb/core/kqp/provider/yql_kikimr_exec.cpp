@@ -4,7 +4,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_graph_transformer.h>

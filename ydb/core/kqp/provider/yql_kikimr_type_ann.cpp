@@ -17,7 +17,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/services/metadata/optimization/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
 

@@ -1,10 +1,14 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 class TIndexConstructor: public TSkipIndexConstructor {
 public:
-    static TString GetClassNameStatic();
+    static TString GetClassNameStatic() {
+        return NPrivate::kMinMaxClassName;
+    }
 
 private:
     TString ColumnName;

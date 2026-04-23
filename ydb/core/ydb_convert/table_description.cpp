@@ -11,7 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>

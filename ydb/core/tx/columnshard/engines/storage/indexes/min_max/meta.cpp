@@ -2,7 +2,7 @@
 
 #include <ydb/core/formats/arrow/program/functions.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include "./misc.h"
+#include "misc/misc.h"
 
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>
@@ -11,9 +11,6 @@
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
-TString TIndexMeta::GetClassNameStatic() {
-    return NPrivate::kMinMaxClassName;
-}
 
 bool TIndexMeta::DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const {
     switch (op.GetOperation()) {

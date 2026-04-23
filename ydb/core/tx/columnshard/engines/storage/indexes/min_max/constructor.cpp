@@ -1,12 +1,8 @@
 #include "constructor.h"
 #include "meta.h"
-#include "./misc.h"
+#include "misc/misc.h"
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 namespace NKikimr::NOlap::NIndexes::NMinMax {
-
-TString TIndexConstructor::GetClassNameStatic() {
-    return NPrivate::kMinMaxClassName;
-}
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {

@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     GLOBAL constructor.cpp
     GLOBAL meta.cpp
-    misc.cpp
 )
 
 PEERDIR(
@@ -11,6 +10,7 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/engines/storage/indexes/portions
     ydb/core/formats/arrow/accessor/abstract
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
 )
 
 END()

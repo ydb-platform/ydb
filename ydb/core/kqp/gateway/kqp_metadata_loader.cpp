@@ -577,6 +577,7 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                 return;
             }
 
+            case NKikimrSchemeOp::TAuth::kIam:
             case NKikimrSchemeOp::TAuth::kNone: {
                 if (objectDescription.SecretValues.size() != 0) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "None auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
@@ -648,6 +649,8 @@ NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata) {
         return NExternalSource::NAuth::MakeServiceAccount(metadata.DataSourceAuth.GetServiceAccount().GetId(), metadata.ServiceAccountIdSignature);
     case NKikimrSchemeOp::TAuth::kAws:
         return NExternalSource::NAuth::MakeAws(metadata.AwsAccessKeyId, metadata.AwsSecretAccessKey, metadata.DataSourceAuth.GetAws().GetAwsRegion());
+    case NKikimrSchemeOp::TAuth::kIam:
+        return NExternalSource::NAuth::MakeIamImpersonate(metadata.DataSourceAuth.GetIam().GetServiceAccountId(), metadata.DataSourceAuth.GetIam().GetResourceId());
     case NKikimrSchemeOp::TAuth::kBasic:
     case NKikimrSchemeOp::TAuth::kMdbBasic:
     case NKikimrSchemeOp::TAuth::kToken:
@@ -924,6 +927,50 @@ NSchemeCache::TSchemeCacheNavigate::TEntry& InferEntry(NKikimr::NSchemeCache::TS
         : resultSet[0];
 }
 
+namespace {
+TString ComposeStructuredTokenJsonForExternalDataSource(const NYql::TExternalSource& externalSource) {
+    const auto& dataSourceAuth = externalSource.DataSourceAuth;
+    switch (dataSourceAuth.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kNone:
+            return NYql::ComposeStructuredTokenJsonForServiceAccount("", "", "");
+
+        case NKikimrSchemeOp::TAuth::kBasic:
+            return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
+                    dataSourceAuth.GetBasic().GetLogin(),
+                    dataSourceAuth.GetBasic().GetPasswordSecretName(),
+                    externalSource.Password);
+
+        case NKikimrSchemeOp::TAuth::kMdbBasic:
+            return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
+                    dataSourceAuth.GetMdbBasic().GetLogin(),
+                    dataSourceAuth.GetMdbBasic().GetPasswordSecretName(),
+                    externalSource.Password);
+
+        case NKikimrSchemeOp::TAuth::kServiceAccount:
+            return NYql::ComposeStructuredTokenJsonForServiceAccountWithSecret(
+                    dataSourceAuth.GetServiceAccount().GetId(),
+                    dataSourceAuth.GetServiceAccount().GetSecretName(),
+                    externalSource.ServiceAccountIdSignature);
+
+        case NKikimrSchemeOp::TAuth::kToken:
+            return NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(
+                    dataSourceAuth.GetToken().GetTokenSecretName(),
+                    externalSource.Token);
+
+        case NKikimrSchemeOp::TAuth::kIam:
+            return NYql::ComposeStructuredTokenJsonForIamAuth(
+                    dataSourceAuth.GetIam().GetServiceAccountId(),
+                    dataSourceAuth.GetIam().GetResourceId());
+
+        case NKikimrSchemeOp::TAuth::kAws:
+            throw yexception() << "Unhandled auth method: Aws";
+
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+            throw yexception() << "Unhandled auth method: unset";
+    }
+}
+} // anonymous namespace
+
 // The type is TString or std::pair<TIndexId, TString>
 template<typename TPath>
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadataCache(
@@ -1092,10 +1139,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
                                 auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
                                 THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
-
-                                auto token = source.Token;
-                                auto secretName = source.DataSourceAuth.GetToken().GetTokenSecretName();
-                                auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);
+                                auto structuredTokenJson = ComposeStructuredTokenJsonForExternalDataSource(source);
                                 auto databaseName = properties.Value("database_name", "");
                                 TString useTlsStr = properties.Value("use_tls", "false");
                                 useTlsStr.to_lower();

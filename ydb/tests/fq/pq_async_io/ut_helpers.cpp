@@ -17,7 +17,8 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
     TMaybe<TDuration> watermarksPeriod,
     TDuration lateArrivalDelay,
-    bool idlePartitionsEnabled)
+    bool idlePartitionsEnabled,
+    bool streamingMode)
 {
     NYql::NPq::NProto::TDqPqTopicSource settings;
     settings.SetTopicPath(topic);
@@ -36,10 +37,16 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     }
     settings.MutableWatermarks()->SetIdlePartitionsEnabled(idlePartitionsEnabled);
     settings.MutableWatermarks()->SetLateArrivalDelayUs(lateArrivalDelay.MicroSeconds());
+    settings.SetStopAtCurrentEndOffsets(!streamingMode);
 
-    auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
-    disposition->set_seconds(0);
-    disposition->set_nanos(0);
+    if (streamingMode) {
+        auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
+        disposition->set_seconds(0);
+        disposition->set_nanos(0);
+    } else {
+        settings.mutable_disposition()->mutable_oldest();
+    }
+
 
     return settings;
 }

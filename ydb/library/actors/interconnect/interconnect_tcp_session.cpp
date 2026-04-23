@@ -653,8 +653,9 @@ namespace NActors {
                 Proxy->Metrics->IncDisconnectByReason(s);
             }
 
-            LOG_INFO_IC_SESSION("ICS25", "shutdown socket, reason# %s", reason.ToString().data());
-            Proxy->UpdateErrorStateLog(TActivationContext::Now(), "close_socket", reason.ToString().data());
+            TString reasonStr = reason.ToString();
+            LOG_INFO_IC_SESSION("ICS25", "shutdown socket, reason# %s", reasonStr.data());
+            Proxy->UpdateErrorStateLog(TActivationContext::Now(), "close_socket", std::move(reasonStr));
             Socket->Shutdown(SHUT_RDWR);
             Socket.Reset();
             Proxy->Metrics->IncDisconnections();
@@ -822,7 +823,7 @@ namespace NActors {
                     LOG_WARN_IC_SESSION("ICS26", "ZeroCopy op was non success: %s",
                         err.data());
 
-                    Proxy->UpdateErrorStateLog(TActivationContext::Now(), "zc_error", err.data());
+                    Proxy->UpdateErrorStateLog(TActivationContext::Now(), "zc_error", std::move(err));
                 }
             }
         }

@@ -212,26 +212,26 @@ void TPQCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
     Become(&TPQCreateTopicActor::StateWork);
 }
 
-TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::TEvCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters)
-    : TBase(request, request->GetProtoRequest()->path())
-    , LocalCluster(localCluster)
-    , Clusters(clusters)
-{
-    Y_ASSERT(request);
-}
+// TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::TEvCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters)
+//     : TBase(request, request->GetProtoRequest()->path())
+//     , LocalCluster(localCluster)
+//     , Clusters(clusters)
+// {
+//     Y_ASSERT(request);
+// }
 
-TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-    : TBase(request)
-{
-    Y_ASSERT(request);
-}
+// TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+//     : TBase(request)
+// {
+//     Y_ASSERT(request);
+// }
 
-void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-    SendProposeRequest(ctx);
-    Become(&TCreateTopicActor::StateWork);
-}
+// void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
+// {
+//     TBase::Bootstrap(ctx);
+//     SendProposeRequest(ctx);
+//     Become(&TCreateTopicActor::StateWork);
+// }
 
 
 void TPQCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
@@ -265,33 +265,33 @@ void TPQCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransacti
 
 
 
-void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-                                            const TString& workingDir, const TString& name)
-{
-    NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-    modifyScheme.SetWorkingDir(workingDir);
+// void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+//                                             const TString& workingDir, const TString& name)
+// {
+//     NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
+//     modifyScheme.SetWorkingDir(workingDir);
 
-    {
-        TString error;
+//     {
+//         TString error;
 
-        auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, AppData(ctx), error,
-                                             workingDir, proposal.Record.GetDatabaseName(), LocalCluster).YdbCode;
+//         auto status = FillProposeRequestImpl(name, *GetProtoRequest(), modifyScheme, AppData(ctx), error,
+//                                              workingDir, proposal.Record.GetDatabaseName(), LocalCluster).YdbCode;
 
-        if (!error.empty()) {
-            Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
-            return RespondWithCode(status);
-        }
-    }
+//         if (!error.empty()) {
+//             Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
+//             return RespondWithCode(status);
+//         }
+//     }
 
-    const auto& pqDescr = modifyScheme.GetCreatePersQueueGroup();
-    const auto& config = pqDescr.GetPQTabletConfig();
+//     const auto& pqDescr = modifyScheme.GetCreatePersQueueGroup();
+//     const auto& config = pqDescr.GetPQTabletConfig();
 
-    if (!LocalCluster.empty() && config.GetLocalDC() && config.GetDC() != LocalCluster) {
-        Request_->RaiseIssue(FillIssue(TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC()
-                                    << "' instead of " << LocalCluster, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
-        return RespondWithCode(Ydb::StatusIds::BAD_REQUEST);
-    }
-}
+//     if (!LocalCluster.empty() && config.GetLocalDC() && config.GetDC() != LocalCluster) {
+//         Request_->RaiseIssue(FillIssue(TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC()
+//                                     << "' instead of " << LocalCluster, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
+//         return RespondWithCode(Ydb::StatusIds::BAD_REQUEST);
+//     }
+// }
 
 
 

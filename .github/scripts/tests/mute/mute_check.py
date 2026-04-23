@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 
-from path_resolver import bash_exports_for_workspace, dedicated_relative, resolve_for_workspace
+from mute_utils import bash_exports_for_workspace, dedicated_relative, resolve_for_workspace
 
 
 def _parse_dispatch_branches(raw: str) -> list[str]:
@@ -194,6 +194,23 @@ def _append_github_output(key: str, value: str) -> None:
             f.write(f'{key}={value}\n')
 
 
+def _emit_matrix_to_outputs(matrix: list[dict[str, str]]) -> None:
+    compact = json.dumps(matrix, separators=(',', ':'), ensure_ascii=False)
+    _append_github_output('matrix_include', compact)
+
+    summary = os.environ.get('GITHUB_STEP_SUMMARY')
+    if not summary:
+        return
+    lines = [
+        f'### Mute update matrix ({len(matrix)} jobs)\n',
+        '```json\n',
+        json.dumps(matrix, indent=2, ensure_ascii=False) + '\n',
+        '```\n',
+    ]
+    with open(summary, 'a', encoding='utf-8') as f:
+        f.writelines(lines)
+
+
 def prepare_mute_update_matrix_job(
     *,
     repo_root: str,
@@ -272,22 +289,7 @@ def cmd_matrix(args: argparse.Namespace) -> int:
         )
         return 1
 
-    compact = json.dumps(matrix, separators=(',', ':'), ensure_ascii=False)
-    gh_out = os.environ.get('GITHUB_OUTPUT')
-    if gh_out:
-        with open(gh_out, 'a', encoding='utf-8') as f:
-            f.write(f'matrix_include={compact}\n')
-
-    summary = os.environ.get('GITHUB_STEP_SUMMARY')
-    if summary:
-        lines = [
-            f'### Mute update matrix ({len(matrix)} jobs)\n',
-            '```json\n',
-            json.dumps(matrix, indent=2, ensure_ascii=False) + '\n',
-            '```\n',
-        ]
-        with open(summary, 'a', encoding='utf-8') as f:
-            f.writelines(lines)
+    _emit_matrix_to_outputs(matrix)
 
     return 0
 

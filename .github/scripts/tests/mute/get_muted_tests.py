@@ -7,16 +7,23 @@ import re
 import sys
 import time
 import ydb
-from get_diff_lines_of_file import get_diff_lines_of_file
-from mute.test_report_mute import pattern_to_re
-from mute_check import YaMuteCheck
 
-# Add analytics directory to path for ydb_wrapper import
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+SCRIPT_DIR = os.path.dirname(__file__)
+TESTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
+ANALYTICS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'analytics'))
+
+# Keep imports working when this script is invoked directly.
+if TESTS_DIR not in sys.path:
+    sys.path.append(TESTS_DIR)
+if ANALYTICS_DIR not in sys.path:
+    sys.path.append(ANALYTICS_DIR)
+
+from get_diff_lines_of_file import get_diff_lines_of_file
+from mute.mute_utils import pattern_to_re
+from mute_check import YaMuteCheck
 from ydb_wrapper import YDBWrapper
 
-dir = os.path.dirname(__file__)
-repo_path = f"{dir}/../../../"
+repo_path = f"{SCRIPT_DIR}/../../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
 
 

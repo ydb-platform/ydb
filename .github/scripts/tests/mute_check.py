@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import re
-from mute.test_report_mute import pattern_to_re
+from mute.mute_utils import pattern_to_re
 
 
 class YaMuteCheck:

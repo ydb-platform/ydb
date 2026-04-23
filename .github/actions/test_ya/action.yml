@@ -415,7 +415,7 @@ runs:
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
               MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
-              python3 .github/scripts/tests/mute/test_report_mute.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
+              python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
               RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
             else
               RERUN_FAILED_OPT=""
@@ -654,7 +654,7 @@ runs:
             echo file ${file_to_check} NOT changed
         else
             echo file ${file_to_check} changed
-            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}" --build_type "${{ inputs.build_preset }}" --muted_ya_file "$MUTED_YA_FILE"
+            .github/scripts/tests/mute/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}" --build_type "${{ inputs.build_preset }}" --muted_ya_file "$MUTED_YA_FILE"
             FILE_PATH=$PUBLIC_DIR/mute_info/2_new_muted_tests.txt
             SEPARATOR=""
             if [ -f "$FILE_PATH" ]; then

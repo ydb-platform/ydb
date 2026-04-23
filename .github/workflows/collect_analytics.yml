@@ -68,7 +68,7 @@ jobs:
         # Run the script for each build type
         for BUILD_TYPE in $BUILD_TYPES; do
           echo "Processing muted tests for build type: $BUILD_TYPE"
-          python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH --build_type $BUILD_TYPE
+          python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch $BRANCH --build_type $BUILD_TYPE
         done 
 
         # Restore the original muted_ya.txt file

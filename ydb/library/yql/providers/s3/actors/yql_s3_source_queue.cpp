@@ -246,7 +246,7 @@ public:
     }
 
     void HandleGetNextBatch(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
-        AnyConsumerMessageReceived = true;
+        ConnectedConsumers.insert(ev->Sender);
         if (HasEnoughToSend()) {
             LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
             TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
@@ -354,7 +354,7 @@ public:
     }
 
     void HandleGetNextBatchForEmptyState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
-        AnyConsumerMessageReceived = true;
+        ConnectedConsumers.insert(ev->Sender);
         LOG_T(
             "TS3FileQueueActor",
             "HandleGetNextBatchForEmptyState Giving away rest of Objects");
@@ -378,7 +378,7 @@ public:
     }
 
     void HandleGetNextBatchForErrorState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
-        AnyConsumerMessageReceived = true;
+        ConnectedConsumers.insert(ev->Sender);
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
@@ -387,7 +387,7 @@ public:
     }
 
     void HandleUpdateConsumersCount(TEvS3Provider::TEvUpdateConsumersCount::TPtr& ev) {
-        AnyConsumerMessageReceived = true;
+        ConnectedConsumers.insert(ev->Sender);
         if (!UpdatedConsumers.contains(ev->Sender)) {
             LOG_D(
                 "TS3FileQueueActor",
@@ -412,7 +412,7 @@ public:
         // consumer message has been received we know the read actors are alive
         // and will send TEvConsumerFinished in their own PassAway(), so we can
         // safely ignore the timeout and let the normal shutdown path run.
-        if (AnyConsumerMessageReceived) {
+        if (ConnectedConsumers.size() == ConsumersCount) {
             LOG_D("TDqSolomonMetricsQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
             return;
         }
@@ -627,16 +627,12 @@ private:
     ui64 ObjectsTotalSize = 0;
     THashMap<NActors::TActorId, ui64> FinishingConsumerToLastSeqNo;
     THashSet<NActors::TActorId> FinishedConsumers;
-    // Set to true when the first message from any consumer is received.
-    // Used by HandlePoison to distinguish between a startup failure (no
-    // consumers ever connected) and a normal shutdown where consumers are
-    // still running and will send TEvConsumerFinished themselves.
-    bool AnyConsumerMessageReceived = false;
     bool RoundRobinStageFinished = false;
     bool IsRoundRobinFinishScheduled = false;
     bool HasPendingRequests = false;
     THashSet<NActors::TActorId> StartedConsumers;
     THashSet<NActors::TActorId> UpdatedConsumers;
+    THashSet<NActors::TActorId> ConnectedConsumers;
 
     const IHTTPGateway::TPtr Gateway;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -647,7 +643,7 @@ private:
     const NS3Lister::ES3PatternType PatternType;
     const bool AllowLocalFiles;
 
-    static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
+    static constexpr TDuration PoisonTimeout = TDuration::Minutes(30);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
 

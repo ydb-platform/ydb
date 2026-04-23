@@ -56,13 +56,14 @@ message TAuthConfig {
     optional string CertificateAuthenticationDomain = 80 [default = "cert"];
     optional bool EnableLoginAuthentication = 81 [default = true];
     optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
-    optional TPasswordComplexity PasswordComplexity = 83;
-    optional TAccountLockout AccountLockout = 84;
-    optional string AccessServiceTokenName = 85;
-    optional TTokenManager TokenManager = 86;
-    optional string AccessServiceSslTargetNameOverride = 87;
-    optional string UserAccountServiceSslTargetNameOverride = 88;
-    optional string ServiceAccountServiceSslTargetNameOverride = 89;
+    optional bool EnableNodeRegistrationByToken = 83 [default = true];
+    optional TPasswordComplexity PasswordComplexity = 84;
+    optional TAccountLockout AccountLockout = 85;
+    optional string AccessServiceTokenName = 86;
+    optional TTokenManager TokenManager = 87;
+    optional string AccessServiceSslTargetNameOverride = 88;
+    optional string UserAccountServiceSslTargetNameOverride = 89;
+    optional string ServiceAccountServiceSslTargetNameOverride = 90;
 }
 
 message TUserRegistryConfig {

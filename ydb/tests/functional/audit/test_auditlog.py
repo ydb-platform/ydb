@@ -15,7 +15,7 @@ from ydb.draft import DynamicConfigClient
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.fixtures import ydb_database_ctx
 
-from helpers import cluster_endpoint, CaptureFileOutput
+from helpers import cluster_grpc_url, cluster_ydbd_subprocess_env, driver_tls_kwargs, CaptureFileOutput
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +50,27 @@ CLUSTER_CONFIG = dict(
 
 
 def ydbcli_db_schema_exec(cluster, operation_proto):
-    endpoint = cluster_endpoint(cluster)
     args = [
         cluster.nodes[1].binary_path,
-        f'--server=grpc://{endpoint}',
+        f'--server={cluster_grpc_url(cluster)}',
+    ]
+    cfg = cluster.config
+    if cfg.grpc_ssl_enable:
+        args += [
+            '--ca-file',
+            cfg.grpc_tls_ca_path,
+            '--client-cert-file',
+            cfg.grpc_tls_cert_path,
+            '--client-cert-key-file',
+            cfg.grpc_tls_key_path,
+        ]
+    args += [
         'db',
         'schema',
         'exec',
         operation_proto,
     ]
-    r = subprocess.run(args, capture_output=True)
+    r = subprocess.run(args, capture_output=True, env=cluster_ydbd_subprocess_env(cluster, token=None))
     assert r.returncode == 0, r.stderr.decode('utf-8')
 
 
@@ -125,28 +136,28 @@ def _database(ydb_cluster, ydb_root, request):
 
 @pytest.fixture(scope='module')
 def _client_session_pool_with_auth_root(ydb_cluster, _database):
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), _database, auth_token='root@builtin')) as driver:
+    with Driver(DriverConfig(cluster_grpc_url(ydb_cluster), _database, auth_token='root@builtin', **driver_tls_kwargs(ydb_cluster))) as driver:
         with SessionPool(driver) as pool:
             yield pool
 
 
 @pytest.fixture(scope='module')
 def _client_session_pool_with_auth_other(ydb_cluster, _database):
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), _database, auth_token='other-user@builtin')) as driver:
+    with Driver(DriverConfig(cluster_grpc_url(ydb_cluster), _database, auth_token='other-user@builtin', **driver_tls_kwargs(ydb_cluster))) as driver:
         with SessionPool(driver) as pool:
             yield pool
 
 
 @pytest.fixture(scope='module')
 def _client_session_pool_no_auth(ydb_cluster, _database):
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), _database, auth_token=None)) as driver:
+    with Driver(DriverConfig(cluster_grpc_url(ydb_cluster), _database, auth_token=None, **driver_tls_kwargs(ydb_cluster))) as driver:
         with SessionPool(driver) as pool:
             yield pool
 
 
 @pytest.fixture(scope='module')
 def _client_session_pool_bad_auth(ydb_cluster, _database):
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), _database, auth_token='__bad__@builtin')) as driver:
+    with Driver(DriverConfig(cluster_grpc_url(ydb_cluster), _database, auth_token='__bad__@builtin', **driver_tls_kwargs(ydb_cluster))) as driver:
         with SessionPool(driver) as pool:
             yield pool
 

@@ -218,6 +218,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--ca=%s" % self.__configurator.grpc_tls_ca_path
             )
 
+        if self.__role == 'slot' and self.__configurator.grpc_tls_data_path is not None:
+            command.extend(
+                [
+                    "--grpc-ca=%s" % self.__configurator.grpc_tls_ca_path,
+                    "--grpc-cert=%s" % self.__configurator.grpc_tls_cert_path,
+                    "--grpc-key=%s" % self.__configurator.grpc_tls_key_path,
+                ]
+            )
+
         if self.__configurator.protected_mode:
             command.append(
                 "--cert=%s" % self.__configurator.grpc_tls_cert_path
@@ -1054,7 +1063,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def _create_config_client(self):
         first_node = self.nodes[list(self.nodes.keys())[0]]
-        if self.__configurator.protected_mode:
+        if self.__configurator.grpc_ssl_enable or self.__configurator.protected_mode:
             port = first_node.grpc_ssl_port
             client = config_client_factory(
                 first_node.host, port, retry_count=20,

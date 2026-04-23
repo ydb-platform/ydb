@@ -37,6 +37,7 @@ public:
         } else {
             const auto& clientCertificates = msg.FindClientCert();
             if (!clientCertificates.empty()) {
+                IsNodeAuthorizedByCertificate = true;
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
             }
         }
@@ -364,13 +365,25 @@ public:
     }
 
     bool CheckAccessGetNodeConfig() const {
-        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
+        const auto* appData = AppData();
+        const auto* token = TBase::GetParsedToken().Get();
+
+        if (IsNodeAuthorizedByCertificate) {
+            return IsTokenAllowed(token, appData->RegisterDynamicNodeAllowedSIDs);
+        }
+
+        if (!appData->AuthConfig.GetEnableNodeRegistrationByToken()) {
+            return false;
+        }
+
+        return IsTokenAllowed(token, appData->RegisterDynamicNodeAllowedSIDs);
     }
 
 private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
     TActorId ConsolePipe;
+    bool IsNodeAuthorizedByCertificate = false;
 };
 
 } // namespace

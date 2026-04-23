@@ -58,14 +58,74 @@ def ydb_cluster_configuration():
 
 @pytest.fixture(scope='module')
 def ydb_configurator(ydb_cluster_configuration):
-    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    config_generator = KikimrConfigGenerator(
+        protected_mode=True,
+        **ydb_cluster_configuration,
+    )
     config_generator.yaml_config['auth_config'] = {
         'domain_login_only': False,
+        'enable_node_registration_by_token': False,
     }
     config_generator.yaml_config['domains_config']['disable_builtin_security'] = True
     security_config = config_generator.yaml_config['domains_config']['security_config']
     security_config['administration_allowed_sids'].append('clusteradmin')
+    # Allow mTLS-authenticated cluster admins (clusteradmins@cert) to manage /Root.
+    # This is the path used by dyn slot registration when token-based registration
+    # is disabled.
+    security_config.setdefault('default_access', []).append('+F:clusteradmins@cert')
+    # protected_mode=True strips default_users; combined with disable_builtin_security
+    # this means no root user is auto-created, but the harness `_get_token` flow
+    # invokes `ydb auth get-token --user root --no-password` to fetch a session
+    # token at cluster start. Re-add a root user with empty password so login works.
+    security_config['default_users'] = [{'name': 'root', 'password': ''}]
+    config_generator.full_config = config_generator.yaml_config
     return config_generator
+
+
+def _ydb_tls_kwargs(cluster):
+    cfg = cluster.config
+    if not getattr(cfg, 'grpc_ssl_enable', False):
+        return {}
+    with open(cfg.grpc_tls_ca_path, 'rb') as f:
+        root = f.read()
+    with open(cfg.grpc_tls_cert_path, 'rb') as f:
+        cert = f.read()
+    with open(cfg.grpc_tls_key_path, 'rb') as f:
+        key = f.read()
+    return {
+        'root_certificates': root,
+        'certificate_chain': cert,
+        'private_key': key,
+    }
+
+
+# override the shared ydb_endpoint fixture to switch to grpcs:// when protected_mode is on
+@pytest.fixture(scope='module')
+def ydb_endpoint(ydb_cluster):
+    node = ydb_cluster.nodes[1]
+    if getattr(ydb_cluster.config, 'grpc_ssl_enable', False):
+        return "grpcs://%s:%s" % (node.host, node.grpc_ssl_port)
+    return "%s:%s" % (node.host, node.port)
+
+
+# override the shared ydb_client fixture to inject TLS material for mTLS clusters
+@pytest.fixture(scope='function')
+def ydb_client(ydb_cluster, ydb_endpoint, request):
+    tls_kwargs = _ydb_tls_kwargs(ydb_cluster)
+
+    def _make_driver(database_path, **kwargs):
+        merged = dict(tls_kwargs)
+        merged.update(kwargs)
+        driver_config = ydb.DriverConfig(ydb_endpoint, database_path, **merged)
+        driver = ydb.Driver(driver_config)
+
+        def stop_driver():
+            driver.stop()
+
+        request.addfinalizer(stop_driver)
+        return driver
+
+    return _make_driver
 
 
 def stream_query_result(driver, query):
@@ -93,7 +153,10 @@ def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
     cluster_admin = ydb.AuthTokenCredentials(ydb_cluster.config.default_clusteradmin)
 
     # prepare root database
-    driver_config = ydb.DriverConfig(ydb_endpoint, ydb_root, credentials=cluster_admin)
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint, ydb_root, credentials=cluster_admin,
+        **_ydb_tls_kwargs(ydb_cluster),
+    )
     with ydb.Driver(driver_config) as driver:
         pool = ydb.SessionPool(driver)
         with pool.checkout() as session:
@@ -107,7 +170,10 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
 
     # prepare tenant database
     database_path = ydb_database_module_scope
-    driver_config = ydb.DriverConfig(ydb_endpoint, database_path, credentials=cluster_admin)
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint, database_path, credentials=cluster_admin,
+        **_ydb_tls_kwargs(ydb_cluster),
+    )
     with ydb.Driver(driver_config) as driver:
         pool = ydb.SessionPool(driver)
         with pool.checkout() as session:
@@ -134,8 +200,8 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
 
 # python sdk does not legally expose login method, so that is a crude way
 # to get auth-token in exchange to credentials
-def login_user(endpoint, database, user, password):
-    driver_config = ydb.DriverConfig(endpoint, database)
+def login_user(endpoint, database, user, password, tls_kwargs=None):
+    driver_config = ydb.DriverConfig(endpoint, database, **(tls_kwargs or {}))
     credentials = ydb.StaticCredentials(driver_config, user, password)
     return credentials._make_token_request()['access_token']
 
@@ -146,13 +212,13 @@ def login_user(endpoint, database, user, password):
     ('dbadmin', True),
     ('ordinaryuser', False)
 ])
-def test_tenant_auth_groups_access(ydb_endpoint, ydb_root, prepared_root_db, prepared_tenant_db, ydb_client, user, expected_access):
+def test_tenant_auth_groups_access(ydb_cluster, ydb_endpoint, ydb_root, prepared_root_db, prepared_tenant_db, ydb_client, user, expected_access):
     tenant_database = prepared_tenant_db
 
     # user could be either from the root or tenant database,
     # but they must obtain auth token by logging in the database they live in
     login_database = ydb_root if user.startswith('cluster') else tenant_database
-    user_auth_token = login_user(ydb_endpoint, login_database, user, '1234')
+    user_auth_token = login_user(ydb_endpoint, login_database, user, '1234', tls_kwargs=_ydb_tls_kwargs(ydb_cluster))
     credentials = ydb.AuthTokenCredentials(user_auth_token)
 
     with ydb_client(tenant_database, credentials=credentials) as driver:

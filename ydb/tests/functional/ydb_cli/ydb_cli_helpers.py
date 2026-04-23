@@ -42,11 +42,27 @@ class BaseCliTestWithDatabase:
     def _start_driver(cls, database: str, credentials=None, cluster: Optional[KiKiMR] = None):
         if cluster is None:
             cluster = cls.cluster
-        driver = ydb.Driver(ydb.DriverConfig(
+        driver_config_kwargs = dict(
             database=database,
             endpoint=f"{cluster.nodes[1].host}:{cluster.nodes[1].port}",
             credentials=credentials,
-        ))
+        )
+        # When the cluster runs in protected mode (mTLS), point the driver to
+        # the per-cluster TLS data so it authenticates as clusteradmins@cert.
+        if getattr(cluster.config, "protected_mode", False):
+            with open(cluster.config.grpc_tls_ca_path, "rb") as f:
+                root_certificates = f.read()
+            with open(cluster.config.grpc_tls_cert_path, "rb") as f:
+                certificate_chain = f.read()
+            with open(cluster.config.grpc_tls_key_path, "rb") as f:
+                private_key = f.read()
+            driver_config_kwargs["root_certificates"] = root_certificates
+            driver_config_kwargs["certificate_chain"] = certificate_chain
+            driver_config_kwargs["private_key"] = private_key
+            driver_config_kwargs["endpoint"] = (
+                f"grpcs://{cluster.nodes[1].host}:{cluster.nodes[1].grpc_ssl_port}"
+            )
+        driver = ydb.Driver(ydb.DriverConfig(**driver_config_kwargs))
         driver.wait(timeout=cls.startup_timeout)
         return driver
 

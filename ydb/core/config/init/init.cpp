@@ -204,10 +204,9 @@ class TDefaultNodeBrokerClient
             const TGrpcSslSettings& grpcSettings,
             const TString addr,
             const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
-            const TString& nodeRegistrationToken,
             const IEnv& env)
     {
-        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, settings.DomainPath_, nodeRegistrationToken);
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, settings.DomainPath_);
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
@@ -220,7 +219,6 @@ class TDefaultNodeBrokerClient
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
-        const TString& nodeRegistrationToken,
         const IEnv& env,
         IInitLogger& logger)
     {
@@ -231,7 +229,6 @@ class TDefaultNodeBrokerClient
                 result = TryToRegisterDynamicNode(grpcSettings,
                                                   addr,
                                                   settings,
-                                                  nodeRegistrationToken,
                                                   env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
@@ -285,7 +282,6 @@ public:
        NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeImpl(grpcSettings,
                                                                                   addrs,
                                                                                   newRegSettings,
-                                                                                  regSettings.NodeRegistrationToken,
                                                                                   env,
                                                                                   logger);
 
@@ -421,7 +417,7 @@ class TDefaultDynConfigClient
                                                      settings.TenantName,
                                                      settings.NodeType,
                                                      settings.DomainName,
-                                                     settings.StaffApiUserToken,
+                                                     TString(),
                                                      true,
                                                      1);
 

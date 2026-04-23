@@ -20,4 +20,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+SUPPRESSIONS(
+    lsan.supp
+)
+
 END()

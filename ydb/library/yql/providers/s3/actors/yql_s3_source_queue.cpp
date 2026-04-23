@@ -411,11 +411,11 @@ public:
         // bootstrapped (e.g. node failure during query startup).  Once we know that all
         // consumers are alive, we can safely ignore the timeout and let the normal
         // shutdown path run.
-        if (ConnectedConsumers.size() == ConsumersCount) {
-            LOG_D("TDqSolomonMetricsQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
+        if (ConnectedConsumers.size() >= ConsumersCount) {
+            LOG_D("TS3FileQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
             return;
         }
-        LOG_I("TDqSolomonMetricsQueueActor", "HandlePoison: no consumer messages received, shutting down");
+        LOG_I("TS3FileQueueActor", "HandlePoison: no consumer messages received, shutting down");
         AnswerPendingRequests();
         PassAway();
     }

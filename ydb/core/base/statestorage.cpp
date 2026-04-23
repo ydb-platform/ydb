@@ -249,6 +249,93 @@ bool operator!=(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInf
     return !operator==(lhs, rhs);
 }
 
+/*
+ * Calculate a conservative "effective number of unavailable rings" for a
+ * single state storage ring group: the maximum number of unavailable state
+ * storage replicas that may simultaneously belong to SelectReplicas for a
+ * single hash/tabletId, counted in ring units (at most one selected replica
+ * per ring).
+ *
+ * The input is not "which rings are broken", but per-replica availability for
+ * each ring. So the result is not a plain count of physically degraded rings,
+ * but the worst-case number of rings that may be unavailable for some hash.
+ *
+ * This distinction matters because ring unavailability depends on
+ * UseRingSpecificNodeSelection.
+ *
+ * 1. UseRingSpecificNodeSelection = true
+ *    Replica choice inside the ring depends on the ring itself, so different
+ *    hashes may hit different replicas of the same ring independently. If at
+ *    least one replica is unavailable, then there exists a set of hashes for
+ *    which this ring becomes unavailable. For this conservative model such a
+ *    ring contributes 1 to the result.
+ *
+ * 2. UseRingSpecificNodeSelection = false
+ *    Replica choice is shared between rings of the same size: hash % ring_size
+ *    picks the same column in every such ring. In this mode a failed replica
+ *    does not invalidate the whole ring for all hashes, it only affects its
+ *    column. Therefore we group rings by ring size, count unavailable replicas
+ *    per column, and take the worst column in each group. That value is the
+ *    effective number of unavailable rings for this group.
+ *
+ * The final result is the sum of contributions from:
+ * - all ring-specific rings, counted individually;
+ * - all shared-selection groups, counted by their worst column.
+ */
+ui32 CalculateEffectiveUnavailableRings(
+    const TStateStorageInfo::TRingGroup& ringGroup,
+    const TVector<TStateStorageRingAvailability>& ringAvailability)
+{
+    Y_ABORT_UNLESS(ringGroup.Rings.size() == ringAvailability.size());
+
+    ui32 effectiveUnavailable = 0;
+    THashMap<ui32, TVector<ui32>> columnUnavailableByRingSize;
+
+    for (ui32 ringIdx : xrange(ringGroup.Rings.size())) {
+        const auto& ring = ringGroup.Rings[ringIdx];
+        const auto& availability = ringAvailability[ringIdx];
+
+        Y_ABORT_UNLESS(ring.Replicas.size() == availability.AvailableReplicas.size());
+
+        if (ring.UseRingSpecificNodeSelection) {
+            // For ring-specific selection any unavailable replica makes the whole
+            // ring effectively unavailable for some hashes.
+            bool hasUnavailableReplica = false;
+            for (bool available : availability.AvailableReplicas) {
+                if (!available) {
+                    hasUnavailableReplica = true;
+                    break;
+                }
+            }
+
+            effectiveUnavailable += hasUnavailableReplica;
+            continue;
+        }
+
+        // Rings with shared replica selection are grouped by ring size and
+        // accounted by columns: the worst column contributes to the total.
+        auto& columnUnavailable = columnUnavailableByRingSize[ring.Replicas.size()];
+        if (columnUnavailable.empty()) {
+            columnUnavailable.resize(ring.Replicas.size(), 0);
+        } else {
+            Y_ABORT_UNLESS(columnUnavailable.size() == ring.Replicas.size());
+        }
+
+        for (ui32 replicaIdx : xrange(availability.AvailableReplicas.size())) {
+            if (!availability.AvailableReplicas[replicaIdx]) {
+                ++columnUnavailable[replicaIdx];
+            }
+        }
+    }
+
+    for (const auto& [ringSize, columnUnavailable] : columnUnavailableByRingSize) {
+        Y_UNUSED(ringSize);
+        effectiveUnavailable += *MaxElement(columnUnavailable.begin(), columnUnavailable.end());
+    }
+
+    return effectiveUnavailable;
+}
+
 static void CopyStateStorageRingInfo(
     const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &source,
     TStateStorageInfo::TRingGroup& ringGroup,

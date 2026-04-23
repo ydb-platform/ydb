@@ -3008,12 +3008,67 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
-    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
+    struct TStateStorageRingSpec {
+        TVector<ui32> NodeIndexes;
+        bool IsDisabled = false;
+        bool UseRingSpecificNodeSelection = true;
+    };
+
+    ui32 GetStateStorageNodeCount(const TVector<TStateStorageRingSpec>& ringSpecs,
+                                  const TVector<ui32>& deadNodeIndexes) {
+        ui32 maxNodeIndex = 0;
+        for (const auto& ringSpec : ringSpecs) {
+            for (ui32 nodeIndex : ringSpec.NodeIndexes) {
+                maxNodeIndex = Max(maxNodeIndex, nodeIndex);
+            }
+        }
+        for (ui32 nodeIndex : deadNodeIndexes) {
+            maxNodeIndex = Max(maxNodeIndex, nodeIndex);
+        }
+        return maxNodeIndex + 1;
+    }
+
+    TIntrusivePtr<TStateStorageInfo> MakeStateStorageInfo(TTestActorRuntime& runtime,
+                                                          ui32 nToSelect,
+                                                          const TVector<TStateStorageRingSpec>& ringSpecs) {
+        TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
+        auto& ringGroup = info->RingGroups.emplace_back();
+        ringGroup.State = ERingGroupState::PRIMARY;
+        ringGroup.NToSelect = nToSelect;
+        ringGroup.Rings.reserve(ringSpecs.size());
+
+        for (const auto& ringSpec : ringSpecs) {
+            auto& ring = ringGroup.Rings.emplace_back();
+            ring.IsDisabled = ringSpec.IsDisabled;
+            ring.UseRingSpecificNodeSelection = ringSpec.UseRingSpecificNodeSelection;
+            for (ui32 nodeIdx : ringSpec.NodeIndexes) {
+                ring.Replicas.emplace_back(runtime.GetNodeId(nodeIdx), "FAKE");
+            }
+        }
+
+        return info;
+    }
+
+    void CheckStateStorageResult(const Ydb::Monitoring::SelfCheckResult& result,
+                                 std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
+        if (expectedStatus) {
+            CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+        }
+    }
+
+    void TestStateStorage(const TVector<TStateStorageRingSpec>& ringSpecs,
+                          ui32 nToSelect,
+                          const TVector<ui32>& deadNodeIndexes,
+                          std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(port)
-                .SetNodeCount(9)
+                .SetNodeCount(GetStateStorageNodeCount(ringSpecs, deadNodeIndexes))
                 .SetUseRealThreads(false)
                 .SetDomainName("Root");
         TServer server(settings);
@@ -3024,12 +3079,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
-        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, 9, {}, {}});
-        info->RingGroups.back().Rings.resize(9);
-        info->RingGroups.back().NToSelect = 9;
-        for (ui32 i = 0; i < 9; ++i) {
-            info->RingGroups.back().Rings[i].Replicas.emplace_back(runtime.GetNodeId(i), "FAKE");
+        auto info = MakeStateStorageInfo(runtime, nToSelect, ringSpecs);
+
+        TVector<ui32> deadNodeIds;
+        deadNodeIds.reserve(deadNodeIndexes.size());
+        for (ui32 nodeIdx : deadNodeIndexes) {
+            deadNodeIds.push_back(runtime.GetNodeId(nodeIdx));
         }
 
         auto ssObserver = runtime.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto&& ev) { ev->Get()->Info = info; });
@@ -3039,10 +3094,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto disconnectObserver = runtime.AddObserver<TEvWhiteboard::TEvSystemStateResponse>([&](auto&& ev) {
             auto actor = ev->Recipient;
             auto nodeId = ev->Sender.NodeId();
-            auto nodeIdx = nodeId - runtime.GetNodeId(0);
-            if (nodeIdx < deadNodes) {
-                runtime.Send(new IEventHandle(actor, actor, new TEvInterconnect::TEvNodeDisconnected(nodeId)), actor.NodeId() - runtime.GetNodeId(0));
-                ev.Reset();
+            for (ui32 deadNodeId : deadNodeIds) {
+                if (deadNodeId == nodeId) {
+                    runtime.Send(new IEventHandle(actor, actor, new TEvInterconnect::TEvNodeDisconnected(nodeId)), actor.NodeId() - runtime.GetNodeId(0));
+                    ev.Reset();
+                    break;
+                }
             }
         });
 
@@ -3051,13 +3108,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
         Cerr << result.ShortDebugString() << Endl;
-        if (expectedStatus) {
-            CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
-            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
-            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+        CheckStateStorageResult(result, expectedStatus);
+    }
+
+    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
+        TVector<TStateStorageRingSpec> ringSpecs;
+        TVector<ui32> deadNodeIndexes;
+        ringSpecs.reserve(9);
+        deadNodeIndexes.reserve(deadNodes);
+        for (ui32 nodeIdx = 0; nodeIdx < 9; ++nodeIdx) {
+            ringSpecs.push_back(TStateStorageRingSpec{.NodeIndexes = {nodeIdx}});
+            if (nodeIdx < deadNodes) {
+                deadNodeIndexes.push_back(nodeIdx);
+            }
         }
+
+        TestStateStorage(ringSpecs, 9, deadNodeIndexes, expectedStatus);
     }
 
     Y_UNIT_TEST(TestStateStorageOk) {
@@ -3074,6 +3140,78 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(TestStateStorageRed) {
         TestStateStorage(6, Ydb::Monitoring::StatusFlag::RED);
+    }
+
+    Y_UNIT_TEST(TestStateStorageSharedReplicaSelectionBlue) {
+        const TVector<TStateStorageRingSpec> ringSpecs = {
+            TStateStorageRingSpec{.NodeIndexes = {0, 1}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {2, 3}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {4, 5}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {6, 7}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {8, 9}, .UseRingSpecificNodeSelection = false},
+        };
+
+        TestStateStorage(ringSpecs, 4, {0, 3}, Ydb::Monitoring::StatusFlag::BLUE);
+    }
+
+    Y_UNIT_TEST(TestStateStorageSharedReplicaSelectionYellow) {
+        const TVector<TStateStorageRingSpec> ringSpecs = {
+            TStateStorageRingSpec{.NodeIndexes = {0, 1}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {2, 3}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {4, 5}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {6, 7}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {8, 9}, .UseRingSpecificNodeSelection = false},
+        };
+
+        TestStateStorage(ringSpecs, 5, {0, 3, 4}, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(TestStateStorageSharedReplicaSelectionRed) {
+        const TVector<TStateStorageRingSpec> ringSpecs = {
+            TStateStorageRingSpec{.NodeIndexes = {0, 1}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {2, 3}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {4, 5}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {6, 7}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {8, 9}, .UseRingSpecificNodeSelection = false},
+        };
+
+        TestStateStorage(ringSpecs, 5, {0, 2, 4}, Ydb::Monitoring::StatusFlag::RED);
+    }
+
+    Y_UNIT_TEST(TestStateStorageDisabledRingIsNotDoubleCounted) {
+        const TVector<TStateStorageRingSpec> ringSpecs = {
+            TStateStorageRingSpec{.NodeIndexes = {0, 1}, .IsDisabled = true, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {2, 3}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {4, 5}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {6, 7}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {8, 9}, .UseRingSpecificNodeSelection = false},
+        };
+
+        TestStateStorage(ringSpecs, 5, {2}, Ydb::Monitoring::StatusFlag::BLUE);
+    }
+
+    Y_UNIT_TEST(TestStateStorageSharedReplicaSelectionDifferentRingSizes) {
+        const TVector<TStateStorageRingSpec> ringSpecs = {
+            TStateStorageRingSpec{.NodeIndexes = {0, 1}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {2, 3}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {4, 5, 6}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {7, 8, 9}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {10}, .UseRingSpecificNodeSelection = false},
+        };
+
+        TestStateStorage(ringSpecs, 5, {0, 5}, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(TestStateStorageMixedReplicaSelectionModes) {
+        const TVector<TStateStorageRingSpec> ringSpecs = {
+            TStateStorageRingSpec{.NodeIndexes = {0, 1}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {2, 3}, .UseRingSpecificNodeSelection = false},
+            TStateStorageRingSpec{.NodeIndexes = {4, 5}},
+            TStateStorageRingSpec{.NodeIndexes = {6, 7}},
+            TStateStorageRingSpec{.NodeIndexes = {8, 9}},
+        };
+
+        TestStateStorage(ringSpecs, 5, {0, 3, 4}, Ydb::Monitoring::StatusFlag::YELLOW);
     }
 
     Y_UNIT_TEST(CLusterNotBootstrapped) {

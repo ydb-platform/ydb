@@ -207,7 +207,12 @@ namespace NKikimr {
         return info;
     }
 
-    static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TActorId> &replicas, ui32 NToSelect, ui32 nrings, ui32 ringSize, ui32 ringGroups = 1)
+    static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TActorId> &replicas,
+                                                                    ui32 NToSelect,
+                                                                    ui32 nrings,
+                                                                    ui32 ringSize,
+                                                                    ui32 ringGroups = 1,
+                                                                    bool useRingSpecificNodeSelection = true)
     {
         Y_ABORT_UNLESS(replicas.size() >= ringGroups * nrings * ringSize);
         Y_ABORT_UNLESS(NToSelect <= nrings);
@@ -221,6 +226,7 @@ namespace NKikimr {
             group.Rings.resize(nrings);
 
             for (size_t i = 0; i < nrings; ++i) {
+                group.Rings[i].UseRingSpecificNodeSelection = useRingSpecificNodeSelection;
                 for (size_t j = 0; j < ringSize; ++j) {
                     group.Rings[i].Replicas.push_back(replicas[inode++]);
                 }
@@ -242,7 +248,8 @@ namespace NKikimr {
         ui32 NToSelect,
         ui32 nrings,
         ui32 ringSize,
-        ui32 ringGroups)
+        ui32 ringGroups,
+        bool useRingSpecificNodeSelection)
     {
         TVector<TActorId> ssreplicas;
         for (size_t i = 0; i < ringGroups * nrings * ringSize; ++i) {
@@ -261,9 +268,9 @@ namespace NKikimr {
 
         const TActorId ssproxy = MakeStateStorageProxyID();
 
-        auto ssInfo = GenerateStateStorageInfo(ssreplicas, NToSelect, nrings, ringSize, ringGroups);
-        auto sbInfo = GenerateStateStorageInfo(sbreplicas, NToSelect, nrings, ringSize, ringGroups);
-        auto bInfo = GenerateStateStorageInfo(breplicas, NToSelect, nrings, ringSize, ringGroups);
+        auto ssInfo = GenerateStateStorageInfo(ssreplicas, NToSelect, nrings, ringSize, ringGroups, useRingSpecificNodeSelection);
+        auto sbInfo = GenerateStateStorageInfo(sbreplicas, NToSelect, nrings, ringSize, ringGroups, useRingSpecificNodeSelection);
+        auto bInfo = GenerateStateStorageInfo(breplicas, NToSelect, nrings, ringSize, ringGroups, useRingSpecificNodeSelection);
 
 
         for (ui32 ssIndex = 0; ssIndex < ringGroups * nrings * ringSize; ++ssIndex) {

@@ -1509,6 +1509,96 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
     }
 
+    Y_UNIT_TEST(StateStorageSharedReplicaSelectionMaxAvailability)
+    {
+        TTestEnvOpts options(10);
+        options.VDisks = 0;
+        options.NRings = 5;
+        options.RingSize = 2;
+        options.NToSelect = 5;
+        options.UseRingSpecificNodeSelection = false;
+
+        TCmsTestEnv env(options);
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageSharedReplicaSelectionKeepAvailable)
+    {
+        TTestEnvOpts options(10);
+        options.VDisks = 0;
+        options.NRings = 5;
+        options.RingSize = 2;
+        options.NToSelect = 5;
+        options.UseRingSpecificNodeSelection = false;
+
+        TCmsTestEnv env(options);
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(3)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageSharedReplicaSelectionKeepAvailableLimit)
+    {
+        TTestEnvOpts options(10);
+        options.VDisks = 0;
+        options.NRings = 5;
+        options.RingSize = 2;
+        options.NToSelect = 5;
+        options.UseRingSpecificNodeSelection = false;
+
+        TCmsTestEnv env(options);
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(4)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageSharedReplicaSelectionDependsOnUseRingSpecificNodeSelection)
+    {
+        TTestEnvOpts options(10);
+        options.VDisks = 0;
+        options.NRings = 5;
+        options.RingSize = 2;
+        options.NToSelect = 5;
+
+        options.UseRingSpecificNodeSelection = false;
+        {
+            TCmsTestEnv env(options);
+
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+            env.RestartCms();
+
+            env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        }
+
+        options.UseRingSpecificNodeSelection = true;
+        {
+            TCmsTestEnv env(options);
+
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+            env.RestartCms();
+
+            env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                       MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        }
+    }
+
     Y_UNIT_TEST(StateStorageTwoBrokenRings)
     {
         TTestEnvOpts options(10);

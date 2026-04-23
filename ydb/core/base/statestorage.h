@@ -611,6 +611,16 @@ private:
     mutable ui64 Hash;
 };
 
+struct TStateStorageRingAvailability {
+    // Per-replica availability mask. true means the replica is available.
+    // A fully unavailable ring is represented by setting all replicas to false.
+    TVector<bool> AvailableReplicas;
+};
+
+ui32 CalculateEffectiveUnavailableRings(
+    const TStateStorageInfo::TRingGroup& ringGroup,
+    const TVector<TStateStorageRingAvailability>& ringAvailability);
+
 bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs);
 bool operator==(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs);
 bool operator!=(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs);

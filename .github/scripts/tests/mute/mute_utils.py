@@ -1,13 +1,18 @@
 from __future__ import annotations
 from typing import Set, Tuple
 import operator
+import os
 import re
 import xml.etree.ElementTree as ET
 import sys
 import yaml
 import json
 
-from junit_utils import add_junit_property
+try:
+    from junit_utils import add_junit_property
+except ModuleNotFoundError:
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+    from junit_utils import add_junit_property
 
 
 def pattern_to_re(pattern):

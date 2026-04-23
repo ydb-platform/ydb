@@ -8,7 +8,7 @@ import sys
 import time
 import ydb
 from get_diff_lines_of_file import get_diff_lines_of_file
-from mute_utils import pattern_to_re
+from mute.mute_utils import pattern_to_re
 from mute_check import YaMuteCheck
 
 # Add analytics directory to path for ydb_wrapper import

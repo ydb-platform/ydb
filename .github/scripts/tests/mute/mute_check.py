@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GitHub Actions helpers for update_muted_ya: matrix generation and per-job base mute fetch."""
+"""GitHub Actions helpers for mute workflows: matrix generation, base mute fetch, and mute path resolve."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 
-from resolve_muted_ya_path import dedicated_relative
+from path_resolver import bash_exports_for_workspace, dedicated_relative, resolve_for_workspace
 
 
 def _parse_dispatch_branches(raw: str) -> list[str]:
@@ -304,6 +304,30 @@ def cmd_prepare_job(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_resolve_path(args: argparse.Namespace) -> int:
+    repo_root = os.path.abspath(args.repo_root)
+    preset = args.preset.strip()
+    try:
+        if args.emit_bash_env:
+            path, fallback_flag, exports = bash_exports_for_workspace(repo_root, preset)
+            print(exports)
+            _append_github_env('MUTED_YA_FILE', path)
+            _append_github_env('MUTED_YA_IS_FALLBACK', fallback_flag)
+            return 0
+        if args.print_dedicated_relative:
+            print(dedicated_relative(preset))
+            return 0
+        if args.print_resolved_relative:
+            rel, _ = resolve_for_workspace(repo_root, preset)
+            print(rel)
+            return 0
+    except (FileNotFoundError, OSError) as exc:
+        print(f'::error::{exc}', file=sys.stderr)
+        return 2
+    print('::error::No resolve-path action selected', file=sys.stderr)
+    return 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -322,7 +346,7 @@ def main() -> int:
     pm.add_argument(
         '--allowed-build-types',
         required=True,
-        help='Comma-separated build presets for the matrix (order preserved); mute paths via resolve_muted_ya_path',
+        help='Comma-separated build presets for the matrix (order preserved); mute paths by preset',
     )
     pm.add_argument(
         '--branches-override',
@@ -359,6 +383,38 @@ def main() -> int:
         help='Path for git show blob (default: base_muted_ya.txt under --repo-root)',
     )
     pj.set_defaults(func=cmd_prepare_job)
+
+    rp = sub.add_parser(
+        'resolve-path',
+        help='Resolve mute file path from build preset (dedicated or fallback)',
+    )
+    rp.add_argument(
+        '--preset',
+        required=True,
+        help='build_preset / BUILD_TYPE, e.g. relwithdebinfo, release-asan',
+    )
+    rp.add_argument(
+        '--repo-root',
+        default='.',
+        help='Repository root for existence checks (default: cwd)',
+    )
+    rg = rp.add_mutually_exclusive_group(required=True)
+    rg.add_argument(
+        '--emit-bash-env',
+        action='store_true',
+        help='Print export lines for current shell; also append to GITHUB_ENV if set (next steps)',
+    )
+    rg.add_argument(
+        '--print-dedicated-relative',
+        action='store_true',
+        help='Print dedicated path for preset (no fallback); for git cat-file checks',
+    )
+    rg.add_argument(
+        '--print-resolved-relative',
+        action='store_true',
+        help='Print path used for ya/transform (with workspace fallback)',
+    )
+    rp.set_defaults(func=cmd_resolve_path)
 
     args = parser.parse_args()
     return args.func(args)

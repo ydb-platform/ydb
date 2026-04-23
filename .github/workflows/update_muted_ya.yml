@@ -10,7 +10,7 @@ on:
         required: false
         default: ''
       build_types:
-        description: 'Comma-separated presets or "all" (default). Cannot request presets outside the allowed list passed to mute_update_workflow_matrix.py in this workflow. Matrix keeps only (branch, preset) where the mute file exists on origin/<branch>.'
+        description: 'Comma-separated presets or "all" (default). Cannot request presets outside the allowed list passed to mute_check.py in this workflow. Matrix keeps only (branch, preset) where the mute file exists on origin/<branch>.'
         required: false
         default: all
         type: string
@@ -37,8 +37,7 @@ jobs:
           path: config-repo
           sparse-checkout: |
             .github/config/
-            .github/scripts/tests/mute_update_workflow_matrix.py
-            .github/scripts/tests/resolve_muted_ya_path.py
+            .github/scripts/tests/mute/mute_check.py
           sparse-checkout-cone-mode: false
 
       - id: set-mute-matrix
@@ -47,7 +46,7 @@ jobs:
           INPUT_BUILD_TYPES: ${{ github.event.inputs.build_types || '' }}
         run: |
           set -euo pipefail
-          python3 config-repo/.github/scripts/tests/mute_update_workflow_matrix.py matrix \
+          python3 config-repo/.github/scripts/tests/mute/mute_check.py matrix \
             --branches-file "config-repo/${{ env.BRANCHES_CONFIG_PATH }}" \
             --git-cwd config-repo \
             --allowed-build-types relwithdebinfo,release-asan
@@ -114,7 +113,7 @@ jobs:
         id: mute_gate
         run: |
           set -euo pipefail
-          python3 .github/scripts/tests/mute_update_workflow_matrix.py prepare-job \
+          python3 .github/scripts/tests/mute/mute_check.py prepare-job \
             --repo-root . \
             --base-branch "${{ matrix.BASE_BRANCH }}" \
             --build-type "${{ matrix.BUILD_TYPE }}" \

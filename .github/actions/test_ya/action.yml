@@ -341,7 +341,6 @@ runs:
           ".github/scripts/tests/generate-summary.py"
           ".github/scripts/tests/fail-checker.py"
           ".github/scripts/tests/transform_build_results.py"
-          ".github/scripts/tests/resolve_muted_ya_path.py"
         )
         
         # Ensure main is available (may be missing in shallow clone)
@@ -362,7 +361,7 @@ runs:
         # Check YDB configuration (after checkout from main)
         python3 .github/scripts/check_ydb_qa_config.py || true
 
-        eval "$(python3 .github/scripts/tests/resolve_muted_ya_path.py --preset "${{ inputs.build_preset }}" --emit-bash-env)"
+        eval "$(python3 .github/scripts/tests/mute/mute_check.py resolve-path --preset "${{ inputs.build_preset }}" --emit-bash-env)"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE (fallback=$MUTED_YA_IS_FALLBACK)"
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
@@ -416,7 +415,7 @@ runs:
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
               MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
-              python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
+              python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
               RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
             else
               RERUN_FAILED_OPT=""

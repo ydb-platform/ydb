@@ -116,7 +116,7 @@ jobs:
 
       - name: Update muted tests in DB
         if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
       - name: Collect test history data
         if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'

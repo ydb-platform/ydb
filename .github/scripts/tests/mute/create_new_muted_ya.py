@@ -17,7 +17,7 @@ for _p in (_tests_dir, _scripts_dir, os.path.join(_scripts_dir, 'analytics')):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from mute_check import YaMuteCheck
+from mute.mute_check import YaMuteCheck
 from mute.update_mute_issues import (
     ORG_NAME,
     PROJECT_ID,

@@ -1,13 +1,77 @@
 from __future__ import annotations
 from typing import Set, Tuple
 import operator
+import os
 import re
+import shlex
 import xml.etree.ElementTree as ET
 import sys
-import yaml
 import json
 
-from junit_utils import add_junit_property
+CONFIG_DIR = os.path.join('.github', 'config')
+MUTE_UPDATE_BUILD_TYPES_CONFIG = os.path.join(CONFIG_DIR, 'mute_update_build_types.json')
+
+def _normalize_relative_path(path: str) -> str:
+    return path.replace('\\', '/')
+
+
+def _repo_root_from_this_file() -> str:
+    # .../<repo>/.github/scripts/tests/mute/mute_utils.py
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+
+
+def _load_muted_ya_path_policy() -> tuple[str, dict[str, str]]:
+    cfg_path = os.path.join(_repo_root_from_this_file(), MUTE_UPDATE_BUILD_TYPES_CONFIG)
+    with open(cfg_path, encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f'{cfg_path}: expected JSON object')
+
+    raw_default = data.get('default_muted_ya_path')
+    if not isinstance(raw_default, str) or not raw_default.strip():
+        raise ValueError(f'{cfg_path}: "default_muted_ya_path" must be a non-empty string')
+    default_path = _normalize_relative_path(raw_default.strip())
+
+    per_preset: dict[str, str] = {}
+    raw_paths = data.get('muted_ya_paths', {})
+    if raw_paths is None:
+        raw_paths = {}
+    if not isinstance(raw_paths, dict):
+        raise ValueError(f'{cfg_path}: "muted_ya_paths" must be a JSON object')
+    for preset, rel_path in raw_paths.items():
+        preset_key = str(preset).strip().lower()
+        if not preset_key:
+            continue
+        if not isinstance(rel_path, str) or not rel_path.strip():
+            raise ValueError(f'{cfg_path}: muted_ya_paths["{preset_key}"] must be a non-empty string')
+        per_preset[preset_key] = _normalize_relative_path(rel_path.strip())
+    return default_path, per_preset
+
+
+def dedicated_relative(preset: str) -> str:
+    preset = preset.strip().lower()
+    default_path, per_preset = _load_muted_ya_path_policy()
+    return per_preset.get(preset, default_path)
+
+
+def resolve_for_workspace(repo_root: str, preset: str) -> tuple[str, bool]:
+    """
+    Returns (path relative to repo_root, used_fallback).
+    Path is resolved from config only; no filesystem fallback checks.
+    """
+    _ = repo_root  # keep signature stable for callers
+    rel = dedicated_relative(preset)
+    return rel.replace('\\', '/'), False
+
+
+def bash_exports_for_workspace(repo_root: str, preset: str) -> tuple[str, str, str]:
+    path, used_fallback = resolve_for_workspace(repo_root, preset)
+    fallback_flag = '1' if used_fallback else '0'
+    exports = [
+        f'export MUTED_YA_FILE={shlex.quote(path)}',
+        f'export MUTED_YA_IS_FALLBACK={fallback_flag}',
+    ]
+    return path, fallback_flag, '\n'.join(exports)
 
 
 def pattern_to_re(pattern):
@@ -44,6 +108,12 @@ class MuteTestCheck:
 
 
 def mute_target(testcase):
+    try:
+        from junit_utils import add_junit_property
+    except ModuleNotFoundError:
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        from junit_utils import add_junit_property
+
     err_text = []
     err_msg = None
     found = False
@@ -161,6 +231,8 @@ def get_previously_skipped_tests(report_json_path: str) -> Set[Tuple[str, str]]:
     return result
 
 def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> None:
+    import yaml
+
     with open(muted_txt_path) as file:
         muted_tests = file.readlines()
     previously_skipped = get_previously_skipped_tests(report_json_path)

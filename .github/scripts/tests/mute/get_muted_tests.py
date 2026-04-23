@@ -7,16 +7,23 @@ import re
 import sys
 import time
 import ydb
-from get_diff_lines_of_file import get_diff_lines_of_file
-from mute_utils import pattern_to_re
-from mute_check import YaMuteCheck
 
-# Add analytics directory to path for ydb_wrapper import
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+SCRIPT_DIR = os.path.dirname(__file__)
+TESTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
+ANALYTICS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'analytics'))
+
+# Keep imports working when this script is invoked directly.
+if TESTS_DIR not in sys.path:
+    sys.path.insert(0, TESTS_DIR)
+if ANALYTICS_DIR not in sys.path:
+    sys.path.insert(0, ANALYTICS_DIR)
+
+from get_diff_lines_of_file import get_diff_lines_of_file
+from mute.mute_utils import pattern_to_re
+from mute.mute_check import YaMuteCheck
 from ydb_wrapper import YDBWrapper
 
-dir = os.path.dirname(__file__)
-repo_path = f"{dir}/../../../"
+repo_path = f"{SCRIPT_DIR}/../../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
 
 
@@ -301,6 +308,14 @@ def mute_applier(args):
         print(f"Unmuted tests have been written to {unmuted_tests_file}.")
 
 
+def _add_muted_ya_file_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        '--muted_ya_file',
+        type=str,
+        help='Mute list path (default: .github/config/muted_ya.txt)',
+    )
+
+
 if __name__ == "__main__":
     print(f'🚀 Starting get_muted_tests.py script')
     print(f'📅 Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
@@ -326,11 +341,7 @@ if __name__ == "__main__":
     upload_muted_tests_parser.add_argument(
         '--build_type', required=True, help='build type for filtering tests'
     )
-    upload_muted_tests_parser.add_argument(
-        '--muted_ya_file',
-        type=str,
-        help='Path to muted_ya.txt file (default: .github/config/muted_ya.txt)'
-    )
+    _add_muted_ya_file_arg(upload_muted_tests_parser)
 
     get_mute_details_parser = subparsers.add_parser(
         'get_mute_diff',
@@ -353,6 +364,7 @@ if __name__ == "__main__":
         required=True,
         help='build type for filtering tests',
     )
+    _add_muted_ya_file_arg(get_mute_details_parser)
     args = parser.parse_args()
     
     print(f'📋 Parsed arguments:')

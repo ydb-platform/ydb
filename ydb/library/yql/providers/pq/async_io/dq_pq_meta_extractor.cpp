@@ -70,10 +70,10 @@ TPqMetaExtractor::TPqMetaExtractor(const NKikimr::NMiniKQL::THolderFactory& hold
     : HolderFactory_(holderFactory)
     , MessageMetaDictType_(messageMetaDictType)
 {
-    for (const auto& sysColumn : GetAllowedPqMetaSysColumns(true)) {
+    for (const auto& sysColumn : GetAllowedPqMetaSysColumns(true, true)) {
         const auto key = SkipPqSystemPrefix(sysColumn);
         Y_ENSURE(key, sysColumn);
-        Y_ENSURE(*key == "message_meta" || PlainExtractorsMap.contains(*key),
+        Y_ENSURE(*key == "user_attributes" || PlainExtractorsMap.contains(*key),
             "Pq metadata field " << *key << " hasn't valid runtime extractor. You should add it.");
     }
 }
@@ -82,7 +82,7 @@ TPqMetaExtractor::TPqMetaExtractorLambda TPqMetaExtractor::FindExtractorLambda(c
     const auto key = SkipPqSystemPrefix(sysColumn);
     Y_ENSURE(key, sysColumn);
 
-    if (*key == "message_meta") {
+    if (*key == "user_attributes") {
         return [this](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
             auto dictBuilder = HolderFactory_.NewDict(MessageMetaDictType_, 0);
             i64 usedSpace = 0;

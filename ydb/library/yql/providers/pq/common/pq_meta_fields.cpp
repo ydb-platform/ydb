@@ -12,10 +12,9 @@ public:
     static constexpr char SYS_PREFIX[] = "_yql_sys_";
     static constexpr char TRANSPARENT_PREFIX[] = "tsp_";
 
-    explicit TPqMetadataField(NUdf::EDataSlot type, bool transparent = false, bool dictStringString = false)
+    explicit TPqMetadataField(const EMetaFieldType& type, bool transparent = false)
         : Type(type)
         , Transparent(transparent)
-        , DictStringString(dictStringString)
     {}
 
     TString GetSysColumnName(const TString& key, bool addTransparentPrefix) const {
@@ -32,25 +31,22 @@ public:
             .Key = key,
             .SysColumn = GetSysColumnName(key, addTransparentPrefix),
             .Type = Type,
-            .DictStringString = DictStringString,
         };
     }
 
 public:
-    const NUdf::EDataSlot Type;
+    const EMetaFieldType Type;
     const bool Transparent;
-    const bool DictStringString;
 };
 
 const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
-    {"create_time", TPqMetadataField(NUdf::EDataSlot::Timestamp)},
-    {"write_time", TPqMetadataField(NUdf::EDataSlot::Timestamp, /* transparent */ true)},
-    {"partition_id", TPqMetadataField(NUdf::EDataSlot::Uint64)},
-    {"offset", TPqMetadataField(NUdf::EDataSlot::Uint64)},
-    {"message_group_id", TPqMetadataField(NUdf::EDataSlot::String)},
-    {"seq_no", TPqMetadataField(NUdf::EDataSlot::Uint64)},
-    // User key-value metadata attached to the message (see NYdb::NTopic::TMessageMeta::Fields).
-    {"message_meta", TPqMetadataField(NUdf::EDataSlot::String, /* transparent */ false, /* dictStringString */ true)},
+    {"create_time", TPqMetadataField(EMetaFieldType::Timestamp)},
+    {"write_time", TPqMetadataField(EMetaFieldType::Timestamp, /* transparent */ true)},
+    {"partition_id", TPqMetadataField(EMetaFieldType::Uint64)},
+    {"offset", TPqMetadataField(EMetaFieldType::Uint64)},
+    {"message_group_id", TPqMetadataField(EMetaFieldType::String)},
+    {"seq_no", TPqMetadataField(EMetaFieldType::Uint64)},
+    {"user_attributes", TPqMetadataField(EMetaFieldType::DictStringString)},
 };
 
 } // anonymous namespace
@@ -74,7 +70,7 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
     bool addTransparentPrefix,
     bool includeUserAttributes)
 {
-    if (!includeUserAttributes && key == "message_meta") {
+    if (!includeUserAttributes && key == "user_attributes") {
         return std::nullopt;
     }
     const auto it = PqMetaFields.find(key);
@@ -95,7 +91,7 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(
         return std::nullopt;
     }
 
-    if (!includeUserAttributes && *key == "message_meta") {
+    if (!includeUserAttributes && *key == "user_attributes") {
         return std::nullopt;
     }
 
@@ -117,7 +113,7 @@ std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool 
     res.reserve(PqMetaFields.size());
 
     for (const auto& [key, field] : PqMetaFields) {
-        if (!includeUserAttributes && key == "message_meta") {
+        if (!includeUserAttributes && key == "user_attributes") {
             continue;
         }
         res.emplace_back(field.GetSysColumnName(key, addTransparentPrefix));

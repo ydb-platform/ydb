@@ -433,7 +433,7 @@ class TestStreamingInYdb(StreamingTestBase):
         indirect=["kikimr"],
     )
     def test_read_message_meta_streaming(self, kikimr, entity_name, request):
-        """Cluster StreamingQueries.pq_user_attributes_in_system_metadata gates SystemMetadata("message_meta") in SQL.
+        """Cluster StreamingQueries.pq_user_attributes_in_system_metadata gates SystemMetadata("user_attributes") in SQL.
 
         Negative cases: streaming SELECT must be rejected at analysis (no output topic).
         Success: read messages directly from the input topic (no sink topic), same as test_read_topic.
@@ -454,7 +454,7 @@ class TestStreamingInYdb(StreamingTestBase):
         )
 
         # Used only for compile-time checks (must reference SystemMetadata like the old streaming query).
-        sql_compile_check = f"""SELECT field1, field2, SystemMetadata("message_meta") AS meta
+        sql_compile_check = f"""SELECT field1, field2, SystemMetadata("user_attributes") AS meta
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -468,7 +468,7 @@ LIMIT 1"""
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql_compile_check)
             err = str(excinfo.value)
-            assert "Metadata key message_meta" in err and "found" in err
+            assert "Metadata key user_attributes" in err and "found" in err
             return
 
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
@@ -514,7 +514,7 @@ LIMIT 1"""
             DO BEGIN
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
                 FROM (
-                    SELECT field1, field2, SystemMetadata("message_meta") AS meta
+                    SELECT field1, field2, SystemMetadata("user_attributes") AS meta
                     FROM {inp}
                     WITH (
                         FORMAT="json_each_row",

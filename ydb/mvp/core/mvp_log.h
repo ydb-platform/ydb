@@ -16,7 +16,7 @@ enum EService : NActors::NLog::EComponent {
     MAX
 };
 
-inline TString GetLogPrefix() {
+inline TStringBuf GetLogPrefix() {
     return {};
 }
 
@@ -29,6 +29,22 @@ using NMVP::GetLogPrefix;
 #define BLOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, EService::MVP, GetLogPrefix() << stream)
 #define BLOG_NOTICE(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, EService::MVP, GetLogPrefix() << stream)
 #define BLOG_ERROR(stream) LOG_ERROR_S(*NActors::TlsActivationContext, EService::MVP, GetLogPrefix() << stream)
+#define BLOG_CRIT(stream) LOG_CRIT_S(*NActors::TlsActivationContext, EService::MVP, GetLogPrefix() << stream)
+#define BLOG_TRACE(stream) LOG_TRACE_S(*NActors::TlsActivationContext, EService::MVP, GetLogPrefix() << stream)
+
 #define BLOG_GRPC_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, EService::GRPC, GetLogPrefix() << stream)
-#define BLOG_GRPC_DC(context, stream) LOG_DEBUG_S(context, EService::GRPC, stream)
+#define BLOG_GRPC_DC(context, stream) LOG_DEBUG_S(context, EService::GRPC, GetLogPrefix() << stream)
+#define BLOG_GRPC_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, EService::GRPC, GetLogPrefix() << stream)
+#define BLOG_GRPC_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, EService::GRPC, GetLogPrefix() << stream)
+#define BLOG_GRPC_NOTICE(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, EService::GRPC, GetLogPrefix() << stream)
+#define BLOG_GRPC_ERROR(stream) LOG_ERROR_S(*NActors::TlsActivationContext, EService::GRPC, GetLogPrefix() << stream)
+#define BLOG_GRPC_CRIT(stream) LOG_CRIT_S(*NActors::TlsActivationContext, EService::GRPC, GetLogPrefix() << stream)
+#define BLOG_GRPC_TRACE(stream) LOG_TRACE_S(*NActors::TlsActivationContext, EService::GRPC, GetLogPrefix() << stream)
+
+#define BLOG_QUERY_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, EService::QUERY, GetLogPrefix() << stream)
 #define BLOG_QUERY_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, EService::QUERY, GetLogPrefix() << stream)
+#define BLOG_QUERY_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, EService::QUERY, GetLogPrefix() << stream)
+#define BLOG_QUERY_NOTICE(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, EService::QUERY, GetLogPrefix() << stream)
+#define BLOG_QUERY_ERROR(stream) LOG_ERROR_S(*NActors::TlsActivationContext, EService::QUERY, GetLogPrefix() << stream)
+#define BLOG_QUERY_CRIT(stream) LOG_CRIT_S(*NActors::TlsActivationContext, EService::QUERY, GetLogPrefix() << stream)
+#define BLOG_QUERY_TRACE(stream) LOG_TRACE_S(*NActors::TlsActivationContext, EService::QUERY, GetLogPrefix() << stream)

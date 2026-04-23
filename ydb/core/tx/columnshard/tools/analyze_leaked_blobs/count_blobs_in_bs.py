@@ -44,11 +44,12 @@ class Blob:
     with_local: int = 0
     local_union: int = 0
     not_keep: int = 0
+    keep_count: int = 0
     blob_size: int = 0
     inplaced: bool = False
 
     def keep(self) -> bool:
-        return self.not_keep == 0
+        return self.not_keep == 0 and self.keep_count > 0
     
     def recoverable(self, erasure: Erasure) -> bool:
         match erasure:
@@ -65,6 +66,8 @@ class Blob:
         self.local_union |= record.local
         if record.not_keep:
             self.not_keep += 1
+        if record.keep:
+            self.keep_count += 1
         self.inplaced = record.inplaced
         assert self.blob_size == 0 or self.blob_size == record.blob_size
         self.blob_size = record.blob_size
@@ -228,6 +231,7 @@ class Channel:
 @dataclass
 class LBRecord:
     not_keep: bool
+    keep: bool
     local: int
     inplaced: bool
     blob_size: int
@@ -273,10 +277,14 @@ class LBRecord:
                     local |= 1 << idx
 
         not_keep = "DoNotKeep" in logoblob_record
+        keep = False
+        if not not_keep:
+            keep = "Keep" in logoblob_record
         fresh = table_type in ("FCur", "FDreg", "FOld")
 
         return cls(
             not_keep=not_keep,
+            keep=keep,
             local=local,
             inplaced=inplaced,
             blob_size=blob_size,

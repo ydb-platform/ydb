@@ -398,8 +398,9 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
 
-        // Get factory from KQP Scheduler
+        // Get factory from KQP Scheduler and schedule delayed empty response as fail-safe measure
         ctx.Send(NKqp::MakeKqpSchedulerServiceId(ctx.SelfID.NodeId()), new NKqp::NScheduler::TEvGetReadFactory, IEventHandle::FlagTrackDelivery);
+        ctx.Schedule(TDuration::Seconds(1), new NKqp::NScheduler::TEvReadFactoryResponse);
     } else {
         SyncConfig();
         State = TShardState::Readonly;

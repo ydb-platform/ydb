@@ -280,13 +280,14 @@ message TKqpReadRangesSourceSettings {
     optional NKqpProto.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
 
     optional string Database = 25;
-    optional string PoolId = 28;
 
     // Vector top-K pushdown for brute force vector search
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 26;
 
     // Globally unique query trace ID for TLI log linkage
     optional uint64 QuerySpanId = 27;
+
+    optional string PoolId = 28;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -321,16 +322,17 @@ message TKqpVectorResolveSettings {
     // Input root cluster ID column (for the prefixed index)
     optional uint32 RootClusterColumnIndex = 16;
 
-    // Database name and pool id for KqpReadActor
+    // Database name and pool id (see below) for KqpReadActor
     optional string Database = 17;
-    optional string PoolId = 21;
-
+    
     // Parameters for finding overlapping clusters (multiple clusters per row)
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
 
     // Globally unique query trace ID for TLI log linkage
     optional uint64 QuerySpanId = 20;
+
+    optional string PoolId = 21;
 }
 
 message TKqpTaskInfo {

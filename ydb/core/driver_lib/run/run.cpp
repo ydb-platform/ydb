@@ -1448,7 +1448,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     bool useAutoConfig = !cfg.HasActorSystemConfig() || NeedToUseAutoConfig(cfg.GetActorSystemConfig());
     bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
-    NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
+    NAutoConfigInitializer::TExecutorPoolLayout pools = NAutoConfigInitializer::GetExecutorPoolLayout(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
 
     if (useSharedThreads) {

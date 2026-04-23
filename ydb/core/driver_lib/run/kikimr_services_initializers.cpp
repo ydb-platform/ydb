@@ -583,7 +583,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     bool useAutoConfig = !hasASCfg || NeedToUseAutoConfig(Config.GetActorSystemConfig());
     if (useAutoConfig) {
         bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
-        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode, TinyMode);
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), {
+            .IsDynamicNode = isDynamicNode,
+            .ForceTinyConfiguration = TinyMode,
+        });
     }
 
     Y_ABORT_UNLESS(Config.HasActorSystemConfig());

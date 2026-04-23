@@ -361,8 +361,8 @@ runs:
         # Check YDB configuration (after checkout from main)
         python3 .github/scripts/check_ydb_qa_config.py || true
 
-        eval "$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}" --emit-bash-env)"
-        echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE (fallback=$MUTED_YA_IS_FALLBACK)"
+        export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
+        echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
@@ -640,13 +640,13 @@ runs:
         fi
 
     - name: show diff mute_ya.txt
-      if: inputs.run_tests && env.MUTED_YA_IS_FALLBACK == '0' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: inputs.run_tests && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
-        # Use ORIGINAL_HEAD from build step (saved before any git operations). Skip when preset uses shared muted_ya.txt fallback.
+        # Use ORIGINAL_HEAD from build step (saved before any git operations).
         get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
         file_to_check="$MUTED_YA_FILE"
         check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`

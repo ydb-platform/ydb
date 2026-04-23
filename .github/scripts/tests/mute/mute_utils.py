@@ -1,9 +1,6 @@
 from __future__ import annotations
-from typing import Set, Tuple
-import operator
 import os
 import re
-import shlex
 import xml.etree.ElementTree as ET
 import sys
 import json
@@ -52,26 +49,6 @@ def dedicated_relative(preset: str) -> str:
     preset = preset.strip().lower()
     default_path, per_preset = _load_muted_ya_path_policy()
     return per_preset.get(preset, default_path)
-
-
-def resolve_for_workspace(repo_root: str, preset: str) -> tuple[str, bool]:
-    """
-    Returns (path relative to repo_root, used_fallback).
-    Path is resolved from config only; no filesystem fallback checks.
-    """
-    _ = repo_root  # keep signature stable for callers
-    rel = dedicated_relative(preset)
-    return rel.replace('\\', '/'), False
-
-
-def bash_exports_for_workspace(repo_root: str, preset: str) -> tuple[str, str, str]:
-    path, used_fallback = resolve_for_workspace(repo_root, preset)
-    fallback_flag = '1' if used_fallback else '0'
-    exports = [
-        f'export MUTED_YA_FILE={shlex.quote(path)}',
-        f'export MUTED_YA_IS_FALLBACK={fallback_flag}',
-    ]
-    return path, fallback_flag, '\n'.join(exports)
 
 
 def pattern_to_re(pattern):
@@ -154,38 +131,6 @@ def mute_target(testcase):
     return True
 
 
-def remove_failure(node):
-    while 1:
-        failure = node.find("failure")
-        if failure is None:
-            break
-        node.remove(failure)
-
-
-def op_attr(node, attr, op, value):
-    v = int(node.get(attr, 0))
-    node.set(attr, str(op(v, value)))
-
-
-def inc_attr(node, attr, value):
-    return op_attr(node, attr, operator.add, value)
-
-
-def dec_attr(node, attr, value):
-    return op_attr(node, attr, operator.sub, value)
-
-
-def update_suite_info(root, n_remove_failures=None, n_remove_errors=None, n_skipped=None):
-    if n_remove_failures:
-        dec_attr(root, "failures", n_remove_failures)
-
-    if n_remove_errors:
-        dec_attr(root, "errors", n_remove_errors)
-
-    if n_skipped:
-        inc_attr(root, "skipped", n_skipped)
-
-
 def recalc_suite_info(suite):
     tests = failures = skipped = 0
     elapsed = 0.0
@@ -211,8 +156,8 @@ def _split(s: str, sep: str) -> tuple[str, str]:
     else:
         return s[:p], s[p + 1 :]
 
-def get_previously_skipped_tests(report_json_path: str) -> Set[Tuple[str, str]]:
-    result = set()
+def get_previously_skipped_tests(report_json_path: str) -> set[tuple[str, str]]:
+    result: set[tuple[str, str]] = set()
     if report_json_path:
         with open(report_json_path, 'r') as f:
             report = json.load(f)
@@ -267,5 +212,11 @@ def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> Non
 
 
 if __name__ == "__main__":
-    args = sys.argv
-    globals()[args[1]](*args[2:])
+    if len(sys.argv) == 4 and sys.argv[1] == "convert_muted_txt_to_yaml":
+        convert_muted_txt_to_yaml(sys.argv[2], sys.argv[3])
+    else:
+        print(
+            "Usage: mute_utils.py convert_muted_txt_to_yaml <muted_txt_path> <report_json_path>",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)

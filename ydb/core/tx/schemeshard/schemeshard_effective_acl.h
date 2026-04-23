@@ -2,6 +2,10 @@
 
 #include <ydb/library/aclib/aclib.h>
 
+namespace NACLibProto {
+    class TSecurityObject;
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 

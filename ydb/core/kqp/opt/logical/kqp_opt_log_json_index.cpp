@@ -304,9 +304,9 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
             "JSON_VALUE with Date/DateTime/Timestamp RETURNING is not supported by JSON index");
     }
 
-    if (isCompare && otherSide.template Maybe<TCoBool>()) {
+    if (isCompare && leftParams->ReturningType && *leftParams->ReturningType == EDataSlot::Bool) {
         return MakeCollectError(ctx, otherSide.Pos(),
-            "Negated JSON_VALUE is not supported by JSON index");
+            "Comparison with JSON_VALUE RETURNING Bool is not supported by JSON index");
     }
 
     std::optional<TExprBase> comparisonValue;

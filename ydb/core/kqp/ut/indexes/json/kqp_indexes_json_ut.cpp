@@ -2070,6 +2070,46 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 10)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != 10)", {"\2k1"});
 
+            // JSON_VALUE op JSON_VALUE - both collectable
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == JSON_VALUE(Text, '$.k2' RETURNING Int32))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != JSON_VALUE(Text, '$.k2' RETURNING Int32))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > JSON_VALUE(Text, '$.k2' RETURNING Int32))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) >= JSON_VALUE(Text, '$.k2' RETURNING Int32))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) < JSON_VALUE(Text, '$.k2' RETURNING Int32))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= JSON_VALUE(Text, '$.k2' RETURNING Int32))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k2' RETURNING Int32) == JSON_VALUE(Text, '$.k1' RETURNING Int32))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') != JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') > JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') >= JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') < JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') <= JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+
+            // JSON_VALUE RETURNING Bool comparison is not supported
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == JSON_VALUE(Text, '$.k2' RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) != JSON_VALUE(Text, '$.k2' RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) > JSON_VALUE(Text, '$.k2' RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) >= JSON_VALUE(Text, '$.k2' RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) < JSON_VALUE(Text, '$.k2' RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) <= JSON_VALUE(Text, '$.k2' RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k2' RETURNING Bool) == JSON_VALUE(Text, '$.k1' RETURNING Bool))");
+            ValidateError(db, R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) == JSON_VALUE(Text, '$.k2' RETURNING Bool)))");
+            ValidateError(db, R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) > JSON_VALUE(Text, '$.k2' RETURNING Bool)))");
+
             // For some nodes inside the path, the collected result cannot be combined with == operator
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 starts with "1"') == "true")", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.size()' RETURNING Int32) == 2)", {"\2k1"});

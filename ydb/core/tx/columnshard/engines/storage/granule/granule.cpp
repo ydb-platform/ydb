@@ -13,6 +13,14 @@
 
 namespace NKikimr::NOlap {
 
+TGranuleMeta::~TGranuleMeta() {
+    for (const auto& [_, portion] : Portions) {
+        if (IntervalTree) {
+            IntervalTree->RemoveRanges(portion);
+        }
+    }
+}
+
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
     AFL_VERIFY(!Portions.contains(info->GetPortionId()));
@@ -25,9 +33,9 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     OnAfterChangePortion(info, nullptr);
 
     if (IntervalTree) {
-        IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-            PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
-            PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
+        IntervalTree->AddRange(NPortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+            NPortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
+            NPortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
     }
 }
 
@@ -138,6 +146,13 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
+bool TGranuleMeta::IsOverloadedByPortionIntersections(std::optional<ui64> limit) const {
+    if (!limit || *limit == 0) {
+        return false;
+    }
+    return GetMaxPortionIntersectionsCount() >= *limit;
+}
+
 TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
     const TVersionedIndex& versionedIndex)
     : PathId(pathId)
@@ -155,7 +170,10 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex, StoragesManager);
     if (HasAppData() && AppData()->ColumnShardConfig.GetEnableIntervalTreeForMetadataSelect()) {
-        IntervalTree = std::make_unique<PortionIntervalTree::TPortionIntervalTree>();
+        const bool countPortionIntersections = AppData()->ColumnShardConfig.GetCountPortionIntersectionsInIntervalTree();
+        IntervalTree = std::make_unique<NPortionIntervalTree::TPortionIntervalTree>(countPortionIntersections,
+            Counters.GetPortionsIndexCounters().IntervalTreeMaxPortionIntersections);
+        SetMaxPortionIntersectionsLimitCounter(versionedIndex.GetLastSchema()->GetIndexInfo().GetMaxPortionIntersectionsLimit().value_or(0));
     }
 }
 
@@ -177,9 +195,9 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
         if (IntervalTree) {
-            IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-                PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion), true,
-                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
+            IntervalTree->AddRange(NPortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+                NPortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion), true,
+                NPortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
         }
     }
 }

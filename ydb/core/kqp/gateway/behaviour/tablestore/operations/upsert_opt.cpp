@@ -16,6 +16,7 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE']");
         }
     }
+    MaxPortionIntersectionsLimit = features.Extract<ui64>("MAX_PORTION_INTERSECTIONS_LIMIT");
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
         if (!CompactionPlannerConstructor.Initialize(*className)) {
             return TConclusionStatus::Fail("incorrect class name for compaction planner:" + *className);
@@ -59,6 +60,9 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     schemaData.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
     if (ScanReaderPolicyName) {
         schemaData.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+    }
+    if (MaxPortionIntersectionsLimit) {
+        schemaData.MutableOptions()->SetMaxPortionIntersectionsLimit(*MaxPortionIntersectionsLimit);
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableCompactionPlannerConstructor());

@@ -84,6 +84,11 @@ public:
         CSCounters.OnWriteOverloadRejectProbability(size);
     }
 
+    void OnWriteOverloadPortionIntersections(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadPortionIntersections(size);
+    }
+
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         ColumnTablesCounters->GetPathIdCounter(pathId)->FillStats(tableStats);
         BackgroundControllerCounters->FillStats(pathId, tableStats);

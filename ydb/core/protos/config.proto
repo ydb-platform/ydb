@@ -2603,6 +2603,7 @@ message TColumnShardConfig {
     optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
     optional bool EnableCursorV1 = 68 [default = false];
     optional uint64 LimitSortedStartInFlight = 69 [default = 16];
+    optional bool CountPortionIntersectionsInIntervalTree = 70 [default = true];
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto

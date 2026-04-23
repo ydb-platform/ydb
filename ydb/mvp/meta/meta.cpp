@@ -9,6 +9,8 @@
 #include "meta_support_links.h"
 #include "meta_cache.h"
 
+#include <ydb/core/security/auth_token_fetcher/auth_token_fetcher.h>
+
 #include <ydb/mvp/core/http_check.h>
 #include <ydb/mvp/core/http_sensors.h>
 #include <ydb/mvp/core/mvp_swagger.h>
@@ -50,7 +52,8 @@ TYdbLocation MetaLocation =
         "meta",
         "meta",
         {},
-        {}
+        {},
+        NKikimr::NSecurity::CreateAuthTokenFetcherDefault()
     };
 
 // TODO(xenoxeno)
@@ -146,7 +149,7 @@ NActors::IActor* CreateMemProfiler();
 TString TMVP::GetMetaDatabaseAuthToken(const TRequest& request) {
     TString authToken;
     if (TMVP::MetaDatabaseTokenName.empty()) {
-        authToken = request.GetAuthToken();
+        authToken = request.GetAuthToken(*MetaLocation.TokenFetcher);
     } else {
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
         if (tokenator) {

@@ -37,6 +37,7 @@ RECURSE_FOR_TESTS(
 )
 
 RECURSE(
+    auth_token_fetcher
     certificate_check
     ldap_auth_provider
     sasl

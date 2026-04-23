@@ -32,6 +32,7 @@ PEERDIR(
     library/cpp/string_utils/url
     ydb/core/protos
     ydb/core/util
+    ydb/core/security/auth_token_fetcher
     ydb/core/viewer/json
     ydb/library/actors/core
     ydb/library/actors/http
@@ -40,7 +41,6 @@ PEERDIR(
     ydb/library/security
     ydb/library/yaml_json
     ydb/mvp/core/protos
-    ydb/mvp/security/simple
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/api/client/nc_private

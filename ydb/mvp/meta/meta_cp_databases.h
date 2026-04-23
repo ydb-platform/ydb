@@ -117,7 +117,7 @@ public:
             }
         };
         NYdbGrpc::TCallMeta meta;
-        Request.ForwardHeaders(meta);
+        Request.ForwardHeaders(meta, *Location.TokenFetcher);
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
         if (tokenator && MvpTokenName) {
             TString token = tokenator->GetToken(MvpTokenName);

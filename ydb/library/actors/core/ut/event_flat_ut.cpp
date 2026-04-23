@@ -17,6 +17,7 @@ enum {
     EvFlatFixedFields,
     EvFlatRepeatedFields,
     EvFlatPayloadFields,
+    EvFlatInlineFields,
 };
 
 struct TPoint {
@@ -187,6 +188,43 @@ struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFie
     friend class TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFieldsTVersions>;
 
     static TEvFlatPayloadFields* Make() {
+        return TBase::MakeEvent();
+    }
+
+    auto Marker() { return this->template Field<TMarkerTag>(); }
+    auto Marker() const { return this->template Field<TMarkerTag>(); }
+
+    auto Blob() { return this->template Bytes<TBlobTag>(); }
+    auto Blob() const { return this->template Bytes<TBlobTag>(); }
+    size_t BlobSize() const { return this->template GetSize<TBlobTag>(); }
+
+    auto Numbers() { return this->template Array<TNumbersTag>(); }
+    auto Numbers() const { return this->template Array<TNumbersTag>(); }
+    size_t NumbersSize() const { return this->template GetSize<TNumbersTag>(); }
+};
+
+struct TEvFlatInlineFields;
+using TEvFlatInlineFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+using TEvFlatInlineFieldsTBlobTag = TFlatEventDefs::InlineBytesField<16, 1>;
+using TEvFlatInlineFieldsTNumbersTag = TFlatEventDefs::InlineArrayField<ui32, 4, 2>;
+using TEvFlatInlineFieldsTSchemeV1 = TFlatEventDefs::Scheme<
+    TEvFlatInlineFieldsTMarkerTag, TEvFlatInlineFieldsTBlobTag, TEvFlatInlineFieldsTNumbersTag>;
+using TEvFlatInlineFieldsTVersions = TFlatEventDefs::Versions<TEvFlatInlineFieldsTSchemeV1>;
+
+struct TEvFlatInlineFields : TEventFlat<TEvFlatInlineFields, TEvFlatInlineFieldsTVersions> {
+    using TBase = TEventFlat<TEvFlatInlineFields, TEvFlatInlineFieldsTVersions>;
+
+    static constexpr ui32 EventType = EvFlatInlineFields;
+
+    using TMarkerTag = TEvFlatInlineFieldsTMarkerTag;
+    using TBlobTag = TEvFlatInlineFieldsTBlobTag;
+    using TNumbersTag = TEvFlatInlineFieldsTNumbersTag;
+    using TSchemeV1 = TEvFlatInlineFieldsTSchemeV1;
+    using TScheme = TEvFlatInlineFieldsTVersions;
+
+    friend class TEventFlat<TEvFlatInlineFields, TEvFlatInlineFieldsTVersions>;
+
+    static TEvFlatInlineFields* Make() {
         return TBase::MakeEvent();
     }
 
@@ -458,6 +496,38 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 3);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[3]), 4);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[4]), 55);
+    }
+
+    Y_UNIT_TEST(InlineBytesAndInlineArrayFields) {
+        THolder<TEvFlatInlineFields> ev(TEvFlatInlineFields::Make());
+        ev->Marker() = 101;
+        ev->Blob().Append(TRope(TString("mini")));
+
+        ui32 values[] = {4, 8, 15, 16};
+        ev->Numbers().CopyFrom(values, std::size(values));
+
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Marker()), 101);
+        UNIT_ASSERT_VALUES_EQUAL(ev->BlobSize(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Blob().Materialize(), "mini");
+        UNIT_ASSERT_VALUES_EQUAL(ev->NumbersSize(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Numbers()[0]), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Numbers()[3]), 16u);
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
+        auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
+
+        THolder<IEventHandle> handle(new IEventHandle(
+            EvFlatInlineFields, 0, TActorId(), TActorId(), buffers, 0));
+
+        TEvFlatInlineFields* loaded = handle->Get<TEvFlatInlineFields>();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 101);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->BlobSize(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->Blob().Materialize(), "mini");
+        UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[1]), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 15u);
+        UNIT_ASSERT(loaded->CreateSerializationInfo(true).Sections.size() == 1u);
     }
 
     Y_UNIT_TEST(FrontendForSingleVersionPayloadScheme) {

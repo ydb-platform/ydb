@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 #include <ydb/library/actors/dnsresolver/dnsresolver.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
@@ -44,7 +45,7 @@ enum EBenchEvents {
 constexpr ui32 Node1 = 1;
 constexpr ui32 Node2 = 2;
 constexpr size_t Payload4KB = 4 * 1024;
-constexpr size_t Payload1MB = 1024 * 1024;
+constexpr size_t VPutLikeExtraChecks = 4;
 
 TActorId MakeBenchReceiverServiceId(ui32 nodeId) {
     return TActorId(nodeId, TStringBuf("bnchrecv"));
@@ -72,6 +73,8 @@ struct TBenchResult {
     ui32 SerializedSizeEnd = 0;
     double Seconds = 0;
     bool Connected = true;
+    ui64 ActorCpuUs = 0;
+    double ActorCpuUtilPct = 0.0;
 };
 
 struct TEvBenchPbMessage
@@ -122,29 +125,94 @@ struct TEvBenchPbStructArrayMessage
     TEvBenchPbStructArrayMessage() = default;
 };
 
+struct TEvBenchPbVPutLikeMessage
+    : TEventPB<TEvBenchPbVPutLikeMessage, NActorsBench::TVPutLike, EvBenchPbMessage>
+{
+    using TBase = TEventPB<TEvBenchPbVPutLikeMessage, NActorsBench::TVPutLike, EvBenchPbMessage>;
+
+    TEvBenchPbVPutLikeMessage() = default;
+};
+
 struct TTripleInts {
     ui32 A;
     ui32 B;
     ui32 C;
 };
 
-static_assert(std::is_trivially_copyable_v<TTripleInts>);
+struct TBlobIdRaw {
+    ui64 RawX1;
+    ui64 RawX2;
+    ui64 RawX3;
+};
 
-struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage> {
-    using TBase = TEventFlat<TEvBenchFlatMessage>;
+struct TVDiskIdRaw {
+    ui32 GroupID;
+    ui32 GroupGeneration;
+    ui8 Ring;
+    ui8 Domain;
+    ui8 VDisk;
+};
+
+struct TMsgQoSRaw {
+    ui64 Cost;
+    ui32 DeadlineSeconds;
+    ui8 ExtQueueId;
+};
+
+struct TTimestampsRaw {
+    ui64 SentByDSProxyUs;
+    ui64 ReceivedByVDiskUs;
+    ui64 SentByVDiskUs;
+    ui64 ReceivedByDSProxyUs;
+};
+
+struct TVPutFlagsRaw {
+    ui8 IssueKeepFlag;
+    ui8 IsZeroEntry;
+    ui8 IgnoreBlock;
+    ui8 NotifyIfNotReady;
+};
+
+struct TExtraBlockCheckRaw {
+    ui64 TabletId;
+    ui32 Generation;
+};
+
+static_assert(std::is_trivially_copyable_v<TTripleInts>);
+static_assert(std::is_trivially_copyable_v<TBlobIdRaw>);
+static_assert(std::is_trivially_copyable_v<TVDiskIdRaw>);
+static_assert(std::is_trivially_copyable_v<TMsgQoSRaw>);
+static_assert(std::is_trivially_copyable_v<TTimestampsRaw>);
+static_assert(std::is_trivially_copyable_v<TVPutFlagsRaw>);
+static_assert(std::is_trivially_copyable_v<TExtraBlockCheckRaw>);
+
+using TFlatEventDefs = TEventFlatLayout;
+
+struct TEvBenchFlatMessage;
+using TEvBenchFlatMessageTValue1Tag = TFlatEventDefs::FixedField<ui64, 0>;
+using TEvBenchFlatMessageTValue2Tag = TFlatEventDefs::FixedField<ui64, 1>;
+using TEvBenchFlatMessageTValue3Tag = TFlatEventDefs::FixedField<ui64, 2>;
+using TEvBenchFlatMessageTValue4Tag = TFlatEventDefs::FixedField<ui64, 3>;
+using TEvBenchFlatMessageTValue5Tag = TFlatEventDefs::FixedField<ui64, 4>;
+using TEvBenchFlatMessageTSchemeV1 = TFlatEventDefs::Scheme<
+    TEvBenchFlatMessageTValue1Tag, TEvBenchFlatMessageTValue2Tag, TEvBenchFlatMessageTValue3Tag,
+    TEvBenchFlatMessageTValue4Tag, TEvBenchFlatMessageTValue5Tag>;
+using TEvBenchFlatMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatMessageTSchemeV1>;
+
+struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageTVersions> {
+    using TBase = TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageTVersions>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
-    using TValue1Tag = TBase::FixedField<ui64, 0>;
-    using TValue2Tag = TBase::FixedField<ui64, 1>;
-    using TValue3Tag = TBase::FixedField<ui64, 2>;
-    using TValue4Tag = TBase::FixedField<ui64, 3>;
-    using TValue5Tag = TBase::FixedField<ui64, 4>;
+    using TValue1Tag = TEvBenchFlatMessageTValue1Tag;
+    using TValue2Tag = TEvBenchFlatMessageTValue2Tag;
+    using TValue3Tag = TEvBenchFlatMessageTValue3Tag;
+    using TValue4Tag = TEvBenchFlatMessageTValue4Tag;
+    using TValue5Tag = TEvBenchFlatMessageTValue5Tag;
+    using TSchemeV1 = TEvBenchFlatMessageTSchemeV1;
+    using TScheme = TEvBenchFlatMessageTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TValue1Tag, TValue2Tag, TValue3Tag, TValue4Tag, TValue5Tag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvBenchFlatMessage>;
+    friend class TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageTVersions>;
 
     auto Value1() { return this->template Field<TValue1Tag>(); }
     auto Value1() const { return this->template Field<TValue1Tag>(); }
@@ -169,17 +237,70 @@ struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage> {
     }
 };
 
-struct TEvBenchFlatBytesMessage : TEventFlat<TEvBenchFlatBytesMessage> {
-    using TBase = TEventFlat<TEvBenchFlatBytesMessage>;
+struct TEvBenchFlatBytesMessage;
+using TEvBenchFlatBytesMessageTBlobTag = TFlatEventDefs::BytesField<0>;
+using TEvBenchFlatBytesMessageTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>, TEvBenchFlatBytesMessageTBlobTag>;
+using TEvBenchFlatBytesMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatBytesMessageTSchemeV1>;
+
+struct TEvBenchFlatBytesMessage : TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageTVersions> {
+    using TBase = TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageTVersions>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
-    using TBlobTag = TBase::BytesField<0>;
+    using TBlobTag = TEvBenchFlatBytesMessageTBlobTag;
+    using TSchemeV1 = TEvBenchFlatBytesMessageTSchemeV1;
+    using TScheme = TEvBenchFlatBytesMessageTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TBlobTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
+    friend class TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageTVersions>;
+};
 
-    friend class TEventFlat<TEvBenchFlatBytesMessage>;
+struct TEvBenchFlatVPutLikeMessage;
+using TEvBenchFlatVPutLikeMessageTBlobIdTag = TFlatEventDefs::FixedField<TBlobIdRaw, 0>;
+using TEvBenchFlatVPutLikeMessageTChecksumTag = TFlatEventDefs::FixedField<ui64, 1>;
+using TEvBenchFlatVPutLikeMessageTFlagsTag = TFlatEventDefs::FixedField<TVPutFlagsRaw, 2>;
+using TEvBenchFlatVPutLikeMessageTVDiskIdTag = TFlatEventDefs::FixedField<TVDiskIdRaw, 3>;
+using TEvBenchFlatVPutLikeMessageTFullDataSizeTag = TFlatEventDefs::FixedField<ui64, 4>;
+using TEvBenchFlatVPutLikeMessageTCookieTag = TFlatEventDefs::FixedField<ui64, 5>;
+using TEvBenchFlatVPutLikeMessageTHandleClassTag = TFlatEventDefs::FixedField<ui32, 6>;
+using TEvBenchFlatVPutLikeMessageTMsgQoSTag = TFlatEventDefs::FixedField<TMsgQoSRaw, 7>;
+using TEvBenchFlatVPutLikeMessageTTimestampsTag = TFlatEventDefs::FixedField<TTimestampsRaw, 8>;
+using TEvBenchFlatVPutLikeMessageTExtraChecksTag = TFlatEventDefs::InlineArrayField<TExtraBlockCheckRaw, VPutLikeExtraChecks, 9>;
+using TEvBenchFlatVPutLikeMessageTPayloadTag = TFlatEventDefs::BytesField<10>;
+using TEvBenchFlatVPutLikeMessageTSchemeV1 = TFlatEventDefs::Scheme<
+    TFlatEventDefs::WithPayloadType<ui8>,
+    TEvBenchFlatVPutLikeMessageTBlobIdTag,
+    TEvBenchFlatVPutLikeMessageTChecksumTag,
+    TEvBenchFlatVPutLikeMessageTFlagsTag,
+    TEvBenchFlatVPutLikeMessageTVDiskIdTag,
+    TEvBenchFlatVPutLikeMessageTFullDataSizeTag,
+    TEvBenchFlatVPutLikeMessageTCookieTag,
+    TEvBenchFlatVPutLikeMessageTHandleClassTag,
+    TEvBenchFlatVPutLikeMessageTMsgQoSTag,
+    TEvBenchFlatVPutLikeMessageTTimestampsTag,
+    TEvBenchFlatVPutLikeMessageTExtraChecksTag,
+    TEvBenchFlatVPutLikeMessageTPayloadTag>;
+using TEvBenchFlatVPutLikeMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatVPutLikeMessageTSchemeV1>;
+
+struct TEvBenchFlatVPutLikeMessage : TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageTVersions> {
+    using TBase = TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageTVersions>;
+
+    static constexpr ui32 EventType = EvBenchFlatMessage;
+
+    using TBlobIdTag = TEvBenchFlatVPutLikeMessageTBlobIdTag;
+    using TChecksumTag = TEvBenchFlatVPutLikeMessageTChecksumTag;
+    using TFlagsTag = TEvBenchFlatVPutLikeMessageTFlagsTag;
+    using TVDiskIdTag = TEvBenchFlatVPutLikeMessageTVDiskIdTag;
+    using TFullDataSizeTag = TEvBenchFlatVPutLikeMessageTFullDataSizeTag;
+    using TCookieTag = TEvBenchFlatVPutLikeMessageTCookieTag;
+    using THandleClassTag = TEvBenchFlatVPutLikeMessageTHandleClassTag;
+    using TMsgQoSTag = TEvBenchFlatVPutLikeMessageTMsgQoSTag;
+    using TTimestampsTag = TEvBenchFlatVPutLikeMessageTTimestampsTag;
+    using TExtraChecksTag = TEvBenchFlatVPutLikeMessageTExtraChecksTag;
+    using TPayloadTag = TEvBenchFlatVPutLikeMessageTPayloadTag;
+    using TSchemeV1 = TEvBenchFlatVPutLikeMessageTSchemeV1;
+    using TScheme = TEvBenchFlatVPutLikeMessageTVersions;
+
+    friend class TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageTVersions>;
 };
 
 #define BENCH_30_U64_FIELDS(X) \
@@ -187,76 +308,119 @@ struct TEvBenchFlatBytesMessage : TEventFlat<TEvBenchFlatBytesMessage> {
     X(11) X(12) X(13) X(14) X(15) X(16) X(17) X(18) X(19) X(20) \
     X(21) X(22) X(23) X(24) X(25) X(26) X(27) X(28) X(29) X(30)
 
-struct TEvBenchFlatThirtyMessage : TEventFlat<TEvBenchFlatThirtyMessage> {
-    using TBase = TEventFlat<TEvBenchFlatThirtyMessage>;
+struct TEvBenchFlatThirtyMessage;
+#define DECLARE_BENCH_30_U64_TAG(N) using TEvBenchFlatThirtyMessageTValue##N##Tag = TFlatEventDefs::FixedField<ui64, N - 1>;
+BENCH_30_U64_FIELDS(DECLARE_BENCH_30_U64_TAG)
+#undef DECLARE_BENCH_30_U64_TAG
+
+using TEvBenchFlatThirtyMessageTSchemeV1 = TFlatEventDefs::Scheme<
+    TEvBenchFlatThirtyMessageTValue1Tag, TEvBenchFlatThirtyMessageTValue2Tag, TEvBenchFlatThirtyMessageTValue3Tag,
+    TEvBenchFlatThirtyMessageTValue4Tag, TEvBenchFlatThirtyMessageTValue5Tag, TEvBenchFlatThirtyMessageTValue6Tag,
+    TEvBenchFlatThirtyMessageTValue7Tag, TEvBenchFlatThirtyMessageTValue8Tag, TEvBenchFlatThirtyMessageTValue9Tag,
+    TEvBenchFlatThirtyMessageTValue10Tag, TEvBenchFlatThirtyMessageTValue11Tag, TEvBenchFlatThirtyMessageTValue12Tag,
+    TEvBenchFlatThirtyMessageTValue13Tag, TEvBenchFlatThirtyMessageTValue14Tag, TEvBenchFlatThirtyMessageTValue15Tag,
+    TEvBenchFlatThirtyMessageTValue16Tag, TEvBenchFlatThirtyMessageTValue17Tag, TEvBenchFlatThirtyMessageTValue18Tag,
+    TEvBenchFlatThirtyMessageTValue19Tag, TEvBenchFlatThirtyMessageTValue20Tag, TEvBenchFlatThirtyMessageTValue21Tag,
+    TEvBenchFlatThirtyMessageTValue22Tag, TEvBenchFlatThirtyMessageTValue23Tag, TEvBenchFlatThirtyMessageTValue24Tag,
+    TEvBenchFlatThirtyMessageTValue25Tag, TEvBenchFlatThirtyMessageTValue26Tag, TEvBenchFlatThirtyMessageTValue27Tag,
+    TEvBenchFlatThirtyMessageTValue28Tag, TEvBenchFlatThirtyMessageTValue29Tag, TEvBenchFlatThirtyMessageTValue30Tag>;
+using TEvBenchFlatThirtyMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatThirtyMessageTSchemeV1>;
+
+struct TEvBenchFlatThirtyMessage : TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageTVersions> {
+    using TBase = TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageTVersions>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
-#define DECLARE_VALUE_TAG(N) using TValue##N##Tag = TBase::FixedField<ui64, N - 1>;
-    BENCH_30_U64_FIELDS(DECLARE_VALUE_TAG)
-#undef DECLARE_VALUE_TAG
+    using TValue1Tag = TEvBenchFlatThirtyMessageTValue1Tag;
+    using TValue2Tag = TEvBenchFlatThirtyMessageTValue2Tag;
+    using TValue3Tag = TEvBenchFlatThirtyMessageTValue3Tag;
+    using TValue4Tag = TEvBenchFlatThirtyMessageTValue4Tag;
+    using TValue5Tag = TEvBenchFlatThirtyMessageTValue5Tag;
+    using TSchemeV1 = TEvBenchFlatThirtyMessageTSchemeV1;
+    using TScheme = TEvBenchFlatThirtyMessageTVersions;
 
-    using TSchemeV1 = TBase::Scheme<
-        TValue1Tag, TValue2Tag, TValue3Tag, TValue4Tag, TValue5Tag,
-        TValue6Tag, TValue7Tag, TValue8Tag, TValue9Tag, TValue10Tag,
-        TValue11Tag, TValue12Tag, TValue13Tag, TValue14Tag, TValue15Tag,
-        TValue16Tag, TValue17Tag, TValue18Tag, TValue19Tag, TValue20Tag,
-        TValue21Tag, TValue22Tag, TValue23Tag, TValue24Tag, TValue25Tag,
-        TValue26Tag, TValue27Tag, TValue28Tag, TValue29Tag, TValue30Tag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvBenchFlatThirtyMessage>;
+    friend class TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageTVersions>;
 
     static TEvBenchFlatThirtyMessage* Make(ui64 base) {
         THolder<TEvBenchFlatThirtyMessage> holder(TBase::MakeEvent());
         auto frontend = holder->GetFrontend<TSchemeV1>();
-#define SET_VALUE_TAG(N) frontend.template Field<TValue##N##Tag>() = base + N;
+#define SET_VALUE_TAG(N) frontend.template Field<TEvBenchFlatThirtyMessageTValue##N##Tag>() = base + N;
         BENCH_30_U64_FIELDS(SET_VALUE_TAG)
 #undef SET_VALUE_TAG
         return holder.Release();
     }
 };
 
-struct TEvBenchFlatArrayMessage : TEventFlat<TEvBenchFlatArrayMessage> {
-    using TBase = TEventFlat<TEvBenchFlatArrayMessage>;
+struct TEvBenchFlatArrayMessage;
+using TEvBenchFlatArrayMessageTValuesTag = TFlatEventDefs::ArrayField<ui64, 0>;
+using TEvBenchFlatArrayMessageTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>, TEvBenchFlatArrayMessageTValuesTag>;
+using TEvBenchFlatArrayMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatArrayMessageTSchemeV1>;
+
+struct TEvBenchFlatArrayMessage : TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageTVersions> {
+    using TBase = TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageTVersions>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
-    using TValuesTag = TBase::ArrayField<ui64, 0>;
+    using TValuesTag = TEvBenchFlatArrayMessageTValuesTag;
+    using TSchemeV1 = TEvBenchFlatArrayMessageTSchemeV1;
+    using TScheme = TEvBenchFlatArrayMessageTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TValuesTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvBenchFlatArrayMessage>;
+    friend class TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageTVersions>;
 };
 
-struct TEvBenchFlatStructArrayMessage : TEventFlat<TEvBenchFlatStructArrayMessage> {
-    using TBase = TEventFlat<TEvBenchFlatStructArrayMessage>;
+struct TEvBenchFlatInlineArray30Message;
+using TEvBenchFlatInlineArray30MessageTValuesTag = TFlatEventDefs::InlineArrayField<ui64, 30, 0>;
+using TEvBenchFlatInlineArray30MessageTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchFlatInlineArray30MessageTValuesTag>;
+using TEvBenchFlatInlineArray30MessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatInlineArray30MessageTSchemeV1>;
+
+struct TEvBenchFlatInlineArray30Message : TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageTVersions> {
+    using TBase = TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageTVersions>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
-    using TValuesTag = TBase::ArrayField<TTripleInts, 0>;
+    using TValuesTag = TEvBenchFlatInlineArray30MessageTValuesTag;
+    using TSchemeV1 = TEvBenchFlatInlineArray30MessageTSchemeV1;
+    using TScheme = TEvBenchFlatInlineArray30MessageTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TValuesTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
+    friend class TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageTVersions>;
+};
 
-    friend class TEventFlat<TEvBenchFlatStructArrayMessage>;
+struct TEvBenchFlatStructArrayMessage;
+using TEvBenchFlatStructArrayMessageTValuesTag = TFlatEventDefs::InlineArrayField<TTripleInts, 10, 0>;
+using TEvBenchFlatStructArrayMessageTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchFlatStructArrayMessageTValuesTag>;
+using TEvBenchFlatStructArrayMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatStructArrayMessageTSchemeV1>;
+
+struct TEvBenchFlatStructArrayMessage : TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageTVersions> {
+    using TBase = TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageTVersions>;
+
+    static constexpr ui32 EventType = EvBenchFlatMessage;
+
+    using TValuesTag = TEvBenchFlatStructArrayMessageTValuesTag;
+    using TSchemeV1 = TEvBenchFlatStructArrayMessageTSchemeV1;
+    using TScheme = TEvBenchFlatStructArrayMessageTVersions;
+
+    friend class TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageTVersions>;
 };
 
 #undef BENCH_30_U64_FIELDS
 
-struct TEvBenchAck : TEventFlat<TEvBenchAck> {
-    using TBase = TEventFlat<TEvBenchAck>;
+struct TEvBenchAck;
+using TEvBenchAckTCountTag = TFlatEventDefs::FixedField<ui32, 0>;
+using TEvBenchAckTChecksumTag = TFlatEventDefs::FixedField<ui64, 1>;
+using TEvBenchAckTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchAckTCountTag, TEvBenchAckTChecksumTag>;
+using TEvBenchAckTVersions = TFlatEventDefs::Versions<TEvBenchAckTSchemeV1>;
+
+struct TEvBenchAck : TEventFlat<TEvBenchAck, TEvBenchAckTVersions> {
+    using TBase = TEventFlat<TEvBenchAck, TEvBenchAckTVersions>;
 
     static constexpr ui32 EventType = EvBenchAck;
 
-    using TCountTag = TBase::FixedField<ui32, 0>;
-    using TChecksumTag = TBase::FixedField<ui64, 1>;
+    using TCountTag = TEvBenchAckTCountTag;
+    using TChecksumTag = TEvBenchAckTChecksumTag;
+    using TSchemeV1 = TEvBenchAckTSchemeV1;
+    using TScheme = TEvBenchAckTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TCountTag, TChecksumTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvBenchAck>;
+    friend class TEventFlat<TEvBenchAck, TEvBenchAckTVersions>;
 
     auto Count() { return this->template Field<TCountTag>(); }
     auto Count() const { return this->template Field<TCountTag>(); }
@@ -271,17 +435,21 @@ struct TEvBenchAck : TEventFlat<TEvBenchAck> {
     }
 };
 
-struct TEvBenchFlush : TEventFlat<TEvBenchFlush> {
-    using TBase = TEventFlat<TEvBenchFlush>;
+struct TEvBenchFlush;
+using TEvBenchFlushTTag = TFlatEventDefs::FixedField<ui32, 0>;
+using TEvBenchFlushTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchFlushTTag>;
+using TEvBenchFlushTVersions = TFlatEventDefs::Versions<TEvBenchFlushTSchemeV1>;
+
+struct TEvBenchFlush : TEventFlat<TEvBenchFlush, TEvBenchFlushTVersions> {
+    using TBase = TEventFlat<TEvBenchFlush, TEvBenchFlushTVersions>;
 
     static constexpr ui32 EventType = EvBenchFlush;
 
-    using TTag = TBase::FixedField<ui32, 0>;
+    using TTag = TEvBenchFlushTTag;
+    using TSchemeV1 = TEvBenchFlushTSchemeV1;
+    using TScheme = TEvBenchFlushTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvBenchFlush>;
+    friend class TEventFlat<TEvBenchFlush, TEvBenchFlushTVersions>;
 
     auto Value() { return this->template Field<TTag>(); }
     auto Value() const { return this->template Field<TTag>(); }
@@ -308,6 +476,137 @@ ui64 SamplePayloadChecksum(const TRope& payload) {
     return static_cast<ui64>(*first.ContiguousData())
         + (static_cast<ui64>(*last.ContiguousData()) << 8)
         + (static_cast<ui64>(size) << 16);
+}
+
+TBlobIdRaw MakeBlobIdRaw(ui64 base) {
+    return {
+        .RawX1 = base * 17 + 1,
+        .RawX2 = base * 17 + 2,
+        .RawX3 = base * 17 + 3,
+    };
+}
+
+TVDiskIdRaw MakeVDiskIdRaw(ui64 base) {
+    return {
+        .GroupID = static_cast<ui32>(base % 17 + 1),
+        .GroupGeneration = static_cast<ui32>(base % 7 + 2),
+        .Ring = static_cast<ui8>(base % 3),
+        .Domain = static_cast<ui8>(base % 5),
+        .VDisk = static_cast<ui8>(base % 8),
+    };
+}
+
+TMsgQoSRaw MakeMsgQoSRaw(ui64 base) {
+    return {
+        .Cost = base * 29 + 7,
+        .DeadlineSeconds = static_cast<ui32>(base % 61 + 10),
+        .ExtQueueId = static_cast<ui8>(base % 3 + 1),
+    };
+}
+
+TTimestampsRaw MakeTimestampsRaw(ui64 base) {
+    return {
+        .SentByDSProxyUs = base * 101 + 11,
+        .ReceivedByVDiskUs = base * 101 + 22,
+        .SentByVDiskUs = base * 101 + 33,
+        .ReceivedByDSProxyUs = base * 101 + 44,
+    };
+}
+
+TVPutFlagsRaw MakeVPutFlagsRaw(ui64 base) {
+    return {
+        .IssueKeepFlag = static_cast<ui8>((base >> 0) & 1),
+        .IsZeroEntry = static_cast<ui8>((base >> 1) & 1),
+        .IgnoreBlock = static_cast<ui8>((base >> 2) & 1),
+        .NotifyIfNotReady = static_cast<ui8>((base >> 3) & 1),
+    };
+}
+
+std::array<TExtraBlockCheckRaw, VPutLikeExtraChecks> MakeExtraChecks(ui64 base) {
+    std::array<TExtraBlockCheckRaw, VPutLikeExtraChecks> checks;
+    for (size_t i = 0; i < checks.size(); ++i) {
+        checks[i] = {
+            .TabletId = base * 37 + i + 1,
+            .Generation = static_cast<ui32>(base % 11 + i + 1),
+        };
+    }
+    return checks;
+}
+
+void FillVPutLikeRecord(NActorsBench::TVPutLike& record, ui64 base, ui32 payloadId) {
+    const TBlobIdRaw blobId = MakeBlobIdRaw(base);
+    const TVDiskIdRaw vdiskId = MakeVDiskIdRaw(base);
+    const TMsgQoSRaw msgQoS = MakeMsgQoSRaw(base);
+    const TTimestampsRaw timestamps = MakeTimestampsRaw(base);
+    const TVPutFlagsRaw flags = MakeVPutFlagsRaw(base);
+    const auto checks = MakeExtraChecks(base);
+
+    auto* blob = record.MutableBlobID();
+    blob->SetRawX1(blobId.RawX1);
+    blob->SetRawX2(blobId.RawX2);
+    blob->SetRawX3(blobId.RawX3);
+    record.SetChecksum(base * 19 + 5);
+    record.SetIssueKeepFlag(flags.IssueKeepFlag);
+    record.SetIsZeroEntry(flags.IsZeroEntry);
+
+    auto* vdisk = record.MutableVDiskID();
+    vdisk->SetGroupID(vdiskId.GroupID);
+    vdisk->SetGroupGeneration(vdiskId.GroupGeneration);
+    vdisk->SetRing(vdiskId.Ring);
+    vdisk->SetDomain(vdiskId.Domain);
+    vdisk->SetVDisk(vdiskId.VDisk);
+
+    record.SetFullDataSize(Payload4KB);
+    record.SetIgnoreBlock(flags.IgnoreBlock);
+    record.SetNotifyIfNotReady(flags.NotifyIfNotReady);
+    record.SetCookie(base * 23 + 9);
+    record.SetHandleClass(static_cast<ui32>(base % 3 + 1));
+
+    auto* qos = record.MutableMsgQoS();
+    qos->SetDeadlineSeconds(msgQoS.DeadlineSeconds);
+    qos->SetCost(msgQoS.Cost);
+    qos->SetExtQueueId(msgQoS.ExtQueueId);
+
+    auto* ts = record.MutableTimestamps();
+    ts->SetSentByDSProxyUs(timestamps.SentByDSProxyUs);
+    ts->SetReceivedByVDiskUs(timestamps.ReceivedByVDiskUs);
+    ts->SetSentByVDiskUs(timestamps.SentByVDiskUs);
+    ts->SetReceivedByDSProxyUs(timestamps.ReceivedByDSProxyUs);
+
+    for (const TExtraBlockCheckRaw& check : checks) {
+        auto* item = record.AddExtraBlockChecks();
+        item->SetTabletId(check.TabletId);
+        item->SetGeneration(check.Generation);
+    }
+
+    record.SetPayloadId(payloadId);
+}
+
+ui64 ReadVPutLikeRecord(const NActorsBench::TVPutLike& record, const TRope& payload) {
+    ui64 sum = SamplePayloadChecksum(payload);
+    const auto& blob = record.GetBlobID();
+    const auto& vdisk = record.GetVDiskID();
+    const auto& qos = record.GetMsgQoS();
+    const auto& ts = record.GetTimestamps();
+
+    sum += blob.GetRawX1() + blob.GetRawX2() + blob.GetRawX3();
+    sum += record.GetChecksum();
+    sum += static_cast<ui64>(record.GetIssueKeepFlag());
+    sum += static_cast<ui64>(record.GetIsZeroEntry());
+    sum += vdisk.GetGroupID() + vdisk.GetGroupGeneration() + vdisk.GetRing() + vdisk.GetDomain() + vdisk.GetVDisk();
+    sum += record.GetFullDataSize();
+    sum += static_cast<ui64>(record.GetIgnoreBlock());
+    sum += static_cast<ui64>(record.GetNotifyIfNotReady());
+    sum += record.GetCookie();
+    sum += record.GetHandleClass();
+    sum += qos.GetDeadlineSeconds() + qos.GetCost() + qos.GetExtQueueId();
+    sum += ts.GetSentByDSProxyUs() + ts.GetReceivedByVDiskUs() + ts.GetSentByVDiskUs() + ts.GetReceivedByDSProxyUs();
+
+    for (const auto& check : record.GetExtraBlockChecks()) {
+        sum += check.GetTabletId() + check.GetGeneration();
+    }
+
+    return sum;
 }
 
 const TRope& GetSharedPayload(size_t size) {
@@ -444,8 +743,6 @@ struct TPayloadPbTraits {
     static constexpr TStringBuf TestName() {
         if constexpr (PayloadBytes == Payload4KB) {
             return "payload-bytes-4k";
-        } else if constexpr (PayloadBytes == Payload1MB) {
-            return "payload-bytes-1m";
         } else {
             return "payload-bytes";
         }
@@ -470,9 +767,6 @@ struct TPayloadPbTraits {
     }
 
     static ui64 EffectiveWindow(ui64 window) {
-        if constexpr (PayloadBytes >= Payload1MB) {
-            return Min<ui64>(window, 8);
-        }
         return window;
     }
 };
@@ -488,8 +782,6 @@ struct TPayloadFlatTraits {
     static constexpr TStringBuf TestName() {
         if constexpr (PayloadBytes == Payload4KB) {
             return "payload-bytes-4k";
-        } else if constexpr (PayloadBytes == Payload1MB) {
-            return "payload-bytes-1m";
         } else {
             return "payload-bytes";
         }
@@ -511,9 +803,6 @@ struct TPayloadFlatTraits {
     }
 
     static ui64 EffectiveWindow(ui64 window) {
-        if constexpr (PayloadBytes >= Payload1MB) {
-            return Min<ui64>(window, 8);
-        }
         return window;
     }
 };
@@ -585,8 +874,10 @@ struct TMessageTraits<TEvBenchFlatThirtyMessage> {
     }
 };
 
-template <>
-struct TMessageTraits<TEvBenchPbArrayMessage> {
+template <size_t ItemCount, size_t ReadCount>
+struct TArrayPbTraits {
+    static_assert(ReadCount <= ItemCount);
+
     using TEvent = TEvBenchPbArrayMessage;
 
     static constexpr TStringBuf Name() {
@@ -594,20 +885,32 @@ struct TMessageTraits<TEvBenchPbArrayMessage> {
     }
 
     static constexpr TStringBuf TestName() {
-        return "array30-read5";
+        if constexpr (ItemCount == 30 && ReadCount == 5) {
+            return "array30-read5";
+        } else if constexpr (ItemCount == 1000 && ReadCount == 1000) {
+            return "array1000-readall";
+        } else {
+            return "array";
+        }
     }
 
     static TEvent* Make(ui64 base) {
         THolder<TEvent> holder(new TEvent());
-        for (ui64 i = 0; i < 30; ++i) {
-            holder->Record.AddValues(base + i + 1);
+        auto* values = holder->Record.MutableValues();
+        values->Reserve(ItemCount);
+        for (ui64 i = 0; i < ItemCount; ++i) {
+            values->Add(base + i + 1);
         }
         return holder.Release();
     }
 
     static ui64 Read(const TEvent& ev) {
-        const auto& r = ev.Record;
-        return r.GetValues(0) + r.GetValues(1) + r.GetValues(2) + r.GetValues(3) + r.GetValues(4);
+        const auto& values = ev.Record.GetValues();
+        ui64 sum = 0;
+        for (size_t i = 0; i < ReadCount; ++i) {
+            sum += values.Get(i);
+        }
+        return sum;
     }
 
     static ui32 SerializedSize(ui64 base) {
@@ -620,37 +923,58 @@ struct TMessageTraits<TEvBenchPbArrayMessage> {
     }
 };
 
-template <>
-struct TMessageTraits<TEvBenchFlatArrayMessage> {
-    using TEvent = TEvBenchFlatArrayMessage;
+template <size_t ItemCount, size_t ReadCount>
+struct TArrayFlatTraits {
+    static_assert(ReadCount <= ItemCount);
+
+    using TEvent = std::conditional_t<ItemCount == 30, TEvBenchFlatInlineArray30Message, TEvBenchFlatArrayMessage>;
 
     static constexpr TStringBuf Name() {
         return "flat";
     }
 
     static constexpr TStringBuf TestName() {
-        return "array30-read5";
+        if constexpr (ItemCount == 30 && ReadCount == 5) {
+            return "array30-read5";
+        } else if constexpr (ItemCount == 1000 && ReadCount == 1000) {
+            return "array1000-readall";
+        } else {
+            return "array";
+        }
     }
 
     static TEvent* Make(ui64 base) {
         THolder<TEvent> holder(TEvent::MakeEvent());
-        std::array<ui64, 30> values;
-        for (size_t i = 0; i < values.size(); ++i) {
-            values[i] = base + i + 1;
-        }
         auto array = holder->template Array<typename TEvent::TValuesTag>();
-        array.Resize(values.size());
-        std::memcpy(array.Data(), values.data(), values.size() * sizeof(ui64));
+        if constexpr (ItemCount == 30) {
+            std::array<ui64, ItemCount> values;
+            for (size_t i = 0; i < ItemCount; ++i) {
+                values[i] = base + i + 1;
+            }
+            array.CopyFrom(values.data(), values.size());
+        } else {
+            ui64* values = array.Init(ItemCount);
+            for (size_t i = 0; i < ItemCount; ++i) {
+                values[i] = base + i + 1;
+            }
+        }
         return holder.Release();
     }
 
     static ui64 Read(const TEvent& ev) {
-        auto values = ev.template Array<typename TEvent::TValuesTag>();
-        return static_cast<ui64>(values[0])
-            + static_cast<ui64>(values[1])
-            + static_cast<ui64>(values[2])
-            + static_cast<ui64>(values[3])
-            + static_cast<ui64>(values[4]);
+        ui64 sum = 0;
+        if constexpr (ItemCount == 30) {
+            auto values = ev.template Array<typename TEvent::TValuesTag>();
+            for (size_t i = 0; i < ReadCount; ++i) {
+                sum += static_cast<ui64>(values[i]);
+            }
+        } else {
+            const ui64* values = ev.template ArrayData<typename TEvent::TValuesTag>();
+            for (size_t i = 0; i < ReadCount; ++i) {
+                sum += values[i];
+            }
+        }
+        return sum;
     }
 
     static ui32 SerializedSize(ui64 base) {
@@ -728,8 +1052,7 @@ struct TMessageTraits<TEvBenchFlatStructArrayMessage> {
             };
         }
         auto array = holder->template Array<typename TEvent::TValuesTag>();
-        array.Resize(values.size());
-        std::memcpy(array.Data(), values.data(), values.size() * sizeof(TTripleInts));
+        array.CopyFrom(values.data(), values.size());
         return holder.Release();
     }
 
@@ -740,6 +1063,112 @@ struct TMessageTraits<TEvBenchFlatStructArrayMessage> {
             const TTripleInts value = values[i];
             sum += value.A + value.B + value.C;
         }
+        return sum;
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchPbVPutLikeMessage> {
+    using TEvent = TEvBenchPbVPutLikeMessage;
+
+    static constexpr TStringBuf Name() {
+        return "protobuf";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "vput-like-4k";
+    }
+
+    static TEvent* Make(ui64 base) {
+        THolder<TEvent> holder(new TEvent());
+        const ui32 payloadId = holder->AddPayload(TRope(GetSharedPayload(Payload4KB)));
+        FillVPutLikeRecord(holder->Record, base, payloadId);
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        const ui32 payloadId = ev.Record.GetPayloadId();
+        Y_ABORT_UNLESS(payloadId < ev.GetPayloadCount());
+        return ReadVPutLikeRecord(ev.Record, ev.GetPayload(payloadId));
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchFlatVPutLikeMessage> {
+    using TEvent = TEvBenchFlatVPutLikeMessage;
+
+    static constexpr TStringBuf Name() {
+        return "flat";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "vput-like-4k";
+    }
+
+    static TEvent* Make(ui64 base) {
+        THolder<TEvent> holder(TEvent::MakeEvent());
+        auto frontend = holder->template GetFrontend<typename TEvent::TSchemeV1>();
+        frontend.template Field<typename TEvent::TBlobIdTag>() = MakeBlobIdRaw(base);
+        frontend.template Field<typename TEvent::TChecksumTag>() = base * 19 + 5;
+        frontend.template Field<typename TEvent::TFlagsTag>() = MakeVPutFlagsRaw(base);
+        frontend.template Field<typename TEvent::TVDiskIdTag>() = MakeVDiskIdRaw(base);
+        frontend.template Field<typename TEvent::TFullDataSizeTag>() = Payload4KB;
+        frontend.template Field<typename TEvent::TCookieTag>() = base * 23 + 9;
+        frontend.template Field<typename TEvent::THandleClassTag>() = static_cast<ui32>(base % 3 + 1);
+        frontend.template Field<typename TEvent::TMsgQoSTag>() = MakeMsgQoSRaw(base);
+        frontend.template Field<typename TEvent::TTimestampsTag>() = MakeTimestampsRaw(base);
+
+        const auto checks = MakeExtraChecks(base);
+        auto extraChecks = holder->template Array<typename TEvent::TExtraChecksTag>();
+        extraChecks.CopyFrom(checks.data(), checks.size());
+
+        holder->template Bytes<typename TEvent::TPayloadTag>().Set(TRope(GetSharedPayload(Payload4KB)));
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        auto frontend = ev.template GetFrontend<typename TEvent::TSchemeV1>();
+        const TBlobIdRaw blob = frontend.template Field<typename TEvent::TBlobIdTag>();
+        const TVPutFlagsRaw flags = frontend.template Field<typename TEvent::TFlagsTag>();
+        const TVDiskIdRaw vdisk = frontend.template Field<typename TEvent::TVDiskIdTag>();
+        const TMsgQoSRaw qos = frontend.template Field<typename TEvent::TMsgQoSTag>();
+        const TTimestampsRaw ts = frontend.template Field<typename TEvent::TTimestampsTag>();
+        auto extraChecks = ev.template Array<typename TEvent::TExtraChecksTag>();
+
+        ui64 sum = SamplePayloadChecksum(ev.template Bytes<typename TEvent::TPayloadTag>().Rope());
+        sum += blob.RawX1 + blob.RawX2 + blob.RawX3;
+        sum += static_cast<ui64>(frontend.template Field<typename TEvent::TChecksumTag>());
+        sum += flags.IssueKeepFlag + flags.IsZeroEntry + flags.IgnoreBlock + flags.NotifyIfNotReady;
+        sum += vdisk.GroupID + vdisk.GroupGeneration + vdisk.Ring + vdisk.Domain + vdisk.VDisk;
+        sum += static_cast<ui64>(frontend.template Field<typename TEvent::TFullDataSizeTag>());
+        sum += static_cast<ui64>(frontend.template Field<typename TEvent::TCookieTag>());
+        sum += static_cast<ui64>(frontend.template Field<typename TEvent::THandleClassTag>());
+        sum += qos.DeadlineSeconds + qos.Cost + qos.ExtQueueId;
+        sum += ts.SentByDSProxyUs + ts.ReceivedByVDiskUs + ts.SentByVDiskUs + ts.ReceivedByDSProxyUs;
+
+        for (size_t i = 0; i < extraChecks.size(); ++i) {
+            const TExtraBlockCheckRaw item = extraChecks[i];
+            sum += item.TabletId + item.Generation;
+        }
+
         return sum;
     }
 
@@ -992,6 +1421,33 @@ THolder<TActorSystemSetup> BuildInterconnectActorSystemSetup(
     return setup;
 }
 
+ui64 CollectActorSystemCpuUs(const TActorSystem& actorSystem) {
+    ui64 totalCpuUs = 0;
+    const auto& statsSubSystem = GetActorSystemStats(actorSystem);
+    const ui32 poolCount = actorSystem.GetBasicExecutorPools().size();
+    for (ui32 poolId = 0; poolId < poolCount; ++poolId) {
+        TExecutorPoolStats poolStats;
+        TVector<TExecutorThreadStats> stats;
+        TVector<TExecutorThreadStats> sharedStats;
+        statsSubSystem.GetPoolStats(poolId, poolStats, stats, sharedStats);
+        for (const auto& item : stats) {
+            totalCpuUs += item.CpuUs;
+        }
+        for (const auto& item : sharedStats) {
+            totalCpuUs += item.CpuUs;
+        }
+    }
+    return totalCpuUs;
+}
+
+double CalcActorCpuUtilPct(ui64 actorCpuUs, double seconds, ui32 totalThreads) {
+    if (seconds <= 0.0 || totalThreads == 0) {
+        return 0.0;
+    }
+    const double capacityUs = seconds * 1000000.0 * totalThreads;
+    return capacityUs > 0.0 ? actorCpuUs * 100.0 / capacityUs : 0.0;
+}
+
 template <class TTraits>
 TBenchResult RunLocalBenchmark(const TBenchConfig& config) {
     const ui64 window = TTraits::EffectiveWindow(config.Window);
@@ -1014,6 +1470,8 @@ TBenchResult RunLocalBenchmark(const TBenchConfig& config) {
     const auto status = future.wait_for(std::chrono::seconds(config.Duration.Seconds() + 30));
     Y_ABORT_UNLESS(status == std::future_status::ready);
     TBenchResult result = future.get();
+    result.ActorCpuUs = CollectActorSystemCpuUs(actorSystem);
+    result.ActorCpuUtilPct = CalcActorCpuUtilPct(result.ActorCpuUs, result.Seconds, config.Threads);
 
     actorSystem.Stop();
     actorSystem.Cleanup();
@@ -1049,6 +1507,8 @@ TBenchResult RunInterconnectBenchmark(const TBenchConfig& config) {
     const auto status = future.wait_for(std::chrono::seconds(config.Duration.Seconds() + 30));
     Y_ABORT_UNLESS(status == std::future_status::ready);
     TBenchResult result = future.get();
+    result.ActorCpuUs = CollectActorSystemCpuUs(node1) + CollectActorSystemCpuUs(node2);
+    result.ActorCpuUtilPct = CalcActorCpuUtilPct(result.ActorCpuUs, result.Seconds, config.Threads * 2);
 
     node1.Stop();
     node2.Stop();
@@ -1133,6 +1593,8 @@ void MaybeRunScenario(const TBenchConfig& config, TStringBuf scenarioName) {
         << " seconds=" << Sprintf("%.3f", result.Seconds)
         << " msg_per_sec=" << Sprintf("%.2f", messageRate)
         << " mib_per_sec=" << Sprintf("%.2f", mibRate)
+        << " actor_cpu_us=" << result.ActorCpuUs
+        << " actor_cpu_util_pct=" << Sprintf("%.2f", result.ActorCpuUtilPct)
         << " checksum=" << result.Checksum
         << Endl;
 }
@@ -1154,14 +1616,16 @@ void RunBenchmarks(const TBenchConfig& config) {
         MaybeRunScenario<TMessageTraits<TEvBenchFlatMessage>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchPbThirtyMessage>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatThirtyMessage>>(config, "local");
-        MaybeRunScenario<TMessageTraits<TEvBenchPbArrayMessage>>(config, "local");
-        MaybeRunScenario<TMessageTraits<TEvBenchFlatArrayMessage>>(config, "local");
+        MaybeRunScenario<TArrayPbTraits<30, 5>>(config, "local");
+        MaybeRunScenario<TArrayFlatTraits<30, 5>>(config, "local");
+        MaybeRunScenario<TArrayPbTraits<1000, 1000>>(config, "local");
+        MaybeRunScenario<TArrayFlatTraits<1000, 1000>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchPbStructArrayMessage>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatStructArrayMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbVPutLikeMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatVPutLikeMessage>>(config, "local");
         MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "local");
         MaybeRunScenario<TPayloadFlatTraits<Payload4KB>>(config, "local");
-        MaybeRunScenario<TPayloadPbTraits<Payload1MB>>(config, "local");
-        MaybeRunScenario<TPayloadFlatTraits<Payload1MB>>(config, "local");
     }
 
     if (runInterconnect) {
@@ -1169,14 +1633,16 @@ void RunBenchmarks(const TBenchConfig& config) {
         MaybeRunScenario<TMessageTraits<TEvBenchFlatMessage>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchPbThirtyMessage>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatThirtyMessage>>(config, "interconnect");
-        MaybeRunScenario<TMessageTraits<TEvBenchPbArrayMessage>>(config, "interconnect");
-        MaybeRunScenario<TMessageTraits<TEvBenchFlatArrayMessage>>(config, "interconnect");
+        MaybeRunScenario<TArrayPbTraits<30, 5>>(config, "interconnect");
+        MaybeRunScenario<TArrayFlatTraits<30, 5>>(config, "interconnect");
+        MaybeRunScenario<TArrayPbTraits<1000, 1000>>(config, "interconnect");
+        MaybeRunScenario<TArrayFlatTraits<1000, 1000>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchPbStructArrayMessage>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatStructArrayMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbVPutLikeMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatVPutLikeMessage>>(config, "interconnect");
         MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "interconnect");
         MaybeRunScenario<TPayloadFlatTraits<Payload4KB>>(config, "interconnect");
-        MaybeRunScenario<TPayloadPbTraits<Payload1MB>>(config, "interconnect");
-        MaybeRunScenario<TPayloadFlatTraits<Payload1MB>>(config, "interconnect");
     }
 }
 

@@ -147,6 +147,8 @@ namespace NActors {
             Fixed,
             Bytes,
             Array,
+            InlineBytes,
+            InlineArray,
         };
         template <class T, size_t TagId>
         struct FixedField {
@@ -177,6 +179,33 @@ namespace NActors {
             static constexpr EFieldKind Kind = EFieldKind::Array;
             static constexpr bool IsFixed = false;
             static constexpr bool IsPayload = true;
+        };
+
+        template <size_t MaxInlineSize, size_t TagId>
+        struct InlineBytesField {
+            static_assert(MaxInlineSize <= std::numeric_limits<ui16>::max(), "InlineBytesField size exceeds ui16");
+
+            using TValue = char;
+            static constexpr size_t Id = TagId;
+            static constexpr size_t InlineSize = MaxInlineSize;
+            static constexpr size_t StorageSize = sizeof(ui16) + MaxInlineSize;
+            static constexpr EFieldKind Kind = EFieldKind::InlineBytes;
+            static constexpr bool IsFixed = false;
+            static constexpr bool IsPayload = false;
+        };
+
+        template <class T, size_t MaxInlineElements, size_t TagId>
+        struct InlineArrayField {
+            static_assert(std::is_trivially_copyable_v<T>, "InlineArrayField requires trivially copyable type");
+            static_assert(MaxInlineElements <= std::numeric_limits<ui16>::max(), "InlineArrayField size exceeds ui16");
+
+            using TValue = T;
+            static constexpr size_t Id = TagId;
+            static constexpr size_t MaxElements = MaxInlineElements;
+            static constexpr size_t StorageSize = sizeof(ui16) + MaxInlineElements * sizeof(T);
+            static constexpr EFieldKind Kind = EFieldKind::InlineArray;
+            static constexpr bool IsFixed = false;
+            static constexpr bool IsPayload = false;
         };
 
         template <class T, bool IsConst>
@@ -298,6 +327,220 @@ namespace NActors {
 
         template <class TPayloadId>
         using TConstBytesView = TBasicBytesView<TPayloadId, true>;
+
+        template <size_t MaxInlineSize, bool IsConst>
+        class TBasicInlineBytesView {
+            using TPointer = std::conditional_t<IsConst, const char*, char*>;
+
+        public:
+            TBasicInlineBytesView() = default;
+
+            explicit TBasicInlineBytesView(TPointer ptr)
+                : Ptr(ptr)
+            {}
+
+            size_t size() const {
+                return ReadUnaligned<ui16>(Ptr);
+            }
+
+            bool empty() const {
+                return size() == 0;
+            }
+
+            bool HasPayload() const {
+                return false;
+            }
+
+            TString Materialize() const {
+                return TString(Data(), size());
+            }
+
+            TRope Rope() const {
+                return TRope(Materialize());
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Clear() {
+                WriteUnaligned<ui16>(Ptr, 0);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Set(TRope data) {
+                const size_t bytes = data.GetSize();
+                Y_ENSURE(bytes <= MaxInlineSize, "Inline bytes field overflow size# " << bytes << " capacity# " << MaxInlineSize);
+                WriteUnaligned<ui16>(Ptr, static_cast<ui16>(bytes));
+                if (bytes) {
+                    auto it = data.Begin();
+                    TRopeUtils::Memcpy(MutableData(), it, bytes);
+                }
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Append(TRope data) {
+                const size_t oldSize = size();
+                const size_t bytes = data.GetSize();
+                Y_ENSURE(oldSize + bytes <= MaxInlineSize,
+                    "Inline bytes field overflow size# " << oldSize + bytes << " capacity# " << MaxInlineSize);
+                if (bytes) {
+                    auto it = data.Begin();
+                    TRopeUtils::Memcpy(MutableData() + oldSize, it, bytes);
+                }
+                WriteUnaligned<ui16>(Ptr, static_cast<ui16>(oldSize + bytes));
+            }
+
+        private:
+            const char* Data() const {
+                return Ptr + sizeof(ui16);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled, char*> MutableData() {
+                return Ptr + sizeof(ui16);
+            }
+
+        private:
+            TPointer Ptr = nullptr;
+        };
+
+        template <size_t MaxInlineSize>
+        using TInlineBytesView = TBasicInlineBytesView<MaxInlineSize, false>;
+
+        template <size_t MaxInlineSize>
+        using TConstInlineBytesView = TBasicInlineBytesView<MaxInlineSize, true>;
+
+        template <class T, size_t MaxInlineElements, bool IsConst>
+        class TBasicInlineArrayView {
+            static_assert(std::is_trivially_copyable_v<T>, "Inline array view requires trivially copyable type");
+            using TPointer = std::conditional_t<IsConst, const char*, char*>;
+
+            class TElementView {
+            public:
+                TElementView(TPointer ptr, size_t index)
+                    : Ptr(ptr)
+                    , Index(index)
+                {}
+
+                operator T() const {
+                    return Read();
+                }
+
+                template <bool Enabled = !IsConst>
+                std::enable_if_t<Enabled, TElementView&> operator=(T value) {
+                    Write(value);
+                    return *this;
+                }
+
+            private:
+                T Read() const {
+                    return ReadUnaligned<T>(Ptr + sizeof(ui16) + Index * sizeof(T));
+                }
+
+                template <bool Enabled = !IsConst>
+                std::enable_if_t<Enabled> Write(T value) {
+                    WriteUnaligned<T>(Ptr + sizeof(ui16) + Index * sizeof(T), value);
+                }
+
+            private:
+                TPointer Ptr = nullptr;
+                size_t Index = 0;
+            };
+
+        public:
+            TBasicInlineArrayView() = default;
+
+            explicit TBasicInlineArrayView(TPointer ptr)
+                : Ptr(ptr)
+            {}
+
+            size_t size() const {
+                return ReadUnaligned<ui16>(Ptr);
+            }
+
+            bool empty() const {
+                return size() == 0;
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled, TElementView> operator[](size_t index) {
+                Y_ENSURE(index < size(), "Array index " << index << " is out of range " << size());
+                return TElementView(Ptr, index);
+            }
+
+            T operator[](size_t index) const {
+                Y_ENSURE(index < size(), "Array index " << index << " is out of range " << size());
+                return ReadUnaligned<T>(Ptr + sizeof(ui16) + index * sizeof(T));
+            }
+
+            T At(size_t index) const {
+                return (*this)[index];
+            }
+
+            T Get(size_t index) const {
+                return At(index);
+            }
+
+            void CopyTo(T* dst, size_t count) const {
+                Y_ENSURE(count == size(), "Unexpected array size " << count << ", expected " << size());
+                if (count) {
+                    std::memcpy(dst, Ptr + sizeof(ui16), count * sizeof(T));
+                }
+            }
+
+            template <class F>
+            void ForEach(F&& f) const {
+                for (size_t i = 0; i < size(); ++i) {
+                    f((*this)[i]);
+                }
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Set(size_t index, T value) {
+                (*this)[index] = value;
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Clear() {
+                WriteUnaligned<ui16>(Ptr, 0);
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> CopyFrom(const T* src, size_t count) {
+                Y_ENSURE(count <= MaxInlineElements,
+                    "Inline array field overflow size# " << count << " capacity# " << MaxInlineElements);
+                WriteUnaligned<ui16>(Ptr, static_cast<ui16>(count));
+                if (count) {
+                    std::memcpy(Ptr + sizeof(ui16), src, count * sizeof(T));
+                }
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled, T*> Init(size_t newSize) {
+                Y_ENSURE(newSize <= MaxInlineElements,
+                    "Inline array field overflow size# " << newSize << " capacity# " << MaxInlineElements);
+                WriteUnaligned<ui16>(Ptr, static_cast<ui16>(newSize));
+                return nullptr;
+            }
+
+            template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled> Resize(size_t newSize) {
+                const size_t current = size();
+                Y_ENSURE(newSize <= MaxInlineElements,
+                    "Inline array field overflow size# " << newSize << " capacity# " << MaxInlineElements);
+                if (newSize > current) {
+                    std::memset(Ptr + sizeof(ui16) + current * sizeof(T), 0, (newSize - current) * sizeof(T));
+                }
+                WriteUnaligned<ui16>(Ptr, static_cast<ui16>(newSize));
+            }
+
+        private:
+            TPointer Ptr = nullptr;
+        };
+
+        template <class T, size_t MaxInlineElements>
+        using TInlineArrayView = TBasicInlineArrayView<T, MaxInlineElements, false>;
+
+        template <class T, size_t MaxInlineElements>
+        using TConstInlineArrayView = TBasicInlineArrayView<T, MaxInlineElements, true>;
 
         template <class T, class TPayloadId, bool IsConst, class TPayload = TRcBuf>
         class TBasicArrayView {
@@ -637,7 +880,18 @@ namespace NActors {
                 static constexpr bool IsField = true;
                 static constexpr bool IsFixed = TItem::IsFixed;
                 static constexpr bool IsPayload = TItem::IsPayload;
-                static constexpr size_t StoredSize = TItem::IsFixed ? sizeof(typename TItem::TValue) : sizeof(TPayloadRef);
+
+                static consteval size_t GetStoredSize() {
+                    if constexpr (TItem::Kind == EFieldKind::Fixed) {
+                        return sizeof(typename TItem::TValue);
+                    } else if constexpr (TItem::Kind == EFieldKind::InlineBytes || TItem::Kind == EFieldKind::InlineArray) {
+                        return TItem::StorageSize;
+                    } else {
+                        return sizeof(TPayloadRef);
+                    }
+                }
+
+                static constexpr size_t StoredSize = GetStoredSize();
             };
 
             template <class TItem>
@@ -671,6 +925,12 @@ namespace NActors {
             static consteval size_t GetFixedOffset() {
                 static_assert(HasFixedField<TTag>, "Field is not a fixed field in this scheme");
                 return sizeof(ui8) + GetFieldOffsetImpl<TTag, TItems...>();
+            }
+
+            template <class TTag>
+            static consteval size_t GetFieldOffset() {
+                static_assert(HasField<TTag>, "Field is absent in this scheme");
+                return GetFieldOffsetImpl<TTag, TItems...>();
             }
 
             template <class TTag>
@@ -806,6 +1066,12 @@ namespace NActors {
         template <class T, size_t TagId>
         using ArrayField = typename TLayout::template ArrayField<T, TagId>;
 
+        template <size_t MaxInlineSize, size_t TagId>
+        using InlineBytesField = typename TLayout::template InlineBytesField<MaxInlineSize, TagId>;
+
+        template <class T, size_t MaxInlineElements, size_t TagId>
+        using InlineArrayField = typename TLayout::template InlineArrayField<T, MaxInlineElements, TagId>;
+
         template <class... TItems>
         using Scheme = typename TLayout::template Scheme<TItems...>;
 
@@ -825,6 +1091,18 @@ namespace NActors {
 
         template <class TPayloadId>
         using TConstBytesView = typename TLayout::template TConstBytesView<TPayloadId>;
+
+        template <size_t MaxInlineSize>
+        using TInlineBytesView = typename TLayout::template TInlineBytesView<MaxInlineSize>;
+
+        template <size_t MaxInlineSize>
+        using TConstInlineBytesView = typename TLayout::template TConstInlineBytesView<MaxInlineSize>;
+
+        template <class T, size_t MaxInlineElements>
+        using TInlineArrayView = typename TLayout::template TInlineArrayView<T, MaxInlineElements>;
+
+        template <class T, size_t MaxInlineElements>
+        using TConstInlineArrayView = typename TLayout::template TConstInlineArrayView<T, MaxInlineElements>;
 
         struct TArrayPayloadStorage {
             static constexpr size_t InlineBytes = 256;
@@ -927,9 +1205,12 @@ namespace NActors {
                 } else if constexpr (TTag::IsFixed) {
                     return Header != nullptr
                         && TScheme::template GetFixedOffset<TTag>() + sizeof(typename TTag::TValue) <= HeaderSize;
-                } else {
+                } else if constexpr (TTag::IsPayload) {
                     return Header != nullptr
                         && TScheme::template GetPayloadRefOffset<TTag>() + sizeof(typename TScheme::TPayloadRef) <= HeaderSize;
+                } else {
+                    return Header != nullptr
+                        && (sizeof(ui8) + TScheme::template GetFieldOffset<TTag>() + TTag::StorageSize) <= HeaderSize;
                 }
             }
 
@@ -951,38 +1232,58 @@ namespace NActors {
 
             template <class TTag>
             auto Bytes() const {
-                static_assert(TTag::Kind == EFieldKind::Bytes, "Bytes() is only available for bytes fields");
-                static_assert(TScheme::template HasPayloadField<TTag>, "Field is absent in this scheme");
+                static_assert(TTag::Kind == EFieldKind::Bytes || TTag::Kind == EFieldKind::InlineBytes,
+                    "Bytes() is only available for bytes fields");
+                static_assert(TScheme::template HasField<TTag>, "Field is absent in this scheme");
                 Y_ENSURE(Header, "Flat event frontend is not initialized");
                 Y_ENSURE(HasFieldRuntime<TTag>(), "Field is absent in this concrete event layout");
 
-                constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
-                constexpr size_t refOffset = TScheme::template GetPayloadRefOffset<TTag>();
-                if constexpr (IsConst) {
-                    return TConstBytesView<typename TScheme::TPayloadId>(&GetBytesPayload(payloadIndex), Header + refOffset,
-                        static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                if constexpr (TTag::Kind == EFieldKind::InlineBytes) {
+                    constexpr size_t offset = sizeof(ui8) + TScheme::template GetFieldOffset<TTag>();
+                    if constexpr (IsConst) {
+                        return TConstInlineBytesView<TTag::InlineSize>(Header + offset);
+                    } else {
+                        return TInlineBytesView<TTag::InlineSize>(Header + offset);
+                    }
                 } else {
-                    return TBytesView<typename TScheme::TPayloadId>(&GetMutableBytesPayload(payloadIndex), Header + refOffset,
-                        static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                    constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
+                    constexpr size_t refOffset = TScheme::template GetPayloadRefOffset<TTag>();
+                    if constexpr (IsConst) {
+                        return TConstBytesView<typename TScheme::TPayloadId>(&GetBytesPayload(payloadIndex), Header + refOffset,
+                            static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                    } else {
+                        return TBytesView<typename TScheme::TPayloadId>(&GetMutableBytesPayload(payloadIndex), Header + refOffset,
+                            static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                    }
                 }
             }
 
             template <class TTag>
             auto Array() const {
-                static_assert(TTag::Kind == EFieldKind::Array, "Array() is only available for array fields");
-                static_assert(TScheme::template HasPayloadField<TTag>, "Field is absent in this scheme");
+                static_assert(TTag::Kind == EFieldKind::Array || TTag::Kind == EFieldKind::InlineArray,
+                    "Array() is only available for array fields");
+                static_assert(TScheme::template HasField<TTag>, "Field is absent in this scheme");
                 Y_ENSURE(Header, "Flat event frontend is not initialized");
                 Y_ENSURE(HasFieldRuntime<TTag>(), "Field is absent in this concrete event layout");
 
                 using TValue = typename TTag::TValue;
-                constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
-                constexpr size_t refOffset = TScheme::template GetPayloadRefOffset<TTag>();
-                if constexpr (IsConst) {
-                    return TConstArrayView<TValue, typename TScheme::TPayloadId>(&GetArrayPayload(payloadIndex), Header + refOffset,
-                        static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                if constexpr (TTag::Kind == EFieldKind::InlineArray) {
+                    constexpr size_t offset = sizeof(ui8) + TScheme::template GetFieldOffset<TTag>();
+                    if constexpr (IsConst) {
+                        return TConstInlineArrayView<TValue, TTag::MaxElements>(Header + offset);
+                    } else {
+                        return TInlineArrayView<TValue, TTag::MaxElements>(Header + offset);
+                    }
                 } else {
-                    return TArrayView<TValue, typename TScheme::TPayloadId>(&GetMutableArrayPayload(payloadIndex), Header + refOffset,
-                        static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                    constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
+                    constexpr size_t refOffset = TScheme::template GetPayloadRefOffset<TTag>();
+                    if constexpr (IsConst) {
+                        return TConstArrayView<TValue, typename TScheme::TPayloadId>(&GetArrayPayload(payloadIndex), Header + refOffset,
+                            static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                    } else {
+                        return TArrayView<TValue, typename TScheme::TPayloadId>(&GetMutableArrayPayload(payloadIndex), Header + refOffset,
+                            static_cast<typename TScheme::TPayloadId>(payloadIndex + 1));
+                    }
                 }
             }
 
@@ -1002,30 +1303,44 @@ namespace NActors {
 
             template <class TTag>
             size_t ArraySize() const {
-                static_assert(TTag::Kind == EFieldKind::Array, "ArraySize() is only available for array fields");
-                static_assert(TScheme::template HasPayloadField<TTag>, "Field is absent in this scheme");
+                static_assert(TTag::Kind == EFieldKind::Array || TTag::Kind == EFieldKind::InlineArray,
+                    "ArraySize() is only available for array fields");
+                static_assert(TScheme::template HasField<TTag>, "Field is absent in this scheme");
 
-                using TValue = typename TTag::TValue;
-                constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
-                const size_t bytes = GetArrayPayload(payloadIndex).GetSize();
-                Y_DEBUG_ABORT_UNLESS(bytes % sizeof(TValue) == 0);
-                return bytes / sizeof(TValue);
+                if constexpr (TTag::Kind == EFieldKind::InlineArray) {
+                    return this->template Array<TTag>().size();
+                } else {
+                    using TValue = typename TTag::TValue;
+                    constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
+                    const size_t bytes = GetArrayPayload(payloadIndex).GetSize();
+                    Y_DEBUG_ABORT_UNLESS(bytes % sizeof(TValue) == 0);
+                    return bytes / sizeof(TValue);
+                }
             }
 
             template <class TTag>
             size_t GetSize() const {
-                static_assert(TTag::IsPayload, "GetSize() is only available for payload-backed fields");
-                static_assert(TScheme::template HasPayloadField<TTag>, "Field is absent in this scheme");
-                constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
-                const size_t bytes = TTag::Kind == EFieldKind::Bytes
-                    ? GetBytesPayload(payloadIndex).GetSize()
-                    : GetArrayPayload(payloadIndex).GetSize();
-                if constexpr (TTag::Kind == EFieldKind::Bytes) {
-                    return bytes;
+                static_assert(TTag::Kind == EFieldKind::Bytes || TTag::Kind == EFieldKind::Array
+                        || TTag::Kind == EFieldKind::InlineBytes || TTag::Kind == EFieldKind::InlineArray,
+                    "GetSize() is only available for bytes or array fields");
+                static_assert(TScheme::template HasField<TTag>, "Field is absent in this scheme");
+
+                if constexpr (TTag::Kind == EFieldKind::InlineBytes) {
+                    return this->template Bytes<TTag>().size();
+                } else if constexpr (TTag::Kind == EFieldKind::InlineArray) {
+                    return this->template Array<TTag>().size();
                 } else {
-                    using TValue = typename TTag::TValue;
-                    Y_DEBUG_ABORT_UNLESS(bytes % sizeof(TValue) == 0);
-                    return bytes / sizeof(TValue);
+                    constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TTag>();
+                    const size_t bytes = TTag::Kind == EFieldKind::Bytes
+                        ? GetBytesPayload(payloadIndex).GetSize()
+                        : GetArrayPayload(payloadIndex).GetSize();
+                    if constexpr (TTag::Kind == EFieldKind::Bytes) {
+                        return bytes;
+                    } else {
+                        using TValue = typename TTag::TValue;
+                        Y_DEBUG_ABORT_UNLESS(bytes % sizeof(TValue) == 0);
+                        return bytes / sizeof(TValue);
+                    }
                 }
             }
 
@@ -1333,9 +1648,10 @@ namespace NActors {
 
         template <class TTag>
         auto Bytes() {
-            static_assert(TTag::Kind == EFieldKind::Bytes, "Bytes() is only available for bytes fields");
+            static_assert(TTag::Kind == EFieldKind::Bytes || TTag::Kind == EFieldKind::InlineBytes,
+                "Bytes() is only available for bytes fields");
             return DispatchCurrentVersion([&]<class TScheme>() -> decltype(MakeFrontend<TScheme>().template Bytes<TTag>()) {
-                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                if constexpr (TScheme::template HasField<TTag>) {
                     Y_ENSURE((HasStoredField<TScheme, TTag>()), "Field is absent in this concrete event layout");
                     return MakeFrontend<TScheme>().template Bytes<TTag>();
                 } else {
@@ -1347,9 +1663,10 @@ namespace NActors {
 
         template <class TTag>
         auto Bytes() const {
-            static_assert(TTag::Kind == EFieldKind::Bytes, "Bytes() is only available for bytes fields");
+            static_assert(TTag::Kind == EFieldKind::Bytes || TTag::Kind == EFieldKind::InlineBytes,
+                "Bytes() is only available for bytes fields");
             return DispatchCurrentVersion([&]<class TScheme>() -> decltype(MakeFrontend<TScheme>().template Bytes<TTag>()) {
-                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                if constexpr (TScheme::template HasField<TTag>) {
                     Y_ENSURE((HasStoredField<TScheme, TTag>()), "Field is absent in this concrete event layout");
                     return MakeFrontend<TScheme>().template Bytes<TTag>();
                 } else {
@@ -1361,9 +1678,10 @@ namespace NActors {
 
         template <class TTag>
         auto Array() {
-            static_assert(TTag::Kind == EFieldKind::Array, "Array() is only available for array fields");
+            static_assert(TTag::Kind == EFieldKind::Array || TTag::Kind == EFieldKind::InlineArray,
+                "Array() is only available for array fields");
             return DispatchCurrentVersion([&]<class TScheme>() -> decltype(MakeFrontend<TScheme>().template Array<TTag>()) {
-                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                if constexpr (TScheme::template HasField<TTag>) {
                     Y_ENSURE((HasStoredField<TScheme, TTag>()), "Field is absent in this concrete event layout");
                     return MakeFrontend<TScheme>().template Array<TTag>();
                 } else {
@@ -1375,9 +1693,10 @@ namespace NActors {
 
         template <class TTag>
         auto Array() const {
-            static_assert(TTag::Kind == EFieldKind::Array, "Array() is only available for array fields");
+            static_assert(TTag::Kind == EFieldKind::Array || TTag::Kind == EFieldKind::InlineArray,
+                "Array() is only available for array fields");
             return DispatchCurrentVersion([&]<class TScheme>() -> decltype(MakeFrontend<TScheme>().template Array<TTag>()) {
-                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                if constexpr (TScheme::template HasField<TTag>) {
                     Y_ENSURE((HasStoredField<TScheme, TTag>()), "Field is absent in this concrete event layout");
                     return MakeFrontend<TScheme>().template Array<TTag>();
                 } else {
@@ -1417,9 +1736,10 @@ namespace NActors {
 
         template <class TTag>
         size_t ArraySize() const {
-            static_assert(TTag::Kind == EFieldKind::Array, "ArraySize() is only available for array fields");
+            static_assert(TTag::Kind == EFieldKind::Array || TTag::Kind == EFieldKind::InlineArray,
+                "ArraySize() is only available for array fields");
             return DispatchCurrentVersion([&]<class TScheme>() -> size_t {
-                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                if constexpr (TScheme::template HasField<TTag>) {
                     Y_ENSURE((HasStoredField<TScheme, TTag>()), "Field is absent in this concrete event layout");
                     return MakeFrontend<TScheme>().template ArraySize<TTag>();
                 } else {
@@ -1431,9 +1751,11 @@ namespace NActors {
 
         template <class TTag>
         size_t GetSize() const {
-            static_assert(TTag::IsPayload, "GetSize() is only available for payload-backed fields");
+            static_assert(TTag::Kind == EFieldKind::Bytes || TTag::Kind == EFieldKind::Array
+                    || TTag::Kind == EFieldKind::InlineBytes || TTag::Kind == EFieldKind::InlineArray,
+                "GetSize() is only available for bytes or array fields");
             return DispatchCurrentVersion([&]<class TScheme>() -> size_t {
-                if constexpr (TScheme::template HasPayloadField<TTag>) {
+                if constexpr (TScheme::template HasField<TTag>) {
                     Y_ENSURE((HasStoredField<TScheme, TTag>()), "Field is absent in this concrete event layout");
                     return MakeFrontend<TScheme>().template GetSize<TTag>();
                 } else {
@@ -1553,8 +1875,10 @@ namespace NActors {
         static consteval size_t GetStoredFieldEndOffset() {
             if constexpr (TTag::IsFixed) {
                 return TScheme::template GetFixedOffset<TTag>() + sizeof(typename TTag::TValue);
-            } else {
+            } else if constexpr (TTag::IsPayload) {
                 return TScheme::template GetPayloadRefOffset<TTag>() + sizeof(typename TScheme::TPayloadRef);
+            } else {
+                return sizeof(ui8) + TScheme::template GetFieldOffset<TTag>() + TTag::StorageSize;
             }
         }
 

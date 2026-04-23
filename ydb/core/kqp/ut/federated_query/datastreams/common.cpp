@@ -213,7 +213,7 @@ void TStreamingTestFixture::CreateTopic(const std::string& topicName, std::optio
     if (!settings) {
         settings.emplace()
             .PartitioningSettings(1, 1)
-            .BeginAddConsumer("test_consumer");
+            .BeginAddConsumer(TStringBuilder() << "test_consumer" << Name_);
     }
 
     const auto result = GetTopicClient(local)->CreateTopic(topicName, *settings).ExtractValueSync();

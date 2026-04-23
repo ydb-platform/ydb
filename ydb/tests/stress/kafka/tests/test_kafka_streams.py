@@ -21,6 +21,12 @@ class TestYdbTopicWorkload(StressFixture):
             ],
         )
 
+    def get_kafka_api_ports(self):
+        ports = []
+        for node in self.cluster.nodes.values():
+            ports.append(node.get_kafka_api_port())
+        return ports
+
     def test(self):
         kafka_api_ports = self.get_kafka_api_ports()
         yatest.common.execute([

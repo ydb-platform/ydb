@@ -63,6 +63,30 @@ TOptionalJsonField<TValue, std::decay_t<TCheckType>, std::decay_t<TGetter>> Make
         key, target, std::forward<TCheckType>(checkType), std::forward<TGetter>(getter), typeError);
 }
 
+inline auto MakeOptionalDoubleField(const TStringBuf key, std::optional<double>& target, const TStringBuf typeError) {
+    return MakeOptionalJsonField<double>(
+        key, target,
+        [](const NJson::TJsonValue& v) { return v.IsDouble(); },
+        [](const NJson::TJsonValue& v) { return v.GetDouble(); },
+        typeError);
+}
+
+inline auto MakeOptionalUintField(const TStringBuf key, std::optional<ui32>& target, const TStringBuf typeError) {
+    return MakeOptionalJsonField<ui32>(
+        key, target,
+        [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
+        [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
+        typeError);
+}
+
+inline auto MakeOptionalBoolField(const TStringBuf key, std::optional<bool>& target, const TStringBuf typeError) {
+    return MakeOptionalJsonField<bool>(
+        key, target,
+        [](const NJson::TJsonValue& v) { return v.IsBoolean(); },
+        [](const NJson::TJsonValue& v) { return v.GetBoolean(); },
+        typeError);
+}
+
 template <class... TFields>
 TConclusionStatus ParseOptionalJsonFields(const NJson::TJsonValue& json, const TFields&... fields) {
     TConclusionStatus result = TConclusionStatus::Success();

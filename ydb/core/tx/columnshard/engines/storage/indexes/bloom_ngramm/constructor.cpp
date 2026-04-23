@@ -58,13 +58,15 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     }
 
     const ui32 columnId = columnInfo->GetId();
+    const bool useDeprecatedSizing = TIndexMeta::IsDeprecatedSizingMode(
+        DeprecatedHashesCount, DeprecatedFilterSizeBytes, DeprecatedRecordsCount);
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
         GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(),
         FalsePositiveProbability.value_or(NDefaults::FalsePositiveProbability),
         NGrammSize.value_or(NDefaults::NGrammSize),
         TBase::GetBitsStorageConstructor(),
         CaseSensitive.value_or(NDefaults::CaseSensitive),
-        UseDeprecatedSizing, DeprecatedFilterSizeBytes, DeprecatedRecordsCount, DeprecatedHashesCount);
+        useDeprecatedSizing, DeprecatedFilterSizeBytes, DeprecatedRecordsCount, DeprecatedHashesCount);
 }
 
 TConclusionStatus TIndexConstructor::ValidateValues() const {
@@ -110,41 +112,28 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
 
     if (auto c = NIndexParameters::ParseOptionalJsonFields(
             jsonInfo,
-            NIndexParameters::MakeOptionalJsonField<double>(
+            NIndexParameters::MakeOptionalDoubleField(
                 NIndexParameters::FalsePositiveProbability, FalsePositiveProbability,
-                [](const NJson::TJsonValue& v) { return v.IsDouble(); },
-                [](const NJson::TJsonValue& v) { return v.GetDouble(); },
                 "false_positive_probability must be in bloom ngramm filter features as double field"),
-            NIndexParameters::MakeOptionalJsonField<ui32>(
+            NIndexParameters::MakeOptionalUintField(
                 NIndexParameters::NGrammSize, NGrammSize,
-                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
-                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
                 "ngramm_size have to be in bloom filter features as uint field"),
-            NIndexParameters::MakeOptionalJsonField<ui32>(
+            NIndexParameters::MakeOptionalUintField(
                 NIndexParameters::HashesCount, DeprecatedHashesCount,
-                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
-                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
                 "hashes_count have to be in bloom filter features as uint field"),
-            NIndexParameters::MakeOptionalJsonField<ui32>(
+            NIndexParameters::MakeOptionalUintField(
                 NIndexParameters::FilterSizeBytes, DeprecatedFilterSizeBytes,
-                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
-                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
                 "filter_size_bytes have to be in bloom filter features as uint field"),
-            NIndexParameters::MakeOptionalJsonField<ui32>(
+            NIndexParameters::MakeOptionalUintField(
                 NIndexParameters::RecordsCount, DeprecatedRecordsCount,
-                [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
-                [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
                 "records_count have to be in bloom filter features as uint field"),
-            NIndexParameters::MakeOptionalJsonField<bool>(
+            NIndexParameters::MakeOptionalBoolField(
                 NIndexParameters::CaseSensitive, CaseSensitive,
-                [](const NJson::TJsonValue& v) { return v.IsBoolean(); },
-                [](const NJson::TJsonValue& v) { return v.GetBoolean(); },
                 "case_sensitive have to be in bloom filter features as boolean field"));
         c.IsFail()) {
         return c;
     }
 
-    UseDeprecatedSizing = DeprecatedHashesCount || DeprecatedFilterSizeBytes || DeprecatedRecordsCount;
     return ValidateValues();
 }
 
@@ -171,20 +160,19 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     CaseSensitive = bFilter.HasCaseSensitive()
         ? std::optional<bool>(bFilter.GetCaseSensitive()) : std::nullopt;
 
-    UseDeprecatedSizing = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0;
     DeprecatedHashesCount.reset();
     DeprecatedFilterSizeBytes.reset();
     DeprecatedRecordsCount.reset();
 
-    if (UseDeprecatedSizing) {
-        if (bFilter.HasHashesCount()) {
-            DeprecatedHashesCount = bFilter.GetHashesCount();
-        }
+    if (bFilter.HasHashesCount()) {
+        DeprecatedHashesCount = bFilter.GetHashesCount();
+    }
 
-        if (bFilter.HasFilterSizeBytes()) {
-            DeprecatedFilterSizeBytes = bFilter.GetFilterSizeBytes();
-        }
+    if (bFilter.HasFilterSizeBytes()) {
+        DeprecatedFilterSizeBytes = bFilter.GetFilterSizeBytes();
+    }
 
+    if (bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0) {
         DeprecatedRecordsCount = bFilter.GetRecordsCount();
     }
 
@@ -207,7 +195,7 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     NIndexParameters::SetProtoIfPresent(CaseSensitive, [&](bool v) { filterProto->SetCaseSensitive(v); });
     NIndexParameters::SetProtoIfPresent(NGrammSize, [&](ui32 v) { filterProto->SetNGrammSize(v); });
 
-    if (UseDeprecatedSizing) {
+    if (TIndexMeta::IsDeprecatedSizingMode(DeprecatedHashesCount, DeprecatedFilterSizeBytes, DeprecatedRecordsCount)) {
         NIndexParameters::SetProtoIfPresent(DeprecatedHashesCount, [&](ui32 v) { filterProto->SetHashesCount(v); });
         NIndexParameters::SetProtoIfPresent(DeprecatedFilterSizeBytes, [&](ui32 v) { filterProto->SetFilterSizeBytes(v); });
         NIndexParameters::SetProtoIfPresent(DeprecatedRecordsCount, [&](ui32 v) { filterProto->SetRecordsCount(v); });

@@ -96,6 +96,11 @@ public:
     static TString GetRecordsCountIntervalString();
 
     static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize) {
+        return ValidateParams(falsePositiveProbability, nGrammSize, std::nullopt, std::nullopt);
+    }
+
+    static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize,
+        const std::optional<ui32>& hashesCount, const std::optional<ui32>& filterSizeBytes) {
         if (falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
             return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
         }
@@ -104,10 +109,15 @@ public:
             return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + GetNGrammSizeIntervalString());
         }
 
-        const ui32 hashesCount = CalcHashesCount(falsePositiveProbability);
-        if (!CheckHashesCount(hashesCount)) {
+        const ui32 validatedHashesCount = hashesCount.value_or(CalcHashesCount(falsePositiveProbability));
+        if (!CheckHashesCount(validatedHashesCount)) {
             return TConclusionStatus::Fail(
                 "false_positive_probability have to produce hashes_count in interval " + GetHashesCountIntervalString());
+        }
+
+        if (filterSizeBytes && !CheckFilterSizeBytes(*filterSizeBytes)) {
+            return TConclusionStatus::Fail(
+                "filter_size_bytes have to be in bloom ngramm filter in interval " + GetFilterSizeBytesIntervalString());
         }
 
         return TConclusionStatus::Success();

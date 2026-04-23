@@ -29,28 +29,8 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     [[nodiscard]] bool Initialize() {
         AFL_VERIFY(!ResultSchema);
-        auto check = [](const bool condition, const TStringBuf message) {
-            if (!condition) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_init", message);
-                return false;
-            }
-
-            return true;
-        };
-
-        if (!check(FalsePositiveProbability > 0 && FalsePositiveProbability < 1, "false_positive_probability out of (0,1) range")) {
-            return false;
-        }
-
-        if (!check(TConstants::CheckNGrammSize(NGrammSize), "ngramm_size out of allowed interval")) {
-            return false;
-        }
-
-        if (!check(TConstants::CheckHashesCount(HashesCount), "hashes_count out of allowed interval")) {
-            return false;
-        }
-
-        if (!check(TConstants::CheckFilterSizeBytes(FilterSizeBytes), "filter_size_bytes out of allowed interval")) {
+        if (auto c = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize, HashesCount, FilterSizeBytes); c.IsFail()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_init", c.GetErrorMessage());
             return false;
         }
 
@@ -168,6 +148,13 @@ protected:
 
 public:
     TIndexMeta() = default;
+
+    static bool IsDeprecatedSizingMode(const std::optional<ui32>& deprecatedHashesCount,
+        const std::optional<ui32>& deprecatedFilterSizeBytes,
+        const std::optional<ui32>& deprecatedRecordsCount) {
+        return deprecatedHashesCount || deprecatedFilterSizeBytes || deprecatedRecordsCount;
+    }
+
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionIndex, const ui32 columnId,
         const TReadDataExtractorContainer& dataExtractor, const double falsePositiveProbability, const ui32 nGrammSize,
         const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive,

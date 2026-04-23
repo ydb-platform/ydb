@@ -22,7 +22,6 @@ private:
     std::optional<ui32> NGrammSize;
     std::optional<double> FalsePositiveProbability;
     std::optional<bool> CaseSensitive;
-    bool UseDeprecatedSizing = false;
     std::optional<ui32> DeprecatedHashesCount;
     std::optional<ui32> DeprecatedFilterSizeBytes;
     std::optional<ui32> DeprecatedRecordsCount;

@@ -8,6 +8,7 @@ SRCS(
     GLOBAL upsert_index.cpp
     GLOBAL drop_index.cpp
     GLOBAL upsert_opt.cpp
+    GLOBAL reset_upsert_opt.cpp
     GLOBAL alter_sharding.cpp
 )
 
@@ -16,6 +17,7 @@ PEERDIR(
     ydb/core/formats/arrow/serializer
     ydb/core/tx/columnshard/engines/storage/optimizer/abstract
     ydb/core/tx/columnshard/data_accessor/abstract
+    ydb/core/tx/columnshard/data_accessor/local_db
     ydb/core/kqp/gateway/utils
     ydb/core/protos
 )

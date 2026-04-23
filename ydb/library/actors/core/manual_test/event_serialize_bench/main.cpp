@@ -25,6 +25,7 @@
 #include <util/string/printf.h>
 #include <util/system/sigset.h>
 
+#include <array>
 #include <chrono>
 #include <future>
 
@@ -97,6 +98,38 @@ struct TEvBenchPbBytesMessage
     TEvBenchPbBytesMessage() = default;
 };
 
+struct TEvBenchPbThirtyMessage
+    : TEventPB<TEvBenchPbThirtyMessage, NActorsBench::TThirtyU64, EvBenchPbMessage>
+{
+    using TBase = TEventPB<TEvBenchPbThirtyMessage, NActorsBench::TThirtyU64, EvBenchPbMessage>;
+
+    TEvBenchPbThirtyMessage() = default;
+};
+
+struct TEvBenchPbArrayMessage
+    : TEventPB<TEvBenchPbArrayMessage, NActorsBench::TFixed64Array30, EvBenchPbMessage>
+{
+    using TBase = TEventPB<TEvBenchPbArrayMessage, NActorsBench::TFixed64Array30, EvBenchPbMessage>;
+
+    TEvBenchPbArrayMessage() = default;
+};
+
+struct TEvBenchPbStructArrayMessage
+    : TEventPB<TEvBenchPbStructArrayMessage, NActorsBench::TTripleArray10, EvBenchPbMessage>
+{
+    using TBase = TEventPB<TEvBenchPbStructArrayMessage, NActorsBench::TTripleArray10, EvBenchPbMessage>;
+
+    TEvBenchPbStructArrayMessage() = default;
+};
+
+struct TTripleInts {
+    ui32 A;
+    ui32 B;
+    ui32 C;
+};
+
+static_assert(std::is_trivially_copyable_v<TTripleInts>);
+
 struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage> {
     using TBase = TEventFlat<TEvBenchFlatMessage>;
 
@@ -148,6 +181,69 @@ struct TEvBenchFlatBytesMessage : TEventFlat<TEvBenchFlatBytesMessage> {
 
     friend class TEventFlat<TEvBenchFlatBytesMessage>;
 };
+
+#define BENCH_30_U64_FIELDS(X) \
+    X(1) X(2) X(3) X(4) X(5) X(6) X(7) X(8) X(9) X(10) \
+    X(11) X(12) X(13) X(14) X(15) X(16) X(17) X(18) X(19) X(20) \
+    X(21) X(22) X(23) X(24) X(25) X(26) X(27) X(28) X(29) X(30)
+
+struct TEvBenchFlatThirtyMessage : TEventFlat<TEvBenchFlatThirtyMessage> {
+    using TBase = TEventFlat<TEvBenchFlatThirtyMessage>;
+
+    static constexpr ui32 EventType = EvBenchFlatMessage;
+
+#define DECLARE_VALUE_TAG(N) using TValue##N##Tag = TBase::FixedField<ui64, N - 1>;
+    BENCH_30_U64_FIELDS(DECLARE_VALUE_TAG)
+#undef DECLARE_VALUE_TAG
+
+    using TSchemeV1 = TBase::Scheme<
+        TValue1Tag, TValue2Tag, TValue3Tag, TValue4Tag, TValue5Tag,
+        TValue6Tag, TValue7Tag, TValue8Tag, TValue9Tag, TValue10Tag,
+        TValue11Tag, TValue12Tag, TValue13Tag, TValue14Tag, TValue15Tag,
+        TValue16Tag, TValue17Tag, TValue18Tag, TValue19Tag, TValue20Tag,
+        TValue21Tag, TValue22Tag, TValue23Tag, TValue24Tag, TValue25Tag,
+        TValue26Tag, TValue27Tag, TValue28Tag, TValue29Tag, TValue30Tag>;
+    using TScheme = TBase::Versions<TSchemeV1>;
+
+    friend class TEventFlat<TEvBenchFlatThirtyMessage>;
+
+    static TEvBenchFlatThirtyMessage* Make(ui64 base) {
+        THolder<TEvBenchFlatThirtyMessage> holder(TBase::MakeEvent());
+        auto frontend = holder->GetFrontend<TSchemeV1>();
+#define SET_VALUE_TAG(N) frontend.template Field<TValue##N##Tag>() = base + N;
+        BENCH_30_U64_FIELDS(SET_VALUE_TAG)
+#undef SET_VALUE_TAG
+        return holder.Release();
+    }
+};
+
+struct TEvBenchFlatArrayMessage : TEventFlat<TEvBenchFlatArrayMessage> {
+    using TBase = TEventFlat<TEvBenchFlatArrayMessage>;
+
+    static constexpr ui32 EventType = EvBenchFlatMessage;
+
+    using TValuesTag = TBase::ArrayField<ui64, 0>;
+
+    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TValuesTag>;
+    using TScheme = TBase::Versions<TSchemeV1>;
+
+    friend class TEventFlat<TEvBenchFlatArrayMessage>;
+};
+
+struct TEvBenchFlatStructArrayMessage : TEventFlat<TEvBenchFlatStructArrayMessage> {
+    using TBase = TEventFlat<TEvBenchFlatStructArrayMessage>;
+
+    static constexpr ui32 EventType = EvBenchFlatMessage;
+
+    using TValuesTag = TBase::ArrayField<TTripleInts, 0>;
+
+    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TValuesTag>;
+    using TScheme = TBase::Versions<TSchemeV1>;
+
+    friend class TEventFlat<TEvBenchFlatStructArrayMessage>;
+};
+
+#undef BENCH_30_U64_FIELDS
 
 struct TEvBenchAck : TEventFlat<TEvBenchAck> {
     using TBase = TEventFlat<TEvBenchAck>;
@@ -228,6 +324,47 @@ const TRope& GetSharedPayload(size_t size) {
     }
 
     return it->second;
+}
+
+void FillThirtyU64Record(NActorsBench::TThirtyU64& record, ui64 base) {
+    record.SetValue1(base + 1);
+    record.SetValue2(base + 2);
+    record.SetValue3(base + 3);
+    record.SetValue4(base + 4);
+    record.SetValue5(base + 5);
+    record.SetValue6(base + 6);
+    record.SetValue7(base + 7);
+    record.SetValue8(base + 8);
+    record.SetValue9(base + 9);
+    record.SetValue10(base + 10);
+    record.SetValue11(base + 11);
+    record.SetValue12(base + 12);
+    record.SetValue13(base + 13);
+    record.SetValue14(base + 14);
+    record.SetValue15(base + 15);
+    record.SetValue16(base + 16);
+    record.SetValue17(base + 17);
+    record.SetValue18(base + 18);
+    record.SetValue19(base + 19);
+    record.SetValue20(base + 20);
+    record.SetValue21(base + 21);
+    record.SetValue22(base + 22);
+    record.SetValue23(base + 23);
+    record.SetValue24(base + 24);
+    record.SetValue25(base + 25);
+    record.SetValue26(base + 26);
+    record.SetValue27(base + 27);
+    record.SetValue28(base + 28);
+    record.SetValue29(base + 29);
+    record.SetValue30(base + 30);
+}
+
+ui64 ReadFirstFiveU64Record(const NActorsBench::TThirtyU64& record) {
+    return record.GetValue1()
+        + record.GetValue2()
+        + record.GetValue3()
+        + record.GetValue4()
+        + record.GetValue5();
 }
 
 template <>
@@ -377,6 +514,241 @@ struct TPayloadFlatTraits {
         if constexpr (PayloadBytes >= Payload1MB) {
             return Min<ui64>(window, 8);
         }
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchPbThirtyMessage> {
+    using TEvent = TEvBenchPbThirtyMessage;
+
+    static constexpr TStringBuf Name() {
+        return "protobuf";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "fixed30-read5";
+    }
+
+    static TEvent* Make(ui64 base) {
+        THolder<TEvent> holder(new TEvent());
+        FillThirtyU64Record(holder->Record, base);
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        return ReadFirstFiveU64Record(ev.Record);
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchFlatThirtyMessage> {
+    using TEvent = TEvBenchFlatThirtyMessage;
+
+    static constexpr TStringBuf Name() {
+        return "flat";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "fixed30-read5";
+    }
+
+    static TEvent* Make(ui64 base) {
+        return TEvent::Make(base);
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        auto frontend = ev.template GetFrontend<typename TEvent::TSchemeV1>();
+        return static_cast<ui64>(frontend.template Field<typename TEvent::TValue1Tag>())
+            + static_cast<ui64>(frontend.template Field<typename TEvent::TValue2Tag>())
+            + static_cast<ui64>(frontend.template Field<typename TEvent::TValue3Tag>())
+            + static_cast<ui64>(frontend.template Field<typename TEvent::TValue4Tag>())
+            + static_cast<ui64>(frontend.template Field<typename TEvent::TValue5Tag>());
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchPbArrayMessage> {
+    using TEvent = TEvBenchPbArrayMessage;
+
+    static constexpr TStringBuf Name() {
+        return "protobuf";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "array30-read5";
+    }
+
+    static TEvent* Make(ui64 base) {
+        THolder<TEvent> holder(new TEvent());
+        for (ui64 i = 0; i < 30; ++i) {
+            holder->Record.AddValues(base + i + 1);
+        }
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        const auto& r = ev.Record;
+        return r.GetValues(0) + r.GetValues(1) + r.GetValues(2) + r.GetValues(3) + r.GetValues(4);
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchFlatArrayMessage> {
+    using TEvent = TEvBenchFlatArrayMessage;
+
+    static constexpr TStringBuf Name() {
+        return "flat";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "array30-read5";
+    }
+
+    static TEvent* Make(ui64 base) {
+        THolder<TEvent> holder(TEvent::MakeEvent());
+        std::array<ui64, 30> values;
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = base + i + 1;
+        }
+        auto array = holder->template Array<typename TEvent::TValuesTag>();
+        array.Resize(values.size());
+        std::memcpy(array.Data(), values.data(), values.size() * sizeof(ui64));
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        auto values = ev.template Array<typename TEvent::TValuesTag>();
+        return static_cast<ui64>(values[0])
+            + static_cast<ui64>(values[1])
+            + static_cast<ui64>(values[2])
+            + static_cast<ui64>(values[3])
+            + static_cast<ui64>(values[4]);
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchPbStructArrayMessage> {
+    using TEvent = TEvBenchPbStructArrayMessage;
+
+    static constexpr TStringBuf Name() {
+        return "protobuf";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "struct-array10-read5";
+    }
+
+    static TEvent* Make(ui64 base) {
+        THolder<TEvent> holder(new TEvent());
+        for (ui64 i = 0; i < 10; ++i) {
+            auto* item = holder->Record.AddValues();
+            item->SetA(static_cast<ui32>(base + i * 3 + 1));
+            item->SetB(static_cast<ui32>(base + i * 3 + 2));
+            item->SetC(static_cast<ui32>(base + i * 3 + 3));
+        }
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        ui64 sum = 0;
+        const auto& values = ev.Record.GetValues();
+        for (int i = 0; i < 5; ++i) {
+            sum += values.Get(i).GetA() + values.Get(i).GetB() + values.Get(i).GetC();
+        }
+        return sum;
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
+        return window;
+    }
+};
+
+template <>
+struct TMessageTraits<TEvBenchFlatStructArrayMessage> {
+    using TEvent = TEvBenchFlatStructArrayMessage;
+
+    static constexpr TStringBuf Name() {
+        return "flat";
+    }
+
+    static constexpr TStringBuf TestName() {
+        return "struct-array10-read5";
+    }
+
+    static TEvent* Make(ui64 base) {
+        THolder<TEvent> holder(TEvent::MakeEvent());
+        std::array<TTripleInts, 10> values;
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = TTripleInts{
+                .A = static_cast<ui32>(base + i * 3 + 1),
+                .B = static_cast<ui32>(base + i * 3 + 2),
+                .C = static_cast<ui32>(base + i * 3 + 3),
+            };
+        }
+        auto array = holder->template Array<typename TEvent::TValuesTag>();
+        array.Resize(values.size());
+        std::memcpy(array.Data(), values.data(), values.size() * sizeof(TTripleInts));
+        return holder.Release();
+    }
+
+    static ui64 Read(const TEvent& ev) {
+        auto values = ev.template Array<typename TEvent::TValuesTag>();
+        ui64 sum = 0;
+        for (size_t i = 0; i < 5; ++i) {
+            const TTripleInts value = values[i];
+            sum += value.A + value.B + value.C;
+        }
+        return sum;
+    }
+
+    static ui32 SerializedSize(ui64 base) {
+        THolder<TEvent> ev(Make(base));
+        return ev->CalculateSerializedSize();
+    }
+
+    static ui64 EffectiveWindow(ui64 window) {
         return window;
     }
 };
@@ -780,6 +1152,12 @@ void RunBenchmarks(const TBenchConfig& config) {
     if (runLocal) {
         MaybeRunScenario<TMessageTraits<TEvBenchPbMessage>>(config, "local");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbThirtyMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatThirtyMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbArrayMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatArrayMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbStructArrayMessage>>(config, "local");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatStructArrayMessage>>(config, "local");
         MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "local");
         MaybeRunScenario<TPayloadFlatTraits<Payload4KB>>(config, "local");
         MaybeRunScenario<TPayloadPbTraits<Payload1MB>>(config, "local");
@@ -789,6 +1167,12 @@ void RunBenchmarks(const TBenchConfig& config) {
     if (runInterconnect) {
         MaybeRunScenario<TMessageTraits<TEvBenchPbMessage>>(config, "interconnect");
         MaybeRunScenario<TMessageTraits<TEvBenchFlatMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbThirtyMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatThirtyMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbArrayMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatArrayMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchPbStructArrayMessage>>(config, "interconnect");
+        MaybeRunScenario<TMessageTraits<TEvBenchFlatStructArrayMessage>>(config, "interconnect");
         MaybeRunScenario<TPayloadPbTraits<Payload4KB>>(config, "interconnect");
         MaybeRunScenario<TPayloadFlatTraits<Payload4KB>>(config, "interconnect");
         MaybeRunScenario<TPayloadPbTraits<Payload1MB>>(config, "interconnect");

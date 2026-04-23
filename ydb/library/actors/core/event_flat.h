@@ -14,6 +14,7 @@
 #include <type_traits>
 #include <utility>
 #include <cstddef>
+#include <cstdint>
 
 namespace NActors {
     namespace NFlatEventDetail {
@@ -91,6 +92,20 @@ namespace NActors {
         struct TPayloadIdTypeSelector<TDefault, TFirst, TRest...> {
             using Type = typename TPayloadIdTypeSelectorImpl<TDefault, TFirst, THasPayloadIdType<TFirst>::value, TRest...>::Type;
         };
+
+        template <class... T>
+        struct TMaxHeaderSize;
+
+        template <class T>
+        struct TMaxHeaderSize<T> {
+            static constexpr size_t Value = T::HeaderSize;
+        };
+
+        template <class T, class... TRest>
+        struct TMaxHeaderSize<T, TRest...> {
+            static constexpr size_t Tail = TMaxHeaderSize<TRest...>::Value;
+            static constexpr size_t Value = T::HeaderSize > Tail ? T::HeaderSize : Tail;
+        };
     } // namespace NFlatEventDetail
 
     /**
@@ -115,6 +130,14 @@ namespace NActors {
         static_assert(std::is_class_v<TEv>, "TEv must be a class");
 
     public:
+        static void operator delete(void* ptr) noexcept {
+            ::operator delete(ptr);
+        }
+
+        static void operator delete(void* ptr, size_t) noexcept {
+            ::operator delete(ptr);
+        }
+
         template <class TPayloadId>
         struct TPayloadRefBase {
             TPayloadId PayloadId = 0; // 0 means payload is absent
@@ -289,6 +312,7 @@ namespace NActors {
         class TBasicArrayView {
             static_assert(std::is_trivially_copyable_v<T>, "Array view requires trivially copyable type");
             using TPayloadRef = TPayloadRefBase<TPayloadId>;
+            static constexpr bool SupportsAlignedFastPath = alignof(T) <= 16;
 
             using TRopePtr = std::conditional_t<IsConst, const TRope*, TRope*>;
             using TPointer = std::conditional_t<IsConst, const char*, char*>;
@@ -321,20 +345,44 @@ namespace NActors {
 
                 T Read() const {
                     Y_ENSURE(Index < Size(), "Array index " << Index << " is out of range " << Size());
-                    T value;
-                    auto it = Payload->Position(Index * sizeof(T));
-                    TRopeUtils::Memcpy(reinterpret_cast<char*>(&value), it, sizeof(T));
-                    return value;
+                    if constexpr (SupportsAlignedFastPath) {
+                        return AlignedData()[Index];
+                    } else {
+                        auto it = Payload->Position(Index * sizeof(T));
+                        if (it.ContiguousSize() >= sizeof(T)) {
+                            return ReadUnaligned<T>(it.ContiguousData());
+                        }
+                        T value;
+                        TRopeUtils::Memcpy(reinterpret_cast<char*>(&value), it, sizeof(T));
+                        return value;
+                    }
                 }
 
                 template <bool Enabled = !IsConst>
                 std::enable_if_t<Enabled> Write(T value) {
                     Y_ENSURE(Index < Size(), "Array index " << Index << " is out of range " << Size());
-                    auto it = Payload->Position(Index * sizeof(T));
-                    TRopeUtils::Memcpy(it, reinterpret_cast<const char*>(&value), sizeof(T));
+                    if constexpr (SupportsAlignedFastPath) {
+                        MutableAlignedData()[Index] = value;
+                    } else {
+                        auto it = Payload->Position(Index * sizeof(T));
+                        if (it.ContiguousSize() >= sizeof(T)) {
+                            WriteUnaligned<T>(it.ContiguousDataMut(), value);
+                        } else {
+                            TRopeUtils::Memcpy(it, reinterpret_cast<const char*>(&value), sizeof(T));
+                        }
+                    }
                     TPayloadRef ref = ReadUnaligned<TPayloadRef>(RefPtr);
                     ref.PayloadId = Payload->GetSize() ? PayloadId : 0;
                     WriteUnaligned<TPayloadRef>(RefPtr, ref);
+                }
+
+                const T* AlignedData() const {
+                    return TBasicArrayView::GetAlignedData(static_cast<const TRope&>(*Payload));
+                }
+
+                template <bool Enabled = !IsConst>
+                std::enable_if_t<Enabled, T*> MutableAlignedData() {
+                    return TBasicArrayView::GetAlignedData(*Payload);
                 }
 
             private:
@@ -363,6 +411,15 @@ namespace NActors {
                 return size() == 0;
             }
 
+            const T* Data() const {
+                if constexpr (SupportsAlignedFastPath) {
+                    return GetAlignedData(static_cast<const TRope&>(*Payload));
+                } else {
+                    static_assert(SupportsAlignedFastPath, "Data() is only available for aligned array payloads");
+                    return nullptr;
+                }
+            }
+
             TElementView operator[](size_t index) const {
                 return TElementView(Payload, RefPtr, PayloadId, index);
             }
@@ -377,14 +434,28 @@ namespace NActors {
 
             void CopyTo(T* dst, size_t count) const {
                 Y_ENSURE(count == size(), "Unexpected array size " << count << ", expected " << size());
-                auto it = Payload->Begin();
-                TRopeUtils::Memcpy(reinterpret_cast<char*>(dst), it, count * sizeof(T));
+                if constexpr (SupportsAlignedFastPath) {
+                    if (count) {
+                        std::memcpy(dst, GetAlignedData(static_cast<const TRope&>(*Payload)), count * sizeof(T));
+                    }
+                } else {
+                    auto it = Payload->Begin();
+                    TRopeUtils::Memcpy(reinterpret_cast<char*>(dst), it, count * sizeof(T));
+                }
             }
 
             template <class F>
             void ForEach(F&& f) const {
-                for (size_t i = 0; i < size(); ++i) {
-                    f(At(i));
+                if constexpr (SupportsAlignedFastPath) {
+                    const size_t count = size();
+                    const T* data = count ? GetAlignedData(static_cast<const TRope&>(*Payload)) : nullptr;
+                    for (size_t i = 0; i < count; ++i) {
+                        f(data[i]);
+                    }
+                } else {
+                    for (size_t i = 0; i < size(); ++i) {
+                        f(At(i));
+                    }
                 }
             }
 
@@ -394,31 +465,36 @@ namespace NActors {
             }
 
             template <bool Enabled = !IsConst>
+            std::enable_if_t<Enabled, T*> Data() {
+                if constexpr (SupportsAlignedFastPath) {
+                    return GetAlignedData(*Payload);
+                } else {
+                    static_assert(SupportsAlignedFastPath, "Data() is only available for aligned array payloads");
+                    return nullptr;
+                }
+            }
+
+            template <bool Enabled = !IsConst>
             std::enable_if_t<Enabled> Clear() {
                 Payload->clear();
                 SetRef({});
             }
 
             template <bool Enabled = !IsConst>
-            std::enable_if_t<Enabled> Append(const T* src, size_t count) {
+            std::enable_if_t<Enabled> CopyFrom(const T* src, size_t count) {
                 if (!count) {
+                    Clear();
                     return;
                 }
 
                 const size_t bytes = CheckedFieldBytes(count);
-                TString data = TString::Uninitialized(bytes);
-                std::memcpy(data.Detach(), src, bytes);
-                Payload->Insert(Payload->End(), TRope(std::move(data)));
+                TRcBuf data = TRcBuf(TRopeAlignedBuffer::Allocate(bytes));
+                std::memcpy(data.GetDataMut(), src, bytes);
+                *Payload = TRope(std::move(data));
 
                 SetRef(TPayloadRef{
                     .PayloadId = static_cast<TPayloadId>(PayloadId),
                 });
-            }
-
-            template <bool Enabled = !IsConst>
-            std::enable_if_t<Enabled> CopyFrom(const T* src, size_t count) {
-                Clear();
-                Append(src, count);
             }
 
             template <bool Enabled = !IsConst>
@@ -434,10 +510,17 @@ namespace NActors {
                 Y_ENSURE(newSize >= current, "Shrink is not supported for flat array payloads");
 
                 const size_t delta = newSize - current;
-                const size_t bytes = CheckedFieldBytes(delta);
-                TString data = TString::Uninitialized(bytes);
-                std::memset(data.Detach(), 0, bytes);
-                Payload->Insert(Payload->End(), TRope(std::move(data)));
+                const size_t currentBytes = CheckedFieldBytes(current);
+                const size_t newBytes = CheckedFieldBytes(newSize);
+                const size_t appendedBytes = CheckedFieldBytes(delta);
+                TRcBuf data = TRcBuf(TRopeAlignedBuffer::Allocate(newBytes));
+                char* dst = data.GetDataMut();
+                if (currentBytes) {
+                    auto it = Payload->Begin();
+                    TRopeUtils::Memcpy(dst, it, currentBytes);
+                }
+                std::memset(dst + currentBytes, 0, appendedBytes);
+                *Payload = TRope(std::move(data));
 
                 SetRef(TPayloadRef{
                     .PayloadId = static_cast<TPayloadId>(PayloadId),
@@ -457,6 +540,29 @@ namespace NActors {
             template <bool Enabled = !IsConst>
             std::enable_if_t<Enabled> SetRef(TPayloadRef ref) {
                 WriteUnaligned<TPayloadRef>(RefPtr, ref);
+            }
+
+            static const T* GetAlignedData(const TRope& payload) {
+                auto it = payload.Begin();
+                if (!it.Valid()) {
+                    return nullptr;
+                }
+                Y_DEBUG_ABORT_UNLESS(it.ContiguousSize() == payload.GetSize());
+                auto* ptr = reinterpret_cast<const T*>(it.ContiguousData());
+                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(ptr) % alignof(T) == 0);
+                return ptr;
+            }
+
+            template <bool Enabled = !IsConst>
+            static std::enable_if_t<Enabled, T*> GetAlignedData(TRope& payload) {
+                auto it = payload.Begin();
+                if (!it.Valid()) {
+                    return nullptr;
+                }
+                Y_DEBUG_ABORT_UNLESS(it.ContiguousSize() == payload.GetSize());
+                auto* ptr = reinterpret_cast<T*>(it.ContiguousDataMut());
+                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(ptr) % alignof(T) == 0);
+                return ptr;
             }
 
         private:
@@ -588,6 +694,7 @@ namespace NActors {
             using TLatestScheme = typename NFlatEventDetail::TLastType<TSchemes...>::Type;
             static_assert(sizeof...(TSchemes) <= std::numeric_limits<ui8>::max(), "Too many flat event versions");
             static constexpr ui8 VersionCount = sizeof...(TSchemes);
+            static constexpr size_t MaxHeaderSize = NFlatEventDetail::TMaxHeaderSize<TSchemes...>::Value;
 
             template <class TScheme>
             static constexpr bool HasScheme = (std::is_same_v<TScheme, TSchemes> || ...);
@@ -850,7 +957,21 @@ namespace NActors {
                 }
                 return info;
             }
-            return CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(), Payloads, HeaderSize);
+
+            TEventSerializationInfo info = CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(),
+                Payloads, HeaderSize);
+            if (!info.Sections.empty()) {
+                DispatchCurrentVersion([&]<class TScheme>() {
+                    size_t payloadIndex = 0;
+                    TScheme::ForEachPayloadField([&]<class TField>() {
+                        if constexpr (TField::Kind == EFieldKind::Array) {
+                            info.Sections[1 + payloadIndex].Alignment = alignof(typename TField::TValue);
+                        }
+                        ++payloadIndex;
+                    });
+                });
+            }
+            return info;
         }
 
         ui8 GetVersion() const {
@@ -866,11 +987,8 @@ namespace NActors {
             using TVersions = typename TEv::TScheme;
             using TLatestScheme = typename TVersions::TLatestScheme;
 
-            THolder<TEv> holder(new TEv());
+            THolder<TEv> holder = MakeHolder();
             holder->ResetHeaderStorage(TLatestScheme::HeaderSize);
-            if (!holder->HeaderStoredInline) {
-                std::memset(holder->MutableHeaderData(), 0, TLatestScheme::HeaderSize);
-            }
             holder->Version = TVersions::VersionCount;
             WriteUnaligned<ui8>(holder->MutableHeaderData(), holder->Version);
             return holder.Release();
@@ -888,11 +1006,8 @@ namespace NActors {
                 ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
                 Y_ENSURE(size, "Flat event header is missing");
 
-                TString header = TString::Uninitialized(size);
-                TRopeUtils::Memcpy(header.Detach(), iter, size);
-
-                THolder<TEv> holder(new TEv());
-                holder->AssignHeaderStorage(std::move(header));
+                THolder<TEv> holder = MakeHolder();
+                holder->AssignHeaderStorage(iter, size);
                 holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
 
                 holder->DispatchCurrentVersion([&]<class TScheme>() {
@@ -903,6 +1018,7 @@ namespace NActors {
                         holder->Payloads[i] = std::move(wirePayloads[i]);
                     }
                     holder->template ValidateStateForScheme<TScheme>();
+                    holder->template NormalizeArrayPayloadsForScheme<TScheme>();
                 });
 
                 return holder.Release();
@@ -912,7 +1028,7 @@ namespace NActors {
 
             Y_ENSURE(!wirePayloads.empty(), "Flat event payload set is empty");
 
-            THolder<TEv> holder(new TEv());
+            THolder<TEv> holder = MakeHolder();
             holder->AssignHeaderStorage(wirePayloads.front());
             holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
 
@@ -920,6 +1036,7 @@ namespace NActors {
                 Y_ENSURE(wirePayloads.size() == 1,
                     "Unexpected number of payload sections " << wirePayloads.size() << " for flat event version " << holder->Version);
                 holder->template ValidateStateForScheme<TScheme>();
+                holder->template NormalizeArrayPayloadsForScheme<TScheme>();
             });
 
             return holder.Release();
@@ -1047,12 +1164,20 @@ namespace NActors {
         TEventFlat() = default;
 
     private:
-        static constexpr size_t InlineHeaderCapacity = 64;
-
         template <class TValue>
         static size_t CheckedFieldBytes(size_t count) {
             Y_ENSURE(count <= std::numeric_limits<size_t>::max() / sizeof(TValue), "Flat event field is too large");
             return count * sizeof(TValue);
+        }
+
+        static THolder<TEv> MakeHolder() {
+            using TVersions = typename TEv::TScheme;
+            constexpr size_t headerCapacity = TVersions::MaxHeaderSize;
+
+            void* mem = ::operator new(sizeof(TEv) + headerCapacity);
+            THolder<TEv> holder(new (mem) TEv());
+            holder->BindHeaderStorage(reinterpret_cast<char*>(holder.Get()) + sizeof(TEv), headerCapacity);
+            return holder;
         }
 
         static ui8 ValidateHeaderStorage(const char* header, size_t size) {
@@ -1085,6 +1210,36 @@ namespace NActors {
                         Y_ENSURE(payload.GetSize() % sizeof(TValue) == 0,
                             "Array payload size mismatch, payload# " << payloadIndex
                             << " bytes# " << payload.GetSize() << " elemSize# " << sizeof(TValue));
+                    }
+                }
+            });
+        }
+
+        template <class TScheme>
+        void NormalizeArrayPayloadsForScheme() {
+            TScheme::ForEachPayloadField([&]<class TField>() {
+                if constexpr (TField::Kind == EFieldKind::Array) {
+                    using TValue = typename TField::TValue;
+                    if constexpr (alignof(TValue) <= 16) {
+                        constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TField>();
+                        TRope& payload = Payloads[payloadIndex];
+                        const size_t bytes = payload.GetSize();
+                        if (!bytes) {
+                            return;
+                        }
+
+                        auto it = payload.Begin();
+                        const bool isContiguous = it.Valid() && it.ContiguousSize() == bytes;
+                        const bool isAligned = isContiguous
+                            && reinterpret_cast<uintptr_t>(it.ContiguousData()) % alignof(TValue) == 0;
+                        if (isContiguous && isAligned) {
+                            return;
+                        }
+
+                        TRcBuf data = TRcBuf(TRopeAlignedBuffer::Allocate(bytes));
+                        auto src = payload.Begin();
+                        TRopeUtils::Memcpy(data.GetDataMut(), src, bytes);
+                        payload = TRope(std::move(data));
                     }
                 }
             });
@@ -1165,65 +1320,60 @@ namespace NActors {
             return TConstFrontend<TScheme>(HeaderData(), &Payloads);
         }
 
+        void BindHeaderStorage(char* storage, size_t capacity) {
+            HeaderStorage = storage;
+            HeaderCapacity = capacity;
+        }
+
         void ResetHeaderStorage(size_t size) {
+            Y_DEBUG_ABORT_UNLESS(size <= HeaderCapacity);
             HeaderSize = size;
-            if (size <= InlineHeaderCapacity) {
-                HeaderStoredInline = true;
-                HeaderStorage = TString();
-            } else {
-                HeaderStoredInline = false;
-                HeaderStorage = TString::Uninitialized(size);
-            }
         }
 
         void AssignHeaderStorage(TString&& header) {
             const size_t size = header.size();
-            if (size <= InlineHeaderCapacity) {
-                HeaderSize = size;
-                HeaderStoredInline = true;
-                if (size) {
-                    std::memcpy(InlineHeader, header.data(), size);
-                }
-                HeaderStorage = TString();
-            } else {
-                HeaderStoredInline = false;
-                HeaderSize = size;
-                HeaderStorage = std::move(header);
+            Y_ENSURE(size <= HeaderCapacity,
+                "Flat event header is too large " << size << ", capacity " << HeaderCapacity);
+            HeaderSize = size;
+            if (size) {
+                std::memcpy(HeaderStorage, header.data(), size);
             }
         }
 
         void AssignHeaderStorage(const TRope& header) {
             const size_t size = header.GetSize();
-            if (size <= InlineHeaderCapacity) {
-                HeaderSize = size;
-                HeaderStoredInline = true;
-                if (size) {
-                    auto it = header.Begin();
-                    TRopeUtils::Memcpy(InlineHeader, it, size);
-                }
-                HeaderStorage = TString();
-            } else {
-                HeaderStoredInline = false;
-                HeaderStorage = header.template ExtractUnderlyingContainerOrCopy<TString>();
-                HeaderSize = HeaderStorage.size();
+            Y_ENSURE(size <= HeaderCapacity,
+                "Flat event header is too large " << size << ", capacity " << HeaderCapacity);
+            HeaderSize = size;
+            if (size) {
+                auto it = header.Begin();
+                TRopeUtils::Memcpy(HeaderStorage, it, size);
+            }
+        }
+
+        void AssignHeaderStorage(TRope::TConstIterator iter, size_t size) {
+            Y_ENSURE(size <= HeaderCapacity,
+                "Flat event header is too large " << size << ", capacity " << HeaderCapacity);
+            HeaderSize = size;
+            if (size) {
+                TRopeUtils::Memcpy(HeaderStorage, iter, size);
             }
         }
 
         char* MutableHeaderData() {
-            return HeaderStoredInline ? InlineHeader : HeaderStorage.Detach();
+            return HeaderStorage;
         }
 
         const char* HeaderData() const {
-            return HeaderStoredInline ? InlineHeader : HeaderStorage.data();
+            return HeaderStorage;
         }
 
     private:
-        TString HeaderStorage;
-        alignas(std::max_align_t) char InlineHeader[InlineHeaderCapacity] = {};
+        char* HeaderStorage = nullptr;
         TVector<TRope> Payloads;
         size_t HeaderSize = 0;
+        size_t HeaderCapacity = 0;
         ui8 Version = 0;
-        bool HeaderStoredInline = true;
     };
 
 } // namespace NActors

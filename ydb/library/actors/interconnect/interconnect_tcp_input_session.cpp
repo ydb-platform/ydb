@@ -676,7 +676,7 @@ namespace NActors {
         }
     }
 
-    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
+    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma) {
         if (isRdma) {
             Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
             auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::EMPTY);
@@ -687,6 +687,9 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
+            if (alignment > 1 && headroom == 0 && tailroom == 0 && alignment <= 16) {
+                return TRcBuf(TRopeAlignedBuffer::Allocate(size));
+            }
             return TRcBuf::Uninitialized(size, headroom, tailroom);
         }
     }
@@ -719,7 +722,7 @@ namespace NActors {
                         if (!isInline) {
                             // allocate buffer and push it into the payload
                             const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
-                            auto buffer = AllocateRcBuf(size, headroom, tailroom, isRdma);
+                            auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
                                 LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
                                 throw TExDestroySession{TDisconnectReason::FormatError()};

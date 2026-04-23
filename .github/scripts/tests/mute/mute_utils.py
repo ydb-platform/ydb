@@ -6,7 +6,7 @@ import sys
 import json
 
 CONFIG_DIR = os.path.join('.github', 'config')
-MUTE_UPDATE_BUILD_TYPES_CONFIG = os.path.join(CONFIG_DIR, 'mute_update_build_types.json')
+MUTE_CONFIG = os.path.join(CONFIG_DIR, 'mute_config.json')
 
 def _normalize_relative_path(path: str) -> str:
     return path.replace('\\', '/')
@@ -18,7 +18,7 @@ def _repo_root_from_this_file() -> str:
 
 
 def _load_muted_ya_path_policy() -> tuple[str, dict[str, str]]:
-    cfg_path = os.path.join(_repo_root_from_this_file(), MUTE_UPDATE_BUILD_TYPES_CONFIG)
+    cfg_path = os.path.join(_repo_root_from_this_file(), MUTE_CONFIG)
     with open(cfg_path, encoding='utf-8') as f:
         data = json.load(f)
     if not isinstance(data, dict):

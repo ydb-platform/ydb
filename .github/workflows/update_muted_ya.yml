@@ -10,7 +10,7 @@ on:
         required: false
         default: ''
       build_types:
-        description: 'Comma-separated presets or "all" (default). Cannot request presets outside .github/config/mute_update_build_types.json (default + per-branch overrides).'
+        description: 'Comma-separated presets or "all" (default). Cannot request presets outside .github/config/mute_config.json (default + per-branch overrides).'
         required: false
         default: all
         type: string
@@ -19,7 +19,7 @@ env:
   # workflow_dispatch: branch selected in UI. schedule: repository default branch.
   WORKFLOW_CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
-  MUTE_BUILD_TYPES_CONFIG_PATH: .github/config/mute_update_build_types.json
+  MUTE_BUILD_TYPES_CONFIG_PATH: .github/config/mute_config.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
   REVIEWERS: '["ci"]'
@@ -264,8 +264,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          # Возвращаемся на main для доступа к скриптам
-          git checkout main
+          # Возвращаемся на WORKFLOW_CHECKOUT_REF для доступа к скриптам
+          git checkout ${{ env.WORKFLOW_CHECKOUT_REF }}
           
           python .github/scripts/create_or_update_pr.py create_or_update \
             --base_branch="${{ env.BASE_BRANCH }}" \

@@ -18,7 +18,6 @@ enum {
     EvFlatRepeatedFields,
     EvFlatPayloadFields,
     EvFlatInlineFields,
-    EvFlatAlignedPayloadFields,
 };
 
 struct TPoint {
@@ -204,36 +203,6 @@ struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFie
     size_t NumbersSize() const { return this->template GetSize<TNumbersTag>(); }
 };
 
-struct TEvFlatAlignedPayloadFields : TEventFlat<TEvFlatAlignedPayloadFields, TEvFlatPayloadFieldsTVersions> {
-    using TBase = TEventFlat<TEvFlatAlignedPayloadFields, TEvFlatPayloadFieldsTVersions>;
-
-    static constexpr ui32 EventType = EvFlatAlignedPayloadFields;
-    static constexpr bool UseAlignedInlinePayloadFormat = true;
-
-    using TMarkerTag = TEvFlatPayloadFieldsTMarkerTag;
-    using TBlobTag = TEvFlatPayloadFieldsTBlobTag;
-    using TNumbersTag = TEvFlatPayloadFieldsTNumbersTag;
-    using TSchemeV1 = TEvFlatPayloadFieldsTSchemeV1;
-    using TScheme = TEvFlatPayloadFieldsTVersions;
-
-    friend class TEventFlat<TEvFlatAlignedPayloadFields, TEvFlatPayloadFieldsTVersions>;
-
-    static TEvFlatAlignedPayloadFields* Make() {
-        return TBase::MakeEvent();
-    }
-
-    auto Marker() { return this->template Field<TMarkerTag>(); }
-    auto Marker() const { return this->template Field<TMarkerTag>(); }
-
-    auto Blob() { return this->template Bytes<TBlobTag>(); }
-    auto Blob() const { return this->template Bytes<TBlobTag>(); }
-    size_t BlobSize() const { return this->template GetSize<TBlobTag>(); }
-
-    auto Numbers() { return this->template Array<TNumbersTag>(); }
-    auto Numbers() const { return this->template Array<TNumbersTag>(); }
-    size_t NumbersSize() const { return this->template GetSize<TNumbersTag>(); }
-};
-
 struct TEvFlatInlineFields;
 using TEvFlatInlineFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
 using TEvFlatInlineFieldsTBlobTag = TFlatEventDefs::InlineBytesField<16, 1>;
@@ -272,9 +241,6 @@ struct TEvFlatInlineFields : TEventFlat<TEvFlatInlineFields, TEvFlatInlineFields
 };
 
 namespace {
-
-    constexpr char AlignedFlatPayloadMarker = 0x08;
-
     size_t SerializeNumberTo(char* dst, size_t number) {
         size_t pos = 0;
         do {
@@ -282,23 +248,6 @@ namespace {
             number >>= 7;
         } while (number);
         return pos;
-    }
-
-    size_t DeserializeNumberFrom(TRope::TConstIterator& it, size_t& size) {
-        size_t result = 0;
-        size_t shift = 0;
-        for (;;) {
-            UNIT_ASSERT(it.Valid());
-            UNIT_ASSERT_GT(size, 0u);
-            const ui8 byte = static_cast<ui8>(*it.ContiguousData());
-            it += 1;
-            --size;
-            result |= static_cast<size_t>(byte & 0x7F) << shift;
-            if (!(byte & 0x80)) {
-                return result;
-            }
-            shift += 7;
-        }
     }
 
     TIntrusivePtr<TEventSerializedData> MakeSerializedData(TVector<TRope> payloads, TString header) {
@@ -357,31 +306,13 @@ namespace {
         auto it = rope.Begin();
         UNIT_ASSERT(it.Valid());
 
-        if (*it.ContiguousData() == AlignedFlatPayloadMarker) {
-            size_t size = rope.GetSize();
-            it += 1;
-            --size;
-
-            const size_t payloadCount = DeserializeNumberFrom(it, size);
-            UNIT_ASSERT_VALUES_EQUAL(payloadCount, 1u);
-
-            const size_t payloadSize = DeserializeNumberFrom(it, size);
-            UNIT_ASSERT_VALUES_EQUAL(payloadSize, payloadBytes);
-            UNIT_ASSERT_GT(size, 0u);
-
-            const size_t padding = static_cast<ui8>(*it.ContiguousData());
-            it += 1;
-            --size;
-            it += padding;
+        TVector<TRope> payloads;
+        if (payloadBytes) {
+            payloads.push_back(TRope(TString::Uninitialized(payloadBytes)));
         } else {
-            TVector<TRope> payloads;
-            if (payloadBytes) {
-                payloads.push_back(TRope(TString::Uninitialized(payloadBytes)));
-            } else {
-                payloads.push_back(TRope{});
-            }
-            it += CalculateSerializedHeaderSizeImpl(payloads);
+            payloads.push_back(TRope{});
         }
+        it += CalculateSerializedHeaderSizeImpl(payloads);
 
         UNIT_ASSERT_C(it.ContiguousSize() >= payloadBytes,
             "contiguous size# " << it.ContiguousSize() << " payload bytes# " << payloadBytes);
@@ -559,67 +490,6 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[1]), 8u);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 15u);
         UNIT_ASSERT(loaded->CreateSerializationInfo(true).Sections.size() == 1u);
-    }
-
-    Y_UNIT_TEST(AlignedInlinePayloadRoundTrip) {
-        THolder<TEvFlatAlignedPayloadFields> ev(TEvFlatAlignedPayloadFields::Make());
-        ev->Marker() = 202;
-        ev->Blob().Set(TRope(TString("aligned")));
-
-        ui32 values[] = {10, 20, 30, 40};
-        std::memcpy(ev->Numbers().Init(std::size(values)), values, sizeof(values));
-
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
-        UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
-        auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
-
-        const TRope rope = buffers->GetRope();
-        auto it = rope.Begin();
-        UNIT_ASSERT(it.Valid());
-        UNIT_ASSERT_VALUES_EQUAL(*it.ContiguousData(), AlignedFlatPayloadMarker);
-
-        THolder<IEventHandle> handle(new IEventHandle(
-            EvFlatAlignedPayloadFields, 0, TActorId(), TActorId(), buffers, 0));
-
-        TEvFlatAlignedPayloadFields* loaded = handle->Get<TEvFlatAlignedPayloadFields>();
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 202u);
-        UNIT_ASSERT_VALUES_EQUAL(loaded->Blob().Materialize(), "aligned");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[0]), 10u);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[3]), 40u);
-    }
-
-    Y_UNIT_TEST(AlignedInlinePayloadRoundTripFromFragmentedBuffer) {
-        THolder<TEvFlatAlignedPayloadFields> ev(TEvFlatAlignedPayloadFields::Make());
-        ev->Marker() = 303;
-        ev->Blob().Set(TRope(TString("fragmented")));
-
-        ui32 values[] = {1, 2, 3, 4, 5, 6, 7, 8};
-        std::memcpy(ev->Numbers().Init(std::size(values)), values, sizeof(values));
-
-        auto rope = ev->SerializeToRope(GetDefaultRcBufAllocator());
-        UNIT_ASSERT(rope);
-
-        const TString serialized = rope->ExtractUnderlyingContainerOrCopy<TString>();
-        TRope fragmented;
-        for (size_t offset = 0; offset < serialized.size();) {
-            const size_t chunk = Min<size_t>(3 + offset % 11, serialized.size() - offset);
-            fragmented.Insert(fragmented.End(), TRope(serialized.substr(offset, chunk)));
-            offset += chunk;
-        }
-
-        TEventSerializationInfo info = ev->CreateSerializationInfo(false);
-        TIntrusivePtr<TEventSerializedData> buffers = MakeIntrusive<TEventSerializedData>(std::move(fragmented), std::move(info));
-
-        THolder<IEventHandle> handle(new IEventHandle(
-            EvFlatAlignedPayloadFields, 0, TActorId(), TActorId(), buffers, 0));
-
-        TEvFlatAlignedPayloadFields* loaded = handle->Get<TEvFlatAlignedPayloadFields>();
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 303u);
-        UNIT_ASSERT_VALUES_EQUAL(loaded->Blob().Materialize(), "fragmented");
-        UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), std::size(values));
-        for (size_t i = 0; i < std::size(values); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[i]), values[i]);
-        }
     }
 
     Y_UNIT_TEST(FrontendForSingleVersionPayloadScheme) {

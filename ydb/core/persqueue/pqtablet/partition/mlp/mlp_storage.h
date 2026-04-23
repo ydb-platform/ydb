@@ -284,6 +284,7 @@ private:
     TUpdateExternalLockedMessageGroupsResult DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&, bool loadState);
     bool CanReadMessageGroupIdHash(ui32 messageGroupIdHash) const;
     bool CanReadMessageGroupIdHashFromParentPartition(const ui32 messageGroupIdHash) const;
+    void ValidateNextOffsets() const;
 
 
     void UpdateFirstUncommittedOffset();
@@ -310,6 +311,8 @@ private:
 
     template <class Fn>
     void IterateAllMessagesInOrder(Fn&& fn);
+    template <class Fn>
+    void IterateAllMessagesInOrder(Fn&& fn) const;
 
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -390,6 +393,16 @@ private:
 
 inline auto TStorage::GetMessageGroupsIdFromSelf() const {
     return IterateKeys(MessageGroups.Groups);
+}
+
+template <class Fn>
+inline void TStorage::IterateAllMessagesInOrder(Fn&& fn) const {
+    for (auto& [offset, m] : SlowMessages) {
+        fn(offset, m);
+    }
+    for (size_t i = 0; i < Messages.size(); ++i) {
+        fn(FirstOffset + i, Messages[i]);
+    }
 }
 
 template <class Fn>

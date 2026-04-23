@@ -152,7 +152,77 @@ bool TStorage::CanReadMessageGroupIdHash(const ui32 messageGroupIdHash) const {
     return MessageGroups.UnlockedMessageGroupsId.contains(messageGroupIdHash);
 }
 
+void TStorage::ValidateNextOffsets() const {
+    // Build actual set by scanning all messages
+    absl::flat_hash_set<ui64> actualOffsets;
+    absl::flat_hash_set<ui32> seenGroupHashes;
+
+    auto processMessage = [&](ui64 offset, const TMessage& message) {
+        if (message.GetStatus() != EMessageStatus::Unprocessed) {
+            return;
+        }
+        if (!message.HasMessageGroupId) {
+            actualOffsets.insert(offset);
+            return;
+        }
+        if (!CanReadMessageGroupIdHash(message.MessageGroupIdHash)) {
+            return;
+        }
+        if (seenGroupHashes.insert(message.MessageGroupIdHash).second) {
+            actualOffsets.insert(offset);
+        }
+    };
+    IterateAllMessagesInOrder(processMessage);
+
+    // Build expected set from MessageGroups index
+    absl::flat_hash_set<ui64> expectedOffsets(MessageGroups.UnorderedOffsets.begin(), MessageGroups.UnorderedOffsets.end());
+    for (ui32 groupHash : MessageGroups.UnlockedMessageGroupsId) {
+        const auto* group = MapFindPtr(MessageGroups.Groups, groupHash);
+        AFL_ENSURE(group != nullptr)("groupHash", groupHash);
+        expectedOffsets.insert(group->FirstOffset);
+    }
+
+    if (actualOffsets == expectedOffsets) {
+        return;
+    }
+
+    TStringBuilder sb;
+    sb << "ValidateNextOffsets MISMATCH: actual.size=" << actualOffsets.size() << " expected.size=" << expectedOffsets.size() << "\n";
+
+    TVector<ui64> allOffsets(Reserve(GetMessageCount() + actualOffsets.size() + expectedOffsets.size()));
+    IterateAllMessagesInOrder([&](ui64 offset, const TMessage&) { allOffsets.push_back(offset); });
+    allOffsets.insert(allOffsets.end(), actualOffsets.begin(), actualOffsets.end());
+    allOffsets.insert(allOffsets.end(), expectedOffsets.begin(), expectedOffsets.end());
+    SortUnique(allOffsets);
+
+    for (ui64 offset : allOffsets) {
+        auto [msg, slowZone] = GetMessageInt(offset);
+        sb << "  offset=" << offset;
+        sb << " zone=" << (slowZone ? 's' : 'f');
+        sb << " mismatch=" << (actualOffsets.contains(offset) != expectedOffsets.contains(offset));
+        sb << " inActual=" << actualOffsets.contains(offset);
+        sb << " inExpected=" << expectedOffsets.contains(offset);
+        sb << " inUnorderedOffsets=" << MessageGroups.UnorderedOffsets.contains(offset);
+        if (msg) {
+            sb << " status=" << static_cast<int>(msg->GetStatus());
+            sb << " hasGroup=" << (bool)msg->HasMessageGroupId;
+            if (msg->HasMessageGroupId) {
+                sb << " groupHash=" << msg->MessageGroupIdHash;
+                sb << " inUnlockedGroups=" << MessageGroups.UnlockedMessageGroupsId.contains(msg->MessageGroupIdHash);
+            }
+        } else {
+            sb << " NOT_FOUND";
+        }
+        sb << "\n";
+    }
+
+    Y_ABORT("%s", sb.c_str());
+}
+
 std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups) {
+    if (KeepMessageOrder) {
+        ValidateNextOffsets();
+    }
     std::optional<ui64> retentionDeadlineDelta = GetRetentionDeadlineDelta();
 
     if (!position.SlowPosition) {

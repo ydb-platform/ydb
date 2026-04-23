@@ -203,13 +203,9 @@ T ParseSettingWithMin(
     if (auto it = settings.find(key); it != settings.end()) {
         T parsed;
         if (!TryFromString<T>(it->second, parsed)) {
-            Cerr << "[Solomon] WARNING: setting '" << key << "' has invalid value '" << it->second
-                 << "', using default " << defaultValue << Endl;
             return defaultValue;
         }
         if (parsed < minValue) {
-            Cerr << "[Solomon] WARNING: setting '" << key << "' value " << parsed
-                 << " is below minimum " << minValue << ", clamping." << Endl;
             return minValue;
         }
         return parsed;
@@ -225,8 +221,6 @@ bool ParseBoolSetting(
     if (auto it = settings.find(key); it != settings.end()) {
         bool parsed;
         if (!TryFromString<bool>(it->second, parsed)) {
-            Cerr << "[Solomon] WARNING: setting '" << key << "' has invalid bool value '" << it->second
-                 << "', using default " << defaultValue << Endl;
             return defaultValue;
         }
         return parsed;

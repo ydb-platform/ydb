@@ -388,6 +388,10 @@ public:
         InsertSettingIfSet(source, "maxListingPageSize", solomonConfig->_MaxListingPageSize.Get());
         InsertSettingIfSet(source, "maxApiInflight", solomonConfig->MaxApiInflight.Get());
         InsertSettingIfSet(source, "maxDataInflightBytes", solomonConfig->MaxDataInflightBytes.Get());
+        InsertSettingIfSet(source, "maxPointsPerOneRequest", solomonConfig->MaxPointsPerOneRequest.Get());
+        InsertSettingIfSet(source, "poisonTimeoutSec", solomonConfig->PoisonTimeoutSec.Get());
+        InsertSettingIfSet(source, "roundRobinStageTimeoutMs", solomonConfig->RoundRobinStageTimeoutMs.Get());
+        InsertSettingIfSet(source, "labelsListingLimit", solomonConfig->LabelsListingLimit.Get());
 
         if (!selectors.empty()) {
             ui64 totalMetricsCount;

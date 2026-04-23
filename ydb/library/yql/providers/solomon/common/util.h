@@ -10,11 +10,6 @@ namespace NYql::NSo {
 // ---------------------------------------------------------------------------
 // TSolomonReadActorConfig — single source of truth for all tunable parameters
 // of the Solomon read pipeline (read_actor, metrics_queue, accessor_client).
-//
-// Replaces the scattered settings.find(...) / FromString<> / hardcoded-default
-// pattern that was duplicated across the three actor files.
-// Modelled on TS3ReadActorFactoryConfig from
-//   ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h
 // ---------------------------------------------------------------------------
 
 struct TSolomonRetryConfig {
@@ -32,7 +27,7 @@ struct TSolomonReadActorConfig {
     // Maximum number of metrics returned per listing page. Must be >= 1.
     ui64 MaxListingPageSize     = 20000;
     // Use POST-based API instead of GET for listing requests.
-    bool EnablePostApi          = false;
+    bool EnablePostApi          = true;
 
     // ── read_actor only ─────────────────────────────────────────────────────
     // Number of timeseries batched per notification to the compute actor. Must be >= 1.

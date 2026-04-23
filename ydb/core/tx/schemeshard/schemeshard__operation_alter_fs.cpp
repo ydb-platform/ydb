@@ -136,7 +136,8 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvFileStore::TEvUpdateConfigResponse::EventType,
         });
     }
 

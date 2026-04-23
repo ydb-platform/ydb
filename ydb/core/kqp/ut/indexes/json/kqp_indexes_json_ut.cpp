@@ -2063,6 +2063,21 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') <= false))");
             ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') == JSON_EXISTS(Text, '$.k2')))");
             ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2')))");
+
+            // Nested JSON_QUERY as JSON source for JSON_EXISTS - not extractable
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.k1' WITHOUT ARRAY WRAPPER), '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, 'lax $.a' WITHOUT ARRAY WRAPPER), 'lax $.b'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, 'strict $.a' WITHOUT ARRAY WRAPPER), 'strict $.b'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITH CONDITIONAL WRAPPER), '$.b'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITH UNCONDITIONAL WRAPPER), '$.b'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$ ? (@.x == 1)' WITHOUT ARRAY WRAPPER), '$.y'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a[0]' WITHOUT ARRAY WRAPPER), '$.b'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d' WITHOUT ARRAY WRAPPER), '$.e'))");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$ ? (@.k1 == 1 && @.k2 == 2)') == true)");
+            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b'))");
         });
     }
 
@@ -2292,6 +2307,20 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // String concatenation (||) in a comparison - not extractable
             ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix")");
             ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix" AND JSON_VALUE(Text, '$.k2') == "b")");
+
+            // Nested JSON_QUERY as JSON source for JSON_VALUE - not extractable
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.k1' WITHOUT ARRAY WRAPPER), '$.k2' RETURNING Int32) == 1)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, 'lax $.a' WITHOUT ARRAY WRAPPER), '$.b' RETURNING Utf8) == "1"u)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, 'strict $.a' WITHOUT ARRAY WRAPPER), '$.b' RETURNING Int64) == 1l)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITH CONDITIONAL WRAPPER), '$.b') == "x"u)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITH UNCONDITIONAL WRAPPER), '$.b' RETURNING String) == "s"s)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a[0]' WITHOUT ARRAY WRAPPER), '$.b' RETURNING Double) == 1.0)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$ ? (@.x == 1)' WITHOUT ARRAY WRAPPER), '$.y' RETURNING Bool) == true)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' RETURNING Int32) == 1)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d') == "1")");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d' WITHOUT ARRAY WRAPPER), '$.e' RETURNING Int32) == 1)");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u AND JSON_VALUE(Text, '$.b') == "w")");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u OR JSON_VALUE(Text, '$.b') == "w")");
         });
     }
 }

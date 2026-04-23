@@ -15,6 +15,7 @@
 #include <utility>
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
 
 namespace NActors {
     namespace NFlatEventDetail {
@@ -128,6 +129,7 @@ namespace NActors {
     template <class TEv>
     class TEventFlat : public IEventBase {
         static_assert(std::is_class_v<TEv>, "TEv must be a class");
+        static constexpr char AlignedExtendedPayloadMarker = 0x08;
 
     public:
         static void operator delete(void* ptr) noexcept {
@@ -862,6 +864,9 @@ namespace NActors {
             if (!HasPayloads()) {
                 return SerializeHeaderOnlyToArcadiaStream(serializer);
             }
+            if (UseAlignedInlinePayloadFormat()) {
+                return SerializeAlignedInlinePayloadToArcadiaStream(serializer);
+            }
             return SerializeToArcadiaStreamImpl(serializer, Payloads)
                 && SerializeHeaderOnlyToArcadiaStream(serializer);
         }
@@ -877,6 +882,9 @@ namespace NActors {
                     std::memcpy(headerBuf.GetDataMut(), HeaderData(), HeaderSize);
                 }
                 return TRope(std::move(headerBuf));
+            }
+            if (UseAlignedInlinePayloadFormat()) {
+                return SerializeAlignedInlinePayloadToRope();
             }
             const ui32 headerSize = CalculateSerializedHeaderSizeImpl(Payloads);
 
@@ -945,6 +953,9 @@ namespace NActors {
             if (!HasPayloads()) {
                 return HeaderSize;
             }
+            if (UseAlignedInlinePayloadFormat()) {
+                return CalculateAlignedInlinePayloadSerializedSize();
+            }
             return CalculateSerializedSizeImpl(Payloads, HeaderSize);
         }
 
@@ -954,6 +965,15 @@ namespace NActors {
                 TEventSerializationInfo info;
                 if (allowExternalDataChannel && HeaderSize) {
                     info.Sections.push_back(TEventSectionInfo{0, HeaderSize, 0, 0, true, false});
+                }
+                return info;
+            }
+            if (UseAlignedInlinePayloadFormat()) {
+                TEventSerializationInfo info;
+                info.IsExtendedFormat = true;
+                if (allowExternalDataChannel) {
+                    info.Sections.push_back(TEventSectionInfo{0, CalculateAlignedInlinePayloadSerializedSize(), 0,
+                        GetInlineBodyAlignment(), true, false});
                 }
                 return info;
             }
@@ -1003,7 +1023,11 @@ namespace NActors {
                 TRope::TConstIterator iter = input->GetBeginIter();
                 size_t size = input->GetSize();
                 size_t totalPayloadSize = 0;
-                ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
+                if (iter.Valid() && *iter.ContiguousData() == AlignedExtendedPayloadMarker) {
+                    ParseAlignedInlinePayload(iter, size, wirePayloads, totalPayloadSize);
+                } else {
+                    ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
+                }
                 Y_ENSURE(size, "Flat event header is missing");
 
                 THolder<TEv> holder = MakeHolder();
@@ -1255,6 +1279,208 @@ namespace NActors {
 
         bool HasPayloads() const {
             return !Payloads.empty();
+        }
+
+        size_t GetInlineBodyAlignment() const {
+            if (!HasPayloads()) {
+                return 1;
+            }
+
+            return DispatchCurrentVersion([&]<class TScheme>() -> size_t {
+                size_t alignment = 1;
+                TScheme::ForEachPayloadField([&]<class TField>() {
+                    if constexpr (TField::Kind == EFieldKind::Array) {
+                        alignment = std::max(alignment, alignof(typename TField::TValue));
+                    }
+                });
+                return alignment;
+            });
+        }
+
+        bool UseAlignedInlinePayloadFormat() const {
+            return HasPayloads() && !AllowExternalDataChannel() && GetInlineBodyAlignment() > 1;
+        }
+
+        static size_t SerializeVarint(size_t num, char* buffer) {
+            char* begin = buffer;
+            do {
+                *buffer++ = (num & 0x7F) | (num >= 128 ? 0x80 : 0x00);
+                num >>= 7;
+            } while (num);
+            return buffer - begin;
+        }
+
+        static size_t DeserializeVarint(TRope::TConstIterator& iter, size_t& size) {
+            size_t res = 0;
+            size_t offset = 0;
+            for (;;) {
+                if (!iter.Valid()) {
+                    return Max<size_t>();
+                }
+                const char byte = *iter.ContiguousData();
+                iter += 1;
+                --size;
+                res |= (static_cast<size_t>(byte) & 0x7F) << offset;
+                offset += 7;
+                if (!(byte & 0x80)) {
+                    break;
+                }
+            }
+            return res;
+        }
+
+        struct TAlignedInlineLayout {
+            ui32 HeaderSize = 0;
+            ui32 TotalSize = 0;
+            TVector<size_t> Paddings;
+        };
+
+        static constexpr size_t MaxInlinePayloadPadding = Max<ui8>();
+
+        size_t GetPayloadAlignment(size_t payloadIndex) const {
+            return DispatchCurrentVersion([&]<class TScheme>() -> size_t {
+                size_t current = 0;
+                size_t alignment = 1;
+                TScheme::ForEachPayloadField([&]<class TField>() {
+                    if (current == payloadIndex) {
+                        if constexpr (TField::Kind == EFieldKind::Array) {
+                            alignment = alignof(typename TField::TValue);
+                        }
+                    }
+                    ++current;
+                });
+                return alignment;
+            });
+        }
+
+        TAlignedInlineLayout BuildAlignedInlineLayout() const {
+            char buf[MaxNumberBytes];
+
+            TAlignedInlineLayout layout;
+            layout.Paddings.yresize(Payloads.size());
+
+            ui32 headerSize = 1 + SerializeVarint(Payloads.size(), buf);
+            for (const TRope& rope : Payloads) {
+                headerSize += SerializeVarint(rope.GetSize(), buf);
+                headerSize += sizeof(ui8);
+            }
+
+            size_t offset = headerSize;
+            for (size_t i = 0; i < Payloads.size(); ++i) {
+                const size_t alignment = GetPayloadAlignment(i);
+                const size_t padding = alignment <= 1 ? 0 : (alignment - offset % alignment) % alignment;
+                Y_ENSURE(padding <= MaxInlinePayloadPadding,
+                    "aligned flat event padding too large padding# " << padding << " alignment# " << alignment);
+                layout.Paddings[i] = padding;
+                offset += padding + Payloads[i].GetSize();
+            }
+
+            layout.HeaderSize = headerSize;
+            layout.TotalSize = offset + HeaderSize;
+            return layout;
+        }
+
+        ui32 CalculateAlignedInlinePayloadSerializedSize() const {
+            return BuildAlignedInlineLayout().TotalSize;
+        }
+
+        bool SerializeAlignedInlinePayloadToArcadiaStream(TChunkSerializer* serializer) const {
+            const TAlignedInlineLayout layout = BuildAlignedInlineLayout();
+            TString framing = TString::Uninitialized(layout.HeaderSize);
+            char* data = framing.Detach();
+            *data++ = AlignedExtendedPayloadMarker;
+            data += SerializeVarint(Payloads.size(), data);
+            for (size_t i = 0; i < Payloads.size(); ++i) {
+                data += SerializeVarint(Payloads[i].GetSize(), data);
+                *data++ = static_cast<ui8>(layout.Paddings[i]);
+            }
+
+            if (!serializer->WriteString(&framing)) {
+                return false;
+            }
+            for (size_t i = 0; i < Payloads.size(); ++i) {
+                const size_t padding = layout.Paddings[i];
+                if (padding) {
+                    TString zeros = TString::Uninitialized(padding);
+                    std::memset(zeros.Detach(), 0, padding);
+                    if (!serializer->WriteString(&zeros)) {
+                        return false;
+                    }
+                }
+                TRope rope(Payloads[i]);
+                if (!serializer->WriteRope(&rope)) {
+                    return false;
+                }
+            }
+            return SerializeHeaderOnlyToArcadiaStream(serializer);
+        }
+
+        std::optional<TRope> SerializeAlignedInlinePayloadToRope() const {
+            const TAlignedInlineLayout layout = BuildAlignedInlineLayout();
+            TRcBuf body = TRcBuf(TRopeAlignedBuffer::Allocate(layout.TotalSize));
+            char* data = body.GetDataMut();
+            *data++ = AlignedExtendedPayloadMarker;
+            data += SerializeVarint(Payloads.size(), data);
+            for (size_t i = 0; i < Payloads.size(); ++i) {
+                data += SerializeVarint(Payloads[i].GetSize(), data);
+                *data++ = static_cast<ui8>(layout.Paddings[i]);
+            }
+            for (size_t i = 0; i < Payloads.size(); ++i) {
+                const size_t padding = layout.Paddings[i];
+                if (padding) {
+                    std::memset(data, 0, padding);
+                    data += padding;
+                }
+                auto it = Payloads[i].Begin();
+                TRopeUtils::Memcpy(data, it, Payloads[i].GetSize());
+                data += Payloads[i].GetSize();
+            }
+            if (HeaderSize) {
+                std::memcpy(data, HeaderData(), HeaderSize);
+            }
+            return TRope(std::move(body));
+        }
+
+        static void ParseAlignedInlinePayload(TRope::TConstIterator& iter, size_t& size, TVector<TRope>& payload,
+                size_t& totalPayloadSize) {
+            Y_ENSURE(iter.Valid() && *iter.ContiguousData() == AlignedExtendedPayloadMarker, "invalid aligned flat event");
+
+            auto fetchRope = [&](size_t len) {
+                TRope::TConstIterator begin = iter;
+                iter += len;
+                size -= len;
+                payload.emplace_back(begin, iter);
+                totalPayloadSize += len;
+            };
+
+            iter += 1;
+            --size;
+
+            const size_t numRopes = DeserializeVarint(iter, size);
+            if (numRopes == Max<size_t>()) {
+                Y_ENSURE(false, "invalid aligned flat event");
+            }
+
+            TStackVec<std::pair<size_t, size_t>, 16> ropeMeta;
+            ropeMeta.reserve(numRopes);
+            for (size_t i = 0; i < numRopes; ++i) {
+                const size_t len = DeserializeVarint(iter, size);
+                const size_t padding = size ? static_cast<ui8>(*iter.ContiguousData()) : Max<size_t>();
+                if (size) {
+                    iter += 1;
+                    --size;
+                }
+                if (len == Max<size_t>() || padding == Max<size_t>() || size < len + padding) {
+                    Y_ENSURE(false, "invalid aligned flat event len# " << len << " padding# " << padding << " size# " << size);
+                }
+                ropeMeta.emplace_back(len, padding);
+            }
+
+            for (const auto& [len, padding] : ropeMeta) {
+                iter += padding;
+                size -= padding;
+                fetchRope(len);
+            }
         }
 
         bool SerializeHeaderOnlyToArcadiaStream(TChunkSerializer* serializer) const {

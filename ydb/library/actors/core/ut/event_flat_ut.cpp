@@ -168,6 +168,8 @@ struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields> {
 
 namespace {
 
+    constexpr char AlignedFlatPayloadMarker = 0x08;
+
     size_t SerializeNumberTo(char* dst, size_t number) {
         size_t pos = 0;
         do {
@@ -175,6 +177,23 @@ namespace {
             number >>= 7;
         } while (number);
         return pos;
+    }
+
+    size_t DeserializeNumberFrom(TRope::TConstIterator& it, size_t& size) {
+        size_t result = 0;
+        size_t shift = 0;
+        for (;;) {
+            UNIT_ASSERT(it.Valid());
+            UNIT_ASSERT_GT(size, 0u);
+            const ui8 byte = static_cast<ui8>(*it.ContiguousData());
+            it += 1;
+            --size;
+            result |= static_cast<size_t>(byte & 0x7F) << shift;
+            if (!(byte & 0x80)) {
+                return result;
+            }
+            shift += 7;
+        }
     }
 
     TIntrusivePtr<TEventSerializedData> MakeSerializedData(TVector<TRope> payloads, TString header) {
@@ -229,20 +248,38 @@ namespace {
         return MakeSerializedData(std::move(payloads), std::move(header));
     }
 
-    size_t MakeSinglePayloadFramingSize(size_t payloadBytes) {
-        TVector<TRope> payloads;
-        if (payloadBytes) {
-            payloads.push_back(TRope(TString::Uninitialized(payloadBytes)));
-        } else {
-            payloads.push_back(TRope{});
-        }
-        return CalculateSerializedHeaderSizeImpl(payloads);
-    }
-
     const char* GetSinglePayloadData(const TRope& rope, size_t payloadBytes) {
         auto it = rope.Begin();
-        it += MakeSinglePayloadFramingSize(payloadBytes);
-        UNIT_ASSERT_VALUES_EQUAL(it.ContiguousSize(), payloadBytes);
+        UNIT_ASSERT(it.Valid());
+
+        if (*it.ContiguousData() == AlignedFlatPayloadMarker) {
+            size_t size = rope.GetSize();
+            it += 1;
+            --size;
+
+            const size_t payloadCount = DeserializeNumberFrom(it, size);
+            UNIT_ASSERT_VALUES_EQUAL(payloadCount, 1u);
+
+            const size_t payloadSize = DeserializeNumberFrom(it, size);
+            UNIT_ASSERT_VALUES_EQUAL(payloadSize, payloadBytes);
+            UNIT_ASSERT_GT(size, 0u);
+
+            const size_t padding = static_cast<ui8>(*it.ContiguousData());
+            it += 1;
+            --size;
+            it += padding;
+        } else {
+            TVector<TRope> payloads;
+            if (payloadBytes) {
+                payloads.push_back(TRope(TString::Uninitialized(payloadBytes)));
+            } else {
+                payloads.push_back(TRope{});
+            }
+            it += CalculateSerializedHeaderSizeImpl(payloads);
+        }
+
+        UNIT_ASSERT_C(it.ContiguousSize() >= payloadBytes,
+            "contiguous size# " << it.ContiguousSize() << " payload bytes# " << payloadBytes);
         return it.ContiguousData();
     }
 

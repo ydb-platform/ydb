@@ -885,23 +885,18 @@ namespace NActors {
             TRope payload;
             if (!pendingEvent.SerializationInfo.Sections.empty()) {
                 // unshuffle inline and external payloads into single event content
-                TRope *prev = nullptr;
-                size_t accumSize = 0;
                 for (const auto& s : pendingEvent.SerializationInfo.Sections) {
                     TRope *rope = s.IsInline
                         ? &pendingEvent.InternalPayload
                         : &pendingEvent.ExternalPayload;
-                    if (rope != prev) {
-                        if (accumSize) {
-                            prev->ExtractFront(accumSize, &payload);
-                        }
-                        prev = rope;
-                        accumSize = 0;
+                    if (s.IsInline && s.Alignment > 1 && s.Headroom == 0 && s.Tailroom == 0 && s.Alignment <= 16 && s.Size) {
+                        TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(s.Size));
+                        const bool success = rope->ExtractFrontPlain(buffer.GetDataMut(), s.Size);
+                        Y_ABORT_UNLESS(success);
+                        payload.Insert(payload.End(), TRope(std::move(buffer)));
+                    } else {
+                        rope->ExtractFront(s.Size, &payload);
                     }
-                    accumSize += s.Size;
-                }
-                if (accumSize) {
-                    prev->ExtractFront(accumSize, &payload);
                 }
 
                 if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {

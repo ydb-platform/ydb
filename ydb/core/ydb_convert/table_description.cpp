@@ -1517,6 +1517,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             }
 
             case Ydb::Table::TableIndex::TYPE_NOT_SET: {
+                status = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Got empty index in modify scheme oepration";
                 return false;
             }

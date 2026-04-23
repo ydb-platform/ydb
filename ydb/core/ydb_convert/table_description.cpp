@@ -10,7 +10,6 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
@@ -192,7 +191,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
             auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
             olapIndex->SetId(nextIndexId++);
             olapIndex->SetName(index.name());
-            olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
+            olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
             auto* min_max = olapIndex->MutableMinMaxIndex();
             min_max->SetColumnId(columnIdIt->second);
             continue;
@@ -1436,7 +1435,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
             auto* upsertIndex = alterColumnTable->MutableAlterSchema()->AddUpsertIndexes();
             upsertIndex->SetName(index.name());
-            upsertIndex->SetClassName(NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
+            upsertIndex->SetClassName(NOlap::NIndexes::NMinMax::kMinMaxClassName);
             auto min_max_proto = upsertIndex->MutableMinMaxIndex();
             min_max_proto->SetColumnName(index.index_columns()[0]);
             return true;

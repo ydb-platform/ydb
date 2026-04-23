@@ -1,11 +1,9 @@
 #pragma once
 #include <optional>
 #include <util/string/builder.h>
-namespace NKikimr::NOlap::NIndexes::NMinMax::NPrivate {
-inline const char* kMinMaxClassName = "MIN_MAX";
-}
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
+    inline const char* kMinMaxClassName = "MIN_MAX";
 
     TString IncorrectDataColumnsErrorMessage(const auto& dataColumns) {
         AFL_VERIFY(!dataColumns.empty());

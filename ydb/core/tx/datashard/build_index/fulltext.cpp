@@ -50,6 +50,18 @@ using namespace NKikimr::NFulltext;
  * - Tokens are inserted into the index table with their __ydb_freqs if required
  */
 
+struct TTokenState {
+    TString Token;
+    ui64 Gen;
+    TDeltaWriter Segment;
+};
+
+struct TTokenStateLess {
+    bool operator()(const TTokenState* a, const TTokenState* b) const {
+        return a->Segment.GetCount() > b->Segment.GetCount() || a->Segment.GetCount() == b->Segment.GetCount() && a->Token < b->Token;
+    }
+};
+
 class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IActorExceptionHandler, public NTable::IScan {
     IDriver* Driver = nullptr;
 
@@ -74,13 +86,15 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
 
     bool Compact = false;
     bool WithRelevance = false;
-    THashMap<TString, TDeltaWriter> TokenBuf;
+    THashMap<TString, TTokenState> TokenBuf;
+    TSet<TTokenState*, TTokenStateLess> TokensBySize;
     ui64 BufferedBytes = 0;
+    ui64 EmptyTokenBytes = 0;
 
-    ui64 MaxBatchRows = 0;
     ui64 MaxBatchBytes = 0;
     ui64 Generation = 0;
     ui64 MaxGeneration = 0;
+    ui64 MaxSegmentDocuments = 10000; // FIXME
 
     TVector<NScheme::TTypeInfo> KeyTypes;
     TSerializedTableRange RequestedRange;
@@ -104,7 +118,6 @@ public:
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
-        , MaxBatchRows(request.GetScanSettings().GetMaxBatchRows())
         , MaxBatchBytes(request.GetScanSettings().GetMaxBatchBytes())
         , Generation(request.GetMinGeneration())
         , MaxGeneration(request.GetMaxGeneration())
@@ -118,6 +131,9 @@ public:
             RequestedRange.Load(Request.GetKeyRange());
         } else {
             RequestedRange = TableRange;
+        }
+        if (!Generation) {
+            Generation = 1;
         }
 
         LOG_I("Create " << Debug());
@@ -317,25 +333,46 @@ public:
                     freq++;
                     continue;
                 }
-                auto & writer = TokenBuf[tokens[i]];
-                if (!writer.GetCount()) {
-                    BufferedBytes += tokens[i].size();
+                auto& state = TokenBuf[tokens[i]];
+                if (state.Token.empty()) {
+                    state.Token = tokens[i];
+                    state.Gen = Generation;
+                    BufferedBytes += tokens[i].size(); // count token sizes
+                } else if (!state.Segment.GetCount()) {
+                    EmptyTokenBytes -= tokens[i].size();
                 }
-                BufferedBytes -= writer.GetBuf().size();
+                TokensBySize.erase(&state);
+                BufferedBytes -= state.Segment.GetBuf().size();
                 if (WithRelevance) {
-                    writer.Add(docId, freq);
+                    state.Segment.Add(docId, freq);
                 } else {
-                    writer.Add(docId);
+                    state.Segment.Add(docId);
                 }
-                BufferedBytes += writer.GetBuf().size();
+                BufferedBytes += state.Segment.GetBuf().size();
+                TokensBySize.insert(&state);
                 freq = 1;
-                if (BufferedBytes >= MaxBatchBytes ||
-                    TokenBuf.size() >= MaxBatchRows) {
-                    if (!FlushAllTokens()) {
+                if (state.Segment.GetCount() >= MaxSegmentDocuments) {
+                    if (!FlushToken(state)) {
                         return EScan::Final;
                     }
-                    LastProcessedKey = TSerializedCellVec(key);
                 }
+            }
+            if (BufferedBytes >= MaxBatchBytes) {
+                // flush the most frequent tokens
+                while (BufferedBytes >= MaxBatchBytes/2) {
+                    auto mostFreqIt = TokensBySize.begin();
+                    Y_ENSURE(mostFreqIt != TokensBySize.end());
+                    if (!(*mostFreqIt)->Segment.GetCount()) {
+                        break;
+                    }
+                    FlushToken(TokenBuf.at((*mostFreqIt)->Token));
+                }
+            }
+            if (EmptyTokenBytes >= MaxBatchBytes/3) {
+                if (!FlushAllTokens()) {
+                    return EScan::Final;
+                }
+                LastProcessedKey = TSerializedCellVec(key);
             }
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
                 UploadDocRow(key, row, tokens.size());
@@ -343,10 +380,8 @@ public:
         } else if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             UploadFulltextRelevance(key, tokens);
             UploadDocRow(key, row, tokens.size());
-            LastProcessedKey = TSerializedCellVec(key);
         } else {
             UploadFulltextPlain(key, row, tokens);
-            LastProcessedKey = TSerializedCellVec(key);
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
@@ -421,24 +456,30 @@ public:
         }
     }
 
-    bool FlushToken(const TString& token, TDeltaWriter& writer)
+    bool FlushToken(TTokenState& state)
     {
-        if (!writer.GetCount()) {
+        if (!state.Segment.GetCount()) {
             return true;
         }
-        if (Generation > MaxGeneration) {
+        if (state.Gen > MaxGeneration) {
             Finish(std::runtime_error("MaxGeneration exceeded"));
             return false;
         }
-        auto segment = writer.GetBuf();
+        auto segment = state.Segment.GetBuf();
         TVector<TCell> uploadKey(::Reserve(3));
-        uploadKey.push_back(TCell(token));
-        uploadKey.push_back(TCell::Make(writer.GetMaxId()));
-        uploadKey.push_back(TCell::Make(Generation));
+        uploadKey.push_back(TCell(state.Token));
+        uploadKey.push_back(TCell::Make(state.Segment.GetMaxId()));
+        uploadKey.push_back(TCell::Make(state.Gen));
         TVector<TCell> uploadValue(::Reserve(2));
         uploadValue.push_back(TCell::Make(true));
         uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
         UploadBuf->AddRow(uploadKey, uploadValue);
+        TokensBySize.erase(&state);
+        BufferedBytes -= state.Segment.GetBuf().size();
+        EmptyTokenBytes += state.Token.size();
+        state.Segment = TDeltaWriter();
+        state.Gen++;
+        TokensBySize.insert(&state);
         return true;
     }
 
@@ -447,14 +488,18 @@ public:
         if (!TokenBuf.size()) {
             return true;
         }
-        for (auto& [token, writer] : TokenBuf) {
-            if (!FlushToken(token, writer)) {
+        for (auto& [token, state] : TokenBuf) {
+            if (!FlushToken(state)) {
                 return false;
             }
+            if (Generation < state.Gen) {
+                Generation = state.Gen;
+            }
         }
-        Generation++;
         BufferedBytes = 0;
+        EmptyTokenBytes = 0;
         TokenBuf.clear();
+        TokensBySize.clear();
         return true;
     }
 

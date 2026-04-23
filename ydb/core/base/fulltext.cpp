@@ -642,27 +642,27 @@ size_t TDeltaWriter::AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, bool
     return pos;
 }
 
-ui64 TDeltaWriter::GetMinId()
+ui64 TDeltaWriter::GetMinId() const
 {
     return MinId;
 }
 
-ui64 TDeltaWriter::GetMaxId()
+ui64 TDeltaWriter::GetMaxId() const
 {
     return MaxId;
 }
 
-ui64 TDeltaWriter::GetCount()
+ui64 TDeltaWriter::GetCount() const
 {
     return Count;
 }
 
-ui64 TDeltaWriter::GetTotalFreq()
+ui64 TDeltaWriter::GetTotalFreq() const
 {
     return TotalFreq;
 }
 
-TConstArrayRef<ui8> TDeltaWriter::GetBuf()
+TConstArrayRef<ui8> TDeltaWriter::GetBuf() const
 {
     return Buf;
 }

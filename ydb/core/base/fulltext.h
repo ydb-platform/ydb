@@ -41,11 +41,11 @@ public:
     void Add(ui64 DocId);
     void Add(ui64 DocId, ui32 Freq);
     size_t AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, bool withFreq, size_t maxSize);
-    ui64 GetMinId();
-    ui64 GetMaxId();
-    ui64 GetCount();
-    ui64 GetTotalFreq();
-    TConstArrayRef<ui8> GetBuf();
+    ui64 GetMinId() const;
+    ui64 GetMaxId() const;
+    ui64 GetCount() const;
+    ui64 GetTotalFreq() const;
+    TConstArrayRef<ui8> GetBuf() const;
 };
 
 TVector<ui8> DeltaCompress(TConstArrayRef<ui64> ids);

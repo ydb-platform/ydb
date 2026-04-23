@@ -93,5 +93,3 @@ def kikimr_grep_kernel_log_safety_warden_factory(
             hours_back=hours_back,
         )
     ]
-
-

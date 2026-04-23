@@ -1975,4 +1975,63 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(ParallelOne) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        // Count SampleK requests dispatched to datashards without blocking them
+        int requestsSeen = 0;
+        TBlockEvents<TEvDataShard::TEvSampleKRequest> requestCounter(runtime, [&](const auto&) {
+            ++requestsSeen;
+            return false;
+        });
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> responseBlocker(runtime, [](const auto&) {
+            return true;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table",
+                TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}});
+            request->Record.MutableSettings()->set_max_shards_in_flight(1);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        // Check that only 1 request is in flight
+        for (int i = 0; i < 3; ++i) {
+            runtime.WaitFor("SampleKResponse", [&]{ return responseBlocker.size() >= 1; });
+            UNIT_ASSERT_VALUES_EQUAL_C(requestsSeen, i + 1,
+                "Expected " << i + 1 << " total requests, got " << requestsSeen << " at shard " << i + 1);
+            responseBlocker.Unblock(1);
+        }
+        responseBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+    }
+
 }

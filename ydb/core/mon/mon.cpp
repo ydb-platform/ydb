@@ -5,7 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/base/tablet_devui_mon_access.h>
+#include <ydb/core/base/tablet_dev_ui_mon_access.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -1184,7 +1184,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
-            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
+            TString user = result ? result->UserToken->GetUserSID() : "anonymous";
             ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method

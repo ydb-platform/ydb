@@ -1,18 +1,23 @@
-#include "tablet_devui_mon_access.h"
+#include "tablet_dev_ui_mon_access.h"
 #include "auth.h"
 #include "appdata.h"
 
 namespace NKikimr {
 
+namespace {
+
+inline constexpr TStringBuf TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX = "/app/secure";
+
+} // namespace
+
 bool IsTabletDevUiSecurePathInfo(TStringBuf pathInfo) {
-    if (!pathInfo.SkipPrefix(TabletDevUiSecurePathInfoPrefix)) {
+    if (!pathInfo.SkipPrefix(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX)) {
         return false;
     }
     return pathInfo.empty() || pathInfo[0] == '/';
 }
 
-bool IsAdministratorForTabletMonHttp(const NActors::TActorContext& ctx,
-    const NActors::NMon::TEvRemoteHttpInfo* msg)
+bool IsAdministratorForTabletMonHttp(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg)
 {
     if (!msg) {
         return IsAdministrator(AppData(ctx), nullptr);

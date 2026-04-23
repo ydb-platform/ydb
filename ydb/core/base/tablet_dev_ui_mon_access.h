@@ -7,18 +7,14 @@
 
 namespace NKikimr {
 
-// Mon "PathInfo" for the tablet DevUI subtree that requires cluster administrator.
-inline constexpr TStringBuf TabletDevUiSecurePathInfoPrefix = "/app/secure";
-
 // Relative path under the tablet mon page used in HTML links to the secure DevUI subtree.
-inline constexpr TStringBuf TabletDevUiSecureMonRelativePath = "app/secure";
+inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure";
 
 // True when `pathInfo` is exactly `/app/secure` or a path under it (`/app/secure/...`).
 bool IsTabletDevUiSecurePathInfo(TStringBuf pathInfo);
 
 // Cluster administrator check for a tablet monitoring HTTP request
-bool IsAdministratorForTabletMonHttp(const NActors::TActorContext& ctx,
-    const NActors::NMon::TEvRemoteHttpInfo* msg);
+bool IsAdministratorForTabletMonHttp(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg);
 
 // Enforce "secure DevUI" access on the tablet mon app handler before running page logic.
 //

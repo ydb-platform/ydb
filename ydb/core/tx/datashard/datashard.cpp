@@ -5,7 +5,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
-#include <ydb/core/base/tablet_devui_mon_access.h>
+#include <ydb/core/base/tablet_dev_ui_mon_access.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
@@ -31,8 +31,8 @@ IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
 namespace NDataShard {
 
 namespace {
-// Allowlisted (page,action) may skip secure DevUI admin gate; default none.
-bool IsDataShardMonDevUiBypassAllowlisted(TStringBuf page, TStringBuf action, bool hasPage, bool hasAction) {
+// AllowListed(page, action) may skip the secure DevUI admin gate. By default there are none.
+bool IsDataShardMonDevUiBypassAllowListed(TStringBuf page, TStringBuf action, bool hasPage, bool hasAction) {
     Y_UNUSED(page, action, hasPage, hasAction);
     return false;
 }
@@ -2351,7 +2351,7 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     const TStringBuf action = hasAction ? TStringBuf(cgi.Get("action")) : TStringBuf();
     const TStringBuf page = hasPage ? TStringBuf(cgi.Get("page")) : TStringBuf();
     if (TabletMonDevUIReplyForbiddenUnlessSecureAdmin(ctx, ev->Sender, ev->Get(), ev->Get()->PathInfo(),
-            IsDataShardMonDevUiBypassAllowlisted(page, action, hasPage, hasAction)))
+            IsDataShardMonDevUiBypassAllowListed(page, action, hasPage, hasAction)))
     {
         return true;
     }

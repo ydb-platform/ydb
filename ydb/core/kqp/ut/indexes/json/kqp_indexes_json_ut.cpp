@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <optional>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb::NQuery;
@@ -263,7 +265,7 @@ void ValidateError(TQueryClient& db, const std::string& predicate) {
     UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Failed to extract search terms from predicate", "for predicate = " << predicate);
 }
 
-void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
+void TestSelectJsonWithIndex(const std::string& jsonType, const std::optional<bool>& jsonExistsStrict,
     const std::function<void(TQueryClient&, const std::function<std::string(const std::string&)>&)>& body)
 {
     auto kikimr = Kikimr();
@@ -272,10 +274,15 @@ void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-    const std::string jsonType = isJsonDocument ? "JsonDocument" : "Json";
-    const auto jsonExists = [&](const std::string& predicate) {
-        return std::format("JSON_EXISTS(Text, '{}')", (isStrict ? "strict " : "lax ") + predicate);
-    };
+    std::function<std::string(const std::string&)> jsonExists;
+    if (jsonExistsStrict.has_value()) {
+        const bool isStrict = jsonExistsStrict.value();
+        jsonExists = [isStrict](const std::string& predicate) {
+            return std::format("JSON_EXISTS(Text, '{}')", (isStrict ? "strict " : "lax ") + predicate);
+        };
+    } else {
+        jsonExists = [](const std::string&) { return std::string{}; };
+    }
 
     CreateTestTable(db, jsonType, /* withIndex */ false);
     FillTestTable(db, "TestTable", jsonType);
@@ -332,28 +339,6 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, std::vector<
     std::sort(expected.begin(), expected.end());
 
     UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "for predicate = " << predicate);
-}
-
-void TestSelectJsonTokens(const std::function<void(TQueryClient&)>& body) {
-    auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-
-    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-
-    const std::string jsonType = "JsonDocument";
-    CreateTestTable(db, jsonType, /* withIndex */ false);
-    FillTestTable(db, "TestTable", jsonType);
-
-    {
-        auto query = R"(
-            ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text)
-        )";
-        auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    body(db);
 }
 
 TExecuteQueryResult WriteJsonIndexWithKeys(TQueryClient& db, const std::string& stmt, const std::string& tableName,
@@ -1281,13 +1266,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_ContextObject, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$"));
         });
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_MemberAccess, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$.k1"));
             ValidatePredicate(db, jsonExists("$.k2"));
             ValidatePredicate(db, jsonExists("$.k3"));
@@ -1326,7 +1311,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_ArrayAccess, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$[0]"));
             ValidatePredicate(db, jsonExists("$[0, 3]"));
             ValidatePredicate(db, jsonExists("$[1 to 3]"));
@@ -1352,7 +1337,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_Methods, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             auto validateMethod = [&](const std::string& method) {
                 ValidatePredicate(db, jsonExists(std::format("$.{}", method)));
                 ValidatePredicate(db, jsonExists(std::format("$.k1.{}", method)));
@@ -1382,7 +1367,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // All 6 literal types with == inside a filter, plus @ itself (not a sub-member)
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterEqual, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             // @.field == literal, all literal types
             ValidatePredicate(db, jsonExists("$ ? (@.k1 == 1)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k2 == -1.5)"));
@@ -1405,7 +1390,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // All comparison operators in a filter
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterComparisonOps, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1 < 10)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 <= -1)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 > 0)"));
@@ -1421,7 +1406,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // AND and OR boolean operators inside filter predicates
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterLogicalOps, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\")"));
             ValidatePredicate(db, jsonExists("$ ? (@.k4 == true && @.k5 == null)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 > 0 && @.k1 < 100)"));
@@ -1434,7 +1419,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Corner cases for the filter context path: deep nesting, array subscript, empty key
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterPaths, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1[0] == 1)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k6[2] == false)"));
@@ -1446,7 +1431,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Predicates and boolean operators inside filter
     Y_UNIT_TEST_QUAD(SelectJsonExists_Predicates, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             // Predicates are not allowed in JsonExists without a filter
             ValidateError(db, jsonExists("exists($.k1)"));
             ValidateError(db, jsonExists("$.k1 starts with \"abc\""));
@@ -1491,7 +1476,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_Literals, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidateError(db, jsonExists("null"));
             ValidateError(db, jsonExists("1"));
             ValidateError(db, jsonExists("\"str\""));
@@ -1502,7 +1487,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Filter with != (inequality) and range comparisons (<, <=, >, >=)
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterInequality, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1 != 1)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k3 != \"text\")"));
             ValidatePredicate(db, jsonExists("$ ? (@.k5 != null)"));
@@ -1526,7 +1511,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Three-way AND/OR and mixed (AND+OR) filter predicates
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterAndOrComplex, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k4 == true)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 == \"1\" && @.k2 == \"22\")"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 == 0 && @.k2 == false)"));
@@ -1553,7 +1538,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Filter with arithmetic operators combined with && and ||: OR dominance
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterArithmeticWithBooleanOps, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 == \"text\")"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k4 == true)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 * @.k2 != 0 || @.k5 == null)"));
@@ -1579,7 +1564,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Filter with path-vs-path comparison operators combined with && and ||: OR dominance
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterComparisonWithBooleanOps, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\")"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 > @.k2 || @.k4 == true)"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1 <= @.k2 || @.k5 == null)"));
@@ -1608,7 +1593,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Filter with paths: deep nesting, array subscripts inside filter, empty key
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterPathsDeep, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
             ValidatePredicate(db, jsonExists("$ ? (@.k1.k2.k3.k4 == \"2\")"));
 
@@ -1640,7 +1625,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Combined key access + array subscript + method with filter
     Y_UNIT_TEST_QUAD(SelectJsonExists_PathArrayMethodWithFilter, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$.k1[*] ? (@.k1 == 10)"));
             ValidatePredicate(db, jsonExists("$.k1[0] ? (@.k1 == 10)"));
             ValidatePredicate(db, jsonExists("$.k1[last] ? (@.k1 == 20)"));
@@ -1665,7 +1650,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Nested filter: result of an inner filter (@ ? (pred)) is accessed as an object
     Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilter, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0)).k2 == -1.5)"));
             ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0)).k3 == \"text\")"));
             ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0)).k4 == false)"));
@@ -1700,7 +1685,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Nested filter where the inner predicate uses AND or OR
     Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilterAndOr, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k5 == null)"));
             ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k3 == \"text\")).k4 == true)"));
             ValidatePredicate(db, jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == false)).k5 == null)"));
@@ -1723,7 +1708,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Nested filter combined with other path constructs: array subscript, wildcards, double nesting
     Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilterPaths, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$ ? ((@[0] ? (@.k1 == \"1\")).k2 == \"22\")"));
             ValidatePredicate(db, jsonExists("$.k1 ? ((@[0] ? (@.k1 == 10)).k1 == 10)"));
             ValidatePredicate(db, jsonExists("$.k1 ? ((@[last] ? (@.k1 == 20)).k1 == 20)"));
@@ -1748,7 +1733,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     // Combined key access + array subscript + methods + predicates + filters + literals + nested filter + AND/OR
     Y_UNIT_TEST_QUAD(SelectJsonExists_Mix, IsJsonDocument, IsStrict) {
-        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::make_optional(IsStrict), [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, jsonExists("$.k1[*] ? (exists(@.k1 ? (@.type() starts with \"s\")))"));
             ValidatePredicate(db, jsonExists("$.k1 ? (@.k2[*].k3 != null && -@.k1.floor() > +3)"));
 
@@ -1781,7 +1766,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST(JsonExistsTokens) {
-        TestSelectJsonTokens([](TQueryClient& db) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Basic path exists cases
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key'))", {"\3key"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))", {"\2k1\2k2" + numSuffix(2)});
@@ -1866,7 +1851,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')))");
             ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')))");
 
-            // Filter equality: covers every literal type; the token carries the value suffix
+            // Filter equality - covers every literal type, the token carries the value suffix
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == null)'))", {"\2k1\2k2" + nullSuffix});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == true)'))", {"\2k1\2k2" + trueSuffix});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == false)'))", {"\2k1\2k2" + falseSuffix});
@@ -1876,7 +1861,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 == @.k2)'))", {"\2k1\2k2" + numSuffix(2)});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? ("s" == @.k2)'))", {"\2k1\2k2" + strSuffix("s")});
 
-            // Filter inequality / range: path only, no value suffix
+            // Filter inequality / range - path only, no value suffix
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != 2)'))", {"\2k1\2k2"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 > 2)'))", {"\2k1\2k2"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 < 2)'))", {"\2k1\2k2"});
@@ -1889,7 +1874,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 >= @.k2)'))", {"\2k1\2k2"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 <= @.k2)'))", {"\2k1\2k2"});
 
-            // Filter path-vs-path comparisons: two tokens, AND mode (value suffix dropped)
+            // Filter path-vs-path comparisons - two tokens, AND mode (value suffix dropped)
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == @.k2)'))", {"\2k1", "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 != @.k2)'))", {"\2k1", "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > @.k2)'))", {"\2k1", "\2k2"}, "and");
@@ -1897,7 +1882,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 >= @.k2)'))", {"\2k1", "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 <= @.k2)'))", {"\2k1", "\2k2"}, "and");
 
-            // Filter arithmetic (path vs literal): path only, no value suffix
+            // Filter arithmetic (path vs literal) - path only, no value suffix
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2)'))", {"\2k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - 1 == 0)'))", {"\2k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 == 4)'))", {"\2k1"});
@@ -1906,14 +1891,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 > 2)'))", {"\2k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 != 4)'))", {"\2k1"});
 
-            // Filter arithmetic (path vs path): two tokens, AND mode
+            // Filter arithmetic (path vs path) - two tokens, AND mode
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5)'))", {"\2k1", "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - @.k2 > 0)'))", {"\2k1", "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * @.k2 < 10)'))", {"\2k1", "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 / @.k2 >= 1)'))", {"\2k1", "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 % @.k2 != 0)'))", {"\2k1", "\2k2"}, "and");
 
-            // Filter unary operators: path only
+            // Filter unary operators - path only
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 == -1)'))", {"\2k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (+@.k1 == 1)'))", {"\2k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 > 0)'))", {"\2k1"});
@@ -1925,7 +1910,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1.abs() == -1)'))", {"\2k1"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() - @.k2.abs() == 0)'))", {"\2k1", "\2k2"}, "and");
 
-            // && / || inside jsonpath: mode propagates from inner operator
+            // && / || inside jsonpath - mode propagates from inner operator
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 != 2)'))",
                 {"\2k1" + numSuffix(1), "\2k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || @.k2 != 2)'))",
@@ -1974,14 +1959,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 {"\2k1", "\2k2", "\2k3"}, "and");
 
             // Outer range comparison with bool literal (non-equality): errors
-            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > false)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > true)");
-            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= false)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true)");
-            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') < false)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') < true)");
-            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') <= false)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') <= true)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') < false)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') <= false)");
 
             // Flipped side (literal op JSON_EXISTS)
             ValidateError(db, R"(true > JSON_EXISTS(Text, '$.k1'))");
@@ -2028,7 +2013,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST(JsonValueTokens) {
-        TestSelectJsonTokens([](TQueryClient& db) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Supported RETURNING types
             ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NULL)"); // negation
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.key') IS NOT NULL)", {"\3key"});
@@ -2055,22 +2040,37 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "1")", {"\2k1" + strSuffix("1")});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "string")", {"\2k1" + strSuffix("string")});
 
-            // Bool comparison with true
+            // JSON_VALUE comparison with true rewrites to JSON_VALUE without boolean comparison
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\2k1" + trueSuffix});
+            ValidateTokens(db, R"(true == JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\2k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)", {"\2k1" + trueSuffix});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\2k1" + trueSuffix});
 
-            // Bool comparison with false (negation)
+            // JSON_VALUE comparison with false rewrites to NOT JSON_VALUE
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)");
+            ValidateError(db, R"(false == JSON_VALUE(Text, '$.k1' RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) != true)");
             ValidateError(db, R"(NOT JSON_VALUE(Text, '$.k1' RETURNING Bool))");
 
+            // JSON_VALUE RETURNING Bool with range comparisons - not extractable
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) > true)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) >= true)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) < true)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) <= true)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) > false)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) >= false)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) < false)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) <= false)");
+
             // Comparison with other literals
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 10)", {"\2k1" + numSuffix(10)});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 10)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) < 10)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) >= 10)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 10)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != 10)", {"\2k1"});
 
-            // For some nodes inside the path, it cannot be combined with == operator
+            // For some nodes inside the path, the collected result cannot be combined with == operator
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 starts with "1"') == "true")", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.size()' RETURNING Int32) == 2)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.*' RETURNING Int32) == 2)", {"\2k1"});
@@ -2078,7 +2078,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 + 1' RETURNING Int32) == 2)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == 2' RETURNING Bool))", {"\2k1" + numSuffix(2)});
 
-            // BETWEEN clause
+            // BETWEEN clause (replaces with JSON_VALUE >= 1 AND JSON_VALUE <= 10)
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) BETWEEN 1 AND 10)", {"\2k1", "\2k1"});
 
             // AND/OR combinations - numeric equality
@@ -2148,21 +2148,21 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(10 <= JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
             ValidateTokens(db, R"(10 != JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
 
-            // STARTS WITH
+            // STARTS WITH - path only token
             ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix"))", {"\2k1"});
             ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix") AND JSON_VALUE(Text, '$.k1') == "a")", {"\2k1", "\2k1" + strSuffix("a")});
 
-            // ENDS WITH: not extractable
+            // ENDS WITH - path only token
             ValidateTokens(db, R"(EndsWith(JSON_VALUE(Text, '$.k1'), "suffix"))", {"\2k1"});
 
-            // LIKE / ILIKE: not extractable
+            // LIKE - path only token / ILIKE - not extractable (Re2)
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') LIKE "pattern%")", {"\2k1"});
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1') ILIKE "pattern%")"); // udf
 
-            // REGEXP: not extractable
+            // REGEXP - not extractable (Re2)
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1') REGEXP "^pattern$")"); // udf
 
-            // String concatenation (||) in a comparison: not extractable
+            // String concatenation (||) in a comparison - not extractable
             ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix")");
             ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix" AND JSON_VALUE(Text, '$.k2') == "b")");
         });

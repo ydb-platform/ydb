@@ -6,8 +6,6 @@
 #include <util/generic/strbuf.h>
 #include <util/network/address.h>
 
-#include <tuple>
-
 namespace NKikimr::NSecurity {
 
 namespace {
@@ -28,12 +26,10 @@ TMaybe<TIpv6Address> GetAddress(TStringBuf address) {
 ////////////////////////////////////////////////////////////////////////////////
 
 TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
-    const auto parsePeername = [](
-        TStringBuf normalizedPeername,
-        TMaybe<TIpv6Address::TIpType> target) -> TMaybe<THostAddressAndPort> {
+    const auto parsePeername = [](TStringBuf normPeername,
+                                  TMaybe<TIpv6Address::TIpType> target) -> TMaybe<THostAddressAndPort> {
         bool isOk = false;
-        auto [addrPort, host, port] =
-            ParseHostAndMayBePortFromString(normalizedPeername, 0, isOk);
+        auto [addrPort, host, port] = ParseHostAndMayBePortFromString(normPeername, 0, isOk);
         if (!isOk) {
             return Nothing();
         }
@@ -69,19 +65,19 @@ TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool IsIPv4(TStringBuf address) {
-    return GetAddress(address)
-        .Transform([](const TIpv6Address& ip) {
-            return ip.Type() == TIpv6Address::TIpType::Ipv4;
-        })
-        .GetOrElse(false);
+    const auto addr = GetAddress(address);
+    if (addr.Defined()) {
+        return addr->Type() == TIpv6Address::Ipv4;
+    }
+    return false;
 }
 
 bool IsIPv6(TStringBuf address) {
-    return GetAddress(address)
-        .Transform([](const TIpv6Address& ip) {
-            return ip.Type() == TIpv6Address::TIpType::Ipv6;
-        })
-        .GetOrElse(false);
+    const auto addr = GetAddress(address);
+    if (addr.Defined()) {
+        return addr->Type() == TIpv6Address::Ipv6;
+    }
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,11 +87,11 @@ bool IsGoodPeernameFormat(TStringBuf peername) {
 }
 
 NAddr::IRemoteAddrPtr ParsePeername(TStringBuf peername) {
-    return TryParsePeername(peername)
-        .Transform([](const THostAddressAndPort& addrWithPort) {
-            return THolder{ToIRemoteAddr(addrWithPort.Ip, addrWithPort.Port)};
-        })
-        .GetOrElse(nullptr);
+    const auto addrWithPort = TryParsePeername(peername);
+    if (addrWithPort.Defined()) {
+        return THolder{ToIRemoteAddr(addrWithPort->Ip, addrWithPort->Port)};
+    }
+    return nullptr;
 }
 
 } // namespace NKikimr::NSecurity

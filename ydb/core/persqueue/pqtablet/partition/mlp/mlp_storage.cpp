@@ -171,19 +171,44 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
         };
     };
 
-    auto isMessageGroupLocked = [&](TMessage& message) {
-        return message.HasMessageGroupId && (!CanReadMessageGroupIdHash(message.MessageGroupIdHash) || skipMessageGroups.contains(message.MessageGroupIdHash));
-    };
+    if (KeepMessageOrder) {
+        auto isMessageGroupSkipped = [&](TMessage& message) {
+            return message.HasMessageGroupId && skipMessageGroups.contains(message.MessageGroupIdHash);
+        };
+        auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
+            const auto& [message, _] = GetMessageInt(offset);
+            AFL_ENSURE(message != nullptr)("offset", offset)("case", desc);
+            AFL_ENSURE(message->GetStatus() == EMessageStatus::Unprocessed)("status", message->GetStatus())("offset", offset)("case", desc);
+            if (retentionExpired(*message)) {
+                return std::nullopt;
+            }
+            if (isMessageGroupSkipped(*message)) {
+                return std::nullopt;
+            }
+            DoLock(offset, *message, deadline);
+            return asResult(offset, *message);
+        };
+        for (ui32 groupId : MessageGroups.UnlockedMessageGroupsId) {
+            auto* group = MapFindPtr(MessageGroups.Groups, groupId);
+            AFL_ENSURE(group != nullptr)("groupId", groupId);
+            ui64 offset = group->FirstOffset;
+            if (auto result = tryReturn(offset, "unblocked")) {
+                return result;
+            }
+        }
+        for (ui64 offset : MessageGroups.UnorderedOffsets) {
+            if (auto result = tryReturn(offset, "unordered")) {
+                return result;
+            }
+        }
+        return std::nullopt;
+    }
 
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
         auto offset = position.SlowPosition.value()->first;
         auto& message = position.SlowPosition.value()->second;
         if (message.GetStatus() == EMessageStatus::Unprocessed) {
             if (retentionExpired(message)) {
-                continue;
-            }
-
-            if (isMessageGroupLocked(message)) {
                 continue;
             }
 
@@ -200,11 +225,6 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
                 if (moveUnlockedOffset) {
                     ++FirstUnlockedOffset;
                 }
-                continue;
-            }
-
-            if (isMessageGroupLocked(message)) {
-                moveUnlockedOffset = false;
                 continue;
             }
 

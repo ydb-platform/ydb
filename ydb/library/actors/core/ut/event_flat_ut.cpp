@@ -34,20 +34,31 @@ struct TRepeatedItem {
 
 static_assert(std::is_trivially_copyable_v<TRepeatedItem>);
 
-struct TEvFlatMessage : TEventFlat<TEvFlatMessage> {
-    using TBase = TEventFlat<TEvFlatMessage>;
+using TFlatEventDefs = TEventFlatLayout;
+
+struct TEvFlatMessage;
+using TEvFlatMessageTTabletIdTag = TFlatEventDefs::FixedField<i64, 0>;
+using TEvFlatMessageTOldFieldTag = TFlatEventDefs::FixedField<i64, 1>;
+using TEvFlatMessageTArrayFieldTag = TFlatEventDefs::ArrayField<ui32, 2>;
+using TEvFlatMessageTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+    TEvFlatMessageTTabletIdTag, TEvFlatMessageTOldFieldTag, TEvFlatMessageTArrayFieldTag>;
+using TEvFlatMessageTSchemeV2 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+    TEvFlatMessageTTabletIdTag, TEvFlatMessageTArrayFieldTag>;
+using TEvFlatMessageTVersions = TFlatEventDefs::Versions<TEvFlatMessageTSchemeV1, TEvFlatMessageTSchemeV2>;
+
+struct TEvFlatMessage : TEventFlat<TEvFlatMessage, TEvFlatMessageTVersions> {
+    using TBase = TEventFlat<TEvFlatMessage, TEvFlatMessageTVersions>;
 
     static constexpr ui32 EventType = EvFlatMessage;
 
-    using TTabletIdTag = TBase::FixedField<i64, 0>;
-    using TOldFieldTag = TBase::FixedField<i64, 1>;
-    using TArrayFieldTag = TBase::ArrayField<ui32, 2>;
+    using TTabletIdTag = TEvFlatMessageTTabletIdTag;
+    using TOldFieldTag = TEvFlatMessageTOldFieldTag;
+    using TArrayFieldTag = TEvFlatMessageTArrayFieldTag;
+    using TSchemeV1 = TEvFlatMessageTSchemeV1;
+    using TSchemeV2 = TEvFlatMessageTSchemeV2;
+    using TScheme = TEvFlatMessageTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TTabletIdTag, TOldFieldTag, TArrayFieldTag>;
-    using TSchemeV2 = TBase::Scheme<TBase::WithPayloadType<ui8>, TTabletIdTag, TArrayFieldTag>;
-    using TScheme = TBase::Versions<TSchemeV1, TSchemeV2>;
-
-    friend class TEventFlat<TEvFlatMessage>;
+    friend class TEventFlat<TEvFlatMessage, TEvFlatMessageTVersions>;
 
     static TEvFlatMessage* Make() {
         return TBase::MakeEvent();
@@ -65,20 +76,28 @@ struct TEvFlatMessage : TEventFlat<TEvFlatMessage> {
     size_t NumbersSize() const { return this->template GetSize<TArrayFieldTag>(); }
 };
 
-struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields> {
-    using TBase = TEventFlat<TEvFlatFixedFields>;
+struct TEvFlatFixedFields;
+using TEvFlatFixedFieldsTSmallTag = TFlatEventDefs::FixedField<ui16, 0>;
+using TEvFlatFixedFieldsTTabletIdTag = TFlatEventDefs::FixedField<i64, 1>;
+using TEvFlatFixedFieldsTPointTag = TFlatEventDefs::FixedField<TPoint, 2>;
+using TEvFlatFixedFieldsTCookieTag = TFlatEventDefs::FixedField<ui32, 3>;
+using TEvFlatFixedFieldsTSchemeV1 = TFlatEventDefs::Scheme<
+    TEvFlatFixedFieldsTSmallTag, TEvFlatFixedFieldsTTabletIdTag, TEvFlatFixedFieldsTPointTag, TEvFlatFixedFieldsTCookieTag>;
+using TEvFlatFixedFieldsTVersions = TFlatEventDefs::Versions<TEvFlatFixedFieldsTSchemeV1>;
+
+struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields, TEvFlatFixedFieldsTVersions> {
+    using TBase = TEventFlat<TEvFlatFixedFields, TEvFlatFixedFieldsTVersions>;
 
     static constexpr ui32 EventType = EvFlatFixedFields;
 
-    using TSmallTag = TBase::FixedField<ui16, 0>;
-    using TTabletIdTag = TBase::FixedField<i64, 1>;
-    using TPointTag = TBase::FixedField<TPoint, 2>;
-    using TCookieTag = TBase::FixedField<ui32, 3>;
+    using TSmallTag = TEvFlatFixedFieldsTSmallTag;
+    using TTabletIdTag = TEvFlatFixedFieldsTTabletIdTag;
+    using TPointTag = TEvFlatFixedFieldsTPointTag;
+    using TCookieTag = TEvFlatFixedFieldsTCookieTag;
+    using TSchemeV1 = TEvFlatFixedFieldsTSchemeV1;
+    using TScheme = TEvFlatFixedFieldsTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TSmallTag, TTabletIdTag, TPointTag, TCookieTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvFlatFixedFields>;
+    friend class TEventFlat<TEvFlatFixedFields, TEvFlatFixedFieldsTVersions>;
 
     static TEvFlatFixedFields* Make() {
         return TBase::MakeEvent();
@@ -97,21 +116,31 @@ struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields> {
     auto Cookie() const { return this->template Field<TCookieTag>(); }
 };
 
-struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields> {
-    using TBase = TEventFlat<TEvFlatRepeatedFields>;
+struct TEvFlatRepeatedFields;
+using TEvFlatRepeatedFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+using TEvFlatRepeatedFieldsTPointTag = TFlatEventDefs::FixedField<TPoint, 1>;
+using TEvFlatRepeatedFieldsTNumbersTag = TFlatEventDefs::ArrayField<ui32, 2>;
+using TEvFlatRepeatedFieldsTItemsTag = TFlatEventDefs::ArrayField<TRepeatedItem, 3>;
+using TEvFlatRepeatedFieldsTEmptyItemsTag = TFlatEventDefs::ArrayField<TRepeatedItem, 4>;
+using TEvFlatRepeatedFieldsTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+    TEvFlatRepeatedFieldsTMarkerTag, TEvFlatRepeatedFieldsTPointTag, TEvFlatRepeatedFieldsTNumbersTag,
+    TEvFlatRepeatedFieldsTItemsTag, TEvFlatRepeatedFieldsTEmptyItemsTag>;
+using TEvFlatRepeatedFieldsTVersions = TFlatEventDefs::Versions<TEvFlatRepeatedFieldsTSchemeV1>;
+
+struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields, TEvFlatRepeatedFieldsTVersions> {
+    using TBase = TEventFlat<TEvFlatRepeatedFields, TEvFlatRepeatedFieldsTVersions>;
 
     static constexpr ui32 EventType = EvFlatRepeatedFields;
 
-    using TMarkerTag = TBase::FixedField<ui32, 0>;
-    using TPointTag = TBase::FixedField<TPoint, 1>;
-    using TNumbersTag = TBase::ArrayField<ui32, 2>;
-    using TItemsTag = TBase::ArrayField<TRepeatedItem, 3>;
-    using TEmptyItemsTag = TBase::ArrayField<TRepeatedItem, 4>;
+    using TMarkerTag = TEvFlatRepeatedFieldsTMarkerTag;
+    using TPointTag = TEvFlatRepeatedFieldsTPointTag;
+    using TNumbersTag = TEvFlatRepeatedFieldsTNumbersTag;
+    using TItemsTag = TEvFlatRepeatedFieldsTItemsTag;
+    using TEmptyItemsTag = TEvFlatRepeatedFieldsTEmptyItemsTag;
+    using TSchemeV1 = TEvFlatRepeatedFieldsTSchemeV1;
+    using TScheme = TEvFlatRepeatedFieldsTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TMarkerTag, TPointTag, TNumbersTag, TItemsTag, TEmptyItemsTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvFlatRepeatedFields>;
+    friend class TEventFlat<TEvFlatRepeatedFields, TEvFlatRepeatedFieldsTVersions>;
 
     static TEvFlatRepeatedFields* Make() {
         return TBase::MakeEvent();
@@ -136,19 +165,26 @@ struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields> {
     size_t EmptyItemsSize() const { return this->template GetSize<TEmptyItemsTag>(); }
 };
 
-struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields> {
-    using TBase = TEventFlat<TEvFlatPayloadFields>;
+struct TEvFlatPayloadFields;
+using TEvFlatPayloadFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+using TEvFlatPayloadFieldsTBlobTag = TFlatEventDefs::BytesField<1>;
+using TEvFlatPayloadFieldsTNumbersTag = TFlatEventDefs::ArrayField<ui32, 2>;
+using TEvFlatPayloadFieldsTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+    TEvFlatPayloadFieldsTMarkerTag, TEvFlatPayloadFieldsTBlobTag, TEvFlatPayloadFieldsTNumbersTag>;
+using TEvFlatPayloadFieldsTVersions = TFlatEventDefs::Versions<TEvFlatPayloadFieldsTSchemeV1>;
+
+struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFieldsTVersions> {
+    using TBase = TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFieldsTVersions>;
 
     static constexpr ui32 EventType = EvFlatPayloadFields;
 
-    using TMarkerTag = TBase::FixedField<ui32, 0>;
-    using TBlobTag = TBase::BytesField<1>;
-    using TNumbersTag = TBase::ArrayField<ui32, 2>;
+    using TMarkerTag = TEvFlatPayloadFieldsTMarkerTag;
+    using TBlobTag = TEvFlatPayloadFieldsTBlobTag;
+    using TNumbersTag = TEvFlatPayloadFieldsTNumbersTag;
+    using TSchemeV1 = TEvFlatPayloadFieldsTSchemeV1;
+    using TScheme = TEvFlatPayloadFieldsTVersions;
 
-    using TSchemeV1 = TBase::Scheme<TBase::WithPayloadType<ui8>, TMarkerTag, TBlobTag, TNumbersTag>;
-    using TScheme = TBase::Versions<TSchemeV1>;
-
-    friend class TEventFlat<TEvFlatPayloadFields>;
+    friend class TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFieldsTVersions>;
 
     static TEvFlatPayloadFields* Make() {
         return TBase::MakeEvent();
@@ -327,11 +363,10 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         ui32 numbers[] = {3, 6, 9, 12};
         TRepeatedItem item1{1, 2, 100};
         TRepeatedItem item2{3, 4, 200};
-        ev->Numbers().Resize(std::size(numbers));
-        std::memcpy(ev->Numbers().Data(), numbers, sizeof(numbers));
-        ev->Items().Resize(2);
-        ev->Items().Data()[0] = item1;
-        ev->Items().Data()[1] = item2;
+        std::memcpy(ev->Numbers().Init(std::size(numbers)), numbers, sizeof(numbers));
+        auto* items = ev->Items().Init(2);
+        items[0] = item1;
+        items[1] = item2;
 
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Marker()), 99);
         const TPoint point = ev->Point();
@@ -391,12 +426,8 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         ev->Blob().Append(TRope(TString("ab")));
         ev->Blob().Append(TRope(TString("cd")));
 
-        ui32 part1[] = {1, 2};
-        ui32 part2[] = {3, 4};
-        ev->Numbers().Resize(std::size(part1) + std::size(part2));
-        std::memcpy(ev->Numbers().Data(), part1, sizeof(part1));
-        std::memcpy(ev->Numbers().Data() + std::size(part1), part2, sizeof(part2));
-        ev->Numbers().Resize(5);
+        ui32 allValues[] = {1, 2, 3, 4, 0};
+        std::memcpy(ev->Numbers().Init(std::size(allValues)), allValues, sizeof(allValues));
         ev->Numbers()[1] = 22;
         ev->Numbers()[4] = 55;
 
@@ -439,8 +470,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
 
         ui32 values[] = {11, 22, 33};
         auto numbers = frontend.template Array<TEvFlatPayloadFields::TNumbersTag>();
-        numbers.Resize(std::size(values));
-        std::memcpy(numbers.Data(), values, sizeof(values));
+        std::memcpy(numbers.Init(std::size(values)), values, sizeof(values));
 
         const TEvFlatPayloadFields& constEv = *ev;
         auto constFrontend = constEv.GetFrontend<TEvFlatPayloadFields::TSchemeV1>();
@@ -462,8 +492,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
 
         ev->Blob().Append(TRope(TString("payload")));
         ui32 values[] = {100, 200, 300};
-        ev->Numbers().Resize(std::size(values));
-        std::memcpy(ev->Numbers().Data(), values, sizeof(values));
+        std::memcpy(ev->Numbers().Init(std::size(values)), values, sizeof(values));
 
         UNIT_ASSERT(ev->Blob().HasPayload());
         UNIT_ASSERT_VALUES_EQUAL(ev->Blob().Materialize(), "payload");
@@ -499,8 +528,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
         ev->TabletId() = 42;
         ui32 values[] = {10, 20, 30};
-        ev->Numbers().Resize(std::size(values));
-        std::memcpy(ev->Numbers().Data(), values, sizeof(values));
+        std::memcpy(ev->Numbers().Init(std::size(values)), values, sizeof(values));
 
         UNIT_ASSERT_VALUES_EQUAL(ev->GetVersion(), static_cast<ui8>(2));
         UNIT_ASSERT(!ev->HasOldField());
@@ -555,14 +583,15 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     Y_UNIT_TEST(VersionedFrontendsForLatestAndOldSchemes) {
         THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
         UNIT_ASSERT(ev->IsVersion<TEvFlatMessage::TSchemeV2>());
+        UNIT_ASSERT(ev->Is<TEvFlatMessage::TSchemeV2>());
         UNIT_ASSERT(!ev->IsVersion<TEvFlatMessage::TSchemeV1>());
+        UNIT_ASSERT(!ev->Is<TEvFlatMessage::TSchemeV1>());
 
         auto v2 = ev->GetFrontend<TEvFlatMessage::TSchemeV2>();
         v2.template Field<TEvFlatMessage::TTabletIdTag>() = 404;
         ui32 values[] = {9, 8, 7};
         auto array = v2.template Array<TEvFlatMessage::TArrayFieldTag>();
-        array.Resize(std::size(values));
-        std::memcpy(array.Data(), values, sizeof(values));
+        std::memcpy(array.Init(std::size(values)), values, sizeof(values));
 
         const TEvFlatMessage& constLatest = *ev;
         auto constV2 = constLatest.GetFrontend<TEvFlatMessage::TSchemeV2>();
@@ -586,13 +615,30 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(v1.template Array<TEvFlatMessage::TArrayFieldTag>()[1]), 6);
     }
 
+    Y_UNIT_TEST(HasFieldUsesActualHeaderSizeWithinVersion) {
+        TString header = TString::Uninitialized(sizeof(ui8) + sizeof(i64));
+        char* ptr = header.Detach();
+        std::memset(ptr, 0, header.size());
+        WriteUnaligned<ui8>(ptr + 0, 2);
+        WriteUnaligned<i64>(ptr + sizeof(ui8), 909);
+
+        auto buffers = MakeSerializedData(TVector<TRope>{}, std::move(header));
+        THolder<IEventHandle> handle(new IEventHandle(
+            EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
+
+        TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
+        UNIT_ASSERT(loaded->Is<TEvFlatMessage::TSchemeV2>());
+        UNIT_ASSERT(loaded->HasField<TEvFlatMessage::TTabletIdTag>());
+        UNIT_ASSERT(!loaded->HasField<TEvFlatMessage::TArrayFieldTag>());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->TabletId()), 909);
+    }
+
     Y_UNIT_TEST(ArrayPayloadPreservesAlignmentLocally) {
         THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
         ev->TabletId() = 11;
 
         ui32 values[] = {10, 20, 30, 40};
-        ev->Numbers().Resize(std::size(values));
-        std::memcpy(ev->Numbers().Data(), values, sizeof(values));
+        std::memcpy(ev->Numbers().Init(std::size(values)), values, sizeof(values));
 
         auto rope = ev->SerializeToRope(GetDefaultRcBufAllocator());
         UNIT_ASSERT(rope);
@@ -606,8 +652,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         ev->TabletId() = 42;
 
         TVector<ui32> values(2048, 7);
-        ev->Numbers().Resize(values.size());
-        std::memcpy(ev->Numbers().Data(), values.data(), values.size() * sizeof(ui32));
+        std::memcpy(ev->Numbers().Init(values.size()), values.data(), values.size() * sizeof(ui32));
 
         const TEventSerializationInfo info = ev->CreateSerializationInfo(true);
         UNIT_ASSERT(info.IsExtendedFormat);

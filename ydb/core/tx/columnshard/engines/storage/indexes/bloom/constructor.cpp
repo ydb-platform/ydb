@@ -7,6 +7,15 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
+TConclusion<double> TBloomIndexConstructor::BuildCanonicalFalsePositiveProbability() const {
+    const double fpp = Request.FalsePositiveProbability.value_or(NDefaults::FalsePositiveProbability);
+    if (fpp <= 0 || fpp >= 1) {
+        return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval (0, 1)");
+    }
+
+    return fpp;
+}
+
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
@@ -14,10 +23,17 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
         errors.AddError("no column with name " + GetColumnName());
         return nullptr;
     }
+
+    auto canonicalFpp = BuildCanonicalFalsePositiveProbability();
+    if (canonicalFpp.IsFail()) {
+        errors.AddError(canonicalFpp.GetErrorMessage());
+        return nullptr;
+    }
+
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
         GetInheritPortionStorage().value_or(false), columnId,
-        FalsePositiveProbability.value_or(NDefaults::FalsePositiveProbability),
+        *canonicalFpp,
         std::make_shared<TDefaultDataExtractor>(),
         TBase::GetBitsStorageConstructor());
 }
@@ -47,8 +63,9 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateOrPatchIndexMeta(con
 }
 
 TConclusionStatus TBloomIndexConstructor::ValidateValues() const {
-    if (FalsePositiveProbability && (*FalsePositiveProbability <= 0 || *FalsePositiveProbability >= 1)) {
-        return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval (0, 1)");
+    auto canonicalFpp = BuildCanonicalFalsePositiveProbability();
+    if (canonicalFpp.IsFail()) {
+        return TConclusionStatus::Fail(canonicalFpp.GetErrorMessage());
     }
 
     return TConclusionStatus::Success();
@@ -66,7 +83,7 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
     }
 
-    FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
+    Request.FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
     return ValidateValues();
 }
 
@@ -86,7 +103,7 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         }
     }
 
-    FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
+    Request.FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
         ? std::optional<double>(bFilter.GetFalsePositiveProbability()) : std::nullopt;
     return ValidateValues();
 }
@@ -94,8 +111,8 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
 void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomFilter();
     TBase::SerializeToProtoImpl(*filterProto);
-    if (FalsePositiveProbability) {
-        filterProto->SetFalsePositiveProbability(*FalsePositiveProbability);
+    if (Request.FalsePositiveProbability) {
+        filterProto->SetFalsePositiveProbability(*Request.FalsePositiveProbability);
     }
 }
 

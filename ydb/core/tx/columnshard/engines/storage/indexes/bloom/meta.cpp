@@ -151,7 +151,7 @@ void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription&
 bool TBloomIndexMeta::Initialize() {
     AFL_VERIFY(!ResultSchema);
     if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_init", "false_positive_probability out of (0,1) range");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_init", "false_positive_probability out of (0,1) range");
         return false;
     }
 

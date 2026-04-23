@@ -19,12 +19,16 @@ public:
     }
 
 private:
-    std::optional<ui32> NGrammSize;
-    std::optional<double> FalsePositiveProbability;
-    std::optional<bool> CaseSensitive;
-    std::optional<ui32> DeprecatedHashesCount;
-    std::optional<ui32> DeprecatedFilterSizeBytes;
-    std::optional<ui32> DeprecatedRecordsCount;
+    struct TRequestSettings {
+        std::optional<ui32> NGrammSize;
+        std::optional<double> FalsePositiveProbability;
+        std::optional<bool> CaseSensitive;
+        std::optional<ui32> DeprecatedHashesCount;
+        std::optional<ui32> DeprecatedFilterSizeBytes;
+        std::optional<ui32> DeprecatedRecordsCount;
+    };
+
+    TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 
 protected:
@@ -41,6 +45,8 @@ protected:
 
 private:
     TConclusionStatus ValidateValues() const;
+    TConclusionStatus FillRequestFromJson(const NJson::TJsonValue& jsonInfo);
+    void FillRequestFromProtoFilter(const NKikimrSchemeOp::TRequestedBloomNGrammFilter& bFilter);
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const override;
 
 public:

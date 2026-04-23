@@ -97,32 +97,24 @@ protected:
             return false;
         }
 
-        CaseSensitive = bFilter.HasCaseSensitive() ? bFilter.GetCaseSensitive() : NDefaults::CaseSensitive;
-        NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
-        UseOldSizing = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0;
-        FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
-            ? bFilter.GetFalsePositiveProbability()
-            : (UseOldSizing
-                ? TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
-                    bFilter.HasHashesCount() ? std::optional<ui32>(bFilter.GetHashesCount()) : std::nullopt,
-                    bFilter.HasFilterSizeBytes() ? std::optional<ui32>(bFilter.GetFilterSizeBytes()) : std::nullopt,
-                    bFilter.HasRecordsCount() ? std::optional<ui32>(bFilter.GetRecordsCount()) : std::nullopt)
-                : NDefaults::FalsePositiveProbability);
-
-        if (UseOldSizing) {
-            HashesCount = bFilter.HasHashesCount() ? bFilter.GetHashesCount() : NDefaults::HashesCount;
-            FilterSizeBytes = bFilter.HasFilterSizeBytes()
-                ? bFilter.GetFilterSizeBytes()
-                : TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability);
-            RecordsCount = bFilter.GetRecordsCount();
-        } else {
-            HashesCount = TConstants::CalcHashesCount(FalsePositiveProbability);
-            FilterSizeBytes = TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability);
+        auto canonical = TConstants::BuildCanonicalSettingsFromProtoFilter(bFilter);
+        if (canonical.IsFail()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_parsing", canonical.GetErrorMessage());
+            return false;
         }
+
+        CaseSensitive = canonical->CaseSensitive;
+        NGrammSize = canonical->NgramSize;
+        FalsePositiveProbability = canonical->FalsePositiveProbability;
+        HashesCount = canonical->HashesCount;
+        FilterSizeBytes = canonical->FilterSizeBytes;
+        RecordsCount = canonical->RecordsCount;
+        UseOldSizing = canonical->UseDeprecatedSizing;
 
         AddColumnId(bFilter.GetColumnId());
         return Initialize();
     }
+
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
         auto* filterProto = proto.MutableBloomNGrammFilter();
         TBase::SerializeToProtoImpl(*filterProto);
@@ -149,34 +141,18 @@ protected:
 public:
     TIndexMeta() = default;
 
-    static bool IsDeprecatedSizingMode(const std::optional<ui32>& deprecatedHashesCount,
-        const std::optional<ui32>& deprecatedFilterSizeBytes,
-        const std::optional<ui32>& deprecatedRecordsCount) {
-        return deprecatedHashesCount || deprecatedFilterSizeBytes || deprecatedRecordsCount;
-    }
-
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionIndex, const ui32 columnId,
-        const TReadDataExtractorContainer& dataExtractor, const double falsePositiveProbability, const ui32 nGrammSize,
-        const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive,
-        const bool useDeprecatedSizing = false,
-        const std::optional<ui32> deprecatedFilterSizeBytes = std::nullopt,
-        const std::optional<ui32> deprecatedRecordsCount = std::nullopt,
-        const std::optional<ui32> deprecatedHashesCount = std::nullopt)
+        const TReadDataExtractorContainer& dataExtractor, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor,
+        const TCanonicalSettings& canonical)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionIndex, dataExtractor, bitsStorageConstructor)
-        , CaseSensitive(caseSensitive)
-        , NGrammSize(nGrammSize)
-        , FalsePositiveProbability(falsePositiveProbability)
-        , UseOldSizing(useDeprecatedSizing)
+        , CaseSensitive(canonical.CaseSensitive)
+        , NGrammSize(canonical.NgramSize)
+        , FalsePositiveProbability(canonical.FalsePositiveProbability)
+        , RecordsCount(canonical.RecordsCount)
+        , FilterSizeBytes(canonical.FilterSizeBytes)
+        , HashesCount(canonical.HashesCount)
+        , UseOldSizing(canonical.UseDeprecatedSizing)
     {
-        if (useDeprecatedSizing) {
-            HashesCount = deprecatedHashesCount.value_or(NDefaults::HashesCount);
-            FilterSizeBytes = deprecatedFilterSizeBytes.value_or(TConstants::CalcDeprecatedFilterSizeBytes(falsePositiveProbability));
-            RecordsCount = deprecatedRecordsCount.value_or(TConstants::DeprecatedRecordsCount);
-        } else {
-            HashesCount = TConstants::CalcHashesCount(falsePositiveProbability);
-            FilterSizeBytes = TConstants::CalcDeprecatedFilterSizeBytes(falsePositiveProbability);
-        }
-
         AFL_VERIFY(Initialize());
     }
 

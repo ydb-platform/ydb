@@ -16,7 +16,11 @@ public:
     }
 
 private:
-    std::optional<double> FalsePositiveProbability;
+    struct TRequestSettings {
+        std::optional<double> FalsePositiveProbability;
+    };
+
+    TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:
@@ -32,6 +36,7 @@ protected:
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) override;
 
 private:
+    TConclusion<double> BuildCanonicalFalsePositiveProbability() const;
     TConclusionStatus ValidateValues() const;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const override;
 

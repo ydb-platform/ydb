@@ -36,10 +36,9 @@ public:
 private:
     void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
+            ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            Ydb::Topic::AlterTopicResponse result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result);
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Topic::AlterTopicResponse());
         }
     }
 

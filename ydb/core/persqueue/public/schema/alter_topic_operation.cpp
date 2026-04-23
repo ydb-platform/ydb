@@ -109,11 +109,6 @@ private:
         modifyScheme.SetAllowAccessToPrivatePaths(true);
 
         auto* config = modifyScheme.MutableAlterPersQueueGroup();
-        config->CopyFrom(TopicInfo.Info->Description);
-
-        // keep previous values or set in ModifyPersqueueConfig
-        config->ClearTotalGroupCount();
-        config->MutablePQTabletConfig()->ClearPartitionKeySchema();
 
         {
             auto applyIf = modifyScheme.AddApplyIf();
@@ -121,7 +116,11 @@ private:
             applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
         }
 
-        auto result = Settings.Strategy->ApplyChanges(modifyScheme, *config, TopicInfo.Info->Description, TopicInfo.CdcStream);
+        auto result = Settings.Strategy->ApplyChanges(TopicInfo, modifyScheme, *config, TopicInfo.Info->Description);
+        if (result) {
+            result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
+        }
+
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
         }
@@ -151,6 +150,7 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
         if (errorCode == Ydb::StatusIds::SUCCESS) {
             ModifyScheme = {};
         }

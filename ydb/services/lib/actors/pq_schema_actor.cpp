@@ -46,7 +46,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& pqConfig,
         const TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
     ) {
-
+        // TODO remove this function
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), pqConfig);
         if (consumerName.empty()) {
             return TMsgPqCodes(TStringBuilder() << "consumer with empty name is forbidden", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
@@ -231,6 +231,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         return {};
     }
 
+    // TODO remove this function. use AddConsumer instead
     TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig* config,
         const Ydb::Topic::Consumer& rr,
@@ -241,7 +242,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TAppData* /*appData*/,
         TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
     ) {
-        auto result = NPQ::NSchema::ProcessAddConsumer(
+        auto result = NPQ::NSchema::AddConsumer(
             config,
             rr,
             supportedClientServiceTypes,
@@ -282,11 +283,11 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config,
-                              const TClientServiceTypes& supportedClientServiceTypes,
+                              const TClientServiceTypes& /*supportedClientServiceTypes*/,
                               TString& error, const NKikimrPQ::TPQConfig& /*pqConfig*/,
                               EOperation operation)
     {
-        auto result = NPQ::NSchema::ValidateConfig(config, supportedClientServiceTypes, operation);
+        auto result = NPQ::NSchema::ValidateConfig(config, operation);
         if (!result) {
             error = result.GetErrorMessage();
         }
@@ -475,7 +476,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             error = TStringBuilder() <<
                 "message_group_seqno_retention_period_ms (provided " <<
                 settings.message_group_seqno_retention_period_ms() <<
-                ") must be less then default limit for database " <<
+                ") must be less than default limit for database " <<
                 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS;
             return Ydb::StatusIds::BAD_REQUEST;
         }

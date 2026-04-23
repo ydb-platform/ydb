@@ -197,79 +197,6 @@ void TPQDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
     Become(&TPQDescribeTopicActor::StateWork);
 }
 
-
-TAddReadRuleActor::TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-}
-
-void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
-    TBase::Bootstrap(ctx);
-    SendDescribeProposeRequest(ctx);
-    Become(&TBase::StateWork);
-}
-
-void TAddReadRuleActor::ModifyPersqueueConfig(
-    TAppData* appData,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(pqGroupDescription);
-
-    auto* tabletConfig = groupConfig.MutablePQTabletConfig();
-    const auto& pqConfig = appData->PQConfig;
-    auto rule = GetProtoRequest()->read_rule();
-
-    if (rule.version() == 0) {
-        rule.set_version(selfInfo.GetVersion().GetPQVersion());
-    }
-    auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
-
-    TString error;
-    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig, nullptr);
-    auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
-                                CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, EOperation::Alter)
-                                : Ydb::StatusIds::BAD_REQUEST;
-    if (status != Ydb::StatusIds::SUCCESS) {
-        return ReplyWithError(status,
-                              status == Ydb::StatusIds::ALREADY_EXISTS ? Ydb::PersQueue::ErrorCode::OK
-                                                                       : Ydb::PersQueue::ErrorCode::BAD_REQUEST,
-                              messageAndCode.Message);
-    }
-}
-
-TRemoveReadRuleActor::TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-    Y_ASSERT(request);
-}
-
-void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
-    TBase::Bootstrap(ctx);
-    SendDescribeProposeRequest(ctx);
-    Become(&TBase::StateWork);
-}
-
-void TRemoveReadRuleActor::ModifyPersqueueConfig(
-    TAppData* appData,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(selfInfo);
-
-    auto error = RemoveReadRuleFromConfig(
-        groupConfig.MutablePQTabletConfig(),
-        pqGroupDescription.GetPQTabletConfig(),
-        GetProtoRequest()->consumer_name(),
-        appData->PQConfig
-    );
-    if (!error.empty()) {
-        return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error);
-    }
-}
-
 TPQCreateTopicActor::TPQCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters)
     : TBase(request, request->GetProtoRequest()->path())
     , LocalCluster(localCluster)
@@ -306,21 +233,6 @@ void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
     Become(&TCreateTopicActor::StateWork);
 }
 
-
-
-TPQAlterTopicActor::TPQAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request, const TString& localCluster)
-    : TBase(request, request->GetProtoRequest()->path())
-    , LocalCluster(localCluster)
-{
-    Y_ASSERT(request);
-}
-
-void TPQAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-    SendProposeRequest(ctx);
-    Become(&TPQAlterTopicActor::StateWork);
-}
 
 void TPQCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                             const TString& workingDir, const TString& name)
@@ -381,21 +293,6 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
     }
 }
 
-
-
-void TPQAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-                                            const TString& workingDir, const TString& name) {
-    NKikimrSchemeOp::TModifyScheme &modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-    modifyScheme.SetWorkingDir(workingDir);
-    TString error;
-    auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error, workingDir,
-                                         proposal.Record.GetDatabaseName(), LocalCluster);
-    if (!error.empty()) {
-        Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
-
-        return RespondWithCode(status);
-    }
-}
 
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopicRequest* request)

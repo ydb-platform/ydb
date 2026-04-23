@@ -239,7 +239,7 @@ TResult ApplyChangesInt(
     pqTabletConfig->ClearConsumers();
 
     for (const auto& rr : consumers) {
-        auto result = ProcessAddConsumer(
+        auto result = AddConsumer(
             pqTabletConfig,
             rr.second,
             supportedClientServiceTypes,
@@ -260,7 +260,7 @@ TResult ApplyChangesInt(
         pqTabletConfig->ClearMetricsLevel();
     }
 
-    return ValidateConfig(*pqTabletConfig, supportedClientServiceTypes, EOperation::Alter);
+    return {};
 }
 
 TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
@@ -357,12 +357,14 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     }
 
     TResult ApplyChanges(
+        const NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
-        const bool isCdcStream
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-        return ApplyChangesInt(Request, targetConfig, isCdcStream);
+        CopyConfig(targetConfig, sourceConfig);
+
+        return ApplyChangesInt(Request, targetConfig, topicInfo.CdcStream);
     }
 
     Ydb::Topic::AlterTopicRequest Request;
@@ -374,7 +376,7 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
     return CreateAlterTopicOperationActor(parentId, {
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
-        .UserToken = settings.UserToken,
+        .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .Cookie = settings.Cookie,

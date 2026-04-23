@@ -245,36 +245,6 @@ private:
     Ydb::Topic::DescribePartitionResult Result;
 };
 
-class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>
-                        , public TCdcStreamCompatible
-{
-    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
-
-public:
-    TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-    void ModifyPersqueueConfig(TAppData* appData,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-};
-
-class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>
-                           , public TCdcStreamCompatible
-{
-    using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>;
-
-public:
-    TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request);
-
-    void Bootstrap(const NActors::TActorContext &ctx);
-    void ModifyPersqueueConfig(TAppData* appData,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-};
-
 
 class TPQCreateTopicActor : public TPQGrpcSchemaBase<TPQCreateTopicActor, NKikimr::NGRpcService::TEvPQCreateTopicRequest> {
     using TBase = TPQGrpcSchemaBase<TPQCreateTopicActor, TEvPQCreateTopicRequest>;
@@ -316,24 +286,6 @@ private:
     TVector<TString> Clusters;
 };
 
-
-class TPQAlterTopicActor : public TPQGrpcSchemaBase<TPQAlterTopicActor, NKikimr::NGRpcService::TEvPQAlterTopicRequest> {
-  using TBase = TPQGrpcSchemaBase<TPQAlterTopicActor, TEvPQAlterTopicRequest>;
-
-public:
-     TPQAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request, const TString& localCluster);
-    ~TPQAlterTopicActor() = default;
-
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-                             const TString& workingDir, const TString& name);
-
-    void Bootstrap(const NActors::TActorContext& ctx);
-
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-
-private:
-    TString LocalCluster;
-};
 
 class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,
                                                                TGetPartitionsLocationRequest,

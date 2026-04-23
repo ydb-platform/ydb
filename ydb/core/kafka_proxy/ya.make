@@ -65,6 +65,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/fetcher
+    ydb/core/persqueue/public/schema
     ydb/core/persqueue/public/write_meta
     ydb/core/protos
     ydb/core/raw_socket

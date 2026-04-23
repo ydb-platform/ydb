@@ -354,6 +354,12 @@ public:
                         return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid path"));
                     }
                 }
+            } else {
+                if (CacheResult.GetError() == "AccessDenied") {
+                    ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), CacheResult.GetError());
+                } else {
+                    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", CacheResult.GetError()), CacheResult.GetError());
+                }
             }
             RequestDone();
         }
@@ -367,6 +373,12 @@ public:
                 ui64 schemeShardTabletId = record.GetSchemeShardTabletId();
                 auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(record.GetTxId());
                 NotifyTxCompletionResult = MakeRequestToTablet<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardTabletId, request.release());
+            }
+        } else {
+            if (ProposeStatus.GetError() == "AccessDenied") {
+                return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Forbidden"), ProposeStatus.GetError());
+            } else {
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", ProposeStatus.GetError()), ProposeStatus.GetError());
             }
         }
         RequestDone();

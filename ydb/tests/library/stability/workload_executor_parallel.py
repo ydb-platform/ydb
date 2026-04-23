@@ -111,8 +111,8 @@ class ParallelWorkloadTestBase:
             test_event_report('TestInit', workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
 
         # THEN execute cluster health check
-        # with allure.step("Pre-workload cluster verification"):
-            # errors_collector.perform_verification_with_cluster_check(workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
+        with allure.step("Pre-workload cluster verification"):
+            errors_collector.perform_verification_with_cluster_check(workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
 
         logging.info("=== Starting environment preparation ===")
 
@@ -377,7 +377,7 @@ class ParallelWorkloadTestBase:
             recoverability_execution_result = stress_executor.execute_stress_runs(
                 stress_deployer,
                 workload_params,
-                100,
+                1200,
                 preparation_result,
                 False
             )

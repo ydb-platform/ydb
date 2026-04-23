@@ -23,7 +23,7 @@ class TxCompleteLagLivenessWarden(LivenessWarden):
         if total_tx_complete_lag != 0:
             return [
                 "Liveness violation for sensor SUM(DataShard/TxCompleteLag) + SUM(PQ/TxCompleteLag): "
-                "actual value is %d, but expected be %d" % (
+                "actual value is %d, but expected to be %d" % (
                     total_tx_complete_lag,
                     0
                 )

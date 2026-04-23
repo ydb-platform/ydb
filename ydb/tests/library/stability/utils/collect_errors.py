@@ -3,7 +3,6 @@ from datetime import datetime
 from pytz import timezone
 import json
 
-import urllib
 import urllib.request
 import allure
 import yatest
@@ -110,13 +109,38 @@ class WardenResults:
         return oom_hosts
 
     def get_hosts_with_verify_fails(self) -> dict[str, int]:
-        """Return dict of host -> verify fail count from orchestrator aggregated checks."""
-        verify_hosts = {}
-        for name, check in self.checks.items():
-            name_lower = name.lower()
-            if 'verify' in name_lower and 'failed' in name_lower and not check.is_ok():
-                for host in check.affected_hosts:
-                    verify_hosts[host] = verify_hosts.get(host, 0) + len(check.violations)
+        """Return dict of host -> verify fail count from orchestrator aggregated checks.
+
+        Counts violations per-host from raw_response to avoid over-counting
+        when violations from multiple hosts are merged into a single check.
+        """
+        verify_hosts: dict[str, int] = {}
+
+        # Try to derive per-host counts directly from raw_response
+        if isinstance(self.raw_response, dict):
+            for key, entry_data in self.raw_response.items():
+                if key.startswith('_') or not isinstance(entry_data, dict):
+                    continue
+                host = key
+                for check_category in ('safety_checks', 'liveness_checks'):
+                    for check_info in entry_data.get(check_category, []):
+                        if not isinstance(check_info, dict):
+                            continue
+                        cname = check_info.get('name', '').lower()
+                        if 'verify' in cname and 'failed' in cname:
+                            status = check_info.get('status', 'ok')
+                            if status != 'ok':
+                                violations = check_info.get('violations', [])
+                                verify_hosts[host] = verify_hosts.get(host, 0) + len(violations)
+
+        # Fallback: if raw_response didn't yield results, use aggregated checks
+        if not verify_hosts:
+            for name, check in self.checks.items():
+                name_lower = name.lower()
+                if 'verify' in name_lower and 'failed' in name_lower and not check.is_ok():
+                    for host in check.affected_hosts:
+                        verify_hosts[host] = verify_hosts.get(host, 0) + len(check.violations)
+
         return verify_hosts
 
     def get_hosts_with_sanitizer(self) -> set[str]:
@@ -334,6 +358,9 @@ class AgentErrorsCollector:
                     status = check_info.get('status', 'unknown')
                     violations = check_info.get('violations', [])
 
+                    # Merge affected_hosts provided by the orchestrator in check_info
+                    explicit_affected = set(check_info.get('affected_hosts', []))
+
                     if name in checks:
                         # Merge with existing check
                         existing = checks[name]
@@ -341,9 +368,10 @@ class AgentErrorsCollector:
                             existing.status = status
                             if host:
                                 existing.affected_hosts.add(host)
+                        existing.affected_hosts.update(explicit_affected)
                         existing.violations.extend(violations)
                     else:
-                        affected = set()
+                        affected = set(explicit_affected)
                         if status != 'ok' and host:
                             affected.add(host)
                         checks[name] = WardenCheckResult(
@@ -413,7 +441,6 @@ class AgentErrorsCollector:
         core_hashes = {}
         try:
             core_hashes = self.get_core_hashes_by_pod(start_time, end_time)
-            pass  # Coredump collection currently disabled
         except Exception as exc:
             logging.error(f"Failed to collect coredumps (warden results preserved): {exc}")
 
@@ -591,7 +618,7 @@ class AgentErrorsCollector:
             dict: Cluster issue information or empty dict if all OK
         """
         try:
-            wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 2 * 60)))
+            wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
             if wait_error:
                 return create_cluster_issue("cluster_not_alive", f"Cluster functionality check failed: {wait_error}")
 

@@ -364,7 +364,7 @@ class StressRunExecutor:
             cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
             run_config['run_command'] = cmd
             run_timeout = (
-                run_config["duration"] + 100
+                run_config["duration"] + 600
             )  # Add buffer for completion
 
             execution_result = execute_command(

@@ -172,7 +172,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
     };
 
     if (KeepMessageOrder) {
-        auto isMessageGroupSkipped = [&](TMessage& message) {
+        auto isMessageGroupSkipped = [&](const TMessage& message) {
             return message.HasMessageGroupId && skipMessageGroups.contains(message.MessageGroupIdHash);
         };
         auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {

@@ -198,6 +198,8 @@ class Tablet:
         if self.no_localdb_blobs:
             self.history_by_channel[0].clear()
             self.history_by_channel[1].clear()
+        for _, history in enumerate(self.history_by_channel):
+            history.sort(key=lambda x: x.timestamp_ms)
 
     def build_intervals(self) -> None:
         for channel, history in enumerate(self.history_by_channel):
@@ -259,10 +261,11 @@ class Tablet:
         if self.hive_records_count != self.hive_records_parsed:
             return [f"tablet {self.tablet_id}: hive records count mismatch parsed={self.hive_records_parsed} expected={self.hive_records_count}"]
         
-        for channel, history in enumerate(self.history_by_channel):
+        start_from_channel = 2 if self.no_localdb_blobs else 0
+        for channel in range(start_from_channel, EXPECTED_CHANNELS_PER_TABLET):
+            history = self.history_by_channel[channel]
             if not history:
                 return [f"tablet {self.tablet_id}: channel {channel} has no history"]
-            history.sort(key=lambda x: x.timestamp_ms)
             if history[0].from_generation != 0:
                 return [f"tablet {self.tablet_id}: channel {channel} has no history from generation 0"]
             is_sorted_by_generation = all(
@@ -297,7 +300,7 @@ class Tablet:
         assert self.current_generation == -1 or self.current_generation == current_generation
         self.current_generation = current_generation
 
-    def add_blobs(self, chunks_total: int, chunk_idx: int, blob_ids: list[BlobId], small_blob_threashold: int):
+    def add_blobs(self, chunks_total: int, chunk_idx: int, blob_ids: list[BlobId], small_blob_threshold: int):
         assert self.chunks_count == 0 or self.chunks_count == chunks_total
         self.chunks_count = chunks_total
 
@@ -309,7 +312,7 @@ class Tablet:
         for blob_id in blob_ids:
             self.leaked_blob_ids.add(blob_id)
         for blob_id in blob_ids:
-            if blob_id.blob_size <= small_blob_threashold:
+            if blob_id.blob_size <= small_blob_threshold:
                 self.stats.leaked_small_blobs_count += 1
                 self.stats.leaked_small_blobs_size += blob_id.blob_size
             else:
@@ -390,9 +393,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--from", dest="from_ts", default=None, help="Ignore lines before this ISO timestamp")
     parser.add_argument("--to", dest="to_ts", default=None, help="Ignore lines after this ISO timestamp")
     parser.add_argument(
-        "--small_blob_threashold",
         "--small_blob_threshold",
-        dest="small_blob_threashold",
+        dest="small_blob_threshold",
         type=int,
         default=259968,
         help="Blob size threshold in bytes for small blobs (default: 259968)",
@@ -436,8 +438,8 @@ class Parser:
             raise SystemExit(f"log_file does not exist: {self.LogPath}")
         if self.Args.shard_count <= 0:
             raise SystemExit("shard_count must be > 0")
-        if self.Args.small_blob_threashold < 0:
-            raise SystemExit("small_blob_threashold must be >= 0")
+        if self.Args.small_blob_threshold < 0:
+            raise SystemExit("small_blob_threshold must be >= 0")
         self.From = parse_iso_z(self.Args.from_ts) if self.Args.from_ts else None
         self.To = parse_iso_z(self.Args.to_ts) if self.Args.to_ts else None
         if self.From and self.To and self.From > self.To:
@@ -540,7 +542,7 @@ class Parser:
         blob_ids_payload = line[blob_ids_pos + len("blob_ids="):]
         blob_ids_raw = BLOB_ID_RE.findall(blob_ids_payload)
         blob_ids = [BlobId.parse(raw) for raw in blob_ids_raw]
-        tablet.add_blobs(chunks_total, chunk_idx, blob_ids, self.Args.small_blob_threashold)
+        tablet.add_blobs(chunks_total, chunk_idx, blob_ids, self.Args.small_blob_threshold)
 
 
 @dataclass
@@ -569,7 +571,7 @@ class StatsPrinter:
         print(f"from: {parser.From}")
         print(f"to: {parser.To}")
         print(f"no_localdb_blobs: {parser.Args.no_localdb_blobs}")
-        print(f"small_blob_threashold: {human_count(parser.Args.small_blob_threashold)}")
+        print(f"small_blob_threshold: {human_count(parser.Args.small_blob_threshold)}")
         print(f"shard_count: {human_count(parser.Args.shard_count)}")
         print(f"require_complete_log: {parser.Args.require_complete_log}")
         print()
@@ -1055,13 +1057,13 @@ def main() -> None:
     printer = StatsPrinter()
     table = parser.parse()
 
+    table.finalize()
     issues = table.validate()
     if args.require_complete_log and issues:
         printer.print_issues(issues)
         print("ERROR: log is incomplete and --require_complete_log is enabled", file=sys.stderr)
         raise SystemExit(1)
 
-    table.finalize()
     intervals = table.build_intervals()
     history_analyzer = HistoryAnalyzer(intervals, folder_for_plots=parser.OutputFolder)
     printer.print_stats(parser, table.get_stats(), history_analyzer.stats, issues)

@@ -3789,7 +3789,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
-    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory) {
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory && *SchedulableReadFactory) {
         schedulableRead = (*SchedulableReadFactory)->Get(record.GetPoolId());
     }
 

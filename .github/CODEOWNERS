@@ -1,4 +1,4 @@
-* @ydb-platform/ReleaseApprovers
-/.github @ydb-platform/ci
+* @ydb-platform/ReleaseApprovers @ydb-platform/entbuilders
+/.github @ydb-platform/ci @ydb-platform/entbuilders
 /CHANGELOG.md @ydb-platform/changelog-reviewers
 /ydb/docs/ @ydb-platform/docs

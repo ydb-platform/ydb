@@ -410,6 +410,10 @@ private:
             const auto httpRequest = BuildSolomonRequest(metricsToSend.Data);
 
             if (!httpRequest) {
+                // BuildSolomonRequest failed (e.g. auth retrieval error).
+                // OnAsyncOutputError has already been called inside FillAuth.
+                // Restore FreeSpace so backpressure accounting stays consistent.
+                FreeSpace += metricsToSend.Data.size();
                 return false;
             }
 

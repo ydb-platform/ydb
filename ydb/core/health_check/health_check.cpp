@@ -3559,6 +3559,7 @@ public:
             }
             ui32 disabledRings = 0;
             ui32 badRings = 0;
+            auto statusBefore = currentContext->OverallStatus;
             for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
                 const auto& ring = ringGroup.Rings[ringIdx];
                 TSelfCheckContext ringContext(currentContext, TStringBuilder() << type << "_RING");
@@ -3580,6 +3581,7 @@ public:
                     ++badRings;
                 }
             }
+            currentContext->OverallStatus = statusBefore;
             if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
                 currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage);
             } else if (badRings > 1) {

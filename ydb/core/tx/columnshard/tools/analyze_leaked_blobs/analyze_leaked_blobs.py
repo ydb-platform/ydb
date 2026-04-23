@@ -106,13 +106,14 @@ class HistoryRecord:
 
 @dataclass
 class TabletStats:
+    missing: bool = True
     cs_blob_ids_count: int = 0
     cs_blob_ids_size: int = 0
     bs_total_blobs_count: int = 0
     bs_total_blobs_size: int = 0
     bs_do_not_keep_count: int = 0
     bs_keep_count: int = 0
-    leaked_blobs_count: int = -1
+    leaked_blobs_count: int = 0
     leaked_blobs_size: int = 0
     # calculated
     leaked_small_blobs_count: int = 0
@@ -120,9 +121,6 @@ class TabletStats:
     leaked_big_blobs_count: int = 0
     leaked_big_blobs_size: int = 0
 
-    def missing(self) -> bool:
-        return self.leaked_blobs_count == -1
-    
     def merge(self, other: "TabletStats") -> None:
         self.cs_blob_ids_count += other.cs_blob_ids_count
         self.cs_blob_ids_size += other.cs_blob_ids_size
@@ -195,6 +193,11 @@ class Tablet:
         issues.extend(self._validate_blobs())
         issues.extend(self._validate_hive_history())
         return issues
+    
+    def finalize(self) -> None:
+        if self.no_localdb_blobs:
+            self.history_by_channel[0].clear()
+            self.history_by_channel[1].clear()
 
     def build_intervals(self) -> None:
         for channel, history in enumerate(self.history_by_channel):
@@ -230,7 +233,7 @@ class Tablet:
 
 
     def _validate_blobs(self) -> list[str]:
-        if self.stats.missing():
+        if self.stats.missing:
             return [f"tablet {self.tablet_id}: leaked blobs stats are missing"]
         if self.chunks_count != len(self.chunks_parsed):
             return [f"tablet {self.tablet_id}: leaked blobs chunks_count mismatch parsed={len(self.chunks_parsed)} expected={self.chunks_count}"]
@@ -269,9 +272,6 @@ class Tablet:
             if not is_sorted_by_generation:
                 return [f"tablet {self.tablet_id}: channel {channel} history is sorted by timestamp, but not sorted by generation"]
         
-        if self.no_localdb_blobs:
-            self.history_by_channel[0].clear()
-            self.history_by_channel[1].clear()
         return []
 
 
@@ -331,6 +331,10 @@ class Table:
         for tablet in self.tablets.values():
             issues.extend(tablet.validate())
         return issues
+    
+    def finalize(self) -> None:
+        for tablet in self.tablets.values():
+            tablet.finalize()
 
     def build_intervals(self) -> list[Interval]:
         for tablet in self.tablets.values():
@@ -344,8 +348,7 @@ class Table:
         return all_intervals
 
     def get_stats(self) -> TabletStats:
-        stats = TabletStats()
-        stats.leaked_blobs_count = 0
+        stats = TabletStats(missing=False)
         for tablet in self.tablets.values():
             stats.merge(tablet.stats)
         return stats
@@ -516,6 +519,7 @@ class Parser:
 
     def _parse_found_leaked_blobs_stats_event(self, line: str, tablet: Tablet) -> None:
         stats = tablet.stats
+        stats.missing = False
         stats.leaked_blobs_count = extract_int_field(line, "leaked_blobs_count")
         stats.leaked_blobs_size = extract_int_field(line, "leaked_blobs_size")
         stats.cs_blob_ids_count = extract_int_field(line, "cs_blob_ids_count")
@@ -1057,6 +1061,7 @@ def main() -> None:
         print("ERROR: log is incomplete and --require_complete_log is enabled", file=sys.stderr)
         raise SystemExit(1)
 
+    table.finalize()
     intervals = table.build_intervals()
     history_analyzer = HistoryAnalyzer(intervals, folder_for_plots=parser.OutputFolder)
     printer.print_stats(parser, table.get_stats(), history_analyzer.stats, issues)

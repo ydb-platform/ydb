@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/base/tablet_devui_mon_access.h>
+#include <ydb/core/base/tablet_dev_ui_mon_access.h>
 
 using namespace NKikimr;
 

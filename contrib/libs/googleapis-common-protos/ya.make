@@ -19,6 +19,8 @@ PROTO_NAMESPACE(
 
 GRPC()
 
+WITH_KOTLIN_GRPC()
+
 SRCS(
     google/api/annotations.proto
     google/api/auth.proto

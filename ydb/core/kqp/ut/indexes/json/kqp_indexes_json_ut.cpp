@@ -324,7 +324,7 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, std::vector<
     UNIT_ASSERT_C(success, "Failed to read plan as JSON");
 
     auto op = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["DefaultOperator"].GetString();
-    UNIT_ASSERT_VALUES_EQUAL(op, '"' + defaultOperator + '"');
+    UNIT_ASSERT_VALUES_EQUAL_C(op, '"' + defaultOperator + '"', "for predicate = " << predicate);
 
     auto splitTokens = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["Tokens"].GetString();
     auto tokens = SplitString(splitTokens, ", ");
@@ -1845,6 +1845,57 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) OR (JSON_EXISTS(Text, '$.k3') OR JSON_EXISTS(Text, '$.k4')))",
                 {"\2k1", "\2k2", "\2k3", "\2k4"}, "or");
+
+            // AND with non-indexable predicate
+            ValidateTokens(db,
+                R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1" AND JSON_EXISTS(Text, '$.k2'))",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND Data = "d1")",
+                {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db,
+                R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1'))",
+                {"\2k1"}, "and");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1")",
+                {"\2k1"}, "and");
+            ValidateTokens(db,
+                R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
+                {"\2k1", "\2k2", "\2k3"}, "and");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1" AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
+                {"\2k1", "\2k2", "\2k3"}, "and");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND Data = "d1" AND JSON_EXISTS(Text, '$.k3'))",
+                {"\2k1", "\2k2", "\2k3"}, "and");
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3') AND Data = "d1")",
+                {"\2k1", "\2k2", "\2k3"}, "and");
+
+            // OR with non-indexable predicate - not extractable
+            ValidateError(db, R"(Data = "d1" OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1" OR JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR Data = "d1")");
+            ValidateError(db, R"(Data = "d1" OR JSON_EXISTS(Text, '$.k1'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1")");
+            ValidateError(db, R"(Data = "d1" OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1" OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR Data = "d1" OR JSON_EXISTS(Text, '$.k3'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3') OR Data = "d1")");
+
+            // Mixed AND/OR with Data - not extractable if the non-indexable predicate is on the OR branch
+            ValidateError(db, R"(Data = "d1" OR JSON_EXISTS(Text, '$.k1'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1")");
+            ValidateError(db, R"(Data = "d1" OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1" OR JSON_EXISTS(Text, '$.k2'))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR Data = "d1")");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR Data = "d1")");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND Data = "d1")", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1" AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1" OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
 
             // NOT JSON_EXISTS and wrapped-NOT forms fall through to "nothing to extract"
             ValidateError(db, R"(NOT JSON_EXISTS(Text, '$.k1'))");

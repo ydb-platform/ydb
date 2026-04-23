@@ -492,9 +492,25 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
         }
 
         auto result = VisitJsonPredicate(andNode.Arg(0), ctx);
+        if (result.has_value() && result->Collect.GetTokensMode() == TCollectResult::ETokensMode::NotSet) {
+            result->Collect.SetTokensMode(TCollectResult::ETokensMode::And);
+        }
+
         for (size_t i = 1; i < andNode.ArgCount(); ++i) {
             auto nextNode = andNode.Arg(i);
             auto nextResult = VisitJsonPredicate(nextNode, ctx);
+
+            if (result.has_value() && result->Collect.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+                if (!nextResult.has_value()) {
+                    return MakeCollectError(ctx, nextNode.Pos(), "JSON index does not support mixed AND/OR with non-indexable predicates");
+                }
+            }
+
+            if (nextResult.has_value() && nextResult->Collect.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+                if (!result.has_value()) {
+                    return MakeCollectError(ctx, nextNode.Pos(), "JSON index does not support mixed AND/OR with non-indexable predicates");
+                }
+            }
 
             result = MergePredicateResults(std::move(result), std::move(nextResult),
                 TCollectResult::ETokensMode::And, ctx, nextNode.Pos());
@@ -514,9 +530,21 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
         }
 
         auto result = VisitJsonPredicate(orNode.Arg(0), ctx);
+        if (!result.has_value()) {
+            return MakeCollectError(ctx, orNode.Arg(0).Pos(), "JSON index does not support OR with non-indexable predicates");
+        }
+
+        if (result->Collect.GetTokensMode() == TCollectResult::ETokensMode::NotSet) {
+            result->Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
+        }
+
         for (size_t i = 1; i < orNode.ArgCount(); ++i) {
             auto nextNode = orNode.Arg(i);
             auto nextResult = VisitJsonPredicate(nextNode, ctx);
+
+            if (!nextResult.has_value()) {
+                return MakeCollectError(ctx, nextNode.Pos(), "JSON index does not support OR with non-indexable predicates");
+            }
 
             result = MergePredicateResults(std::move(result), std::move(nextResult),
                 TCollectResult::ETokensMode::Or, ctx, nextNode.Pos());

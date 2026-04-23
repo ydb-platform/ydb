@@ -277,7 +277,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 *UntrustedUdfFlag_ = *UntrustedUdfFlag_ ||
                     callable.GetType()->GetName() == TStringBuf("ScriptUdf") ||
                     !ExecCtx_->FunctionRegistry_->IsLoadedUdfModule(moduleName) ||
-                    moduleName == TStringBuf("Geo");
+                    moduleName == TStringBuf("Geo") || moduleName == TStringBuf("Streaming");
 
                 if (moduleName.StartsWith("SystemPython")) {
                     *RemoteExecutionFlag_ = true;

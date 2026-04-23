@@ -438,8 +438,6 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             logger.warning("Timeout while checking unified_agent for VERIFY failed")
         except ValueError as e:
             logger.warning("Error parsing unified_agent output: {}".format(e))
-        except FileNotFoundError:
-            logger.warning("unified_agent not found")
         except Exception as e:
             logger.warning("Error checking unified_agent: {}".format(e))
 

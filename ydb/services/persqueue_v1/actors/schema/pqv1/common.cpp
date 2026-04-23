@@ -251,7 +251,7 @@ TResult FillProposeRequest( // create and alter
         error = TStringBuilder() <<
             "message_group_seqno_retention_period_ms (provided " <<
             settings.message_group_seqno_retention_period_ms() <<
-            ") must be less then default limit for database " <<
+            ") must be less than default limit for database " <<
             NPQ::DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS;
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }

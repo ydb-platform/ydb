@@ -76,9 +76,6 @@ private:
                 TRpcOpBase::StateFuncBase(ev);
         }
     }
-
-private:
-    TString LocalDc;
 };
 
 } // namespace

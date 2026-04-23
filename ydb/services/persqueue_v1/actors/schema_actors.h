@@ -245,36 +245,6 @@ private:
     Ydb::Topic::DescribePartitionResult Result;
 };
 
-// class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>
-//                         , public TCdcStreamCompatible
-// {
-//     using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
-
-// public:
-//     TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
-
-//     void Bootstrap(const NActors::TActorContext& ctx);
-//     void ModifyPersqueueConfig(TAppData* appData,
-//                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-//                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-//                                const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-// };
-
-// class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>
-//                            , public TCdcStreamCompatible
-// {
-//     using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>;
-
-// public:
-//     TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request);
-
-//     void Bootstrap(const NActors::TActorContext &ctx);
-//     void ModifyPersqueueConfig(TAppData* appData,
-//                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-//                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-//                                const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-// };
-
 
 class TPQCreateTopicActor : public TPQGrpcSchemaBase<TPQCreateTopicActor, NKikimr::NGRpcService::TEvPQCreateTopicRequest> {
     using TBase = TPQGrpcSchemaBase<TPQCreateTopicActor, TEvPQCreateTopicRequest>;

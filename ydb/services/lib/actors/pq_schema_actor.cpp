@@ -476,7 +476,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             error = TStringBuilder() <<
                 "message_group_seqno_retention_period_ms (provided " <<
                 settings.message_group_seqno_retention_period_ms() <<
-                ") must be less then default limit for database " <<
+                ") must be less than default limit for database " <<
                 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS;
             return Ydb::StatusIds::BAD_REQUEST;
         }

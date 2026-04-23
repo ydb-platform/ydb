@@ -180,7 +180,7 @@ TResult ProcessTopicAttributes(
                     if (ms > DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS) {
                         return {Ydb::StatusIds::BAD_REQUEST,
                             TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << ms <<
-                            ") must be less then default limit for database " <<
+                            ") must be less than default limit for database " <<
                             DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS};
                     }
                     if (ms > 0) {

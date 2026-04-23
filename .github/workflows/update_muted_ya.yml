@@ -10,7 +10,7 @@ on:
         required: false
         default: ''
       build_types:
-        description: 'Comma-separated presets or "all" (default). Cannot request presets outside .github/config/mute_update_build_types.json (default + per-branch overrides). Matrix keeps only (branch, preset) where the mute file exists on origin/<branch>.'
+        description: 'Comma-separated presets or "all" (default). Cannot request presets outside .github/config/mute_update_build_types.json (default + per-branch overrides).'
         required: false
         default: all
         type: string
@@ -50,7 +50,6 @@ jobs:
           set -euo pipefail
           python3 config-repo/.github/scripts/tests/mute/mute_helper.py matrix \
             --branches-file "config-repo/${{ env.BRANCHES_CONFIG_PATH }}" \
-            --git-cwd config-repo \
             --build-types-config "config-repo/${{ env.MUTE_BUILD_TYPES_CONFIG_PATH }}"
 
   collect-testowners-and-sync:
@@ -111,15 +110,17 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      - name: Resolve mute file and fetch base from target branch
+      - name: Prepare base mute file
         id: mute_gate
         run: |
           set -euo pipefail
-          python3 .github/scripts/tests/mute/mute_helper.py prepare-job \
-            --repo-root . \
-            --base-branch "${{ matrix.BASE_BRANCH }}" \
-            --build-type "${{ matrix.BUILD_TYPE }}" \
-            --pr-branch-prefix "${{ env.PR_BRANCH_PREFIX }}"
+          echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> "$GITHUB_ENV"
+          echo "BUILD_TYPE=${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
+          echo "PR_BRANCH=${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}_${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
+
+          git fetch origin "${{ matrix.BASE_BRANCH }}:refs/remotes/origin/${{ matrix.BASE_BRANCH }}"
+          git show "origin/${{ matrix.BASE_BRANCH }}:${{ matrix.MUTED_YA_RELATIVE }}" > base_muted_ya.txt
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Collect test history data
         if: steps.mute_gate.outputs.skip != 'true'

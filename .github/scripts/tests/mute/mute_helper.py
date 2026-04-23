@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""GitHub Actions helpers for mute workflows: matrix generation, base mute fetch, and mute path resolve."""
+"""GitHub Actions helpers for mute workflows: matrix generation and mute path resolve."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import subprocess
 import sys
 
 from mute_utils import bash_exports_for_workspace, dedicated_relative, resolve_for_workspace
@@ -102,80 +101,6 @@ def parse_requested_build_types(raw: str) -> set[str]:
     return {p.strip().lower() for p in (raw or '').split(',') if p.strip()}
 
 
-def candidate_presets(
-    *,
-    allowed_base: list[str],
-    event_name: str,
-    build_types_raw: str,
-) -> list[str]:
-    """Presets to consider per branch (existence on remote is checked separately)."""
-    if event_name != 'workflow_dispatch':
-        return list(allowed_base)
-
-    raw = (build_types_raw or '').strip().lower()
-    if not raw or raw == 'all':
-        return list(allowed_base)
-
-    base_set = set(allowed_base)
-    requested_set: set[str] = set()
-    for token in [p.strip().lower() for p in build_types_raw.split(',') if p.strip()]:
-        if token in base_set:
-            requested_set.add(token)
-    return [p for p in allowed_base if p in requested_set]
-
-
-def _ensure_branch_fetched(git_cwd: str, branch: str, fetch_timeout_s: int = 180) -> bool:
-    r = subprocess.run(
-        [
-            'git',
-            'fetch',
-            'origin',
-            f'{branch}:refs/remotes/origin/{branch}',
-            '--depth=1',
-        ],
-        cwd=git_cwd,
-        capture_output=True,
-        text=True,
-        timeout=fetch_timeout_s,
-    )
-    if r.returncode != 0:
-        err = (r.stderr or r.stdout or '').strip()
-        print(f'::notice::Could not fetch branch {branch!r}: {err} — skipping branch', file=sys.stderr)
-        return False
-    return True
-
-
-def _origin_dedicated_pathspec(branch: str, preset: str) -> str:
-    """``origin/<branch>:<dedicated-relative>`` for git cat-file / git show (path from dedicated_relative)."""
-    return f'origin/{branch.strip()}:{dedicated_relative(preset.strip().lower())}'
-
-
-def _fetch_branch_full(repo_root: str, branch: str, fetch_timeout_s: int = 180) -> bool:
-    """Fetch one branch ref (matches update_muted_ya prepare step; no shallow depth)."""
-    r = subprocess.run(
-        ['git', 'fetch', 'origin', f'{branch}:refs/remotes/origin/{branch}'],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        timeout=fetch_timeout_s,
-    )
-    if r.returncode != 0:
-        err = (r.stderr or r.stdout or '').strip()
-        print(f'::error::Could not fetch branch {branch!r}: {err}', file=sys.stderr)
-        return False
-    return True
-
-
-def _mute_file_exists_on_remote(git_cwd: str, branch: str, preset: str) -> bool:
-    ps = _origin_dedicated_pathspec(branch, preset)
-    r = subprocess.run(
-        ['git', 'cat-file', '-e', ps],
-        cwd=git_cwd,
-        capture_output=True,
-    )
-    return r.returncode == 0
-
-
 def load_branches(branches_file: str) -> list[str]:
     with open(branches_file, encoding='utf-8') as f:
         data = json.load(f)
@@ -187,7 +112,6 @@ def load_branches(branches_file: str) -> list[str]:
 def build_matrix(
     *,
     branches_file: str,
-    git_cwd: str,
     branches_override: str,
     allowed_presets: list[str],
     build_type_policy: tuple[list[str], dict[str, list[str]]] | None,
@@ -238,24 +162,6 @@ def _append_github_env(key: str, value: str) -> None:
             f.write(f'{key}={value}\n')
 
 
-def _git_show_origin_dedicated_to_file(git_cwd: str, branch: str, preset: str, output_path: str) -> None:
-    ps = _origin_dedicated_pathspec(branch, preset)
-    r = subprocess.run(
-        ['git', 'show', ps],
-        cwd=git_cwd,
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
-        err = (r.stderr or r.stdout or '').strip() or 'git show failed'
-        raise RuntimeError(f'{ps}: {err}')
-    parent = os.path.dirname(output_path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(r.stdout)
-
-
 def _append_github_output(key: str, value: str) -> None:
     path = os.environ.get('GITHUB_OUTPUT')
     if path:
@@ -278,41 +184,6 @@ def _emit_matrix_to_outputs(matrix: list[dict[str, str]]) -> None:
     ]
     with open(summary, 'a', encoding='utf-8') as f:
         f.writelines(lines)
-
-
-def prepare_mute_update_matrix_job(
-    *,
-    repo_root: str,
-    base_branch: str,
-    build_type: str,
-    pr_branch_prefix: str,
-    output_path: str,
-) -> int:
-    """Fetch branch and write dedicated mute blob to output_path."""
-    repo_root = os.path.abspath(repo_root)
-    base_branch = base_branch.strip()
-    build_type = build_type.strip().lower()
-    pr_branch_prefix = pr_branch_prefix.strip()
-
-    _append_github_env('BASE_BRANCH', base_branch)
-    _append_github_env('BUILD_TYPE', build_type)
-    _append_github_env('PR_BRANCH', f'{pr_branch_prefix}_{base_branch}_{build_type}')
-
-    if not _fetch_branch_full(repo_root, base_branch):
-        return 1
-
-    rel = dedicated_relative(build_type)
-    print(f'origin/{base_branch}:{rel}')
-
-    try:
-        _git_show_origin_dedicated_to_file(repo_root, base_branch, build_type, output_path)
-    except RuntimeError as exc:
-        print(f'::error::{exc}', file=sys.stderr)
-        return 1
-
-    _append_github_output('skip', 'false')
-    print(f'✓ Wrote base mute from origin/{base_branch}:{rel}')
-    return 0
 
 
 def cmd_matrix(args: argparse.Namespace) -> int:
@@ -342,7 +213,6 @@ def cmd_matrix(args: argparse.Namespace) -> int:
 
         matrix = build_matrix(
             branches_file=args.branches_file,
-            git_cwd=args.git_cwd,
             branches_override=override,
             allowed_presets=allowed_presets,
             build_type_policy=policy,
@@ -365,18 +235,6 @@ def cmd_matrix(args: argparse.Namespace) -> int:
     _emit_matrix_to_outputs(matrix)
 
     return 0
-
-
-def cmd_prepare_job(args: argparse.Namespace) -> int:
-    out = args.output.strip() or 'base_muted_ya.txt'
-    out_path = out if os.path.isabs(out) else os.path.join(os.path.abspath(args.repo_root), out)
-    return prepare_mute_update_matrix_job(
-        repo_root=args.repo_root,
-        base_branch=args.base_branch,
-        build_type=args.build_type,
-        pr_branch_prefix=args.pr_branch_prefix,
-        output_path=out_path,
-    )
 
 
 def cmd_resolve_path(args: argparse.Namespace) -> int:
@@ -414,11 +272,6 @@ def main() -> int:
         help='Path to stable_tests_branches.json (JSON array of branch names)',
     )
     pm.add_argument(
-        '--git-cwd',
-        required=True,
-        help='Path to a git clone of the repo (e.g. config-repo from actions/checkout)',
-    )
-    pm.add_argument(
         '--allowed-build-types',
         default='',
         help='Legacy mode: comma-separated build presets for all branches (order preserved)',
@@ -444,25 +297,6 @@ def main() -> int:
         help='Override GITHUB_EVENT_NAME (default: env)',
     )
     pm.set_defaults(func=cmd_matrix)
-
-    pj = sub.add_parser(
-        'prepare-job',
-        help='Fetch base branch, extract dedicated mute file into --output, set GITHUB_ENV / GITHUB_OUTPUT skip',
-    )
-    pj.add_argument('--repo-root', default='.', help='Git repository root (default: cwd)')
-    pj.add_argument('--base-branch', required=True, help='Target branch (e.g. stable-25-1)')
-    pj.add_argument('--build-type', required=True, help='CI preset / BUILD_TYPE')
-    pj.add_argument(
-        '--pr-branch-prefix',
-        required=True,
-        help='Prefix for PR_BRANCH env value (workflow PR_BRANCH_PREFIX)',
-    )
-    pj.add_argument(
-        '--output',
-        default='base_muted_ya.txt',
-        help='Path for git show blob (default: base_muted_ya.txt under --repo-root)',
-    )
-    pj.set_defaults(func=cmd_prepare_job)
 
     rp = sub.add_parser(
         'resolve-path',

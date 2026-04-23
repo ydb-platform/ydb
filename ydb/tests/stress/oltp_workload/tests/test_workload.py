@@ -7,6 +7,16 @@ from ydb.tests.library.stress.fixtures import StressFixture
 
 
 class TestYdbWorkload(StressFixture):
+    @staticmethod
+    def _feature_flags():
+        return {
+            "enable_parameterized_decimal": True,
+            "enable_table_datetime64": True,
+            "enable_vector_index": True,
+            "enable_fulltext_index": True,
+            "enable_local_bloom_filter_index": True,
+        }
+
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(

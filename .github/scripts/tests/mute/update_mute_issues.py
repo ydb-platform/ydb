@@ -54,15 +54,11 @@ def truncate_issue_body(body):
 def handle_github_errors(response):
     if 'errors' in response:
         for error in response['errors']:
-            if error['type'] == 'INSUFFICIENT_SCOPES':
-                print("Error: Insufficient Scopes")
-                print("Message:", error['message'])
-                raise Exception("Insufficient scopes. Please update your token's scopes.")
-            # Handle other types of errors if necessary
-            else:
-                print("Unknown error type:", error.get('type', 'No type'))
-                print("Message:", error.get('message', 'No message available'))
-                raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
+            if not isinstance(error, dict):
+                raise Exception(f"GraphQL Error (unexpected shape): {error!r}")
+            print("Type:", error.get('type') or '(missing)')
+            print("Message:", error.get('message', 'No message available'))
+            raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
 
 def run_query(query, variables=None):
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]

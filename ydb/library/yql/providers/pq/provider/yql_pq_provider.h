@@ -49,17 +49,12 @@ public:
         return Configuration->PqReadByRtmrCluster_.Get() != "dq";
     }
 
-    /// KQP: StreamingQueries.PqUserAttributesInSystemMetadata (EnablePqUserAttributesInSystemMetadata).
-    bool EffectiveUserAttributesInSystemMetadata() const {
-        return EnablePqUserAttributesInSystemMetadata;
-    }
-
 public:
     bool SupportRtmrMode = false;
     bool UseActorSystemThreadsInTopicClient = true;
     /// When true, transparent PQ metadata (e.g. write_time) uses _yql_sys_tsp_<key> instead of _yql_sys_<key>.
     bool AddTransparentPrefixToTransparentSystemColumns = true;
-    /// Cluster gate for SystemMetadata("message_meta") from streaming_queries config.
+    /// Cluster gate for SystemMetadata("user_attributes") from streaming_queries config.
     /// KQP sets this from StreamingQueries.PqUserAttributesInSystemMetadata; standalone YQL defaults to true.
     bool EnablePqUserAttributesInSystemMetadata = true;
     bool StreamingTopicsReadByDefault = true;

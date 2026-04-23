@@ -24,11 +24,18 @@ using namespace NNodes;
 namespace {
 
 const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& descriptor, TExprContext& ctx) {
-    if (descriptor.DictStringString) {
-        const auto* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-        return ctx.MakeType<TDictExprType>(stringType, stringType);
+    switch (descriptor.Type) {
+        case EMetaFieldType::Uint64:
+            return ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        case EMetaFieldType::Timestamp:
+            return ctx.MakeType<TDataExprType>(EDataSlot::Timestamp);
+        case EMetaFieldType::String:
+            return ctx.MakeType<TDataExprType>(EDataSlot::String);
+        case EMetaFieldType::DictStringString: {
+            const auto* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+            return ctx.MakeType<TDictExprType>(stringType, stringType);
+        }
     }
-    return ctx.MakeType<TDataExprType>(descriptor.Type);
 }
 
 struct TWatermarkPushdownSettings: public NPushdown::TSettings {
@@ -232,7 +239,10 @@ public:
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
             [this](TStringBuf fieldName) {
-                return GetPqMetaFieldDescriptorBySysColumn(TString(fieldName), State_->EffectiveUserAttributesInSystemMetadata()).has_value();
+                return GetPqMetaFieldDescriptorBySysColumn(
+                    TString(fieldName), 
+                    State_->EnablePqUserAttributesInSystemMetadata
+                ).has_value();
             },
             ctx)) {
             return TStatus::Error;
@@ -454,7 +464,7 @@ public:
             const TString metadataSysColumnName(metadataSysColumn->Content());
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
-                State_->EffectiveUserAttributesInSystemMetadata());
+                State_->EnablePqUserAttributesInSystemMetadata);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -495,7 +505,7 @@ public:
             const TString metadataSysColumnName(metadataSysColumn->Content());
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
-                State_->EffectiveUserAttributesInSystemMetadata());
+                State_->EnablePqUserAttributesInSystemMetadata);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -518,7 +528,7 @@ public:
         const auto descriptor = GetPqMetaFieldDescriptorByKey(
             metadataKey,
             State_->AddTransparentPrefixToTransparentSystemColumns,
-            State_->EffectiveUserAttributesInSystemMetadata());
+            State_->EnablePqUserAttributesInSystemMetadata);
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));
@@ -550,7 +560,7 @@ public:
                 return TStatus::Error;
             }
 
-            if (descriptor->DictStringString) {
+            if (descriptor->Type == EMetaFieldType::DictStringString) {
                 const auto* itemType = structType->GetItems()[*pos]->GetItemType();
                 const TTypeAnnotationNode* dictType = itemType;
                 if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
@@ -573,7 +583,22 @@ public:
                     return TStatus::Error;
                 }
 
-                if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
+                EDataSlot expectedSlot = EDataSlot::String;
+                switch (descriptor->Type) {
+                    case EMetaFieldType::Uint64:
+                        expectedSlot = EDataSlot::Uint64;
+                        break;
+                    case EMetaFieldType::Timestamp:
+                        expectedSlot = EDataSlot::Timestamp;
+                        break;
+                    case EMetaFieldType::String:
+                        expectedSlot = EDataSlot::String;
+                        break;
+                    case EMetaFieldType::DictStringString:
+                        YQL_ENSURE(false, "unexpected DictStringString in scalar branch");
+                        break;
+                }
+                if (!EnsureSpecificDataType(row->Pos(), *dataType, expectedSlot, ctx)) {
                     return TStatus::Error;
                 }
             }

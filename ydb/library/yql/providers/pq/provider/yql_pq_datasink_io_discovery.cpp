@@ -24,9 +24,9 @@ public:
         output = input;
         if (ctx.Step.IsDone(TExprStep::DiscoveryIO))
             return TStatus::Ok;
-//TMP
-        // if (!State_->DbResolver)
-        //     return TStatus::Ok;
+
+        if (!State_->DbResolver)
+            return TStatus::Ok;
 
         THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> ids;
         FindYdsDbIdsForResolving(State_, input, ids);
@@ -35,12 +35,11 @@ public:
             return TStatus::Ok;
 
         const std::weak_ptr<NYql::TDatabaseResolverResponse> response = DbResolverResponse_;
-        //TMP
-        // AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future)
-        // {
-        //     if (const auto res = response.lock())
-        //         *res = std::move(future.ExtractValue());
-        // });
+        AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future)
+        {
+            if (const auto res = response.lock())
+                *res = std::move(future.ExtractValue());
+        });
         return TStatus::Async;
     }
 

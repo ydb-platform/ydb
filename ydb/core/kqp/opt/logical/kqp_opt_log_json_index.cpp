@@ -72,13 +72,6 @@ ECallableType NodeToCallableType(const TExprBase& node) {
     return ECallableType::JsonExists;
 }
 
-bool IsCoalesceWithTrueDefault(const TCoCoalesce& coalesce) {
-    if (!coalesce.Value().Maybe<TCoBool>()) {
-        return false;
-    }
-    return FromString<bool>(coalesce.Value().Cast<TCoBool>().Literal().Value());
-}
-
 std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode) {
     if (!jsonNode.Json().Maybe<TCoMember>()) {
         return std::unexpected("Nested JSON_* functions are not supported");
@@ -340,15 +333,6 @@ std::optional<TPredicateCollectResult> VisitJsonUnaryOperator(const TCoUnaryArit
 }
 
 std::optional<TPredicateCollectResult> VisitJsonExists(const TExprBase& node, TExprContext& ctx) {
-    if (auto exists = node.Maybe<TCoExists>()) {
-        auto inner = UnwrapOptionalNodes(exists.Cast().Optional());
-        if (inner.Maybe<TCoJsonExists>()) {
-            return VisitJsonExists(inner, ctx);
-        }
-
-        return std::nullopt;
-    }
-
     if (node.Maybe<TCoJsonExists>()) {
         auto params = VisitJsonNode(node.Cast<TCoJsonExists>());
         if (!params) {
@@ -377,42 +361,6 @@ std::optional<TPredicateCollectResult> VisitJsonValue(const TExprBase& node, TEx
         return VisitJsonUnaryOperator(unaryArithmetic.Cast(), ctx);
     }
 
-    if (auto exists = node.Maybe<TCoExists>()) {
-        auto inner = UnwrapOptionalNodes(exists.Cast().Optional());
-        if (inner.Maybe<TCoJsonValue>()) {
-            auto params = VisitJsonNode(inner.Cast<TCoJsonValue>());
-            if (!params) {
-                return MakeCollectError(ctx, node.Pos(), params.error());
-            }
-
-            return ParseAndCollectJson(params->ColumnName, params->JsonPath,
-                ECallableType::JsonValue, std::nullopt, ctx, node.Pos());
-        }
-
-        return std::nullopt;
-    }
-
-    if (auto notNode = node.Maybe<TCoNot>()) {
-        const auto inner = notNode.Cast().Value();
-        if (auto exists = inner.Maybe<TCoExists>()) {
-            auto opt = UnwrapOptionalNodes(exists.Cast().Optional());
-            if (opt.Maybe<TCoJsonValue>()) {
-                return MakeCollectError(ctx, node.Pos(), "JSON_VALUE IS NULL is not supported by JSON index");
-            }
-
-            return std::nullopt;
-        }
-
-        if (auto coal = inner.Maybe<TCoCoalesce>()) {
-            auto coalesce = coal.Cast();
-            if (coalesce.Predicate().Maybe<TCoJsonValue>() && IsCoalesceWithTrueDefault(coalesce)) {
-                return MakeCollectError(ctx, node.Pos(), "Negated JSON_VALUE is not supported by JSON index");
-            }
-        }
-
-        return std::nullopt;
-    }
-
     if (node.Maybe<TCoJsonValue>()) {
         auto jsonValue = node.Cast<TCoJsonValue>();
         auto params = VisitJsonNode(jsonValue);
@@ -433,40 +381,8 @@ std::optional<TPredicateCollectResult> VisitJsonValue(const TExprBase& node, TEx
 }
 
 std::optional<TPredicateCollectResult> VisitJsonQuery(const TExprBase& node, TExprContext& ctx) {
-    if (auto exists = node.Maybe<TCoExists>()) {
-        auto inner = UnwrapOptionalNodes(exists.Cast().Optional());
-        if (inner.Maybe<TCoJsonQuery>()) {
-            auto params = VisitJsonNode(inner.Cast<TCoJsonQuery>());
-            if (!params) {
-                return MakeCollectError(ctx, node.Pos(), params.error());
-            }
-
-            return ParseAndCollectJson(params->ColumnName, params->JsonPath, ECallableType::JsonQuery, std::nullopt, ctx, node.Pos());
-        }
-
-        return std::nullopt;
-    }
-
-    if (auto notNode = node.Maybe<TCoNot>()) {
-        auto inner = notNode.Cast().Value();
-        if (auto exists = inner.Maybe<TCoExists>()) {
-            auto opt = UnwrapOptionalNodes(exists.Cast().Optional());
-            if (opt.Maybe<TCoJsonQuery>()) {
-                return MakeCollectError(ctx, node.Pos(), "JSON_QUERY IS NULL is not supported by JSON index");
-            }
-        }
-
-        return std::nullopt;
-    }
-
     if (node.Maybe<TCoJsonQuery>()) {
-        auto params = VisitJsonNode(node.Cast<TCoJsonQuery>());
-        if (!params) {
-            return MakeCollectError(ctx, node.Pos(), params.error());
-        }
-
-        return ParseAndCollectJson(params->ColumnName, params->JsonPath,
-            ECallableType::JsonQuery, std::nullopt, ctx, node.Pos());
+        return MakeCollectError(ctx, node.Pos(), "JSON_QUERY is not supported by JSON index");
     }
 
     return std::nullopt;

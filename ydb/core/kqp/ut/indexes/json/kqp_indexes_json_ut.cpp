@@ -1772,13 +1772,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))", {"\2k1\2k2" + numSuffix(2)});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))", {"\2k1" + trueSuffix, "\2k2" + falseSuffix}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))", {"\2k1" + nullSuffix, "\2k2" + strSuffix("str")}, "or");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key') IS NOT NULL)", {"\3key"});
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key') == true)", {"\3key"});
 
             // Negated JSON_EXISTS is not supported by JSON index
             ValidateError(db, R"(JSON_EXISTS(Text, '$.key') == false)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.key') != true)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.key') IS NULL)");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.key') IS NOT NULL)"); // returns false != null -> exists
 
             // AND combinations
             ValidateTokens(db,
@@ -2066,8 +2066,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(JsonValueTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Supported RETURNING types
-            ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NULL)"); // negation
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key') IS NOT NULL)", {"\3key"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int8) == 1t)", {"\2k1" + numSuffix(1)});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint8) == 1ut)", {"\2k1" + numSuffix(1)});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int16) == 1s)", {"\2k1" + numSuffix(1)});
@@ -2090,6 +2088,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // Default RETURNING type is Utf8
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "1")", {"\2k1" + strSuffix("1")});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "string")", {"\2k1" + strSuffix("string")});
+
+            // Negation
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NULL)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NOT NULL)"); 
 
             // JSON_VALUE comparison with true rewrites to JSON_VALUE without boolean comparison
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\2k1" + trueSuffix});

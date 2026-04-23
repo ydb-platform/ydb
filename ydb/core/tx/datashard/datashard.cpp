@@ -4951,7 +4951,9 @@ void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &c
 }
 
 void TDataShard::Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev) {
-    SchedulableReadFactory = ev->Get()->Factory;
+    if (!SchedulableReadFactory) {
+        SchedulableReadFactory = ev->Get()->Factory;
+    }
     CheckMediatorStateRestored();
 }
 

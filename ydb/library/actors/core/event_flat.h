@@ -38,6 +38,15 @@ namespace NActors {
             : std::true_type {
         };
 
+        template <class T, class = void>
+        struct TUseAlignedInlinePayloadFormat : std::false_type {
+        };
+
+        template <class T>
+        struct TUseAlignedInlinePayloadFormat<T, std::void_t<decltype(T::UseAlignedInlinePayloadFormat)>>
+            : std::bool_constant<T::UseAlignedInlinePayloadFormat> {
+        };
+
         template <class... T>
         struct TLastType;
 
@@ -1408,6 +1417,9 @@ namespace NActors {
                 return SerializeHeaderOnlyToArcadiaStream(serializer);
             }
             const TVector<TRope> wirePayloads = BuildWirePayloads();
+            if (UseAlignedInlinePayloadFormat()) {
+                return SerializeAlignedInlinePayloadToArcadiaStream(serializer, wirePayloads);
+            }
             return SerializeToArcadiaStreamImpl(serializer, wirePayloads)
                 && SerializeHeaderOnlyToArcadiaStream(serializer);
         }
@@ -1425,6 +1437,9 @@ namespace NActors {
                 return TRope(std::move(headerBuf));
             }
             const TVector<TRope> wirePayloads = BuildWirePayloads();
+            if (UseAlignedInlinePayloadFormat()) {
+                return SerializeAlignedInlinePayloadToRope(wirePayloads);
+            }
             const ui32 headerSize = CalculateSerializedHeaderSizeImpl(wirePayloads);
 
             TRope result;
@@ -1493,6 +1508,9 @@ namespace NActors {
                 return HeaderSize;
             }
             const TVector<TRope> wirePayloads = BuildWirePayloads();
+            if (UseAlignedInlinePayloadFormat()) {
+                return CalculateAlignedInlinePayloadSerializedSize(wirePayloads);
+            }
             return CalculateSerializedSizeImpl(wirePayloads, HeaderSize);
         }
 
@@ -1506,6 +1524,21 @@ namespace NActors {
                 return info;
             }
             const TVector<TRope> wirePayloads = BuildWirePayloads();
+            if (UseAlignedInlinePayloadFormat()) {
+                TEventSerializationInfo info;
+                info.IsExtendedFormat = true;
+                if (allowExternalDataChannel) {
+                    info.Sections.push_back(TEventSectionInfo{
+                        0,
+                        CalculateAlignedInlinePayloadSerializedSize(wirePayloads),
+                        0,
+                        0,
+                        true,
+                        false
+                    });
+                }
+                return info;
+            }
             TEventSerializationInfo info = CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(),
                 wirePayloads, HeaderSize);
             if (!info.Sections.empty()) {
@@ -1553,7 +1586,11 @@ namespace NActors {
                 TRope::TConstIterator iter = input->GetBeginIter();
                 size_t size = input->GetSize();
                 size_t totalPayloadSize = 0;
-                ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
+                if (iter.Valid() && *iter.ContiguousData() == AlignedExtendedPayloadMarker) {
+                    ParseAlignedInlinePayload(iter, size, wirePayloads, totalPayloadSize);
+                } else {
+                    ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
+                }
                 Y_ENSURE(size, "Flat event header is missing");
 
                 THolder<TEv> holder = MakeHolder();
@@ -1923,7 +1960,7 @@ namespace NActors {
         }
 
         bool UseAlignedInlinePayloadFormat() const {
-            return false;
+            return NFlatEventDetail::TUseAlignedInlinePayloadFormat<TEv>::value;
         }
 
         static size_t SerializeVarint(size_t num, char* buffer) {
@@ -2042,7 +2079,27 @@ namespace NActors {
             if (!rope) {
                 return false;
             }
-            return serializer->WriteRope(&*rope);
+            void* data = nullptr;
+            int size = 0;
+            for (auto it = rope->Begin(); it.Valid(); it.AdvanceToNextContiguousBlock()) {
+                const char* ptr = it.ContiguousData();
+                size_t len = it.ContiguousSize();
+                while (len) {
+                    if (!size && !serializer->Next(&data, &size)) {
+                        return false;
+                    }
+                    const size_t numBytesToCopy = Min<size_t>(size, len);
+                    std::memcpy(data, ptr, numBytesToCopy);
+                    data = static_cast<char*>(data) + numBytesToCopy;
+                    size -= numBytesToCopy;
+                    ptr += numBytesToCopy;
+                    len -= numBytesToCopy;
+                }
+            }
+            if (size) {
+                serializer->BackUp(size);
+            }
+            return true;
         }
 
         std::optional<TRope> SerializeAlignedInlinePayloadToRope(const TVector<TRope>& wirePayloads) const {

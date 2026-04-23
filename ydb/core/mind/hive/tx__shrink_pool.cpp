@@ -20,7 +20,7 @@ public:
         , StoragePool(storagePool)
         , NewSize(newSize)
         , Cookie(cookie)
-	, Version(version)
+        , Version(version)
     {
     }
 

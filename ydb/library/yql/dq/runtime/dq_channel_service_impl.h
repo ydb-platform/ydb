@@ -524,6 +524,10 @@ public:
     void Terminate();
     void AbortChannel(const TString& message);
 
+    ui64 GetPopBytes(){
+        return PopStats.Bytes.load();
+    }
+
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
     ui64 PeerGenMajor = 0;
@@ -547,6 +551,35 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+};
+
+class TBroadcastInputDescriptor : public TInputDescriptor{
+public:
+
+    TBroadcastInputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem,
+      ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes, ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks)
+    : TInputDescriptor(info, actorSystem, inputBufferBytes, inputBufferChunks) {
+        
+    }
+
+    bool IsEmpty();
+    bool PushDataChunk(TDataChunk&& data);
+    bool PopDataChunk(TDataChunk& data);
+    ui32 GetQueueSize();
+
+    bool IsFinished();
+    bool IsEarlyFinished();
+    bool EarlyFinish();
+    void Terminate();
+
+    ui64 GetPopBytes(){
+        ui64 ans = 0;
+        for (auto& descriptor : InputDescriptors)
+            ans += descriptor->GetPopBytes();
+        return ans;
+    }
+
+    TVector<std::shared_ptr<TInputDescriptor>> InputDescriptors;
 };
 
 class TInputBuffer : public IChannelBuffer {
@@ -680,7 +713,8 @@ public:
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
-    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
+    // change to channelId
+    mutable std::unordered_map<ui64, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundOutputs;
@@ -1132,33 +1166,50 @@ class TBroadcastOutputChannel : public IDqOutputChannel
         void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) override
         {
             // IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
-            auto service = Service.lock();
-            Y_ENSURE(service, "Channel has been binded or service is not available");
+            // auto service = Service.lock();
+            // Y_ENSURE(service, "Channel has been binded or service is not available");
             Y_ENSURE(!Binded[channelId]);
 
+            Binded[channelId] = true;
+            ++BindedCount;
             // if (IsLocalChannel)
             // {
             //     Serializer = ConvertToLocalSerializer(std::move(Serializer));
             // }
 
+
             auto broadcastBuffer = std::static_pointer_cast<TBroadcastBuffer>(Serializer->Buffer);
 
-            broadcastBuffer->Buffers[channelId]->Info.OutputActorId = outputActorId;
-            broadcastBuffer->Buffers[channelId]->Info.InputActorId = inputActorId;
+            auto nodeId = inputActorId.NodeId();
 
-            auto buffer = service->GetOutputBuffer(broadcastBuffer->Buffers[channelId]->Info, Storage);
-            //
-            if (Aggregator)
-            {
-                buffer->SetFillAggregator(Aggregator);
+            auto it = ChannelIdFromNodeId.find(nodeId);
+
+            if (it == ChannelIdFromNodeId.end()) {
+                ChannelIdFromNodeId.emplace(nodeId, channelId);
+                broadcastBuffer->Buffers[channelId]->Info.OutputActorId = outputActorId;
+                broadcastBuffer->Buffers[channelId]->Info.InputActorId = inputActorId;
+            } else {
+                // broadcastBuffer->Buffers[it->second]->Info.OutputActorId = outputActorId;
+                auto& broadcastInputs = broadcastBuffer->Buffers[it->second]->Info.BroadcastInputActorIds;
+                if (broadcastInputs.empty())
+                    broadcastInputs.push_back(broadcastBuffer->Buffers[it->second]->Info.InputActorId);
+                broadcastInputs.push_back(inputActorId);
+
+                broadcastBuffer->Buffers.erase(channelId);
             }
+            // auto buffer = service->GetOutputBuffer(broadcastBuffer->Buffers[channelId]->Info, Storage);
+            // //
+            // if (Aggregator)
+            // {
+            //     buffer->SetFillAggregator(Aggregator);
+            // }
 
-            broadcastBuffer->Buffers[channelId] = buffer;
-            Binded[channelId] = true;
-            ++BindedCount;
+            // broadcastBuffer->Buffers[channelId] = buffer;
 
-            if (BindedCount == OutputSize)
-                Service.reset();
+
+            if (BindedCount == OutputSize) {
+                FinishBinding();
+            }
         }
 
         bool IsLocal() const override
@@ -1176,8 +1227,33 @@ class TBroadcastOutputChannel : public IDqOutputChannel
         std::unordered_map<ui64, bool> Binded;
         ui64 BindedCount{0};
 
+        // mapping of nodeId and channelId
+        std::unordered_map<ui64, ui64> ChannelIdFromNodeId;
+
         // number of channels
         ui32 OutputSize{0};
+
+    private:
+        void FinishBinding() {
+            auto service = Service.lock();
+            Y_ENSURE(service, "Channel has been binded or service is not available");
+
+            auto broadcastBuffer = std::static_pointer_cast<TBroadcastBuffer>(Serializer->Buffer);
+
+            for(auto& [_, buf] : broadcastBuffer->Buffers) {
+
+                auto buffer = service->GetOutputBuffer(buf->Info, Storage);
+                
+                if (Aggregator)
+                {
+                    buffer->SetFillAggregator(Aggregator);
+                }
+
+                buf = buffer;
+            }
+            
+            Service.reset();
+        }
     };
 
 class TFastDqInputChannel : public IDqInputChannel {

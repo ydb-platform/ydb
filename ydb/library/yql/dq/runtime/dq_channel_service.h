@@ -23,6 +23,9 @@ struct TChannelInfo {
     ui64 ChannelId;
     NActors::TActorId OutputActorId;
     NActors::TActorId InputActorId;
+
+    // multiple actors for broadcast channels
+    TVector<NActors::TActorId> BroadcastInputActorIds;
 };
 
 struct TChannelFullInfo : public TChannelInfo {

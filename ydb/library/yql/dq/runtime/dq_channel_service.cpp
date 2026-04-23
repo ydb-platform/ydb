@@ -687,12 +687,12 @@ bool TBroadcastBuffer::IsEmpty() {
 }
 
 bool TBroadcastBuffer::Pop(TDataChunk&) {
-    Y_ENSURE(false, "TOutputBuffer::Pop not allowed");
+    Y_ENSURE(false, "TBroadcastBuffer::Pop not allowed");
     return false;
 }
 
 void TBroadcastBuffer::EarlyFinish() {
-    Y_ENSURE(false, "TOutputBuffer::EarlyFinish not allowed");
+    Y_ENSURE(false, "TBroadcastBuffer::EarlyFinish not allowed");
 }
 
 void TBroadcastBuffer::ExportPushStats(TDqAsyncStats& stats) {
@@ -762,6 +762,7 @@ bool TInputDescriptor::IsEarlyFinished() {
     return EarlyFinished.load();
 }
 
+// allows multiple channels to take data
 bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
     std::lock_guard lock(QueueMutex);
     if (Queue.empty()) {
@@ -820,6 +821,57 @@ ui32 TInputDescriptor::GetQueueSize() {
     std::lock_guard lock(QueueMutex);
     return  Queue.size();
 }
+
+/// Broadcast input
+
+bool TBroadcastInputDescriptor::IsEmpty() {
+    for(const auto& descriptor: InputDescriptors)
+        if(!descriptor->IsEmpty())
+            return false;
+    return true;
+}
+
+bool TBroadcastInputDescriptor::IsFinished() {
+    for(const auto& descriptor: InputDescriptors)
+        if(!descriptor->IsFinished())
+            return false;
+    return true;
+}
+
+bool TBroadcastInputDescriptor::IsEarlyFinished() {
+    for(const auto& descriptor: InputDescriptors)
+        if(!descriptor->IsEarlyFinished())
+            return false;
+    return true;
+}
+
+
+bool TBroadcastInputDescriptor::EarlyFinish() {
+    bool result = true;
+    for(const auto& descriptor: InputDescriptors)
+        result = result && descriptor->EarlyFinish();
+    return result;
+}
+
+
+ui32 TBroadcastInputDescriptor::GetQueueSize() {
+    // should it be allowed?
+    Y_ENSURE(false, "TBroadcastInputDescriptor::GetQueueSize not allowed");
+    return  0;
+}
+
+bool TBroadcastInputDescriptor::PushDataChunk(TDataChunk&& data) {
+    for(const auto& descriptor: InputDescriptors)
+        descriptor->PushDataChunk(TDataChunk{data});
+    return false;
+}
+
+// pop from inner descriptors
+bool TBroadcastInputDescriptor::PopDataChunk(TDataChunk& data) {
+    Y_UNUSED(data);
+    Y_ENSURE(false, "TBroadcastInputDescriptor::Pop not allowed");
+}
+
 
 TInputBuffer::~TInputBuffer() {
     NodeState->TerminateInputDescriptor(Descriptor);
@@ -993,6 +1045,15 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
 
     NActors::ActorIdToProto(item->Descriptor->Info.OutputActorId, ev->Record.MutableSrcActorId());
     NActors::ActorIdToProto(item->Descriptor->Info.InputActorId, ev->Record.MutableDstActorId());
+    
+    // setting multiple inputs if channel is broadcast channel
+    if (!item->Descriptor->Info.BroadcastInputActorIds.empty())
+        for (auto& inputId : item->Descriptor->Info.BroadcastInputActorIds){
+            auto* ids = ev->Record.MutableBroadcastDstActorIds();
+            auto *ex = ids->Add();
+            ActorIdToProto(inputId, ex);
+        }
+
     ev->Record.SetChannelId(item->Descriptor->Info.ChannelId);
 
     if (!item->Data.Buffer.Empty()) {
@@ -1086,6 +1147,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
+
+    for (const auto& actorId : record.GetBroadcastDstActorIds())
+        info.BroadcastInputActorIds.push_back(NActors::ActorIdFromProto(actorId));
+
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
@@ -1120,6 +1185,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     }
     data.Bytes = record.GetBytes();
     Y_ENSURE(data.Bytes > data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
+    // broadcast descriptor can be here
     if (descriptor->PushDataChunk(std::move(data))) {
         UpdateProgress(descriptor);
     }
@@ -1567,8 +1633,9 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     NActors::ActorIdToProto(descriptor->Info.InputActorId, evUpdate->Record.MutableDstActorId());
     evUpdate->Record.SetChannelId(descriptor->Info.ChannelId);
 
-    evUpdate->Record.SetEarlyFinished(descriptor->EarlyFinished.load());
-    evUpdate->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
+    evUpdate->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
+    // what should be here in broadcast channel?
+    evUpdate->Record.SetPopBytes(descriptor->GetPopBytes());
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
@@ -1580,7 +1647,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
 
 std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, bool bound, bool leading) {
     std::lock_guard lock(Mutex);
-    auto it = OutputDescriptors.find(info);
+    auto it = OutputDescriptors.find(info.ChannelId);
     if (it != OutputDescriptors.end()) {
         auto result = it->second;
         if (bound) {
@@ -1597,7 +1664,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
     }
 
     auto result = std::make_shared<TOutputDescriptor>(info, ActorSystem, OutputBufferBytes, OutputBufferChunks, Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
-    OutputDescriptors.emplace(info, result);
+    OutputDescriptors.emplace(info.ChannelId, result);
     (*OutputBufferCount)++;
     if (bound) {
         result->IsBound = true;
@@ -1616,6 +1683,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
+            // send to multiple actors if broadcast?
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;
@@ -1625,7 +1693,21 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         return {};
     }
 
-    auto result = std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
+    bool isBroadcast = !info.BroadcastInputActorIds.empty();
+
+    std::shared_ptr<TInputDescriptor> result =  isBroadcast ? std::make_shared<TBroadcastInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes)
+                                                            : std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks);
+    
+    if (isBroadcast){
+        TChannelFullInfo newInfo = info;
+        auto broadcastDescriptor = std::static_pointer_cast<TBroadcastInputDescriptor>(result);
+        newInfo.BroadcastInputActorIds.clear();
+        for (const auto& inputId : info.BroadcastInputActorIds) {
+            newInfo.InputActorId = inputId;
+            broadcastDescriptor->InputDescriptors.push_back(GetOrCreateInputDescriptor(newInfo, bound, leading));
+        }
+    }
+
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
     if (bound) {
@@ -1639,7 +1721,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
 void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor) {
     descriptor->Terminate();
     std::lock_guard lock(Mutex);
-    OutputDescriptors.erase(descriptor->Info);
+    OutputDescriptors.erase(descriptor->Info.ChannelId);
     (*OutputBufferCount)--;
 }
 
@@ -1669,7 +1751,7 @@ void TNodeState::CleanupUnbound() {
         if (front.second > now) {
             break;
         }
-        if (auto it = OutputDescriptors.find(front.first); it != OutputDescriptors.end()) {
+        if (auto it = OutputDescriptors.find(front.first.ChannelId); it != OutputDescriptors.end()) {
             if (!it->second->IsBound) {
                 OutputDescriptors.erase(it);
             }
@@ -1805,8 +1887,8 @@ TString TNodeState::GetDebugInfo() {
         << ", Reconciliation=" << Reconciliation.load()
         << Endl;
 
-    for (auto& [info, descriptor] : OutputDescriptors) {
-        builder << "  Output " << info.ChannelId << ", FL=" << (ui32)descriptor->FillLevel
+    for (auto& [channelId, descriptor] : OutputDescriptors) {
+        builder << "  Output " << channelId << ", FL=" << (ui32)descriptor->FillLevel
             << ", IF:" << descriptor->IsFinished() << ", TA=" << descriptor->IsTerminatedOrAborted()
             << ", EF: " << descriptor->EarlyFinished.load()
             << ", PP:" << descriptor->PushBytes.load() << ':' << descriptor->RemotePopBytes.load() << Endl;
@@ -2315,11 +2397,11 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
                 TABLEBODY() {
                     for (auto& [nodeId, state] : ChannelService->NodeStates) {
-                        for (auto& [info, descriptor] : state->OutputDescriptors) {
+                        for (auto& [channelId, descriptor] : state->OutputDescriptors) {
                             auto pushBytes = descriptor->PushBytes.load();
                             auto popBytes = descriptor->RemotePopBytes.load();
                             TABLER() {
-                                TABLED() {str << info.ChannelId;}
+                                TABLED() {str << channelId;}
                                 TABLED() {str << nodeId;}
                                 TABLED() {str << descriptor->Info.SrcStageId;}
                                 TABLED() {str << descriptor->Info.DstStageId;}
@@ -2347,13 +2429,13 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->HeadBlobId;}
                                 TABLED() {str << descriptor->TailBlobId;}
                                 TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
-                                        str << info.OutputActorId;
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(descriptor->Info.OutputActorId)}}))  {
+                                        str << descriptor->Info.OutputActorId;
                                     }
                                 }
                                 TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.InputActorId)}}))  {
-                                        str << info.InputActorId;
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(descriptor->Info.InputActorId)}}))  {
+                                        str << descriptor->Info.InputActorId;
                                     }
                                 }
                             }

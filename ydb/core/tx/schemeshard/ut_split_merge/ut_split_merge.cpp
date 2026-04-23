@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -11,6 +12,19 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 namespace {
+
+constexpr ui32 MAX_SPLIT_PROTOCOL_VERSION = 3;
+
+ui32 GetSplitProtocolVersion(TTestActorRuntime& runtime) {
+    if (runtime.GetAppData().FeatureFlags.GetEnableDataShardSplitHistogramOmission()) {
+        return 3;
+    } else if (runtime.GetAppData().FeatureFlags.GetEnableDataShardSplitKeySelection()) {
+        return 2;
+    } else if (runtime.GetAppData().FeatureFlags.GetEnableDataShardSplitHistogramSorting()) {
+        return 1;
+    }
+    return 0;
+}
 
 void WaitForTableSplit(TTestActorRuntime& runtime, const TString& path, size_t requiredPartitionCount = 10) {
     while (true) {
@@ -26,9 +40,10 @@ void WaitForTableSplit(TTestActorRuntime& runtime, const TString& path, size_t r
         const auto result = DescribePath(runtime, path, true);
         if (result.GetPathDescription().TablePartitionsSize() >= requiredPartitionCount)
             return;
-    }        
-} 
+    }
 }
+
+}  // namespace anonymous
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
     Y_UNIT_TEST(Test) {
@@ -135,14 +150,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                            {NLs::PartitionKeys({""})});
     }
 
-    Y_UNIT_TEST(Split10Shards) {
-        TTestBasicRuntime runtime;
-
+    void Split10Shards(ui32 splitProtocolVersion) {
         TTestEnvOptions opts;
+        if (splitProtocolVersion == 1) {
+            opts.EnableDataShardSplitHistogramSorting(true);
+        } else if (splitProtocolVersion == 2) {
+            opts.EnableDataShardSplitKeySelection(true);
+        } else if (splitProtocolVersion == 3) {
+            opts.EnableDataShardSplitHistogramOmission(true);
+        }
         opts.EnableBackgroundCompaction(false);
         opts.DataShardStatsReportIntervalSeconds(1);
-
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime, opts);
+
+        UNIT_ASSERT_VALUES_EQUAL(splitProtocolVersion, GetSplitProtocolVersion(runtime));
 
         ui64 txId = 100;
 
@@ -202,6 +224,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         WaitForTableSplit(runtime, "/MyRoot/Table");
     }
+    struct TTestRegistrationSplit10Shards {
+        TTestRegistrationSplit10Shards() {
+            static std::vector<TString> TestNames;
+
+            for (const auto& i : xrange(MAX_SPLIT_PROTOCOL_VERSION + 1)) {
+                TestNames.emplace_back(TStringBuilder() << "Split10Shards-protocol" << i);
+
+                TCurrentTest::AddTest(
+                    TestNames.back().c_str(),
+                    std::bind(std::bind(Split10Shards, i), std::placeholders::_1),
+                    /*forceFork*/ false
+                );
+            }
+        }
+    };
+    static TTestRegistrationSplit10Shards testRegistrationSplit10Shards;
 
     Y_UNIT_TEST(SplitShardsWithDecimalKey) {
         TTestBasicRuntime runtime;
@@ -237,8 +275,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         for (ui64 key = 0; key < 1000; ++key) {
             const std::pair<ui64, ui64> decimalKey = NYql::NDecimal::MakePair(
                 NYql::NDecimal::FromString(Sprintf("%d.123456789", key * 1'000'000), 35, 10));
-            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2, 3}, 
-                {TCell::Make<std::pair<ui64, ui64>>(decimalKey)}, 
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2, 3},
+                {TCell::Make<std::pair<ui64, ui64>>(decimalKey)},
                 {TCell::Make<std::pair<ui64, ui64>>(decimalValue), TCell(stringValue)});
         }
 
@@ -493,7 +531,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
     }
 
     Y_UNIT_TEST(AutoMergeInOne) {
+        NDataShard::gDbStatsDataSizeResolution = 1;
+        NDataShard::gDbStatsRowCountResolution = 1;
         TTestWithReboots t;
+        t.EnvOpts.EnableBackgroundCompaction(false);
+        t.EnvOpts.DataShardStatsReportIntervalSeconds(0);
+        t.EnvOpts.EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -509,6 +552,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                                    {NLs::PartitionKeys({"A", ""})});
+
+                TAtomic unused;
+                runtime.GetAppData().Icb->SetValue("SchemeShard_MergeByLoadMinUptimeSec", 1, unused);
+                runtime.GetAppData().Icb->SetValue("SchemeShard_MergeByLoadMinLowLoadDurationSec", 10, unused);
             }
 
             TVector<THolder<IEventHandle>> suppressed;
@@ -665,6 +712,8 @@ struct TLoadAndSplitSimulator {
     NKikimrTableStats::THistogram KeyAccessHistogramPatch;
     ui64 TableLocalPathId;
 
+    ui32 SplitProtocolVersion = 0;
+
     std::map<ui64, std::pair<ui64, ui64>> DatashardsKeyRanges;
     TInstant LastSplitAckTime;
     ui64 SplitAckCount = 0;
@@ -672,16 +721,18 @@ struct TLoadAndSplitSimulator {
     ui64 KeyAccessSampleReqCount = 0;
     ui64 SplitReqCount = 0;
 
-    TLoadAndSplitSimulator(ui64 tableLocalPathId, ui64 initialDatashardId, ui64 targetCpuLoadPercent)
+    TLoadAndSplitSimulator(ui64 tableLocalPathId, ui64 initialDatashardId, ui64 targetCpuLoadPercent, TTestActorRuntime& testRuntime)
         : TableLocalPathId(tableLocalPathId)
     {
         MetricsPatch.SetCPU(CpuLoadMicroseconds(targetCpuLoadPercent));
 
         //NOTE: histogram must have at least 3 buckets with different keys to be able to produce split key
-        // (see ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp, DoFindSplitKey() and ChooseSplitKeyByKeySample())
+        // (see ydb/core/split/key_access.cpp, FindSplitKeyPrefix() and SelectShortestMedianKeyPrefix())
         HistogramAddBucket(KeyAccessHistogramPatch, 999998, 1000);
         HistogramAddBucket(KeyAccessHistogramPatch, 999999, 1000);
         HistogramAddBucket(KeyAccessHistogramPatch, 1000000, 1000);
+
+        SplitProtocolVersion = GetSplitProtocolVersion(testRuntime);
 
         DatashardsKeyRanges[initialDatashardId] = std::make_pair(0, 1000000);
 
@@ -749,10 +800,40 @@ struct TLoadAndSplitSimulator {
                     if (end == 0) {
                         end = 1000000;
                     }
-                    ui64 splitPoint = (end - start) / 2;
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
+                    ui64 splitPoint = (end + start) / 2;
+
+                    // Emulate split protocol versions, see GetSplitBoundaryByLoad().
+                    switch (SplitProtocolVersion) {
+                        case 0: {  // unsorted array, no key
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint + 1));
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint - 1));
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint));
+                            }
+                            break;
+                        case 1: {  // sorted array, no key
+                                record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
+                            }
+                            break;
+                        case 2: {  // sorted array, with key
+                                record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
+                                record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
+                                record.MutableTableStats()->SetSplitByLoadSuggestedKey(ToSerialized(splitPoint));
+                            }
+                            break;
+                        case 3: {  // no array, with key
+                                record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
+                                record.MutableTableStats()->MutableKeyAccessSample()->Clear();
+                                record.MutableTableStats()->SetSplitByLoadSuggestedKey(ToSerialized(splitPoint));
+                            }
+                            break;
+                        default:
+                            UNIT_ASSERT_C(false, TStringBuilder() << "Unsupported protocol version " << SplitProtocolVersion << ". Consider to support it in a simulation?");
+                    };
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                         << ", intercept EvGetTableStatsResult, from datashard " << record.GetDatashardId()
@@ -812,8 +893,7 @@ struct TLoadAndSplitSimulator {
     };
 };
 
-TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
-    TTestEnvOptions opts;
+TTestEnv SetupEnv(TTestBasicRuntime &runtime, TTestEnvOptions& opts) {
     opts.EnableBackgroundCompaction(false);
     opts.DataShardStatsReportIntervalSeconds(0);
 
@@ -841,6 +921,10 @@ TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
 
     return env;
 }
+TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
+    TTestEnvOptions opts;
+    return SetupEnv(runtime, opts);
+}
 
 }  // anonymous namespace
 
@@ -853,7 +937,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         const ui64 tableLocalPathId = tableInfo.GetPathDescription().GetSelf().GetPathId();
         const ui64 initialDatashardId = tableInfo.GetPathDescription().GetTablePartitions(0).GetDatashardId();
 
-        TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent);
+        TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent, runtime);
 
         runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
             simulator.ChangeEvent(event);
@@ -883,7 +967,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         const ui64 tableLocalPathId = tableInfo.GetPathDescription().GetSelf().GetPathId();
         const ui64 initialDatashardId = tableInfo.GetPathDescription().GetTablePartitions(0).GetDatashardId();
 
-        TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent);
+        TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent, runtime);
 
         runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
             simulator.ChangeEvent(event);
@@ -905,9 +989,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         // Cerr << "TEST SplitByLoad, SplitReq " << simulator.SplitReqCount << Endl;
     }
 
-    Y_UNIT_TEST(TableSplitsUpToMaxPartitionsCount) {
+    static void TableSplitsUpToMaxPartitionsCount(ui32 splitProtocolVersion) {
+        TTestEnvOptions opts;
+        if (splitProtocolVersion == 1) {
+            opts.EnableDataShardSplitHistogramSorting(true);
+        } else if (splitProtocolVersion == 2) {
+            opts.EnableDataShardSplitKeySelection(true);
+        } else if (splitProtocolVersion == 3) {
+            opts.EnableDataShardSplitHistogramOmission(true);
+        }
         TTestBasicRuntime runtime;
-        auto env = SetupEnv(runtime);
+        auto env = SetupEnv(runtime, opts);
+
+        UNIT_ASSERT_VALUES_EQUAL(splitProtocolVersion, GetSplitProtocolVersion(runtime));
 
         const ui32 expectedPartitionCount = 5;
         const ui32 cpuLoadThreshold = 1;    // percents
@@ -948,6 +1042,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
         TestDescribeResult(tableInfo, {NLs::PartitionCount(expectedPartitionCount)});
     }
+    struct TTestRegistrationTableSplitsUpToMaxPartitionsCount {
+        TTestRegistrationTableSplitsUpToMaxPartitionsCount() {
+            static std::vector<TString> TestNames;
+
+            constexpr ui32 MAX_SPLIT_PROTOCOL_VERSION = 3;
+
+            for (const auto& i : xrange(MAX_SPLIT_PROTOCOL_VERSION + 1)) {
+                TestNames.emplace_back(TStringBuilder() << "TableSplitsUpToMaxPartitionsCount-protocol" << i);
+
+                TCurrentTest::AddTest(
+                    TestNames.back().c_str(),
+                    std::bind(std::bind(TableSplitsUpToMaxPartitionsCount, i), std::placeholders::_1),
+                    /*forceFork*/ false
+                );
+            }
+        }
+    };
+    static TTestRegistrationTableSplitsUpToMaxPartitionsCount testRegistrationTableSplitsUpToMaxPartitionsCount;
 
     Y_UNIT_TEST(IndexTableSplitsUpToMainTableCurrentPartitionCount) {
         TTestBasicRuntime runtime;

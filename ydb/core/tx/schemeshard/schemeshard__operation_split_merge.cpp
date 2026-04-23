@@ -1032,19 +1032,13 @@ public:
         /// Accept operation
         ///
 
-        auto guard = context.DbGuard();
-        context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabDomain(context.SS, path.GetPathIdForDomain());
-        context.MemChanges.GrabPath(context.SS, path->PathId);
-        context.MemChanges.GrabTable(context.SS, path->PathId);
-
+        //NOTE: No MemChanges.Grab* calls are made here: TSplitMerge::Propose() has no
+        // failure paths after this point, so AbortOperationPropose / UnDo() will
+        // never be triggered for these objects.
+        // AbortUnsafe() (triggered by TDropForceUnsafe) handles its own rollback
+        // by performing the inverse in-memory operations directly.
         context.DbChanges.PersistTxState(OperationId);
         for (const auto& shard : op.Shards) {
-            if (shard.Operation == TTxState::CreateParts) {
-                context.MemChanges.GrabNewShard(context.SS, shard.Idx);
-            } else {
-                context.MemChanges.GrabShard(context.SS, shard.Idx);
-            }
             context.DbChanges.PersistShard(shard.Idx);
         }
 

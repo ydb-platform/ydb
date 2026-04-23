@@ -63,9 +63,7 @@ Currently only [row-oriented tables](datamodel/table.md#row-oriented-tables) are
 
 ## Backup collections {#backup-collections}
 
-A [backup collection](datamodel/backup-collection.md) is a mechanism that groups a set of tables and manages the chain of their full and incremental backups. Collections are stored within the cluster and can be [exported to external storage](datamodel/backup-collection.md#external-storage) for protection against cluster loss.
-
-For details on architecture, limitations, operations, and internals, see [Backup collections](datamodel/backup-collection.md).
+For details on backup collections, see [Backup collections](datamodel/backup-collection.md).
 
 ## Comparison {#comparison}
 

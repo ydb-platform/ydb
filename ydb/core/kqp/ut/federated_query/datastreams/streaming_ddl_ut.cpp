@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreateTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
-        const TString sourceBucket = TStringBuilder() << "test_bucket_streaming_query_s3_insert" << Name_;
+        const TString sourceBucket = TStringBuilder() << "test_bucket_streaming_query_s3_insert";
         const TString s3SinkName = TStringBuilder() << "sinkName" << Name_;
         CreateBucket(sourceBucket);
         CreateS3Source(sourceBucket, s3SinkName);
@@ -743,7 +743,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         const auto pqGateway = SetupMockPqGateway();
 
-        const TString sourceBucket = TStringBuilder() << "test_streaming_query_with_s3_join" << Name_;
+        const TString sourceBucket = TStringBuilder() << "test_streaming_query_with_s3_join";
         constexpr char objectContent[] = R"(
 {"fqdn": "host1.example.com", "payload": "P1"}
 {"fqdn": "host2.example.com", "payload": "P2"}
@@ -1559,7 +1559,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         // Join with S3 used for introducing temporary failure and force retry on specific key
 
-        const TString sourceBucket = TStringBuilder() << "test_streaming_query_recovery_on_internal_retry" << Name_;
+        const TString sourceBucket = TStringBuilder() << "test_streaming_query_recovery_on_internal_retry";
         constexpr char objectContent[] = R"(
 {"fqdn": "host1.example.com", "payload": "P1"}
 {"fqdn": "host2.example.com"                              })";
@@ -2092,7 +2092,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreateTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
-        const TString sourceBucket = TStringBuilder() << "test_bucket_streaming_query_s3_insert_checkpoint_propagation" << Name_;
+        const TString sourceBucket = TStringBuilder() << "test_bucket_streaming_query_s3_insert_checkpoint_propagation";
         const TString s3SinkName = TStringBuilder() << "sinkName" << Name_;
         CreateBucket(sourceBucket);
         CreateS3Source(sourceBucket, s3SinkName);
@@ -2583,7 +2583,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreateTopic(outputTopic2);
         CreatePqSource(pqSource);
 
-        const TString sinkBucket = TStringBuilder() << "test_bucket_streaming_query_multi_insert" << Name_;
+        const TString sinkBucket = TStringBuilder() << "test_bucket_streaming_query_multi_insert";
         const TString s3SinkName = TStringBuilder() << "s3SinkName" << Name_;
         CreateBucket(sinkBucket);
         CreateS3Source(sinkBucket, s3SinkName);

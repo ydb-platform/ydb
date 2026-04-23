@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[" + topicName + "] data source generic doesn't exist");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[" + topicName + "] data source generic doesn't exist");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {
-        const TString writeBucket = TStringBuilder() << "test_bucket_restore_script_physical_graph" << Name_;
+        const TString writeBucket = TStringBuilder() << "test_bucket_restore_script_physical_graph";
         CreateBucket(writeBucket);
 
         const TString topicName = TStringBuilder() << "restoreScriptTopic" << Name_;
@@ -476,7 +476,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        const TString writeBucket = TStringBuilder() << "test_bucket_restore_script_physical_graph_on_retry" << Name_;
+        const TString writeBucket = TStringBuilder() << "test_bucket_restore_script_physical_graph_on_retry";
         CreateBucket(writeBucket);
 
         const TString topicName = TStringBuilder() << "restoreScriptTopicOnRetry" << Name_;
@@ -703,7 +703,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(S3RuntimeListingDisabledForStreamingQueries, TStreamingTestFixture) {
-        const TString sourceBucket = TStringBuilder() << "test_bucket_disable_runtime_listing" << Name_;
+        const TString sourceBucket = TStringBuilder() << "test_bucket_disable_runtime_listing";
         constexpr char objectPath[] = "test_bucket_object.json";
         constexpr char objectContent[] = R"({"data": "x"})";
         CreateBucketWithObject(sourceBucket, objectPath, objectContent);
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(S3AtomicUploadCommitDisabledForStreamingQueries, TStreamingTestFixture) {
-        const TString sourceBucket = TStringBuilder() << "test_bucket_disable_atomic_upload_commit" << Name_;
+        const TString sourceBucket = TStringBuilder() << "test_bucket_disable_atomic_upload_commit";
         constexpr char objectPath[] = "test_bucket_object.json";
         constexpr char objectContent[] = R"({"data": "x"})";
         CreateBucketWithObject(sourceBucket, objectPath, objectContent);
@@ -760,7 +760,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(S3PartitioningKeysFlushTimeout, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
-        const TString sourceBucket = TStringBuilder() << "test_bucket_partitioning_keys_flush" << Name_;
+        const TString sourceBucket = TStringBuilder() << "test_bucket_partitioning_keys_flush";
         const TString s3SourceName = TStringBuilder() << "s3Source" << Name_;
         CreateBucket(sourceBucket);
         CreateS3Source(sourceBucket, s3SourceName);

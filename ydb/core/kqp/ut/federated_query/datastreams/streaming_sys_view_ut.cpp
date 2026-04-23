@@ -147,10 +147,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         const TString resourcePool = TStringBuilder() << "MyResourcePool" << Name_;
         ExecQuery(fmt::format(R"(
             GRANT ALL ON `/Root` TO `root@builtin`;
-            CREATE RESOURCE POOL `{resource_pool} WITH (CONCURRENT_QUERY_LIMIT = "-1");
+            CREATE RESOURCE POOL `{resource_pool}` WITH (CONCURRENT_QUERY_LIMIT = "-1");
             CREATE STREAMING QUERY `{query_name}` WITH (
                 RUN = FALSE,
-                RESOURCE_POOL = "MyResourcePool"
+                RESOURCE_POOL = "{resource_pool}"
             ) AS DO BEGIN{text}END DO)",
             "query_name"_a = queryName,
             "resource_pool"_a = resourcePool,
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 .Name = queryName,
                 .Status = "RUNNING",
                 .Run = true,
-                .Pool = "MyResourcePool",
+                .Pool = resourcePool,
             }})[0];
 
             UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 0);

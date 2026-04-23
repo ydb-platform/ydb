@@ -2,10 +2,9 @@
 import os
 import datetime
 import logging
-import subprocess
-import argparse
 from typing import Optional
-from github import Github
+
+from github import Github, GithubException
 from github.PullRequest import PullRequest
 
 automerge_pr_label = "automerge"
@@ -78,35 +77,31 @@ class PrAutomerger:
     def add_pr_failed_label(self, pr: PullRequest):
         pr.add_to_labels(pr_label_fail)
 
-    def git_merge_pr(self, pr: PullRequest):
-        self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "merge-repo")
-        os.chdir("merge-repo")
-        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
-        self.git_run("checkout", pr.base.ref)
-
-        commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
+    def api_merge_pr(self, pr: PullRequest) -> bool:
+        """Merge via GitHub API (squash), same end result as native auto-merge in the mute PR workflow."""
         try:
-            self.git_run("merge", "PR", "-m", commit_msg)
-        except subprocess.CalledProcessError:
-            self.add_failed_comment(pr, "Unable to merge PR.")
-            self.add_pr_failed_label(pr)
-            return False
-
-        try:
-            self.git_run("push")
+            pr.merge(merge_method="squash", commit_title=pr.title)
             return True
-        except subprocess.CalledProcessError:
-            self.add_failed_comment(pr, "Unable to push merged revision.")
+        except GithubException as e:
+            self.logger.error("merge API failed status=%s data=%r", e.status, e.data)
+            msg = e.data.get("message", str(e)) if isinstance(e.data, dict) else str(e)
+            self.add_failed_comment(pr, f"Unable to merge PR via API: {msg}")
             self.add_pr_failed_label(pr)
             return False
 
     def merge_pr(self, pr: PullRequest):
         self.logger.info("start merge %s into %s", pr, pr.base.ref)
-        if not self.git_merge_pr(pr):
+        if not self.api_merge_pr(pr):
             self.logger.info("unable to merge PR")
             return
-        self.logger.info("deleting ref %r", pr.head.ref)
-        self.repo.get_git_ref(f"heads/{pr.head.ref}").delete()
+        try:
+            self.logger.info("deleting ref %r", pr.head.ref)
+            self.repo.get_git_ref(f"heads/{pr.head.ref}").delete()
+        except GithubException as e:
+            if e.status == 404:
+                self.logger.info("head ref already deleted: %s", pr.head.ref)
+            else:
+                self.logger.warning("could not delete head ref %r: %s", pr.head.ref, e)
         body = f"The PR was successfully merged into {pr.base.ref} using workflow"
         pr.create_issue_comment(body=body)
 
@@ -115,22 +110,6 @@ class PrAutomerger:
         if self.workflow_url:
             text += f" Sync workflow logs can be found [here]({self.workflow_url})."
         pr.create_issue_comment(f"{failed_comment_mark}\n{text}")
-
-    def git_run(self, *args):
-        args = ["git"] + list(args)
-
-        self.logger.info("run: %r", args)
-        try:
-            output = subprocess.check_output(args).decode()
-        except subprocess.CalledProcessError as e:
-            self.logger.error(e.output.decode())
-            raise
-        else:
-            self.logger.info("output:\n%s", output)
-        return output
-
-    def git_revparse_head(self):
-        return self.git_run("rev-parse", "HEAD").strip()
 
     def cmd_check_pr(self):
         prs = self.get_latest_open_prs()

@@ -181,8 +181,7 @@ graph TB
     CheckChanges -->|Yes| CreatePR[📦 Create PR<br/>with changes]
     
     CreatePR --> CommentPR[💬 Comment PR<br/>Add labels & reviewers]
-    CommentPR --> AutoMerge[🔄 Enable auto-merge]
-    AutoMerge --> WaitMerge[⏳ Wait for PR merge]
+    CommentPR --> WaitMerge[⏳ automerge_pr cron (~5 min)<br/>squash merge via GitHub API]
     
     WaitMerge --> PRMerged[✅ PR merged<br/>Issues workflow: merged PR<br/>to main + mute-unmute label]
     

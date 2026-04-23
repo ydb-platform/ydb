@@ -1641,7 +1641,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::SchedulePartitionCountTimer() {
-    if (!CheckPartitionCountPeriod || SourceParams.GetStopAtCurrentEndOffsets() || PartitionCountTimerScheduled) {
+    if (!CheckPartitionCountPeriod || /* SourceParams.GetStopAtCurrentEndOffsets() || */ PartitionCountTimerScheduled) {
         return;
     }
     PartitionCountTimerScheduled = true;

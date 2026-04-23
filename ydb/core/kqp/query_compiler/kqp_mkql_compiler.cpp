@@ -428,7 +428,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 10, "BlockHashJoinCore should have 10 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -473,24 +473,26 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
 
             auto graceJoinRenames = [&]{
-                auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
-                    return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
-                };
-                TDqUserRenames renames{};
-                for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kLeft);
+                const auto& leftRenamesNode = *node.Child(TDqBlockHashJoinCore::idx_LeftRenames);
+                const auto& rightRenamesNode = *node.Child(TDqBlockHashJoinCore::idx_RightRenames);
+                const ui32 outputWidth = leftRenamesNode.ChildrenSize() / 2 + rightRenamesNode.ChildrenSize() / 2;
+                TDqUserRenames renames(outputWidth, {-1, EJoinSide::kLeft});
+                for (ui32 i = 0; i < leftRenamesNode.ChildrenSize(); i += 2) {
+                    const auto srcIdx = FromString<int>(leftRenamesNode.Child(i)->Content());
+                    const auto dstIdx = FromString<ui32>(leftRenamesNode.Child(i + 1)->Content());
+                    renames[dstIdx] = {srcIdx, EJoinSide::kLeft};
                 }
-                if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
-                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                        renames.emplace_back(index, EJoinSide::kRight);       
-                    }
+                for (ui32 i = 0; i < rightRenamesNode.ChildrenSize(); i += 2) {
+                    const auto srcIdx = FromString<int>(rightRenamesNode.Child(i)->Content());
+                    const auto dstIdx = FromString<ui32>(rightRenamesNode.Child(i + 1)->Content());
+                    renames[dstIdx] = {srcIdx, EJoinSide::kRight};
                 }
                 return TGraceJoinRenames::FromDq(renames);
             }();
 
 
             NMiniKQL::TBlockHashJoinSettings settings;
-            for (const auto& setting : node.Child(7)->Children()) {
+            for (const auto& setting : node.Child(TDqBlockHashJoinCore::idx_Settings)->Children()) {
                 if (setting->Child(0)->Content() == "BuildSide") {
                     if (setting->Child(1)->Content() == "Left") {
                         settings.BuildSide = NMiniKQL::EBuildSide::Left;

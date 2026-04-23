@@ -76,9 +76,11 @@
             {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
             {"Index": 3, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
             {"Index": 4, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
-            {"Index": 5, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
-            {"Index": 6, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
-            {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
+            {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
+            {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+            {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
+            {"Index": 9, "Name": "Settings", "Type": "TCoNameValueTupleList"}
         ]
     },
     {

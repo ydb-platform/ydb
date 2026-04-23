@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                         Bytes(R # 10e12)
                     ';
             )";
-	    TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"" + TString(UseBlockHashJoin ? "true" : "false") + "\";";
+            TString blocks = UseBlockHashJoin ? "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n" : "";
             TString select = R"(
                 SELECT L.*
                 FROM `left_table` AS L
@@ -903,6 +903,330 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             }
             UNIT_ASSERT_VALUES_EQUAL(matchedRows, 3);
             UNIT_ASSERT_VALUES_EQUAL(unmatchedRows, 1);
+        }
+    }
+
+    Y_UNIT_TEST(BlockHashJoinColumnPruningInner) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_wide` (
+                        id Int32 NOT NULL,
+                        name String NOT NULL,
+                        extra1 String NOT NULL,
+                        extra2 Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/right_wide` (
+                        id Int32 NOT NULL,
+                        value String NOT NULL,
+                        extra3 String NOT NULL,
+                        extra4 Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/left_wide` (id, name, extra1, extra2) VALUES
+                        (1, "alice", "x1", 10),
+                        (2, "bob",   "x2", 20),
+                        (3, "carol", "x3", 30);
+
+                    INSERT INTO `/Root/right_wide` (id, value, extra3, extra4) VALUES
+                        (1, "v1", "y1", 100),
+                        (2, "v2", "y2", 200),
+                        (4, "v4", "y4", 400);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT L.name AS name, R.value AS value
+                FROM `left_wide` AS L
+                INNER JOIN `right_wide` AS R
+                ON L.id = R.id
+                ORDER BY L.name;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            Cout << "AST (ColumnPruningInner): " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra1"),
+                TStringBuilder() << "Column 'extra1' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra2"),
+                TStringBuilder() << "Column 'extra2' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra3"),
+                TStringBuilder() << "Column 'extra3' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("extra4"),
+                TStringBuilder() << "Column 'extra4' should be pruned from join. AST: " << ast);
+        }
+    }
+
+    Y_UNIT_TEST(BlockHashJoinColumnPruningLeftJoinOnlyLeftColumns) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_multi` (
+                        id Int32 NOT NULL,
+                        col_a String NOT NULL,
+                        col_b String NOT NULL,
+                        col_c Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/right_multi` (
+                        id Int32 NOT NULL,
+                        col_d String NOT NULL,
+                        col_e String NOT NULL,
+                        col_f Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT L.col_a AS col_a
+                FROM `left_multi` AS L
+                LEFT JOIN `right_multi` AS R
+                ON L.id = R.id
+                ORDER BY L.col_a;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            Cout << "AST (ColumnPruningLeftJoinOnlyLeftColumns): " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_b"),
+                TStringBuilder() << "Column 'col_b' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_c"),
+                TStringBuilder() << "Column 'col_c' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_d"),
+                TStringBuilder() << "Column 'col_d' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_e"),
+                TStringBuilder() << "Column 'col_e' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("col_f"),
+                TStringBuilder() << "Column 'col_f' should be pruned from join. AST: " << ast);
+        }
+    }
+
+    Y_UNIT_TEST(BlockHashJoinColumnPruningWithAggregation) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/orders` (
+                        order_id Int32 NOT NULL,
+                        customer_id Int32 NOT NULL,
+                        amount Int32 NOT NULL,
+                        status String NOT NULL,
+                        PRIMARY KEY (order_id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/customers` (
+                        customer_id Int32 NOT NULL,
+                        name String NOT NULL,
+                        region String NOT NULL,
+                        tier String NOT NULL,
+                        PRIMARY KEY (customer_id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(O # 10e12)
+                        Bytes(C # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT C.name AS name, SUM(O.amount) AS total
+                FROM `orders` AS O
+                INNER JOIN `customers` AS C
+                ON O.customer_id = C.customer_id
+                GROUP BY C.name
+                ORDER BY name;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            Cout << "AST (ColumnPruningWithAggregation): " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("order_id"),
+                TStringBuilder() << "Column 'order_id' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("status"),
+                TStringBuilder() << "Column 'status' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("region"),
+                TStringBuilder() << "Column 'region' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("tier"),
+                TStringBuilder() << "Column 'tier' should be pruned from join. AST: " << ast);
+        }
+    }
+
+    Y_UNIT_TEST(BlockHashJoinColumnPruningLeftSemiWithExtraColumns) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_extra` (
+                        id Int32 NOT NULL,
+                        name String NOT NULL,
+                        unused1 String NOT NULL,
+                        unused2 Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/right_extra` (
+                        id Int32 NOT NULL,
+                        value String NOT NULL,
+                        unused3 String NOT NULL,
+                        unused4 Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT L.name AS name
+                FROM `left_extra` AS L
+                LEFT SEMI JOIN `right_extra` AS R
+                ON L.id = R.id
+                ORDER BY L.name;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            Cout << "AST (ColumnPruningLeftSemiWithExtraColumns): " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"),
+                TStringBuilder() << "AST should contain BlockHashJoinCore. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused1"),
+                TStringBuilder() << "Column 'unused1' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused2"),
+                TStringBuilder() << "Column 'unused2' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused3"),
+                TStringBuilder() << "Column 'unused3' should be pruned from join. AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("unused4"),
+                TStringBuilder() << "Column 'unused4' should be pruned from join. AST: " << ast);
         }
     }
 }

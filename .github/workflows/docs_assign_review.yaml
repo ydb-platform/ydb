@@ -1,8 +1,8 @@
 name: Assign a reviewer for documentation
 
-on:
-  pull_request_target:
-    types: [opened]
+# on:
+#   pull_request_target:
+#     types: [opened]
 
 jobs:
   assign-docs-reviewer:

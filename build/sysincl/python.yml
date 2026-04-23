@@ -1,4 +1,4 @@
-- source_filter: "^(?!((contrib/tools/python3(_prev)?|library/python/runtime(_py3)?/main|library/python/symbols)/))"
+- source_filter: "^(?!((contrib/tools/python3(_prev)?|library/python/runtime(_py3)?/main|library/python/symbols|contrib/tools/python)/))"
   includes:
   - Python-ast.h
   - Python.h

@@ -30,8 +30,12 @@ def get_coverage_filters(unit, filters=[]):
         cov_exclude_re = get_coverage_filter_regexp(coverage_exclude_regexp)
         filters.append(lambda x: re.match(cov_exclude_re, x) is not None)
     if unit.get("ENABLE_CONTRIB_COVERAGE") != "yes":
-        paths_to_exclude = ("contrib",)
-        filters.append(lambda x: x.startswith(paths_to_exclude))
+        if unit.get("ENABLE_CONTRIB_YDB_COVERAGE") == "yes":
+            pattern = r'^contrib/(?!ydb)'
+            filters.append(lambda x: re.match(pattern, x) is not None)
+        else:
+            paths_to_exclude = ("contrib",)
+            filters.append(lambda x: x.startswith(paths_to_exclude))
     return filters
 
 

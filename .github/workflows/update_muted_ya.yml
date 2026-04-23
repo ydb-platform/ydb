@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Optional: comma-separated branches instead of stable_tests_branches.json. Empty = use stable_tests_branches.json from main.'
+        description: 'Optional: comma-separated branches instead of stable_tests_branches.json. Empty = use stable_tests_branches.json from WORKFLOW_CHECKOUT_REF.'
         required: false
         default: ''
       build_types:
@@ -38,6 +38,7 @@ jobs:
           sparse-checkout: |
             .github/config/
             .github/scripts/tests/mute/mute_check.py
+            .github/scripts/tests/mute/mute_utils.py
           sparse-checkout-cone-mode: false
 
       - id: set-mute-matrix

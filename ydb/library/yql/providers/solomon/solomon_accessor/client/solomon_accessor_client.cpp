@@ -481,8 +481,10 @@ public:
         if (auto error = GetAuthInfo(authInfo)) {
             return NThreading::MakeFuture(TGetDataResponse(*error));
         }
-        callMeta.Aux.emplace_back("authorization", authInfo);
-        callMeta.Aux.emplace_back("x-client-id", "x-client-id");
+        if (!authInfo.empty()) {
+            callMeta.Aux.emplace_back("authorization", authInfo);
+        }
+        callMeta.Aux.emplace_back("x-client-id", "yandex-query");
 
         auto resultPromise = NThreading::NewPromise<TGetDataResponse>();
 
@@ -526,10 +528,12 @@ private:
         switch (Settings.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
                 auth = TStringBuilder() << "OAuth " << authToken;
+                break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
                 auth = TStringBuilder() << "Bearer " << authToken;
+                break;
             default:
-                return TStringBuilder() << "Cant provide auth info for unknwon cluster type: " << static_cast<int>(Settings.GetClusterType());
+                return TStringBuilder() << "Can't provide auth info for unknown cluster type: " << static_cast<int>(Settings.GetClusterType());
         }
 
         return {};
@@ -550,7 +554,9 @@ private:
         if (auto error = GetAuthInfo(authInfo)) {
             return *error;
         }
-        headers.Fields.emplace_back(TStringBuilder() << "Authorization: " << authInfo);
+        if (!authInfo.empty()) {
+            headers.Fields.emplace_back(TStringBuilder() << "Authorization: " << authInfo);
+        }
         headers.Fields.emplace_back("x-client-id: yandex-query");
         headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
         headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");

@@ -434,7 +434,7 @@ public:
                 buffer.push_back(value);
             }
 
-            CurrentDataBytesInflight -= data.TotalSize;
+            CurrentDataBytesStored -= data.TotalSize;
             TryRequestData();
         }
 

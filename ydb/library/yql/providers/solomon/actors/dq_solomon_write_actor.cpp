@@ -337,16 +337,20 @@ private:
         metricsCount = 0;
     }
 
-    NHttp::THttpOutgoingRequestPtr BuildSolomonRequest(const TString& data) {
+    std::optional<NHttp::THttpOutgoingRequestPtr> BuildSolomonRequest(const TString& data) {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Url);
-        FillAuth(httpRequest);
-        httpRequest->Set("x-client-id", "yql");
+        
+        if (!FillAuth(httpRequest)) {
+            return {};
+        }
+
+        httpRequest->Set("x-client-id", "yandex-query");
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/json");
         httpRequest->Set<&NHttp::THttpRequest::Body>(data);
         return httpRequest;
     }
 
-    void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
+    bool FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
         const TString authorizationHeader = "Authorization";
 
         TString authToken;
@@ -355,7 +359,7 @@ private:
         } catch (const std::exception& ex) {
             TIssues issues { TIssue(TStringBuilder() << "Failed to get auth token: " << ex.what()) };
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
-            return;
+            return false;
         }
 
         switch (WriteParams.Shard.GetClusterType()) {
@@ -368,8 +372,10 @@ private:
             default:
                 TIssues issues { TIssue(TStringBuilder() << "Invalid cluster type: " << ToString<ui32>(WriteParams.Shard.GetClusterType())) };
                 Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-                return;
+                return false;
         }
+
+        return true;
     }
 
     bool TryToSendNextBatch() {
@@ -401,11 +407,15 @@ private:
             }
 
             const auto& metricsToSend = std::get<TMetricsToSend>(variant);
-            const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(metricsToSend.Data);
+            const auto httpRequest = BuildSolomonRequest(metricsToSend.Data);
+
+            if (!httpRequest) {
+                return false;
+            }
 
             const size_t bodySize = metricsToSend.Data.size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
-            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
+            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(*httpRequest), /*flags=*/0, Cookie);
             SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;

@@ -158,12 +158,6 @@ class Workload(unittest.TestCase):
 
         self.driver.topic_client.create_topic(topic, consumers=consumers, min_active_partitions=10)
 
-    def drop_topic(self, topic: str):
-        try:
-            self.driver.topic_client.drop_topic(topic)
-        except ydb.SchemeError:
-            pass
-
     def __enter__(self):
         return self
 

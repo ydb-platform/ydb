@@ -137,9 +137,11 @@ ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
     if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         NActors::TExecutorPoolState poolState;
         NActors::GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
-        userPoolSize = static_cast<ui32>(poolState.PossibleMaxLimit);
+        if (poolState.PossibleMaxLimit > 0) {
+            userPoolSize = static_cast<ui32>(poolState.PossibleMaxLimit);
+        }
     }
-
+ 
     if (!userPoolSize) {
         ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool possible max limit is undefined for executer tasks construction";
         userPoolSize = NSystemInfo::NumberOfCpus();

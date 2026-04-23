@@ -14,4 +14,5 @@ RECURSE(
     stress
     supp
     tools
+    cloud-security
 )

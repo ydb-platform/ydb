@@ -172,9 +172,12 @@ public:
         CheckFinished();
     };
 
-    void LoadState(const TSinkState&) override { }
-
-    void CommitState(const NDqProto::TCheckpoint&) override { }
+    // Checkpointing is not supported for the Solomon sink: writes are not
+    // idempotent and there is no way to roll back a partially-sent batch.
+    // Silently ignore checkpoint calls so the actor can coexist with
+    // checkpoint-enabled pipelines.
+    void LoadState(const TSinkState&) override {}
+    void CommitState(const NDqProto::TCheckpoint&) override {}
 
     i64 GetFreeSpace() const override {
         return FreeSpace;
@@ -277,6 +280,14 @@ private:
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
             Metrics.Errors->Inc();
+
+            // Restore FreeSpace and remove the inflight entry so backpressure
+            // accounting stays consistent even when we report an error.
+            if (auto ptr = InflightBuffer.find(ev->Cookie); ptr != InflightBuffer.end()) {
+                FreeSpace += ptr->second.BodySize;
+                InflightBuffer.erase(ptr);
+            }
+
             Callbacks->OnAsyncOutputError(OutputIndex, issues, res->IsTerminal ? NYql::NDqProto::StatusIds::EXTERNAL_ERROR : NYql::NDqProto::StatusIds::UNSPECIFIED);
             return;
         }
@@ -337,7 +348,15 @@ private:
 
     void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
         const TString authorizationHeader = "Authorization";
-        const TString authToken = CredentialsProvider->GetAuthInfo();
+
+        TString authToken;
+        try {
+            authToken = CredentialsProvider->GetAuthInfo();
+        } catch (const std::exception& ex) {
+            TIssues issues { TIssue(TStringBuilder() << "Failed to get auth token: " << ex.what()) };
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            return;
+        }
 
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
@@ -347,7 +366,9 @@ private:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
+                TIssues issues { TIssue(TStringBuilder() << "Invalid cluster type: " << ToString<ui32>(WriteParams.Shard.GetClusterType())) };
+                Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                return;
         }
     }
 
@@ -409,6 +430,28 @@ private:
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
         SINK_LOG_T("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
+
+        // Look up the inflight entry first so we can always restore FreeSpace
+        // before reporting an error — regardless of which parse step fails.
+        auto ptr = InflightBuffer.find(cookie);
+        if (ptr == InflightBuffer.end()) {
+            SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
+            TIssues issues { TIssue(TStringBuilder() << "Internal error in monitoring writer") };
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            return;
+        }
+
+        // Helper: erase the inflight entry and restore FreeSpace, then report error.
+        auto reportError = [&](TIssues issues, NYql::NDqProto::StatusIds::StatusCode code) {
+            FreeSpace += ptr->second.BodySize;
+            if (ShouldNotifyNewFreeSpace && FreeSpace > 0) {
+                Callbacks->ResumeExecution();
+                ShouldNotifyNewFreeSpace = false;
+            }
+            InflightBuffer.erase(ptr);
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, code);
+        };
+
         NJson::TJsonParser parser;
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
@@ -426,20 +469,25 @@ private:
         if (!parser.Parse(TString(response.Response->Body), &res)) {
             TIssues issues { TIssue(TStringBuilder() << "Invalid monitoring response: " << response.Response->GetObfuscatedData()) };
             SINK_LOG_E("Failed to parse response[" << cookie << "] from solomon: " << issues.ToOneLineString());
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
-        Y_ABORT_UNLESS(res.size() == 2);
-
-        auto ptr = InflightBuffer.find(cookie);
-        if (ptr == InflightBuffer.end()) {
-            SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
-            TIssues issues { TIssue(TStringBuilder() << "Internal error in monitoring writer") };
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+        if (res.size() != 2) {
+            TIssues issues { TIssue(TStringBuilder() << "Unexpected monitoring response format (fields=" << res.size() << "): " << response.Response->GetObfuscatedData()) };
+            SINK_LOG_E("Unexpected response size[" << cookie << "] from solomon: " << issues.ToOneLineString());
+            reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
 
-        const ui64 writtenMetricsCount = std::stoul(res[0]);
+        ui64 writtenMetricsCount = 0;
+        try {
+            writtenMetricsCount = std::stoull(res[0]);
+        } catch (const std::exception& e) {
+            TIssues issues { TIssue(TStringBuilder() << "Failed to parse writtenMetricsCount from monitoring response: " << e.what()) };
+            SINK_LOG_E("Failed to parse writtenMetricsCount[" << cookie << "] from solomon: " << issues.ToOneLineString());
+            reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            return;
+        }
         *Metrics.ConfirmedMetrics += writtenMetricsCount;
         if (writtenMetricsCount != ptr->second.MetricsCount) {
             // TODO: YQ-340

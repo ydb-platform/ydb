@@ -673,6 +673,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         return true;
     }
 
+    // TODO: remove
     TYdbPqCodes FillProposeRequestImpl(
             const TString& name, const Ydb::Topic::CreateTopicRequest& request,
             NKikimrSchemeOp::TModifyScheme& modifyScheme, TAppData* appData,
@@ -847,6 +848,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
 
+    // TODO: remove
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
             const Ydb::Topic::AlterTopicRequest& request,
             NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, TAppData* /*appData*/,

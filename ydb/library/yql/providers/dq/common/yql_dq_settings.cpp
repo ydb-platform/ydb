@@ -1,9 +1,14 @@
 #include "yql_dq_settings.h"
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 #include <util/string/split.h>
 
 namespace NYql {
 
-TDqConfiguration::TDqConfiguration() {
+TDqConfiguration::TDqConfiguration()
+    : NCommon::TSettingDispatcher(DqProviderName, TQContext{})
+{
     REGISTER_SETTING(*this, DataSizePerJob);
     REGISTER_SETTING(*this, MaxDataSizePerJob);
     REGISTER_SETTING(*this, MaxTasksPerStage);

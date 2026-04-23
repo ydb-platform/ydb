@@ -7,7 +7,7 @@ from ydb.tests.library.nemesis.safety_warden import (
     CommandExecutor,
     GrepLogFileForMarkers,
     GrepGzippedLogFilesForMarkersSafetyWarden,
-    GrepDMesgForPatternsSafetyWarden,
+    GrepJournalctlKernelForPatternsSafetyWarden,
     RemoteCommandExecutor,
 )
 
@@ -78,16 +78,20 @@ def kikimr_crit_and_alert_logs_safety_warden_factory(
     ]
 
 
-def kikimr_grep_dmesg_safety_warden_factory(
+def kikimr_grep_kernel_log_safety_warden_factory(
         executor: CommandExecutor = None,
         lines_after=5,
+        hours_back=24,
 ):
     markers = ['Out of memory: Kill process']
 
     return [
-        GrepDMesgForPatternsSafetyWarden(
+        GrepJournalctlKernelForPatternsSafetyWarden(
             executor,
             list_of_markers=markers,
             lines_after=lines_after,
+            hours_back=hours_back,
         )
     ]
+
+

@@ -344,19 +344,20 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(CommandBasedSafetyWarden):
         )
 
 
-class GrepDMesgForPatternsSafetyWarden(CommandBasedSafetyWarden):
-    def __init__(self, executor, list_of_markers, lines_after=1):
-        name = "GrepDMesgForPatternsSafetyWarden for markers = {markers}".format(
+class GrepJournalctlKernelForPatternsSafetyWarden(CommandBasedSafetyWarden):
+    def __init__(self, executor, list_of_markers, lines_after=1, hours_back=24):
+        name = "GrepJournalctlKernelForPatternsSafetyWarden for markers = {markers}".format(
             markers=list_of_markers,
         )
+        since_value = '{hours} hours ago'.format(hours=hours_back)
         command = [
-            'dmesg', '-T',
+            'sudo', 'journalctl', '-k', '--no-pager', '--since', "'{since}'".format(since=since_value),
             '|',
             'grep',
             '-A', str(lines_after),
         ] + construct_list_of_grep_pattern_arguments(list_of_markers)
 
-        super(GrepDMesgForPatternsSafetyWarden, self).__init__(
+        super(GrepJournalctlKernelForPatternsSafetyWarden, self).__init__(
             name, executor, command=command, split_line_size=lines_after,
         )
 

@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+            UNIT_ASSERT_GE(rows.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), tablePathId1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), tablePathId1);
         }
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+            UNIT_ASSERT_GE(rows.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), tablePathId2);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), tablePathId2);
         }

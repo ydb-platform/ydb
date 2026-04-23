@@ -227,6 +227,7 @@ namespace NActors {
     }
 
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
+
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
         if (Settings->AllowDrop) {
@@ -585,6 +586,7 @@ namespace NActors {
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
+
                 NJsonWriter::TBuf j;
                 j.BeginObject()
                     .WriteKey("@timestamp")

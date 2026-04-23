@@ -15,13 +15,12 @@
     do {                                                                                                                        \
         if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
             TVector<std::pair<TString, TString>> auditParts;                                                                    \
-            NKikimr::NStructLog::TStructuredMessage structMessage;                                                              \
+            NKikimr::NStructLog::TStructuredMessage auditStructMessage;                                                         \
             expr                                                                                                                \
             ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
-            MemStructLogAdapter(*sys, NActors::NLog::EPriority::PRI_NOTICE, NKikimrServices::AUDIT_LOG_WRITER, __FILE_NAME__, __LINE__, "Audit event", std::move(structMessage)); \
+            YDBLOG_COMP_NOTICE(AUDIT_LOG_WRITER, "Audit event", auditStructMessage);                                            \
         }                                                                                                                       \
     } while (0) /**/
-
 #define AUDIT_LOG(expr) AUDIT_LOG_S((::NActors::TActivationContext::ActorSystem()), expr)
 
 #define AUDIT_PART_NO_COND(key, value) AUDIT_PART_COND(key, value, true)
@@ -29,7 +28,7 @@
     do {                                                                                                                          \
         if (condition && !TStringBuf(value).empty()) {                                                                            \
             auditParts.emplace_back(key, value);                                                                                  \
-            structMessage.AppendValue({key}, TString(value));                                                                     \
+            auditStructMessage.AppendValue({key}, TString(value));                                                                \
         }                                                                                                                         \
     } while (0);
 

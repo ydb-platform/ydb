@@ -754,7 +754,7 @@ namespace NActors {
     do { \
         auto& actorContext = (CTX); \
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
-        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
+        const auto component = [&]{ using namespace NKikimrServices; return (COMP); }(); \
         if (IS_CTX_LOG_PRIORITY_ENABLED(actorContext, priority, component, 0ull)) { \
             NKikimr::NStructLog::TStructuredMessage message = NKikimr::NStructLog::TLogStack::GetTop(); \
             YDBLOG_UPDATE_MESSAGE(message, __VA_ARGS__); \
@@ -785,7 +785,7 @@ namespace NActors {
 
 #define YDBLOG_COMP(PRIO, COMP, T, ...) \
     do { \
-        if (TActivationContext *ctxp = TlsActivationContext) { \
+        if (auto ctxp = NActors::TlsActivationContext) { \
             YDBLOG_CTX_COMP(*ctxp, PRIO, COMP, T, __VA_ARGS__); \
         } \
     } while (false)

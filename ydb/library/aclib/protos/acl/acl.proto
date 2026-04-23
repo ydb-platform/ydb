@@ -1,6 +1,6 @@
 package NACLibProto;
 
-option go_package = "a.yandex-team.ru/contrib/ydb/library/aclib/protos/acl;aclpb";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/aclib/protos/acl;aclpb";
 option java_outer_classname = "Aclib";
 
 message TACE {

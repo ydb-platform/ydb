@@ -2486,37 +2486,15 @@ public:
                                                 localBloomNgramFilterDesc,
                                                 name, value.StringValue(), error);
                                             break;
+                                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                                            break;
+                                        }
                                         }
                                         default:
                                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                                 << "Unknown index setting: " << name));
                                             return SyncError();
                                     }
-                                    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
-                                        NKikimr::NFulltext::FillSetting(
-                                            *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
-                                        FillLocalBloomFilterSetting(
-                                            localBloomFilterDesc,
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
-                                        FillLocalBloomNgramFilterSetting(
-                                            localBloomNgramFilterDesc,
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
-                                        break;
-                                    }
-                                    default:
-                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                            << "Unknown index setting: " << name.StringValue()));
-                                        return SyncError();
                                 }
 
                                 if (error) {

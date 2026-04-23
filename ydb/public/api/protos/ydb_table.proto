@@ -357,7 +357,7 @@ message TableIndex {
        LocalBloomFilterIndex local_bloom_filter_index = 10;
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
        GlobalJsonIndex global_json_index = 12;
-       LocalMinMaxIndex local_min_max_index = 13;
+       LocalMinMaxIndex local_min_max_index = 14;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;

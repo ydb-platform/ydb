@@ -191,7 +191,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
             return EnqueueResolveShard(state);
         }
         SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, YdbStatusToDqStatus(status), issues);
-        return PassAway();
+        return;
     }
 
     if (auto scanner = InFlightShards.GetShardScanner(state->TabletId)) {
@@ -205,7 +205,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
         CA_LOG_E("TKqpScanFetcherActor: broken tablet for this request " << state->TabletId << ", retries limit exceeded ("
                                                                          << state->TotalRetries << ")");
         SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, YdbStatusToDqStatus(status), issues);
-        return PassAway();
+        return;
     }
 }
 
@@ -410,20 +410,22 @@ void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::T
         NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Connection with node " << nodeId << " lost.");
 }
 
-bool TKqpScanFetcherActor::SendGlobalFail(
-    const NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssuesIds::EIssueCode issueCode, const TString& message) const {
+void TKqpScanFetcherActor::SendGlobalFail(
+    const NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssuesIds::EIssueCode issueCode, const TString& message) {
     for (auto&& i : ComputeActorIds) {
         Send(i, new TEvScanExchange::TEvTerminateFromFetcher(statusCode, issueCode, message));
     }
-    return true;
+    InFlightShards.AbortAllScanners(message);
+    PassAway();
 }
 
-bool TKqpScanFetcherActor::SendGlobalFail(
-    const NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) const {
+void TKqpScanFetcherActor::SendGlobalFail(
+    const NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
     for (auto&& i : ComputeActorIds) {
         Send(i, new TEvScanExchange::TEvTerminateFromFetcher(state, statusCode, issues));
     }
-    return true;
+    InFlightShards.AbortAllScanners(issues.ToOneLineString());
+    PassAway();
 }
 
 bool TKqpScanFetcherActor::SendScanFinished() {
@@ -674,7 +676,7 @@ void TKqpScanFetcherActor::EnqueueResolveShard(const std::shared_ptr<TShardState
     }
 }
 
-void TKqpScanFetcherActor::StopOnError(const TString& errorMessage) const {
+void TKqpScanFetcherActor::StopOnError(const TString& errorMessage) {
     CA_LOG_E("unexpected problem: " << errorMessage);
     TIssue issue(errorMessage);
     TIssues issues;
@@ -701,11 +703,9 @@ void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {
         InFlightShards.PingAllScanners();
     } else if (Now() - RegistrationStartTime > REGISTRATION_TIMEOUT) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "TEvWakeup")("info", "Abort fetcher due to Registration timeout");
-        InFlightShards.AbortAllScanners("Abort fetcher due to Registration timeout");
         TIssues issues;
         issues.AddIssue(TIssue("Abort fetcher due to Registration timeout"));
         SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, NYql::NDqProto::StatusIds::INTERNAL_ERROR, issues);
-        PassAway();
         return;
     }
     Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());

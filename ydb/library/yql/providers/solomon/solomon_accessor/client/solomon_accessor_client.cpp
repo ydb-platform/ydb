@@ -529,7 +529,7 @@ private:
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
                 auth = TStringBuilder() << "Bearer " << authToken;
             default:
-                return TStringBuilder() << "Cant provide auth info for unknwon cluster type: " << Settings.GetClusterType();
+                return TStringBuilder() << "Cant provide auth info for unknwon cluster type: " << static_cast<int>(Settings.GetClusterType());
         }
 
         return {};

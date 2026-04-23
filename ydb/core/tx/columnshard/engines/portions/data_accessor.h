@@ -81,6 +81,12 @@ class TPreparedColumn {
 private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TAssembleBlobInfo> Blobs;
+    // Per-column slice parameters.  When ColumnSliceRows is set, the assembled
+    // column array is sliced to ColumnSliceRows rows starting at
+    // ColumnSliceOffset.  Used by the page-aware assembly path when columns
+    // have different chunk boundaries and therefore different leading offsets.
+    std::optional<ui32> ColumnSliceRows;
+    ui32 ColumnSliceOffset = 0;
 
 public:
     ui32 GetColumnId() const {
@@ -99,6 +105,19 @@ public:
         : Loader(loader)
         , Blobs(std::move(blobs)) {
         AFL_VERIFY(Loader);
+    }
+
+    void SetColumnSlice(const ui32 offset, const ui32 rows) {
+        ColumnSliceOffset = offset;
+        ColumnSliceRows = rows;
+    }
+
+    std::optional<ui32> GetColumnSliceRows() const {
+        return ColumnSliceRows;
+    }
+
+    ui32 GetColumnSliceOffset() const {
+        return ColumnSliceOffset;
     }
 
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess() const;

@@ -509,6 +509,15 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
 
         ReportTracing(source);
 
+        // Cache the duplicate filter in the source for streaming mode.
+        // Subsequent pages will reuse this cached filter instead of
+        // re-requesting from the DuplicateManager (which would hang
+        // because the manager already consumed the portion's borders).
+        auto* simpleSource = source->MutableAs<IDataSource>();
+        if (simpleSource->IsStreamingMode() && !simpleSource->HasCachedDuplicateFilter()) {
+            simpleSource->SetCachedDuplicateFilter(filter);
+        }
+
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
             filter = filter.ApplyFilterFrom(*appliedFilter);
         }
@@ -535,6 +544,25 @@ TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<NCo
 
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    auto* simpleSource = source->MutableAs<IDataSource>();
+
+    // In streaming mode, the fetch script is restarted from step 0 for each
+    // page via ContinueCursor().  The DuplicateManager produces a per-portion
+    // filter that is valid for all pages.  On the first page we fetch it
+    // asynchronously and cache it; on subsequent pages we reuse the cached
+    // copy.  Re-requesting would hang because the manager already consumed
+    // the portion's borders on the first request.
+    if (simpleSource->IsStreamingMode() && simpleSource->HasCachedDuplicateFilter()) {
+        NArrow::TColumnFilter filter = simpleSource->GetCachedDuplicateFilter();
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "duplicate_filter_cached")(
+            "source", source->GetSourceIdx())("filter", filter.DebugString());
+        if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
+            filter = filter.ApplyFilterFrom(*appliedFilter);
+        }
+        source->MutableStageData().AddFilter(std::move(filter));
+        return true;
+    }
+
     source->MutableAs<TPortionDataSource>()->StartFetchingDuplicateFilter(std::make_shared<TFilterSubscriber>(source, step));
     return false;
 }

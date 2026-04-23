@@ -81,6 +81,12 @@ private:
     // Used by TBuildResultStep to decide whether batchStartIndex should be 0 or StartIndex.
     bool AssembledDataIsPageRelative = false;
 
+    // Cached duplicate filter for streaming mode.  The DuplicateManager produces
+    // a per-portion filter on the first page; subsequent pages reuse this cached
+    // copy instead of re-requesting (which would hang because the manager already
+    // consumed the portion's borders).
+    std::optional<NArrow::TColumnFilter> CachedDuplicateFilter;
+
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
@@ -281,6 +287,20 @@ public:
 
     void SetAssembledDataPageRelative(bool value) {
         AssembledDataIsPageRelative = value;
+    }
+
+    // Duplicate filter caching for streaming mode.
+    bool HasCachedDuplicateFilter() const {
+        return CachedDuplicateFilter.has_value();
+    }
+
+    const NArrow::TColumnFilter& GetCachedDuplicateFilter() const {
+        AFL_VERIFY(CachedDuplicateFilter.has_value());
+        return *CachedDuplicateFilter;
+    }
+
+    void SetCachedDuplicateFilter(const NArrow::TColumnFilter& filter) {
+        CachedDuplicateFilter = filter;
     }
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {

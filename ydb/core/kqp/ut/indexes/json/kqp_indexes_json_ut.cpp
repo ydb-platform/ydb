@@ -230,18 +230,19 @@ void FillTestTable(TQueryClient& db, const std::string& tableName, const std::st
 }
 
 void ValidatePredicate(TQueryClient& db, const std::string& predicate) {
-    static constexpr const char* Table = "TestTable";
-    static constexpr const char* IndexTable = "json_idx";
+    static constexpr const char* table = "TestTable";
+    static constexpr const char* indexTable = "json_idx";
+
     auto query = [&](const std::string& indexPart, const std::string& pred) {
         return std::format(R"(
             SELECT Key, Text FROM {} {} WHERE {} ORDER BY Key;
-        )", Table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
+        )", table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
     };
 
     auto mainResult = db.ExecuteQuery(query("", predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(mainResult.IsSuccess(), mainResult.GetIssues().ToString());
 
-    auto indexResult = db.ExecuteQuery(query(IndexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
+    auto indexResult = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(indexResult.IsSuccess(), indexResult.GetIssues().ToString());
 
     // Cerr << "MAIN: " << Endl << FormatResultSetYson(mainResult.GetResultSet(0)) << Endl;
@@ -252,15 +253,16 @@ void ValidatePredicate(TQueryClient& db, const std::string& predicate) {
 }
 
 void ValidateError(TQueryClient& db, const std::string& predicate) {
-    static constexpr const char* Table = "TestTable";
-    static constexpr const char* IndexTable = "json_idx";
+    static constexpr const char* table = "TestTable";
+    static constexpr const char* indexTable = "json_idx";
+
     auto query = [&](const std::string& indexPart, const std::string& pred) {
         return std::format(R"(
             SELECT * FROM {} {} WHERE {} ORDER BY Key;
-        )", Table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
+        )", table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
     };
 
-    auto result = db.ExecuteQuery(query(IndexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
+    auto result = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(!result.IsSuccess(), "Predicate: " + predicate + ", issues: " + result.GetIssues().ToString());
     UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Failed to extract search terms from predicate", "for predicate = " << predicate);
 }

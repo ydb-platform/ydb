@@ -456,6 +456,7 @@ private:
         }
 
         if (!Settings.PoolId.empty()) {
+            record.SetDatabaseId(Settings.Database);
             record.SetPoolId(Settings.PoolId);
         }
 
@@ -1146,6 +1147,7 @@ private:
         }
 
         if (!Settings.PoolId.empty()) {
+            record.SetDatabaseId(Settings.Database);
             record.SetPoolId(Settings.PoolId);
         }
     }
@@ -1224,6 +1226,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     preparedSettings.TableId = MakeTableId(settings.GetTable());
 
     if (settings.HasPoolId()) {
+        preparedSettings.Database = settings.GetDatabase();
         preparedSettings.PoolId = settings.GetPoolId();
     }
 

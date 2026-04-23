@@ -92,8 +92,8 @@ TSchedulableReadFactory::TSchedulableReadFactory(TComputeSchedulerPtr scheduler)
     : Scheduler(std::move(scheduler))
 {}
 
-TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TPoolId& poolId) const {
-    auto query = Scheduler->GetReadQuery(poolId);
+TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
+    auto query = Scheduler->GetReadQuery(databaseId, poolId);
     return std::make_shared<TSchedulableRead>(query);
 }
 

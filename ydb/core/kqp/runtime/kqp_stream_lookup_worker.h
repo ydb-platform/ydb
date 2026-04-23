@@ -14,6 +14,7 @@ namespace NKqp {
 struct TLookupSettings {
     TString TablePath;
     TTableId TableId;
+    TString Database;
     TString PoolId;
 
     ui32 AllowNullKeysPrefixSize;

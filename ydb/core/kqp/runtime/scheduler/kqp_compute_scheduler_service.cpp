@@ -319,7 +319,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
         pool->AddQuery(query);
 
         // Add read query
-        ReadQueries.emplace(poolId, query);
+        ReadQueries.emplace(std::make_pair(databaseId, poolId), query);
     }
 }
 
@@ -349,10 +349,11 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     return query;
 }
 
-NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TPoolId& poolId) const {
+NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
     TReadGuard lock(Mutex);
 
-    if (auto queryIt = ReadQueries.find(poolId); queryIt != ReadQueries.end()) {
+    auto databaseAndPoolId = std::make_pair(databaseId, poolId);
+    if (auto queryIt = ReadQueries.find(databaseAndPoolId); queryIt != ReadQueries.end()) {
         return queryIt->second;
     }
 

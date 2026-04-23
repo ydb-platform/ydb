@@ -2294,8 +2294,9 @@ message TEvRead {
     // Optional bit flags with hints
     optional uint32 Hints = 13;
 
-    // Resource Pool to support quota via Workload Manager
-    optional string PoolId = 14;
+    // Resource Pool (and database) to support quota via Workload Manager
+    optional string DatabaseId = 14;
+    optional string PoolId = 15;
 
     // Request must contain either keys, queries or program
     // mixed requests are not supported

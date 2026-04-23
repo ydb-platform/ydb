@@ -141,6 +141,7 @@ struct TSchedulerTestHelper {
     std::unique_ptr<TEvDataShard::TEvRead> MakeReadRequest(ui64 readId, const TString& poolId = TEST_POOL_ID) const {
         auto snapshot = CreateVolatileSnapshot(Server, {"/Root/table-1"}, TDuration::Hours(1));
         auto request = GetBaseReadRequest(TableId, UserTable.GetDescription(), readId, NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+        request->Record.SetDatabaseId(TEST_DATABASE_ID);
         request->Record.SetPoolId(poolId);
         return request;
     }

@@ -153,6 +153,7 @@ public:
         TLookupSettings settings {
             .TablePath = Settings.TablePath,
             .TableId = Settings.TableId,
+            .Database = Settings.Database,
             .PoolId = Settings.PoolId,
 
             .AllowNullKeysPrefixSize = 0,

@@ -21,7 +21,7 @@ public:
     void AddOrUpdatePool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TStaticAttributes& attrs);
 
     NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
-    NHdrf::NDynamic::TQueryPtr GetReadQuery(const NHdrf::TPoolId& poolId) const;
+    NHdrf::NDynamic::TQueryPtr GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const;
     bool RemoveQuery(const NHdrf::TQueryId& queryId);
 
     void UpdateFairShare();
@@ -35,7 +35,7 @@ private:
 
     // Special virtual queries per each pool to create SchedulableRead upon them, used for datashards and columnshards.
     // TODO: get rid of read queries - just pass somehow the real query to datashards.
-    THashMap<NHdrf::TPoolId, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
+    THashMap<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
 
     const TDelayParams DelayParams;
     const NHdrf::NSnapshot::ELeafFairShare FairShareMode;

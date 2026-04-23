@@ -141,6 +141,7 @@ class TTableReader : public TAtomicRefCount<T> {
     TString TablePath;
     IKqpGateway::TKqpSnapshot Snapshot;
     TString LogPrefix;
+    TString Database;
     TString PoolId;
 
     ui64 ReadRows = 0;
@@ -159,6 +160,7 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
@@ -168,6 +170,7 @@ public:
         , TablePath(tablePath)
         , Snapshot(snapshot)
         , LogPrefix(logPrefix)
+        , Database(database)
         , PoolId(poolId)
         , KeyColumnTypes(keyColumnTypes)
         , ResultColumnTypes(resultColumnTypes)
@@ -270,6 +273,7 @@ public:
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
 
         if (!PoolId.empty()) {
+            record.SetDatabaseId(Database);
             record.SetPoolId(PoolId);
         }
 
@@ -607,12 +611,13 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds,
         i32 frequencyColumnIndex)
-        : TTableReader(counters, tableId, tablePath,  snapshot, logPrefix, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath,  snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , FrequencyColumnIndex(frequencyColumnIndex)
     {}
 
@@ -673,7 +678,8 @@ public:
         }
 
         TIntrusivePtr<TIndexTableImplReader> reader = MakeIntrusive<TIndexTableImplReader>(
-            counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix, settings->GetPoolId(),
+            counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+            settings->GetDatabase(),settings->GetPoolId(),
             keyColumnTypes, resultColumnTypes, resultColumnIds, freqColumnIndex);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
@@ -1213,11 +1219,12 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , IndexType(indexType)
     {}
 
@@ -1275,7 +1282,8 @@ public:
 
         auto reader = MakeIntrusive<TDocsTableReader>(
             settings->GetIndexType(), counters,
-            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix, settings->GetPoolId(),
+            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+                settings->GetDatabase(), settings->GetPoolId(),
                 keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
@@ -1308,11 +1316,12 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , IndexType(indexType)
     {}
 
@@ -1374,7 +1383,8 @@ public:
 
         return MakeIntrusive<TStatsTableReader>(
             settings->GetIndexType(), counters,
-            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix, settings->GetPoolId(),
+            FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+                settings->GetDatabase(), settings->GetPoolId(),
                 keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
@@ -1433,11 +1443,12 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
     {}
 
     static TIntrusivePtr<TDictTableReader> FromSettings(
@@ -1482,7 +1493,8 @@ public:
         resultKeyColumnIds.push_back(freqColumnIndex);
 
         return MakeIntrusive<TDictTableReader>(
-            counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix, settings->GetPoolId(),
+            counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
+            settings->GetDatabase(), settings->GetPoolId(),
             keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
@@ -1543,6 +1555,7 @@ public:
         const TString& tablePath,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
+        const TString& database,
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
@@ -1550,7 +1563,7 @@ public:
         const TVector<std::pair<i32, NScheme::TTypeInfo>>& resultCellIndices,
         bool mainTableCovered,
         bool withRelevance)
-        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , WithRelevance(withRelevance)
         , ResultCellIndices(resultCellIndices)
         , MainTableCovered(mainTableCovered)
@@ -1606,8 +1619,8 @@ public:
         withRelevance = withRelevance && settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance;
 
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()), settings->GetTable().GetPath(),
-            snapshot, logPrefix, settings->GetPoolId(), keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices,
-            mainTableCovered, withRelevance);
+            snapshot, logPrefix, settings->GetDatabase(), settings->GetPoolId(), keyColumnTypes, resultColumnTypes, resultColumnIds,
+            resultCellIndices, mainTableCovered, withRelevance);
     }
 
     bool GetWithRelevance() {

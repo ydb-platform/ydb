@@ -74,6 +74,7 @@ struct TKqpBufferTableLookupSettings {
 
     NWilson::TTraceId ParentTraceId;
 
+    TString Database;
     TString PoolId;
 };
 

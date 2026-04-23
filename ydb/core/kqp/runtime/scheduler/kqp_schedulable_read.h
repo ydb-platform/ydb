@@ -30,7 +30,7 @@ class TSchedulableReadFactory {
 public:
     explicit TSchedulableReadFactory(TComputeSchedulerPtr scheduler);
 
-    TSchedulableReadPtr Get(const NHdrf::TPoolId& poolId) const;
+    TSchedulableReadPtr Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const;
 
 private:
     TComputeSchedulerPtr Scheduler;

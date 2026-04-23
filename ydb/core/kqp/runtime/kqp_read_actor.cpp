@@ -895,6 +895,7 @@ public:
         }
 
         if (Settings->HasPoolId()) {
+            record.SetDatabaseId(Settings->GetDatabase());
             record.SetPoolId(Settings->GetPoolId());
         }
 

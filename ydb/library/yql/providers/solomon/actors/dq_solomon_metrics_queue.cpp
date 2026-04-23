@@ -168,7 +168,7 @@ public:
 
 private:
     void HandleUpdateConsumersCount(TEvSolomonProvider::TEvUpdateConsumersCount::TPtr& ev) {
-        AnyConsumerMessageReceived = true;
+        ConnectedConsumers.insert(ev->Sender);
         if (const auto [it, inserted] = UpdatedConsumers.emplace(ev->Sender); inserted) {
             const ui64 delta = ev->Get()->Record.GetConsumersCountDelta();
             LOG_D("TDqSolomonMetricsQueueActor",
@@ -185,7 +185,7 @@ private:
     }
 
     void HandleGetNextBatch(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
-        AnyConsumerMessageReceived = true;
+        ConnectedConsumers.insert(ev->Sender);
         if (HasEnoughToSend()) {
             LOG_I("TDqSolomonMetricsQueueActor", "HandleGetNextBatch has enough metrics to send, trying to send them");
             TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
@@ -288,12 +288,11 @@ private:
     }
 
     void HandlePoison() {
-        // PoisonTimeout is a safety net for the case where read actors never
-        // bootstrapped (e.g. node failure during query startup).  Once any
-        // consumer message has been received we know the read actors are alive
-        // and will send TEvConsumerFinished in their own PassAway(), so we can
-        // safely ignore the timeout and let the normal shutdown path run.
-        if (AnyConsumerMessageReceived) {
+        // PoisonTimeout is a safety net for the case where some read actors are never
+        // bootstrapped (e.g. node failure during query startup).  Once we know that all
+        // consumers are alive, we can safely ignore the timeout and let the normal
+        // shutdown path run.
+        if (ConnectedConsumers.size() == ConsumersCount) {
             LOG_D("TDqSolomonMetricsQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
             return;
         }
@@ -303,11 +302,13 @@ private:
     }
 
     void HandleGetNextBatchForEmptyState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
+        ConnectedConsumers.insert(ev->Sender);
         LOG_T("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForEmptyState giving away rest of Objects");
         TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
     }
 
     void HandleGetNextBatchForErrorState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
+        ConnectedConsumers.insert(ev->Sender);
         LOG_D("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForErrorState sending issues");
         Send(ev->Sender, new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
@@ -516,16 +517,12 @@ private:
 private:
     ui64 ProcessedMetrics = 0;
     ui64 ConsumersCount;
-    // Set to true when the first message from any consumer is received.
-    // Used by HandlePoison to distinguish between a startup failure (no
-    // consumers ever connected) and a normal shutdown where consumers are
-    // still running and will send TEvConsumerFinished themselves.
-    bool AnyConsumerMessageReceived = false;
     bool IsRoundRobinFinishScheduled = false;
     bool RoundRobinStageFinished = false;
     ui64 CurrentInflight = 0;
     THashSet<NActors::TActorId> StartedConsumers;
     THashSet<NActors::TActorId> UpdatedConsumers;
+    THashSet<NActors::TActorId> ConnectedConsumers;
     THashSet<NActors::TActorId> FinishedConsumers;
     THashMap<NActors::TActorId, ui64> FinishingConsumerToLastSeqNo;
 
@@ -547,10 +544,10 @@ private:
     const ui64 MaxApiInflight;
     const ui64 MaxHttpGetRequestSize = 4_KB;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
+    NSo::ISolomonAccessorClient::TPtr SolomonClient;
 
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
-    NSo::ISolomonAccessorClient::TPtr SolomonClient;
 };
 
 

@@ -2066,6 +2066,37 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    // JSON index does not support JSON_QUERY, every predicate that references it should fail term extraction
+    // No comments ;)
+    Y_UNIT_TEST(JsonQueryTokens) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateError(db, R"(JSON_QUERY(Text, '$.k1') IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, '$.k1' WITHOUT ARRAY WRAPPER) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, 'lax $.k1' WITHOUT ARRAY WRAPPER) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, 'strict $.k1' WITHOUT ARRAY WRAPPER) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, 'strict $.k1' WITHOUT ARRAY WRAPPER NULL ON EMPTY) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, 'strict $.k1' WITHOUT ARRAY WRAPPER NULL ON ERROR) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, '$.k1' WITH UNCONDITIONAL WRAPPER) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, '$.k1' WITH CONDITIONAL WRAPPER) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, '$.k1' WITH UNCONDITIONAL ARRAY WRAPPER) IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, '$ ? (@.k1 == 1)') IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, '$.k1.*') IS NOT NULL)");
+            ValidateError(db, R"(JSON_QUERY(Text, '$.k1[0]') IS NOT NULL)");
+            ValidateError(db, R"(NOT (JSON_QUERY(Text, '$.k1') IS NOT NULL))");
+            ValidateError(db, R"((JSON_QUERY(Text, '$.k1') IS NULL))");
+
+            ValidateError(db, R"((JSON_QUERY(Text, '$.k1') IS NOT NULL) AND (JSON_QUERY(Text, '$.k2') IS NOT NULL))");
+            ValidateError(db, R"((JSON_QUERY(Text, '$.k1') IS NOT NULL) OR (JSON_QUERY(Text, '$.k2') IS NOT NULL))");
+            ValidateError(db, R"((JSON_QUERY(Text, '$.k1') IS NOT NULL) OR (JSON_QUERY(Text, '$.k2') IS NOT NULL) AND (JSON_QUERY(Text, '$.k3') IS NOT NULL))");
+            ValidateError(db, R"((JSON_QUERY(Text, '$.k1') IS NOT NULL) AND (JSON_QUERY(Text, '$.k2') IS NOT NULL) OR (JSON_QUERY(Text, '$.k3') IS NOT NULL))");
+            ValidateError(db, R"(((JSON_QUERY(Text, '$.k1') IS NOT NULL) AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)) OR (JSON_QUERY(Text, '$.k3') IS NOT NULL))");
+
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)))");
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_QUERY(Text, '$.k2') IS NOT NULL)))");
+            ValidateError(db, R"((JSON_VALUE(Text, '$.k1') = "1") AND (JSON_QUERY(Text, '$.k2') IS NOT NULL))");
+        });
+    }
+
     Y_UNIT_TEST(JsonValueTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Supported RETURNING types

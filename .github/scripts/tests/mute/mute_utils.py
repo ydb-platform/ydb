@@ -6,14 +6,7 @@ import re
 import shlex
 import xml.etree.ElementTree as ET
 import sys
-import yaml
 import json
-
-try:
-    from junit_utils import add_junit_property
-except ModuleNotFoundError:
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from junit_utils import add_junit_property
 
 CONFIG_DIR = os.path.join('.github', 'config')
 
@@ -93,6 +86,12 @@ class MuteTestCheck:
 
 
 def mute_target(testcase):
+    try:
+        from junit_utils import add_junit_property
+    except ModuleNotFoundError:
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        from junit_utils import add_junit_property
+
     err_text = []
     err_msg = None
     found = False
@@ -210,6 +209,8 @@ def get_previously_skipped_tests(report_json_path: str) -> Set[Tuple[str, str]]:
     return result
 
 def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> None:
+    import yaml
+
     with open(muted_txt_path) as file:
         muted_tests = file.readlines()
     previously_skipped = get_previously_skipped_tests(report_json_path)

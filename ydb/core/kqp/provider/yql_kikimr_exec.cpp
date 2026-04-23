@@ -4,6 +4,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -2389,9 +2390,8 @@ public:
                                 add_index->mutable_local_bloom_ngram_filter_index();
                             } else if (type == "localMinMax") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableCsMinMaxIndex()) {
-
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
-                                        TStringBuilder() << "Local min_max index is disabled with EnableCsMinMaxIndex feature flag"));
+                                        NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
                                     return SyncError();
                                 }
                                 add_index->mutable_local_min_max_index();
@@ -2615,10 +2615,9 @@ public:
                             }
 
                             break;
-
                         case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                             if (table.Metadata->StoreType != EStoreType::Column) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Local min_max index is supported only for column tables"));
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                                 return SyncError();
                             }
 

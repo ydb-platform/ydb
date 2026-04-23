@@ -2,7 +2,7 @@
 
 #include <ydb/core/formats/arrow/program/functions.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include "./class_name.h"
+#include "./misc.h"
 
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>

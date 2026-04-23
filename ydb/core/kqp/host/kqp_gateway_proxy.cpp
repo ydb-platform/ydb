@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -630,18 +631,18 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
             case TIndexDescription::EType::LocalMinMax: {
                 if (index.KeyColumns.size() != 1) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Local min_max index is applied to 1 column only, got columns: [" << JoinStrings(index.KeyColumns, ", ") << "]";
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.KeyColumns);
                     return false;
                 }
                 if (!index.DataColumns.empty()) { // todo: спросить на ревью 1) что такое DataColumns и 2) правда ли, что эти ошибки вернутся человеку, который отправил yql запрос?
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Local min_max index doesn't need data columns, got: [" << JoinStrings(index.DataColumns, ", ") << "]";
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.KeyColumns);
                     return false;
                 }
                 auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
                 if (columnIdIt == columnIdsByName.end()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Tried to apply min_max index to unknown column '" << index.KeyColumns.front() << "'";
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
                     return false;
                 }
 
@@ -1070,7 +1071,7 @@ public:
 
                         if (index.Type == TIndexDescription::EType::LocalMinMax) {
                             if (metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local min_max index is supported only for column tables"));
+                                tablePromise.SetValue(ResultFromError<TGenericResult>(NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                                 return;
                             }
                         }

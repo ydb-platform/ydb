@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
@@ -173,21 +174,20 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
     for (const auto& index : in.indexes()) {
         if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
             if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
-                return fail("Local min_max index is disabled with EnableCsMinMaxIndex feature flag");
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
             }
             if (index.name().empty()) {
                 return fail("Local min_max index must have a name");
             }
             if (index.index_columns_size() != 1) {
-                return fail(TStringBuilder() << "Local min_max index is applied to 1 column only, got " << index.index_columns_size() << " columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]");
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
             }
             if (!index.data_columns().empty()) {
-                return fail(TStringBuilder() << "Local min_max does't need Data columns(COVER from yql), but got "
-                            << index.data_columns().size() << " of these columns: [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]");
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns()));
             }
             auto columnIdIt = nameToId.find(index.index_columns(0));
             if (columnIdIt == nameToId.end()) {
-                return fail(TStringBuilder() << "Tried to apply local min_max index to unknown column '" << index.index_columns(0) << "'");
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0)));
             }
             auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
             olapIndex->SetId(nextIndexId++);
@@ -1418,19 +1418,17 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
             if (index.index_columns_size() != 1) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Local min_max is applied to 1 column only, got columns: [" << JoinStrings(index.index_columns().begin(), index.index_columns().end(), ", ") << "]";
+                error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns());
                 return false;
-            } 
+            }
             if (!index.data_columns().empty()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-
-                error = TStringBuilder() << "Local min_max does't need Data columns(COVER from yql), but got "
-                            << index.data_columns().size() << " of these columns: [" << JoinStrings(index.data_columns().begin(), index.data_columns().end(), ", ") << "]";
+                error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns());
                 return false;
             }
             if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
                 status = Ydb::StatusIds::UNSUPPORTED;
-                error = "Local min_max index is disabled with EnableCsMinMaxIndex feature flag";
+                error = NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage;
                 return false;
             }
             auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();

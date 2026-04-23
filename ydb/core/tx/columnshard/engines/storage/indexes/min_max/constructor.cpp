@@ -1,6 +1,6 @@
 #include "constructor.h"
 #include "meta.h"
-#include "./class_name.h"
+#include "./misc.h"
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 

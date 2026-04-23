@@ -19,7 +19,6 @@ PEERDIR(
     ydb/core/base
     ydb/core/engine
     ydb/core/formats/arrow/switch
-    ydb/core/tx/columnshard/engines/storage/indexes/min_max
     yql/essentials/core
     ydb/core/persqueue/events
     ydb/core/protos

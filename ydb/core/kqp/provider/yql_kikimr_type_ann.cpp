@@ -17,7 +17,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/services/metadata/optimization/abstract.h>
-
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
 
@@ -1241,7 +1241,7 @@ private:
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
             } else if (type == "localMinMax") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableCsMinMaxIndex()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local min_max index is disabled with EnableCsMinMaxIndex feature flag"));
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
                     return TStatus::Error;
                 }
 
@@ -1260,7 +1260,7 @@ private:
             if (indexType == TIndexDescription::EType::LocalMinMax &&
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                    "Local min_max index is supported only for column tables"));
+                    NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                 return TStatus::Error;
             }
 
@@ -1425,19 +1425,17 @@ private:
                 case TIndexDescription::EType::LocalMinMax: {
                     if (!dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            TStringBuilder() << "Local min_max does't need Data columns(COVER from yql), but got "
-                            << indexColums.size() << " of these columns: [" << JoinStrings(dataColums, ", ") << "]"));
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
                     if (meta->StoreType != EStoreType::Column) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            "Local min_max index is supported only for column tables"));
+                            NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                         return IGraphTransformer::TStatus::Error;
                     }
                     if (indexColums.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            TStringBuilder() << "Local min_max is applied to 1 column only(exactly 1 column in ON (...) yql statement), tried to apply to "
-                            << indexColums.size() << " columns: [" << JoinStrings(indexColums, ", ") << "]"));
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
 

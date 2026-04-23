@@ -1,5 +1,6 @@
 ydb/core/blobstorage/ut_blobstorage Decommit3dc.Test
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
+ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithToken
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatch
@@ -14,6 +15,7 @@ ydb/core/kqp/ut/tli KqpTli.CrossTables
 ydb/core/kqp/ut/tli KqpTli.IgnoredTableRegexes
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
+ydb/core/kqp/ut/tli KqpTli.SeparateCommitBreakerInMiddleOfSameShard
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitDataQuery
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.BasicWriteReadDirectPBufferFilling

@@ -315,13 +315,40 @@ jobs:
             // Читаем комментарий из файла
             const commentFile = '${{ steps.comment_pr.outputs.PR_COMMENT_FILE }}';
             const commentBody = fs.readFileSync(commentFile, 'utf8');
+            const MAX_COMMENT_LENGTH = 65000;
+            let finalCommentBody = commentBody;
+
+            if (commentBody.length > MAX_COMMENT_LENGTH) {
+              console.log(`Comment is too large (${commentBody.length} chars), creating gist fallback`);
+              try {
+                const gist = await github.rest.gists.create({
+                  public: false,
+                  description: `Muted tests update details for PR #${{ steps.create_or_update_pr.outputs.pr_number }}`,
+                  files: {
+                    [`muted-tests-update-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}.md`]: {
+                      content: commentBody
+                    }
+                  }
+                });
+                finalCommentBody = [
+                  `Collected in workflow [#${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for ${{ env.BASE_BRANCH }} (build: ${{ env.BUILD_TYPE }})`,
+                  '',
+                  `The full comment body is too large for GitHub issue comments (${commentBody.length.toLocaleString()} chars).`,
+                  `Full details: ${gist.data.html_url}`
+                ].join('\n');
+              } catch (error) {
+                console.log(`Failed to create gist fallback: ${error.message}`);
+                const suffix = '\n\n[Comment truncated due to GitHub limit]';
+                finalCommentBody = commentBody.slice(0, MAX_COMMENT_LENGTH - suffix.length) + suffix;
+              }
+            }
             
             // Добавляем комментарий
             await github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: commentBody
+              body: finalCommentBody
             });
             
             // Добавляем лейблы

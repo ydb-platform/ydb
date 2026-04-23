@@ -90,15 +90,25 @@ private:
     ui64 HiveTabletId = TDomainsInfo::BadTabletId;
     ui32 RedirectsCount = 0;
 
-    void FinishWithError(const TStringBuf reason) {
+    void ClosePipeClient(const TActorContext& ctx) {
+        if (PipeClient == TActorId()) {
+            return;
+        }
+        NTabletPipe::CloseClient(ctx, PipeClient);
+        PipeClient = TActorId();
+    }
+
+    void FinishWithError(const TActorContext& ctx, const TStringBuf reason) {
         if (Finished) {
             return;
         }
+        ClosePipeClient(ctx);
         Finished = true;
         ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "hive_channel_history")("status", "failed")("reason", reason)("hive_tablet_id", HiveTabletId);
     }
 
     void SendRequestToHive(const TActorContext& ctx, const ui64 hiveTabletId) {
+        ClosePipeClient(ctx);
         HiveTabletId = hiveTabletId;
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveTabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         auto request = std::make_unique<TEvHive::TEvRequestHiveInfo>();
@@ -134,7 +144,7 @@ public:
         }
         HiveTabletId = AppData()->DomainsInfo->GetHive();
         if (HiveTabletId == TDomainsInfo::BadTabletId) {
-            FinishWithError("hive_tablet_id_is_not_available");
+            FinishWithError(ctx, "hive_tablet_id_is_not_available");
             return;
         }
 
@@ -149,15 +159,15 @@ public:
         if (msg->Record.HasForwardRequest()) {
             const ui64 redirectedHiveTabletId = msg->Record.GetForwardRequest().GetHiveTabletId();
             if (!redirectedHiveTabletId) {
-                FinishWithError("forward_request_hive_tablet_id_is_empty");
+                FinishWithError(ctx, "forward_request_hive_tablet_id_is_empty");
                 return;
             }
             if (redirectedHiveTabletId == HiveTabletId) {
-                FinishWithError("forward_request_loop");
+                FinishWithError(ctx, "forward_request_loop");
                 return;
             }
             if (++RedirectsCount > MaxRedirects) {
-                FinishWithError("too_many_forward_redirects");
+                FinishWithError(ctx, "too_many_forward_redirects");
                 return;
             }
             ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
@@ -167,7 +177,7 @@ public:
             return;
         }
         if (msg->Record.TabletsSize() == 0) {
-            FinishWithError("empty_hive_response");
+            FinishWithError(ctx, "empty_hive_response");
             return;
         }
 
@@ -204,10 +214,11 @@ public:
                 "chunk_records_count", endIdx - beginIdx)("history_chunk", chunkHistory);
         }
 
+        ClosePipeClient(ctx);
         Finished = true;
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         if (!Enabled || Finished) {
             return;
         }
@@ -215,24 +226,24 @@ public:
             return;
         }
         if (ev->Get()->Status != NKikimrProto::OK) {
-            FinishWithError("pipe_connect_failed");
+            FinishWithError(ctx, "pipe_connect_failed");
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
         if (!Enabled || Finished) {
             return;
         }
         if (ev->Get()->ClientId == PipeClient) {
-            FinishWithError("pipe_destroyed");
+            FinishWithError(ctx, "pipe_destroyed");
         }
     }
 
-    void HandleTimeout() {
+    void HandleTimeout(const TActorContext& ctx) {
         if (!Enabled || Finished) {
             return;
         }
-        FinishWithError("timeout");
+        FinishWithError(ctx, "timeout");
     }
 };
 
@@ -386,18 +397,18 @@ public:
         CheckFinish();
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& /*ctx*/) {
-        HiveHistoryCollector.Handle(ev);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        HiveHistoryCollector.Handle(ev, ctx);
         CheckFinish();
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& /*ctx*/) {
-        HiveHistoryCollector.Handle(ev);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+        HiveHistoryCollector.Handle(ev, ctx);
         CheckFinish();
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& /*ctx*/) {
-        HiveHistoryCollector.HandleTimeout();
+    void Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+        HiveHistoryCollector.HandleTimeout(ctx);
         CheckFinish();
     }
 

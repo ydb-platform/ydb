@@ -88,7 +88,7 @@ struct TClassifyTestCase {
     };
     std::vector<TExtraClassifier> ExtraClassifiers;
 
-    TWmQueryClassifier BuildClassifier() const {
+    std::shared_ptr<IWmQueryClassifier> BuildClassifier() const {
         std::vector<TResourcePoolClassifierConfig> configs;
         configs.push_back(MakeClassifierConfig(
             TEST_DB, "c_main", Rank, ResourcePool,
@@ -126,13 +126,12 @@ struct TClassifyTestCase {
             .UserToken = token,
         };
 
-        return TWmQueryClassifier(poolSnap, classifierSnap, std::move(ctx));
+        return CreateWmQueryClassifier(poolSnap, classifierSnap, std::move(ctx));
     }
 
     IWmQueryClassifier::TPreClassifyResult RunPreClassify() const {
         auto classifier = BuildClassifier();
-        classifier.PreCompileClassify();
-        return classifier.GetPreClassifyResult();
+        return classifier->PreCompileClassify();
     }
 };
 
@@ -175,9 +174,9 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
             .UserToken = token,
         };
 
-        TWmQueryClassifier classifier(poolSnap, classifierSnap, ctx);
-        classifier.PreCompileClassify();
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(classifier.GetPreClassifyResult()), "pool_target");
+        auto classifier = CreateWmQueryClassifier(poolSnap, classifierSnap, ctx);
+        auto result = classifier->PreCompileClassify();
+        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "pool_target");
     }
 
     Y_UNIT_TEST(ShouldFallToDefaultWhenNoMatch) {
@@ -204,9 +203,9 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
             .UserToken = nullptr,
         };
 
-        TWmQueryClassifier classifier(poolSnap, classifierSnap, ctx);
-        classifier.PreCompileClassify();
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(classifier.GetPreClassifyResult()), "pool_target");
+        auto classifier = CreateWmQueryClassifier(poolSnap, classifierSnap, ctx);
+        auto result = classifier->PreCompileClassify();
+        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "pool_target");
     }
 }
 

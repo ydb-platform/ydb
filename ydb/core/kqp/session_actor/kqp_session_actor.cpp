@@ -574,11 +574,12 @@ public:
             return;
         }
 
-        auto status = QueryState->QueryClassifier->GetPreClassifyResult();
+        auto status = QueryState->QueryClassifier->PreCompileClassify();
 
         std::visit(TOverloaded {
             [this](const IWmQueryClassifier::TResolvedPoolId& s) {
                 STLOG_D("PreCompile Classify was resolved", (pool_id, s.PoolId), (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = s.PoolId;
                 PassRequestToResourcePool(&TThis::PreCompileState);
             },
             [this](const IWmQueryClassifier::TReject& r) {
@@ -587,6 +588,7 @@ public:
             },
             [this](const auto&) {
                 STLOG_D("PreCompile Classify was bypass or pending compilation, compiling", (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = DEFAULT_POOL_ID;
                 CompileQuery();
             },
         }, status);
@@ -1017,30 +1019,27 @@ public:
             co_return ReplyPrepareResult();
         }
 
-        if (QueryState->QueryClassifier) {
-            auto status = QueryState->QueryClassifier->GetPreClassifyResult();
-            if (std::holds_alternative<IWmQueryClassifier::TPendingCompilation>(status)) {
-                auto result = QueryState->QueryClassifier->PostCompileClassify(*QueryState->PreparedQuery);
+        if (QueryState->QueryClassifier && QueryState->QueryClassifier->NeedsPostCompileClassify()) {
+            auto result = QueryState->QueryClassifier->PostCompileClassify(*QueryState->PreparedQuery);
 
-                std::visit(TOverloaded {
-                    [this](const IWmQueryClassifier::TResolvedPoolId& r) {
-                        STLOG_D("PostCompile Classify resolved", (pool_id, r.PoolId), (trace_id, TraceId()));
-                        QueryState->UserRequestContext->PoolId = r.PoolId;
-                        PassRequestToResourcePool(&TThis::PostCompileState);
-                    },
-                    [this](const IWmQueryClassifier::TBypass&) {
-                        STLOG_D("PostCompile Classify bypass", (trace_id, TraceId()));
-                    },
-                    [this](const IWmQueryClassifier::TReject& r) {
-                        STLOG_N("PostCompile Classify rejected", (trace_id, TraceId()));
-                        ythrow TRequestFail(r.Code) << r.Message;
-                    }
-                }, result);
-
-                // Cancel on Resolved and Reject
-                if (!std::holds_alternative<IWmQueryClassifier::TBypass>(result)) {
-                    co_return;
+            std::visit(TOverloaded {
+                [this](const IWmQueryClassifier::TResolvedPoolId& r) {
+                    STLOG_D("PostCompile Classify resolved", (pool_id, r.PoolId), (trace_id, TraceId()));
+                    QueryState->UserRequestContext->PoolId = r.PoolId;
+                    PassRequestToResourcePool(&TThis::PostCompileState);
+                },
+                [this](const IWmQueryClassifier::TBypass&) {
+                    STLOG_D("PostCompile Classify bypass", (trace_id, TraceId()));
+                },
+                [this](const IWmQueryClassifier::TReject& r) {
+                    STLOG_N("PostCompile Classify rejected", (trace_id, TraceId()));
+                    ythrow TRequestFail(r.Code) << r.Message;
                 }
+            }, result);
+
+            // Cancel on Resolved and Reject
+            if (!std::holds_alternative<IWmQueryClassifier::TBypass>(result)) {
+                co_return;
             }
         }
 

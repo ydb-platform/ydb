@@ -1582,76 +1582,34 @@ private:
         }
     }
 
-    void ClassifyForWorkloadManager(const TEvKqp::TEvQueryRequest::TPtr& ev, TWmQueryClassifier& cl) {
+    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
         const auto& databaseId = ev->Get()->GetDatabaseId();
 
         if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
             || ev->Get()->IsInternalCall()
             || ev->Get()->GetIsWarmupCompilation()) {
-            cl.Bypass();
-            return;
+            ev->Get()->SetPoolId(DEFAULT_POOL_ID);
+            ev->Get()->SetWmQueryClassifier(CreateWmBypassClassifier());
+            return true;
         }
 
-        cl.PreCompileClassify();
-
-        // Trigger updates for missing pools
-        for (const auto& missedPoolId : cl.GetMissedPoolIds()) {
-            ResourcePoolsCache.GetPoolInfo(databaseId, missedPoolId, ActorContext());
-        }
-    }
-
-    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 requestId) {
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
+        auto poolId = ev->Get()->GetPoolId();
+        ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : DEFAULT_POOL_ID, ActorContext());
 
         auto context = TClassifyContext{
             // This parameter is set when user creates a request with an explicit PoolId
-            .PoolId = ev->Get()->GetPoolId(),
+            .PoolId = poolId,
             .DatabaseId = ev->Get()->GetDatabaseId(),
             .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
             .UserToken = ev->Get()->GetUserToken()
         };
 
-        auto classifier = std::make_shared<TWmQueryClassifier>(
-            ResourcePoolsCache.LastPoolInfoSnapshot, ResourcePoolsCache.LastClassifierSnapshot, context);
-
-        ClassifyForWorkloadManager(ev, *classifier);
-        const auto status = classifier->GetPreClassifyResult();
-
-        bool isSuccess = std::visit(TOverloaded {
-            [this, &requestId](const IWmQueryClassifier::TReject& reject) {
-                ReplyProcessError(reject.Code, reject.Message, requestId);
-                return false;
-            },
-            [&ev](const IWmQueryClassifier::TResolvedPoolId& resolved) {
-                KQP_PROXY_LOG_D("Proxy Classify returns: resolved: " << resolved.PoolId);
-                ev->Get()->SetPoolId(resolved.PoolId);
-                return true;
-            },
-            [&ev](const IWmQueryClassifier::TBypass&) {
-                KQP_PROXY_LOG_D("Proxy Classify returns: bypass");
-                // When WM is bypassed (either by rule or because WM is disabled), EffectivePoolId
-                // is expected to be set to the default pool. The PoolId in the query plan is also
-                // expected to be the default one. TBypass guarantees that WM is skipped, but
-                // SetPoolId ensures this value is reflected in both EffectivePoolId and the query plan.
-                // TODO: Consider reviewing and possibly removing this behavior.
-                ev->Get()->SetPoolId(DEFAULT_POOL_ID);
-                return true;
-            },
-            [&ev](const IWmQueryClassifier::TPendingCompilation&) {
-                KQP_PROXY_LOG_D("Proxy Classify returns: need compilation");
-                // Same as TBypass above but for post-compile classification path.
-                // Set default pool as initial value for query plan stats generated during compilation.
-                // If PostCompileClassify resolves to a specific pool, UserRequestContext->PoolId will
-                // be overwritten with the actual pool. If it returns TBypass, default remains correct.
-                // TODO: Consider reviewing and possibly removing this behavior.
-                ev->Get()->SetPoolId(DEFAULT_POOL_ID);
-                return true;
-            }
-        }, status);
-
-        if (!isSuccess) {
-            return false;
-        }
+        auto classifier = CreateWmQueryClassifier(
+            ResourcePoolsCache.LastPoolInfoSnapshot,
+            ResourcePoolsCache.LastClassifierSnapshot,
+            context
+        );
 
         ev->Get()->SetWmQueryClassifier(classifier);
         return true;

@@ -75,103 +75,34 @@ public:
         TString Message;
     };
 
-    // Need query plan (e.g. FullScan check) to finish classification
-    struct TPendingCompilation {};
+    struct TPendingCompilation {
+        i64 ResumeRank;
+    };
 
     using TPreClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject, TPendingCompilation>;
     using TPostClassifyResult = std::variant<TResolvedPoolId, TBypass, TReject>;
 
     virtual ~IWmQueryClassifier() = default;
 
-    /// Get a state of a pre compile classification
-    virtual TPreClassifyResult GetPreClassifyResult() const = 0;
+    /// Pre compile classification
+    [[nodiscard]]
+    virtual TPreClassifyResult PreCompileClassify() = 0;
+
+    [[nodiscard]]
+    virtual bool NeedsPostCompileClassify() const = 0;
 
     /// Refines classification once the query plan is available
     [[nodiscard]]
-    virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const = 0;
+    virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) = 0;
 };
 
-class TWmQueryClassifier : public IWmQueryClassifier {
-public:
-    using TClassifierSnapshotPtr = std::shared_ptr<const TResourcePoolClassifierSnapshot>;
-    using TPoolInfoSnapshotPtr = std::shared_ptr<const TPoolInfoSnapshot>;
+using TClassifierSnapshotPtr = std::shared_ptr<const TResourcePoolClassifierSnapshot>;
+using TPoolInfoSnapshotPtr = std::shared_ptr<const TPoolInfoSnapshot>;
 
-public:
-    TWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
-                       TClassifierSnapshotPtr classifierSnapshot,
-                       TClassifyContext context);
+std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+                                                            TClassifierSnapshotPtr classifierSnapshot,
+                                                            TClassifyContext context);
 
-    ~TWmQueryClassifier() = default;
-
-public:
-    // Manual classification overrides
-    void Reject(const Ydb::StatusIds::StatusCode code, const TString& message);
-    void ResolveToDefault();
-    void Resolve(const TString& poolId);
-    void Bypass();
-
-    /// Returns IDs of pools that couldn't be found during classification
-    const std::unordered_set<TString>& GetMissedPoolIds() const {
-        return MissedPoolIds;
-    }
-
-    TPreClassifyResult GetPreClassifyResult() const override;
-
-    /// Runs classification before the query is compiled
-    void PreCompileClassify();
-
-    [[nodiscard]]
-    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const override;
-
-private:
-    void PendingCompile(i64 rank);
-    const TPoolInfoSnapshot::TPoolEntry* FindPool(const TString& poolId) const;
-
-    template<typename TStore>
-    bool TryResolve(const TString& poolId, TStore& store, std::unordered_set<TString>* missedPoolIds = nullptr) const {
-        auto poolInfo = FindPool(poolId);
-
-        if (poolId == REJECT_POOL_ID) {
-            store = TReject{
-                .Code = Ydb::StatusIds::ABORTED,
-                .Message = "Query is rejected by classifier"
-            };
-            return true;
-        }
-
-        if (!poolInfo) {
-            store = TResolvedPoolId{.PoolId = poolId};
-            if (missedPoolIds) {
-                missedPoolIds->emplace(poolId);
-            }
-            return false;
-        }
-
-        if (!poolInfo->UserHasAccess(Context)) {
-            store = TReject{
-                .Code = Ydb::StatusIds::UNAUTHORIZED, 
-                .Message = TStringBuilder() << "No access permissions for resource pool " << poolId
-            };
-            return false;
-        }
-
-        if (!NWorkload::IsWorkloadServiceRequired(poolInfo->Config)) {
-            store = TBypass{};
-        } else {
-            store = TResolvedPoolId{.PoolId = poolId};
-        }
-
-        return true;
-    }
-
-private:
-    const TPoolInfoSnapshotPtr PoolInfoSnapshot;
-    const TClassifierSnapshotPtr ClassifierSnapshot;
-    const TClassifyContext Context;
-    std::optional<i64> ResumeRank;
-    const std::map<i64, TResourcePoolClassifierConfig>* Configs;
-    TPreClassifyResult PreClassifyResult;
-    std::unordered_set<TString> MissedPoolIds;
-};
+std::shared_ptr<IWmQueryClassifier> CreateWmBypassClassifier();
 
 } // namespace NKikimr::NKqp

@@ -34,6 +34,12 @@ bool MatchesMemberName(const TString& target, const TClassifyContext& ctx) {
     return ctx.MemberNameCache[target] = found;
 }
 
+///
+/// Performs query classification using static query parameters. Static parameters are:
+/// - Known before query compilation/execution.
+/// - Independent of SQL analysis, plan building, or computations.
+/// - Provided as session/connection metadata alongside the query.
+///
 bool MatchesStatic(const NResourcePool::TClassifierSettings& s, const TClassifyContext& ctx) {
     if (s.MemberName && !MatchesMemberName(*s.MemberName, ctx)) {
         return false;
@@ -46,122 +52,209 @@ bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings&) {
     return false;
 }
 
+///
+/// Performs query classification based on dynamic query parameters — data that:
+/// - Requires query compilation/execution to be determined.
+/// - Involves SQL analysis, plan building, or computations.
+/// - Depends on actual query structure and execution characteristics.
+///
+/// Currently returns true (no dynamic filtering applied).
+///
 bool MatchesDynamic(const NResourcePool::TClassifierSettings&, const TPreparedQueryHolder&) {
     return true;
 }
 
 } // anonymous namespace
 
-TWmQueryClassifier::TWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
-    TClassifierSnapshotPtr classifierSnapshot, TClassifyContext context)
-    : PoolInfoSnapshot(std::move(poolInfoSnapshot))
-    , ClassifierSnapshot(std::move(classifierSnapshot))
-    , Context(std::move(context))
-    , Configs(nullptr)
-{
-    if (!ClassifierSnapshot) {
-        return;
-    }
+class TWmQueryClassifier : public IWmQueryClassifier {
+public:
+    using TClassifierSnapshotPtr = std::shared_ptr<const TResourcePoolClassifierSnapshot>;
+    using TPoolInfoSnapshotPtr = std::shared_ptr<const TPoolInfoSnapshot>;
 
-    const auto& dbConfigs = ClassifierSnapshot->GetResourcePoolClassifierConfigsByRank();
-    auto it = dbConfigs.find(Context.DatabaseId);
-
-    if (it != dbConfigs.end()) {
-        Configs = &it->second;
-    }
-}
-
-const TPoolInfoSnapshot::TPoolEntry* TWmQueryClassifier::FindPool(const TString& poolId) const {
-    if (!PoolInfoSnapshot) {
-        return nullptr;
-    }
-
-    return PoolInfoSnapshot->FindPool(Context.DatabaseId, poolId);
-}
-
-void TWmQueryClassifier::PreCompileClassify() {
-    // User requested an explicit pool
-    if (Context.PoolId) {
-        TryResolve(Context.PoolId, PreClassifyResult, &MissedPoolIds);
-        return;
-    }
-
-    // If no classification use default pool
-    if (!Configs) {
-        TryResolve(DEFAULT_POOL_ID, PreClassifyResult, &MissedPoolIds);
-        return;
-    }
-
-    for (const auto& [rank, value] : *Configs) {
-        const NResourcePool::TClassifierSettings& settings = value.GetClassifierSettings();
-
-        if (!MatchesStatic(settings, Context)) {
-            continue;
-        }
-
-        if (NeedsPreparedQuery(settings)) {
-            PendingCompile(rank);
+public:
+    TWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+                       TClassifierSnapshotPtr classifierSnapshot,
+                       TClassifyContext context)
+        : PoolInfoSnapshot(std::move(poolInfoSnapshot))
+        , ClassifierSnapshot(std::move(classifierSnapshot))
+        , Context(std::move(context))
+        , Configs(nullptr)
+    {
+        if (!ClassifierSnapshot) {
             return;
         }
 
-        if (TryResolve(settings.ResourcePool, PreClassifyResult, &MissedPoolIds)) {
-            return;
+        const auto& dbConfigs = ClassifierSnapshot->GetResourcePoolClassifierConfigsByRank();
+        auto it = dbConfigs.find(Context.DatabaseId);
+
+        if (it != dbConfigs.end()) {
+            Configs = &it->second;
         }
     }
 
-    // No suitable classification use default pool
-    TryResolve(DEFAULT_POOL_ID, PreClassifyResult, &MissedPoolIds);
-}
+    ~TWmQueryClassifier() = default;
 
-IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const {
-    Y_VALIDATE(Configs, "Post compile classify without configuration");
-    Y_VALIDATE(ResumeRank, "Post compile classify without next rank");
-
-    for (auto it = Configs->lower_bound(*ResumeRank); it != Configs->end(); ++it) {
-        const auto& settings = it->second.GetClassifierSettings();
-
-        if (!MatchesStatic(settings, Context)) {
-            continue;
+public:
+    [[nodiscard]]
+    TPreClassifyResult PreCompileClassify() override {
+        if (PreClassifyResult) {
+            return *PreClassifyResult;
         }
 
-        if (!MatchesDynamic(settings, preparedQuery)){
-            continue;
+        // User requested an explicit pool
+        if (Context.PoolId) {
+            TryResolve(Context.PoolId, PreClassifyResult);
+            return *PreClassifyResult;
         }
 
+        // If no classification use default pool
+        if (!Configs) {
+            TryResolve(DEFAULT_POOL_ID, PreClassifyResult);
+            return *PreClassifyResult;
+        }
+
+        for (const auto& [rank, value] : *Configs) {
+            const NResourcePool::TClassifierSettings& settings = value.GetClassifierSettings();
+
+            if (!MatchesStatic(settings, Context)) {
+                continue;
+            }
+
+            if (NeedsPreparedQuery(settings)) {
+                return *PreClassifyResult = TPendingCompilation{.ResumeRank = rank};
+            }
+
+            if (TryResolve(settings.ResourcePool, PreClassifyResult)) {
+                return *PreClassifyResult;
+            }
+        }
+
+        // No suitable classification use default pool
+        TryResolve(DEFAULT_POOL_ID, PreClassifyResult);
+        return *PreClassifyResult;
+    }
+
+    bool NeedsPostCompileClassify() const override {
+        Y_VALIDATE(PreClassifyResult.has_value(), "Pre compile classification does not called");
+        return std::holds_alternative<TPendingCompilation>(*PreClassifyResult);
+    }
+
+    [[nodiscard]]
+    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) override {
+        Y_VALIDATE(Configs, "Post compile classify without configuration");
+        Y_VALIDATE(PreClassifyResult.has_value() && std::holds_alternative<TPendingCompilation>(*PreClassifyResult),
+               "Post compile classify requires TPendingCompilation from pre-classification");
+
+        const auto& pending = std::get<TPendingCompilation>(*PreClassifyResult);
         TPostClassifyResult result;
 
-        if (TryResolve(settings.ResourcePool, result)){
-            return result;
+        for (auto it = Configs->lower_bound(pending.ResumeRank); it != Configs->end(); ++it) {
+            const auto& settings = it->second.GetClassifierSettings();
+
+            if (!MatchesStatic(settings, Context)) {
+                continue;
+            }
+
+            if (!MatchesDynamic(settings, preparedQuery)){
+                continue;
+            }
+
+            if (TryResolve(settings.ResourcePool, result)){
+                return result;
+            }
         }
+
+        // No suitable classification use default pool
+        TryResolve(DEFAULT_POOL_ID, result);
+        return result;
     }
 
-    // No suitable classification use default pool
-    return TResolvedPoolId{.PoolId = DEFAULT_POOL_ID};
+private:
+    const TPoolInfoSnapshot::TPoolEntry* FindPool(const TString& poolId) const {
+        if (!PoolInfoSnapshot) {
+            return nullptr;
+        }
+
+        return PoolInfoSnapshot->FindPool(Context.DatabaseId, poolId);
+    }
+
+    template<typename TStore>
+    bool TryResolve(const TString& poolId, TStore& store) const {
+        if (poolId == REJECT_POOL_ID) {
+            store = TReject{
+                .Code = Ydb::StatusIds::ABORTED,
+                .Message = "Query is rejected by classifier"
+            };
+            return true;
+        }
+
+        auto poolInfo = FindPool(poolId);
+
+        if (!poolInfo) {
+            store = TResolvedPoolId{.PoolId = poolId};
+            return false;
+        }
+
+        if (!poolInfo->UserHasAccess(Context)) {
+            store = TReject{
+                .Code = Ydb::StatusIds::UNAUTHORIZED,
+                .Message = TStringBuilder() << "No access permissions for resource pool " << poolId
+            };
+            return false;
+        }
+
+        if (!NWorkload::IsWorkloadServiceRequired(poolInfo->Config)) {
+            store = TBypass{};
+        } else {
+            store = TResolvedPoolId{.PoolId = poolId};
+        }
+
+        return true;
+    }
+
+private:
+    const TPoolInfoSnapshotPtr PoolInfoSnapshot;
+    const TClassifierSnapshotPtr ClassifierSnapshot;
+    const TClassifyContext Context;
+    const std::map<i64, TResourcePoolClassifierConfig>* Configs;
+    std::optional<TPreClassifyResult> PreClassifyResult;
+};
+
+class TFixedWmQueryClassifier : public IWmQueryClassifier {
+public:
+    TFixedWmQueryClassifier(TPreClassifyResult preResult, TPostClassifyResult postResult)
+        : PreResult(preResult)
+        , PostResult(postResult)
+    {}
+
+    ~TFixedWmQueryClassifier() = default;
+
+public:
+    TPreClassifyResult PreCompileClassify() override {
+        return PreResult;
+    }
+
+    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder&) override {
+        return PostResult;
+    }
+
+    bool NeedsPostCompileClassify() const override {
+        return std::holds_alternative<TPendingCompilation>(PreResult);
+    }
+
+private:
+    TPreClassifyResult PreResult;
+    TPostClassifyResult PostResult;
+};
+
+std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+                                                            TClassifierSnapshotPtr classifierSnapshot,
+                                                            TClassifyContext context) {
+    return std::make_unique<TWmQueryClassifier>(poolInfoSnapshot, classifierSnapshot, context);
 }
 
-IWmQueryClassifier::TPreClassifyResult TWmQueryClassifier::GetPreClassifyResult() const {
-    return PreClassifyResult;
-}
-
-void TWmQueryClassifier::Reject(const Ydb::StatusIds::StatusCode code, const TString& message) {
-    PreClassifyResult = TReject{.Code = code, .Message = message};
-}
-
-void TWmQueryClassifier::Resolve(const TString& poolId) {
-    TryResolve(poolId, PreClassifyResult);
-}
-
-void TWmQueryClassifier::ResolveToDefault() {
-    Resolve(DEFAULT_POOL_ID);
-}
-
-void TWmQueryClassifier::Bypass() {
-    PreClassifyResult = TBypass{};
-}
-
-void TWmQueryClassifier::PendingCompile(i64 rank) {
-    ResumeRank = rank;
-    PreClassifyResult = TPendingCompilation();
+std::shared_ptr<IWmQueryClassifier> CreateWmBypassClassifier() {
+    return std::make_unique<TFixedWmQueryClassifier>(IWmQueryClassifier::TBypass{}, IWmQueryClassifier::TBypass{});
 }
 
 } // namespace NKikimr::NKqp

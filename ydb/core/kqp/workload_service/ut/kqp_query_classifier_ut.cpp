@@ -19,11 +19,15 @@ public:
     
     virtual ~TestQueryClassifier() = default;
 
-    TPreClassifyResult GetPreClassifyResult() const override {
+    TPreClassifyResult PreCompileClassify() override {
         return PreClassifyResult;
     }
 
-    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder&) const override {
+    virtual bool NeedsPostCompileClassify() const override {
+        return std::holds_alternative<TPendingCompilation>(PreClassifyResult);
+    }
+
+    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder&) override {
         return PostClassifyResult;
     }
 
@@ -50,13 +54,12 @@ TEvKqp::TEvQueryResponse::TPtr RunQueryWith(TPreResult preResult, TPostResult po
     runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG);
 
     auto proxyId = NKqp::MakeKqpProxyID(runtime.GetNodeId(0));
-    auto mockClassifier = std::make_shared<TestQueryClassifier>(preResult, postResult);
     
     auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvQueryRequest::EventType) {
             // Replace the classifier after proxy set it
             auto* request = ev->Get<TEvKqp::TEvQueryRequest>();
-            request->SetWmQueryClassifier(mockClassifier);
+            request->SetWmQueryClassifier(std::make_shared<TestQueryClassifier>(preResult, postResult));
         }
 
         return false;

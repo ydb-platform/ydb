@@ -362,11 +362,11 @@ public:
         return WmSessionUpdater;
     }
 
-    void SetWmQueryClassifier(const std::shared_ptr<IWmQueryClassifier>& classifier) {
-        WmQueryClassifier = classifier;
+    void SetWmQueryClassifier(std::shared_ptr<IWmQueryClassifier> classifier) {
+        WmQueryClassifier = std::move(classifier);
     }
 
-    std::shared_ptr<IWmQueryClassifier> GetWmQueryClassifier() {
+    std::shared_ptr<IWmQueryClassifier> GetWmQueryClassifier() const {
         return WmQueryClassifier;
     }
 

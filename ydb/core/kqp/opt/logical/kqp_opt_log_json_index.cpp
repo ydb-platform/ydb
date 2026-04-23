@@ -289,11 +289,11 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
     auto [jsonSide, otherSide] = *normalized;
     auto leftParams = VisitJsonNode(jsonSide.template Cast<TCoJsonQueryBase>());
     if (!leftParams) {
-        return MakeCollectError(ctx, left.Pos(), leftParams.error());
+        return MakeCollectError(ctx, jsonSide.Pos(), leftParams.error());
     }
 
     if (IsJsonValueReturningNonIndexable(leftParams->ReturningType)) {
-        return MakeCollectError(ctx, left.Pos(),
+        return MakeCollectError(ctx, jsonSide.Pos(),
             "JSON_VALUE with Date/DateTime/Timestamp RETURNING is not supported by JSON index");
     }
 
@@ -408,25 +408,9 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
         }
 
         auto result = VisitJsonPredicate(andNode.Arg(0), ctx);
-        if (result.has_value() && result->Collect.GetTokensMode() == TCollectResult::ETokensMode::NotSet) {
-            result->Collect.SetTokensMode(TCollectResult::ETokensMode::And);
-        }
-
         for (size_t i = 1; i < andNode.ArgCount(); ++i) {
             auto nextNode = andNode.Arg(i);
             auto nextResult = VisitJsonPredicate(nextNode, ctx);
-
-            if (result.has_value() && result->Collect.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-                if (!nextResult.has_value()) {
-                    return MakeCollectError(ctx, nextNode.Pos(), "JSON index does not support mixed AND/OR with non-indexable predicates");
-                }
-            }
-
-            if (nextResult.has_value() && nextResult->Collect.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-                if (!result.has_value()) {
-                    return MakeCollectError(ctx, nextNode.Pos(), "JSON index does not support mixed AND/OR with non-indexable predicates");
-                }
-            }
 
             result = MergePredicateResults(std::move(result), std::move(nextResult),
                 TCollectResult::ETokensMode::And, ctx, nextNode.Pos());
@@ -448,10 +432,6 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
         auto result = VisitJsonPredicate(orNode.Arg(0), ctx);
         if (!result.has_value()) {
             return MakeCollectError(ctx, orNode.Arg(0).Pos(), "JSON index does not support OR with non-indexable predicates");
-        }
-
-        if (result->Collect.GetTokensMode() == TCollectResult::ETokensMode::NotSet) {
-            result->Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
         }
 
         for (size_t i = 1; i < orNode.ArgCount(); ++i) {
@@ -522,7 +502,6 @@ std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& bod
         }
     };
 
-    // VisitExpr only visits unique nodes
     countJsonNodes(body.Ptr());
 
     if (result->ProcessedJsonNodes != totalJsonNodes) {

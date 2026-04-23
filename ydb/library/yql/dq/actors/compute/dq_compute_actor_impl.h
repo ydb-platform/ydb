@@ -1654,9 +1654,9 @@ protected:
                     str << "  LastPopReturnedNoData: " << ProcessOutputsState.LastPopReturnedNoData << Endl;
                 }
 
-                if (auto stats = GetTaskRunnerStats()) {
+                if (auto stats = GetTaskRunnerStats(); stats && !stats->ComputationLogBuffer.empty()) {
                     str << Endl << Endl;
-                    COLLAPSED_BUTTON_CONTENT("ComputationLog", TStringBuilder() << "Computation log: " << stats->ComputationLogBuffer.size() << " entries") {
+                    COLLAPSED_BUTTON_CONTENT("ComputationLog", TStringBuilder() << "Compute graph log: " << stats->ComputationLogBuffer.size() << " entries") {
                         str << Endl;
                         for (const auto& line : stats->ComputationLogBuffer) {
                             str << "  " << line.first << " " << NHtml::EscapeText(line.second);

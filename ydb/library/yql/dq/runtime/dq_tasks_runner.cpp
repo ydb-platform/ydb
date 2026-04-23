@@ -40,6 +40,8 @@ namespace NYql::NDq {
 
 namespace {
 
+constexpr const ui32 COMPUTATION_LOG_TAIL_MAX_ENTRIES = 100;
+
 void ValidateParamValue(std::string_view paramName, const TType* type, const NUdf::TUnboxedValuePod& value) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
@@ -288,9 +290,10 @@ public:
             logProviderFunc = [log=LogFunc, isProfile, this](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                 const TString logMessage = (TStringBuilder() << "[" << component << "][" << level << "]: " << message << "\n");
                 if (isProfile && Stats) {
-                    Stats->ComputationLogBuffer.emplace_back(TInstant::Now(), logMessage);
-                    if (Stats->ComputationLogBuffer.size() > 40) {
-                        Stats->ComputationLogBuffer.pop_front();
+                    auto& logBuf = Stats->ComputationLogBuffer;
+                    logBuf.emplace_back(TInstant::Now(), logMessage);
+                    if (logBuf.size() > COMPUTATION_LOG_TAIL_MAX_ENTRIES) {
+                        logBuf.pop_front();
                     }
                 }
                 if (log) {

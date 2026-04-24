@@ -52,6 +52,7 @@ ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigrationViaDropCreate
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
 ydb/services/ydb/backup_ut BackupPathTestFs.ParallelBackupWholeDatabase
+ydb/services/ydb/backup_ut unittest.[*/*] chunk
 ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedCert
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedPrivatekey

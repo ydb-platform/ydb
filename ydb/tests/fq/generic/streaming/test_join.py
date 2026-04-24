@@ -739,6 +739,8 @@ TESTCASES = [
         ),
         "MultiGet",
         "true",
+        "MaxCachedRows",
+        "0",
     ),
     # 14
     (

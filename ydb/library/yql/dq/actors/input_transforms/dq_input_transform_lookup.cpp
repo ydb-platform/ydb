@@ -70,7 +70,8 @@ public:
         , OutputRowType(outputRowType)
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
-        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(Settings.GetCacheLimit(), lookupKeyType))
+        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(std::max(Settings.GetCacheLimit(), ui64(1)), lookupKeyType))
+        , DisableLruCache(Settings.GetCacheLimit() < 1)
         , MaxDelayedRows(Settings.GetMaxDelayedRows())
         , CacheTtl(std::chrono::seconds(Settings.GetCacheTtlSeconds()))
         , IsMultiMatches(Settings.GetIsMultiMatches())
@@ -249,6 +250,7 @@ protected:
 
     NUdf::EFetchStatus InputFlowFetchStatus;
     std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
+    const bool DisableLruCache;
     size_t MaxDelayedRows;
     std::chrono::seconds CacheTtl;
     static constexpr auto MinFullscanFailureTtl = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::hours(1)); // TODO make tuneable
@@ -365,9 +367,11 @@ private:
 #if 0 // TODO
             // Opportunistially populate LRU cache with partial fullscan results
             // (again, in case of MultiMatches, we cannot use partial results)
-            for (auto& [k, v]: *lookupResult) {
-                Y_DEBUG_ABORT_UNLESS(v);
-                LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+            if (!DisableLruCache) {
+                for (auto& [k, v]: *lookupResult) {
+                    Y_DEBUG_ABORT_UNLESS(v);
+                    LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+                }
             }
 #endif
         }
@@ -388,7 +392,7 @@ private:
         } else {
             Y_ABORT_UNLESS(lookupResult == KeysForLookup);
             lookupResult.reset();
-            if (!FullscanReady) { // don't populate LRU cache when we have (complete) fullscan results
+            if (!FullscanReady && !DisableLruCache) { // don't populate LRU cache when we have (complete) fullscan results
                 for (auto& [k, v]: *KeysForLookup) {
                     LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
                 }
@@ -609,8 +613,10 @@ private: //events
                 LastRequestedIncomplete.reset();
             }
         }
-        for (auto&& [k, v]: *lookupResult) {
-            LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
+        if (!DisableLruCache) {
+            for (auto&& [k, v]: *lookupResult) {
+                LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
+            }
         }
         KeysForLookup->clear();
         auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;

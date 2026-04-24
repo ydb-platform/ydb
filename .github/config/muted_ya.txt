@@ -14,7 +14,6 @@ ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
-ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0

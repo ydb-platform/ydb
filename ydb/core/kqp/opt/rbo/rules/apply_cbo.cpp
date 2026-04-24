@@ -11,14 +11,20 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
+struct TShuffleEliminationContext {
+    TSimpleSharedPtr<TOrderingsStateMachine> FSM;
+    TTableAliasMap TableAliasMap;
+};
+
+TShuffleEliminationContext BuildShuffleEliminationContext(
     TIntrusivePtr<TOpCBOTree>& cboTree,
-    TTableAliasMap& tableAliasMap)
+    TVector<std::shared_ptr<TRelOptimizerNode>>& rels)
 {
     TFDStorage fdStorage;
+    TTableAliasMap tableAliasMap;
     auto& rootLineage = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
 
-    // Build table alias map: canonical alias -> base table name
+    // -- Build table alias map --------------------------------------
     THashSet<TString> addedAliases;
     for (const auto& [iu, entry] : rootLineage.Mapping) {
         auto alias = entry.GetCannonicalAlias();
@@ -32,11 +38,10 @@ TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
         if (mapping.contains(column)) {
             return mapping.at(column).GetInfoUnit();
         }
-
         return column;
     };
 
-    // Collect interesting orderings and FDs from join conditions
+    // -- Collect interesting orderings & FDs from join conditions ---
     for (auto node : cboTree->TreeNodes) {
         auto join = CastOperator<TOpJoin>(node);
         TVector<TJoinColumn> leftKeys, rightKeys;
@@ -50,21 +55,26 @@ TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
 
         fdStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle, &tableAliasMap);
         fdStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle, &tableAliasMap);
-
         for (size_t i = 0; i < leftKeys.size(); ++i) {
-            fdStorage.AddFD(leftKeys[i], rightKeys[i], TFunctionalDependency::EEquivalence, false, &tableAliasMap);
+            fdStorage.AddFD(leftKeys[i], rightKeys[i],
+                            TFunctionalDependency::EEquivalence, false, &tableAliasMap);
         }
     }
 
-    // Collect base table shufflings and sortings from child metadata
-    for (auto child : cboTree->Children) {
+    // -- Collect base-table shufflings & sortings -------------------
+    // Resolve once, cache for reuse during rel initialization below.
+    TVector<TVector<TJoinColumn>> resolvedChildShufflings(cboTree->Children.size());
+
+    for (size_t i = 0; i < cboTree->Children.size(); ++i) {
+        const auto& child = cboTree->Children[i];
         if (!child->Props.Metadata.has_value()) {
             continue;
         }
         const auto& metadata = *child->Props.Metadata;
 
         if (!metadata.ShuffledByColumns.empty()) {
-            TVector<TJoinColumn> shuffledBy;
+            auto& shuffledBy = resolvedChildShufflings[i];
+            shuffledBy.reserve(metadata.ShuffledByColumns.size());
             for (const auto& col : metadata.ShuffledByColumns) {
                 auto mapped = resolveColumn(col);
                 shuffledBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
@@ -74,16 +84,40 @@ TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
 
         if (!metadata.KeyColumns.empty()) {
             TVector<TJoinColumn> sortedBy;
+            sortedBy.reserve(metadata.KeyColumns.size());
             for (const auto& col : metadata.KeyColumns) {
                 auto mapped = resolveColumn(col);
                 sortedBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
             }
-            TVector<TOrdering::TItem::EDirection> dirs(sortedBy.size(), TOrdering::TItem::EDirection::EAscending);
+            TVector<TOrdering::TItem::EDirection> dirs(
+                sortedBy.size(), TOrdering::TItem::EDirection::EAscending);
             fdStorage.AddSorting(TSorting(sortedBy, dirs), &tableAliasMap);
         }
     }
 
-    return MakeSimpleShared<TOrderingsStateMachine>(std::move(fdStorage), TOrdering::EType::EShuffle);
+    // -- Build the FSM ----------------------------------------------
+    auto fsm = MakeSimpleShared<TOrderingsStateMachine>(
+        std::move(fdStorage), TOrdering::EType::EShuffle);
+
+    // -- Seed each rel's LogicalOrderings from cached shufflings ----
+    for (size_t i = 0; i < resolvedChildShufflings.size(); ++i) {
+        if (resolvedChildShufflings[i].empty()) {
+            continue;
+        }
+        auto orderingIdx = fsm->FDStorage.FindShuffling(
+            TShuffling(resolvedChildShufflings[i]), &tableAliasMap);
+        if (orderingIdx != std::numeric_limits<std::size_t>::max()) {
+            rels[i]->Stats.LogicalOrderings = fsm->CreateState(orderingIdx);
+        }
+    }
+
+    // -- Log orderings FSM that we created --------------------------
+    if (NYql::NLog::YqlLogger().NeedToLog(
+            NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "\nShufflings FSM: " << fsm->ToString();
+    }
+
+    return {std::move(fsm), std::move(tableAliasMap)};
 }
 
 // To use DP CBO, we need to use the column lineage map and map all variables in join condition to
@@ -274,18 +308,18 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
 
-    TTableAliasMap tableAliasMap;
-    TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM;
+    std::optional<TShuffleEliminationContext> shuffleCtx;
     if (enableShuffleElimination) {
-        orderingsFSM = BuildShuffleEliminationFSM(cboTree, tableAliasMap);
+        shuffleCtx.emplace(BuildShuffleEliminationContext(cboTree, rels));
     }
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(
         providerCtx, settings, ctx.ExprCtx,
         enableShuffleElimination,
-        orderingsFSM,
-        enableShuffleElimination ? &tableAliasMap : nullptr));
+        shuffleCtx ? shuffleCtx->FSM : nullptr,
+        shuffleCtx ? &shuffleCtx->TableAliasMap : nullptr)
+    );
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;

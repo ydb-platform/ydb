@@ -134,12 +134,14 @@ struct TStageGraph {
     THashMap<ui32, TVector<ui32>> StageOutputs;
     THashMap<std::pair<ui32, ui32>, TVector<TIntrusivePtr<TConnection>>> Connections;
     THashMap<ui32, ui32> StageOutputIndices;
+    THashMap<ui32, TString> StageGUIDs;
 
     ui32 AddStage() {
         ui32 newStageId = StageIds.size();
         StageIds.push_back(newStageId);
         StageInputs[newStageId] = TVector<ui32>();
         StageOutputs[newStageId] = TVector<ui32>();
+        StageGUIDs[newStageId] = CreateGuidAsString();
         return newStageId;
     }
 

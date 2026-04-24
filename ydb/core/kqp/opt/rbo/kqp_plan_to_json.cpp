@@ -12,24 +12,25 @@ void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperato
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags) {
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
     auto res = op->ToJson(explainFlags);
 
     AddOptimizerEstimates(res, op);
+    res["OperatorId"] = operatorId;
     return res;
 }
 
 
-NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, explainFlags));
+    operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags));
     result["Operators"] = operatorList;
 
     auto getChildJson = [&](const auto& child) {
-        auto childJson = GetExplainJsonRec(child, nodeCounter, explainFlags);
+        auto childJson = GetExplainJsonRec(child, nodeCounter, operatorIds, explainFlags);
 
         // Insert shuffle connections if needed
         // (currently always needed for GraceJoin)
@@ -67,7 +68,7 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
 namespace NKikimr {
 namespace NKqp {
 
-NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     // First construct the ResultSet
@@ -87,9 +88,11 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
 
     THashMap<int, TVector<TIntrusivePtr<IOperator>>> stageOpMap;
     std::set<int> stages;
+    ui32 operatorId = 0;
 
     for (auto it : *this) {
         auto & currOp = it.Current;
+        operatorIds.insert({currOp.Get(), operatorId++});
         int stageId = *currOp->Props.StageId;
         if (!stageOpMap.contains(stageId)) {
             stageOpMap.insert({stageId, {}});
@@ -124,7 +127,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
                 stageName = stageName + "-" + op->GetExplainName();
             }
 
-            operatorList.AppendValue(MakeJson(op, explainFlags));
+            operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags));
         }
 
         // Build a list of subplans - these are connection objects of input stages
@@ -139,6 +142,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
         // If this is the final stage, add the child plans and operators to it
         if(stageOutputs.empty()) {
             finalStage["Node Type"] = stageName;
+            finalStage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
             if (ops.size()) {
                 finalStage["Operators"] = operatorList;
             }
@@ -162,6 +166,8 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
 
                 auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
                 stage["Node Type"] = stageName;
+                stage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
+
                 if (ops.size()) {
                     stage["Operators"] = operatorList;
                 }
@@ -186,7 +192,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
 }
 
 // For explain JSON we recurse over the operators of the plan
-NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     NJson::TJsonValue result;
@@ -195,7 +201,7 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, ui32 explainFlags) 
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    plans.AppendValue(GetExplainJsonRec(GetInput(), nodeCounter, explainFlags));
+    plans.AppendValue(GetExplainJsonRec(GetInput(), nodeCounter, operatorIds, explainFlags));
     result["Plans"] = plans;
 
     return result;

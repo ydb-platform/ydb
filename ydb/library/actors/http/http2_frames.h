@@ -66,7 +66,7 @@ enum class ESettingsId : uint16_t {
 
 // Error codes (RFC 7540 Section 7)
 enum class EErrorCode : uint32_t {
-    NO_ERROR            = 0x0,
+    SUCCESS             = 0x0,
     PROTOCOL_ERROR      = 0x1,
     INTERNAL_ERROR      = 0x2,
     FLOW_CONTROL_ERROR  = 0x3,

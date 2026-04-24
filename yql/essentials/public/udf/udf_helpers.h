@@ -24,10 +24,11 @@ concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeIn
     { T::DeclareSignature(name, userType, builder, typesOnly) } -> std::convertible_to<bool>;
 };
 
-template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF, bool SupportsPolyArgs = false>
+template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
 class TLangVerForked {
 private:
     Y_HAS_SUBTYPE(TBlockType);
+    Y_HAS_MEMBER(BuildPolyArgsWithVersion);
 
 public:
     using TTypeAwareMarker = bool;
@@ -49,20 +50,28 @@ public:
         return TActualUDF::Name();
     }
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
     static TString BuildPolyArgs() {
-        if (!SupportsPolyArgs) {
-            return {};
+        if constexpr (THasBuildPolyArgsWithVersion<TActualUDF>::value) {
+            Y_ENSURE(THasBuildPolyArgsWithVersion<TLegacyUDF>::value);
+            TStringBuilder builder;
+            builder << "[";
+            builder << TActualUDF::BuildPolyArgsWithVersion(V, false);
+            builder << TLegacyUDF::BuildPolyArgsWithVersion(0, true);
+            builder << "]";
+            return builder;
+        } else {
+            TStringBuilder builder;
+            auto verStr = *FormatLangVersion(V);
+            builder << "[[{cmd=ver;value=\"";
+            builder << verStr;
+            builder << "\"};{ver=\"";
+            builder << verStr;
+            builder << "\"}];[[];{}]]";
+            return builder;
         }
-
-        TStringBuilder builder;
-        auto verStr = *FormatLangVersion(V);
-        builder << "[[{cmd=ver;value=\"";
-        builder << verStr;
-        builder << "\"};{ver=\"";
-        builder << verStr;
-        builder << "\"}];[[];{}]]";
-        return builder;
     }
+#endif
 
     static bool DeclareSignature(
         const TStringRef& name, TType* userType,
@@ -403,6 +412,38 @@ public:
         }
 
         return true;
+    }
+
+    static TString BuildPolyArgs() {
+        TStringBuilder sb;
+        sb << "[";
+        AppendPolyArgsItem<TUserTypes...>(sb, true);
+        sb << "]";
+        return sb;
+    }
+
+private:
+    template <typename THead, typename... TTail>
+    static void AppendPolyArgsItem(TStringBuilder& sb, bool isFirst) {
+        const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
+                                  ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
+                                  .Name;
+        if (!isFirst) {
+            sb << ";";
+        }
+        if constexpr (sizeof...(TTail) > 0) {
+            if constexpr (CheckOptional) {
+                sb << "[{cmd=or;value=[{arg=T0;cmd=type;value=[DataType;" << typeName
+                   << "]};{arg=T0;cmd=type;value=[OptionalType;[DataType;" << typeName
+                   << "]]}]};{args=[[DataType;" << typeName << "]]}]";
+            } else {
+                sb << "[{arg=T0;cmd=type;value=[DataType;" << typeName
+                   << "]};{args=[[DataType;" << typeName << "]]}]";
+            }
+            AppendPolyArgsItem<TTail...>(sb, false);
+        } else {
+            sb << "[[];{args=[[DataType;" << typeName << "]]}]";
+        }
     }
 };
 

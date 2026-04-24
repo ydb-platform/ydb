@@ -10232,6 +10232,14 @@ Y_UNIT_TEST(DropViewWithTablePrefix) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
+Y_UNIT_TEST(CreateDropViewDoesntWorkWithBinding) {
+    NSQLTranslation::TTranslationSettings settings;
+    ExpectFailWithError("use ydb; $path = 'foo'; create view $path as select 1",
+                        "<main>:1:37: Error: Bind parameter is not supported\n", settings);
+    ExpectFailWithError("use ydb; $path = 'foo'; drop view $path",
+                        "<main>:1:35: Error: Bind parameter is not supported\n", settings);
+}
+
 Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
     NYql::TAstParseResult res = SqlToYql(R"(
             SELECT * FROM plato.Input WITH schema(y Int32, x String not null);
@@ -14650,8 +14658,16 @@ Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
 
 Y_UNIT_TEST(ErrorOnMissingCluster) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:13: Error: No cluster name given and no default cluster is selected\n", settings);
+    ExpectFailWithError("create view foo as select 1", "<main>:1:13: Error: No cluster name given and no default cluster is selected\n", settings);
+    ExpectFailWithError("drop view foo", "<main>:1:11: Error: No cluster name given and no default cluster is selected\n", settings);
+}
+
+Y_UNIT_TEST(ErrorOnTempView) {
+    NSQLTranslation::TTranslationSettings settings;
+    ExpectFailWithError("create view plato.@foo as do begin select 1; end do", "<main>:1:20: Error: Temporary object is not supported\n", settings);
+    ExpectFailWithError("$path = 'foo'; create view plato.@$path as do begin select 1; end do", "<main>:1:35: Error: Temporary object is not supported\n", settings);
+    ExpectFailWithError("drop view plato.@foo", "<main>:1:18: Error: Temporary object is not supported\n", settings);
 }
 
 Y_UNIT_TEST(CreateViewIfNotExists) {
@@ -14671,6 +14687,37 @@ Y_UNIT_TEST(CreateViewIfNotExists) {
     VerifyProgram(res, elementStat, verifyLine);
 
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
+Y_UNIT_TEST(CreateDropViewWithBind) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    auto verify = [&](const TString& q) {
+        TString header = R"sql(
+            USE plato;
+            PRAGMA TablePathPrefix = '//prefix';
+            $path = 'tab' || 'le';
+        )sql";
+        NYql::TAstParseResult res = SqlToYqlWithSettings(header + q, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Concat") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"((let namedexprnode0 (Concat (String '"tab") (String '"le"))))");
+            }
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"('('objectId (String (EvaluateAtom (BuildTablePath (String '"//prefix") (String (EvaluateAtom namedexprnode0)))))))");
+            }
+        };
+        TWordCountHive elementStat = {{"Write!"}, {"Concat"}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Concat"], 1);
+    };
+
+    verify("create view $path as do begin select 1; end do");
+    verify("drop view $path");
 }
 
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)

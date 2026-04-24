@@ -755,7 +755,7 @@ namespace NActors {
         auto& actorContext = (CTX); \
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto component = [&]{ using namespace NKikimrServices; return (COMP); }(); \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(ctx, priority, component, 0ull)) { \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorContext, priority, component, 0ull)) { \
             NKikimr::NStructLog::TStructuredMessage message = NKikimr::NStructLog::TLogStack::GetTop(); \
             YDBLOG_UPDATE_MESSAGE(message, __VA_ARGS__); \
             MemStructLogAdapter(actorContext, priority, component, __FILE_NAME__, __LINE__, T, std::move(message) ); \

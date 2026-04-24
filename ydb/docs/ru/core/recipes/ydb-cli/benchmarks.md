@@ -9,10 +9,6 @@
 | [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md)|
 | [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md)|
 
-<<<<<<< HEAD
-Работают сходным образом, детальное описание для каждого см. в соответствующих разделах, ссылки выше.
-Все команды для работы с бенчмарками собраны в соответствующие группы, при этом для всех команд единым образом задается путь в БД:
-=======
 Помимо стандартных бенчмарков есть еще несколько внутренних:
 
 | Бенчмарк                             | Справка                                                  |
@@ -27,21 +23,17 @@
 Все указанные методы эмулируют пользовательскую нагрузку на базу данных в рамках заданных сценариев. Детальное описание каждого метода представлено в соответствующих разделах, ссылки на которые приведены выше.
 
 Все команды для работы с бенчмарками сгруппированы в соответствующие категории:
->>>>>>> cce21d85bc7 (More benchmarks on benchmarks page in docs (#31616))
 
 ```bash
 {{ ydb-cli }} workload tpcc --path path/in/database ...
 {{ ydb-cli }} workload clickbench --path path/in/database ...
 {{ ydb-cli }} workload tpch --path path/in/database ...
 {{ ydb-cli }} workload tpcds --path path/in/database ...
-<<<<<<< HEAD
-=======
 {{ ydb-cli }} workload query --path path/in/database ...
 {{ ydb-cli }} workload kv --path path/in/database ...
 {{ ydb-cli }} workload stock --path path/in/database ...
 {{ ydb-cli }} workload topic ...
 {{ ydb-cli }} workload transfer ...
->>>>>>> cce21d85bc7 (More benchmarks on benchmarks page in docs (#31616))
 ```
 
 Нагрузочное тестирование можно разбить на 3 этапа:
@@ -63,14 +55,11 @@
 {{ ydb-cli }} workload clickbench --path clickbench/hits init --store=row
 {{ ydb-cli }} workload tpch --path tpch/s1 init --store=column
 {{ ydb-cli }} workload tpcds --path tpcds/s1 init --store=external-s3
-<<<<<<< HEAD
-=======
 {{ ydb-cli }} workload query --path user/suite1 init --suite-path /home/user/user_suite
 {{ ydb-cli }} workload kv --path kv init --store=column
 {{ ydb-cli }} workload stock --path stock init --store=row
 {{ ydb-cli }} workload topic init --topic some_topic
 {{ ydb-cli }} workload transfer topic-to-table init --topic some_topic --table /db/table
->>>>>>> cce21d85bc7 (More benchmarks on benchmarks page in docs (#31616))
 ```
 
 На данном этапе, если вы запускаете `tpch`, `tpcds` или `clickbench`, можно настроить создаваемые таблицы:
@@ -86,14 +75,11 @@
 * [clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
 * [tpch init](../../reference/ydb-cli/workload-tpch.md#init)
 * [tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
-<<<<<<< HEAD
-=======
 * [query init](../../reference/ydb-cli/workload-query.md#init)
 * [kv init](../../reference/ydb-cli/workload-kv.md#init)
 * [stock init](../../reference/ydb-cli/commands/workload/stock.md#init)
 * [topic init](../../reference/ydb-cli/workload-topic.md#init)
 * [transfer init](../../reference/ydb-cli/workload-transfer.md#init)
->>>>>>> cce21d85bc7 (More benchmarks on benchmarks page in docs (#31616))
 
 ### Наполнение данными
 
@@ -126,14 +112,11 @@
 {{ ydb-cli }} workload clickbench --path clickbench/hits run --include 1-5,8
 {{ ydb-cli }} workload tpch --path tpch/s1 run --exсlude 3,4 --iterations 3
 {{ ydb-cli }} workload tpcds --path tpcds/s1 run --plan ~/query_plan --include 2 --iterations 5
-<<<<<<< HEAD
-=======
 {{ ydb-cli }} workload query --path user/suite1 run --plan ~/query_plan --include first_query_set.1.sql,second_query_set.2.sql --iterations 5
 {{ ydb-cli }} workload kv --path kv run mixed
 {{ ydb-cli }} workload stock --path stock run add-rand-order
 {{ ydb-cli }} workload topic run full --topic some_topic
 {{ ydb-cli }} workload transfer topic-to-table run --topic some_topic --table /db/table
->>>>>>> cce21d85bc7 (More benchmarks on benchmarks page in docs (#31616))
 ```
 
 Команда позволяет выбрать запросы для исполнения, сгенерировать несколько видов отчетов, собрать статистику исполнения и тд.
@@ -144,14 +127,11 @@
 * [clickbench run](../../reference/ydb-cli/workload-click-bench.md#run)
 * [tpch run](../../reference/ydb-cli/workload-tpch.md#run)
 * [tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
-<<<<<<< HEAD
-=======
 * [query run](../../reference/ydb-cli/workload-query.md#run)
 * [kv run](../../reference/ydb-cli/workload-kv.md#run)
 * [stock run](../../reference/ydb-cli/commands/workload/stock.md#run)
 * [topic run](../../reference/ydb-cli/workload-topic.md#run)
 * [transfer run](../../reference/ydb-cli/workload-transfer.md#run)
->>>>>>> cce21d85bc7 (More benchmarks on benchmarks page in docs (#31616))
 
 ## Очистка {#cleanup}
 
@@ -163,14 +143,11 @@
 {{ ydb-cli }} workload clickbench --path clickbench/hits clean
 {{ ydb-cli }} workload tpch --path tpch/s1 clean
 {{ ydb-cli }} workload tpcds --path tpcds/s1 clean
-<<<<<<< HEAD
-=======
 {{ ydb-cli }} workload query --path user/suite1 clean
 {{ ydb-cli }} workload kv --path kv clean
 {{ ydb-cli }} workload stock --path stock clean
 {{ ydb-cli }} workload topic clean --topic some_topic
 {{ ydb-cli }} workload transfer topic-to-table clean --topic some_topic --table /db/table
->>>>>>> cce21d85bc7 (More benchmarks on benchmarks page in docs (#31616))
 ```
 
 Подробное описание см. в соответствующих разделах:
@@ -179,8 +156,6 @@
 * [clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
 * [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)
-<<<<<<< HEAD
-=======
 * [query clean](../../reference/ydb-cli/workload-query.md#cleanup)
 * [kv clean](../../reference/ydb-cli/workload-kv.md#cleanup)
 * [stock clean](../../reference/ydb-cli/commands/workload/stock.md#cleanup)

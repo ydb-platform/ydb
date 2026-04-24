@@ -65,6 +65,9 @@ enum class ESettingsId : uint16_t {
 };
 
 // Error codes (RFC 7540 Section 7)
+#ifdef NO_ERROR
+#undef NO_ERROR // windows.h pollution
+#endif
 enum class EErrorCode : uint32_t {
     NO_ERROR            = 0x0,
     PROTOCOL_ERROR      = 0x1,

@@ -2078,6 +2078,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$ ? (@.k1 == 1 && @.k2 == 2)') == true)");
             ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b'))");
+
+            // JSON_EXISTS with TRUE ON ERROR is negation
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.key' TRUE ON ERROR))");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' FALSE ON ERROR))", {"\3key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' ERROR ON ERROR))", {"\3key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' UNKNOWN ON ERROR))", {"\3key"});
         });
     }
 
@@ -2321,6 +2327,19 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d' WITHOUT ARRAY WRAPPER), '$.e' RETURNING Int32) == 1)");
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u AND JSON_VALUE(Text, '$.b') == "w")");
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u OR JSON_VALUE(Text, '$.b') == "w")");
+
+            // DEFAULT ON EMPTY with non-NULL value is negation
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON EMPTY) > 10)");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON EMPTY) > 10)", {"\3key"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON EMPTY) > 10)", {"\3key"});
+
+            // DEFAULT ON ERROR with non-NULL value is negation
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON ERROR) > 10)");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON ERROR) > 10)", {"\3key"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON ERROR) > 10)", {"\3key"});
+
+            // Both DEFAULT ON EMPTY and DEFAULT ON ERROR with non-NULL value are negation too
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON EMPTY DEFAULT 12 ON ERROR) > 10)");
         });
     }
 }

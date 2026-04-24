@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <yql/essentials/core/sql_types/yql_atom_enums.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -74,9 +75,32 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         return std::unexpected("Expected empty dict as variables");
     }
 
+    if (jsonNode.Maybe<TCoJsonExists>()) {
+        const auto jsonExists = jsonNode.Cast<TCoJsonExists>();
+        if (jsonExists.OnError() && jsonExists.OnError().Maybe<TCoJust>()) {
+            const auto arg = jsonExists.OnError().Cast<TCoJust>().Input();
+            if (arg.Maybe<TCoBool>() && FromString<bool>(arg.Cast<TCoBool>().Literal().Value())) {
+                return std::unexpected("JSON_EXISTS with ON ERROR TRUE is not supported by JSON index");
+            }
+        }
+    }
+
     std::optional<EDataSlot> returningType;
     if (jsonNode.Maybe<TCoJsonValue>()) {
-        auto jsonValue = jsonNode.Cast<TCoJsonValue>();
+        const auto jsonValue = jsonNode.Cast<TCoJsonValue>();
+
+        const auto onEmptyMode = FromString<EJsonValueHandlerMode>(jsonValue.OnEmptyMode().Ref().Content());
+        const auto onEmptyValue = jsonValue.OnEmpty();
+        if (onEmptyMode == EJsonValueHandlerMode::DefaultValue && !onEmptyValue.Maybe<TCoNull>()) {
+            return std::unexpected("DEFAULT ON EMPTY in JSON_VALUE must be NULL");
+        }
+
+        const auto onErrorMode = FromString<EJsonValueHandlerMode>(jsonValue.OnErrorMode().Ref().Content());
+        const auto onErrorValue = jsonValue.OnError();
+        if (onErrorMode == EJsonValueHandlerMode::DefaultValue && !onErrorValue.Maybe<TCoNull>()) {
+            return std::unexpected("DEFAULT ON ERROR in JSON_VALUE must be NULL");
+        }
+
         if (jsonValue.ReturningType()) {
             const auto* returningTypeAnn = jsonValue.ReturningType().Ref()
                 .GetTypeAnn()->Cast<TTypeExprType>()->GetType();

@@ -362,6 +362,8 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
+    Props.Metadata->ShuffledByColumns = {};
+
     // Aggregate acts list a source in terms of lineage
     // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
     Props.Metadata->ColumnLineage = {};

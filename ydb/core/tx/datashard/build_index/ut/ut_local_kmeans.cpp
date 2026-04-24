@@ -1198,8 +1198,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     }
 
     // Helper: sends a single LocalKMeans request and checks the reply.
-    // Returns the parsed issues string.
-    static TString DoLocalKMeansCheckIssues(
+    // Returns the status and parsed issues string.
+    static std::pair<NKikimrIndexBuilder::EBuildStatus, TString> DoLocalKMeansCheckIssues(
         Tests::TServer::TPtr server, TActorId sender)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
@@ -1242,15 +1242,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         TAutoPtr<IEventHandle> handle;
         auto* reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvLocalKMeansResponse>(handle);
-        UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE,
-            "Expected DONE status");
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        return issues.ToOneLineString();
+        return {reply->Record.GetStatus(), issues.ToOneLineString()};
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingWarning) {
+    Y_UNIT_TEST(InvalidEmbeddingError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -1269,26 +1267,22 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         options.Shards(1);
         CreateMainTable(server, sender, options);
 
-        // 2 valid rows (with \x02 format byte), 3 invalid rows
+        // 2 valid rows (with \x02 format byte), 1 invalid row with wrong format byte
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
             "(1, \"\x30\x30\2\", \"one\"),"
             "(2, \"\x31\x31\2\", \"two\"),"
-            "(3, \"invalid\", \"three\"),"
-            "(4, \"\", \"four\"),"
-            "(5, \"bad\", \"five\");");
+            "(3, \"invalid\", \"three\");");
 
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
-        TString issuesStr = DoLocalKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        auto [status, issuesStr] = DoLocalKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
     }
 
-    Y_UNIT_TEST(AllInvalidEmbeddingsWarning) {
-        // When ALL rows have invalid embeddings, FeedSample discards them all.
-        // FinishPrefixImpl returns early (no valid samples), and FeedFinal is never called.
-        // This test verifies the warning is still emitted in that case (counter in FeedSample).
+    Y_UNIT_TEST(EmptyEmbeddingError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -1307,18 +1301,17 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         options.Shards(1);
         CreateMainTable(server, sender, options);
 
-        // All rows have invalid embeddings (no \x02 format byte)
+        // Row with empty embedding
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
-            "(1, \"invalid\", \"one\"),"
-            "(2, \"\", \"two\"),"
-            "(3, \"bad\", \"three\");");
+            "(1, \"\", \"one\");");
 
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
-        TString issuesStr = DoLocalKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        auto [status, issuesStr] = DoLocalKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Empty vector data");
     }
 }
 

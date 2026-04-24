@@ -334,9 +334,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         });
         CreateShardedTable(server, sender, "/Root", "table-1", options);
 
-        // Upsert some initial values
+        // Only valid vectors (with \x02 format byte)
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value, __ydb_foreign) VALUES "
-            "(1, \"ab\", false), (2, \"ab\x02\", false), (3, \"\", false), (4, \"cdef\", false), (5, \"de\x02\", false);");
+            "(2, \"ab\x02\", false), (5, \"de\x02\", false);");
 
         auto snapshot = CreateVolatileSnapshot(server, {kTable});
 
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         UNIT_ASSERT_VALUES_EQUAL(data, "value = de\x02, key = 5\nvalue = ab\x02, key = 2\n");
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingWarning) {
+    Y_UNIT_TEST(InvalidEmbeddingError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -375,9 +375,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         });
         CreateShardedTable(server, sender, "/Root", "table-1", options);
 
-        // 3 invalid rows (no format byte), 2 valid rows (with \x02 format byte)
+        // First row has invalid format (no \x02 format byte), should stop immediately
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-            "(1, \"ab\"), (2, \"ab\x02\"), (3, \"\"), (4, \"cdef\"), (5, \"de\x02\");");
+            "(1, \"ab\"), (2, \"ab\x02\"), (5, \"de\x02\");");
 
         auto snapshot = CreateVolatileSnapshot(server, {kTable});
         auto datashards = GetTableShards(server, sender, kTable);
@@ -411,15 +411,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
 
-        UNIT_ASSERT_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE);
-        // 2 valid rows should be sampled
-        UNIT_ASSERT_EQUAL(reply->Record.RowsSize(), 2);
+        UNIT_ASSERT_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
 
-        // Warning about 3 invalid rows should be present
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
         TString issuesStr = issues.ToOneLineString();
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
     }
 }
 

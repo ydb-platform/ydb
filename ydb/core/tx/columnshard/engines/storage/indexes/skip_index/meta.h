@@ -46,26 +46,16 @@ class TSkipBitmapIndex: public TSkipIndex {
 private:
     std::shared_ptr<IBitsStorageConstructor> BitsStorageConstructor;
     using TBase = TSkipIndex;
-<<<<<<< HEAD
-    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
-=======
     virtual bool DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const = 0;
->>>>>>> 4b171e0e744 (Refactor IBitsStorageConstructor: separate serialization/restoration, simplify viewer interface (#37183))
+        const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op) const override final {
         if (data.empty()) {
             return false;
         }
-<<<<<<< HEAD
-        auto storageConclusion = BitsStorageConstructor->Build(data);
-        return DoCheckValueImpl(*storageConclusion.GetResult(), cat, value, op);
-=======
         auto storageConclusion = BitsStorageConstructor->Restore(data);
-        return DoCheckValueImpl(*storageConclusion.GetResult(), cat, value, op, info);
->>>>>>> 4b171e0e744 (Refactor IBitsStorageConstructor: separate serialization/restoration, simplify viewer interface (#37183))
+        return DoCheckValueImpl(*storageConclusion.GetResult(), cat, value, op);
     }
 
 protected:

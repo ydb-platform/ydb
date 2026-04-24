@@ -2165,7 +2165,11 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
         buffer->SetLevelChangeCallback(LevelChangeCallback_);
         LevelChangeCallback_(EDqFillLevel::HardLimit, buffer->GetFillLevel());
     }
+    Bound_ = true;
     Service.reset();
+    if (FinishPending_) {
+        Serializer->Flush(true);
+    }
 }
 
 void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {

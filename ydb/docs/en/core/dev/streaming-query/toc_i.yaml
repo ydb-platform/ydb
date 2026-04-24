@@ -1,15 +1,3 @@
 items:
-- name: Local and external topics
-  href: local-and-external-topics.md
-- name: Common patterns
-  href: patterns.md
-- name: Writing to tables
-  href: table-writing.md
 - name: Data enrichment
   href: enrichment.md
-- name: Topic read and write formats
-  href: streaming-query-formats.md
-- name: Delivery guarantees
-  href: guarantees.md
-- name: Checkpoints
-  href: checkpoints.md

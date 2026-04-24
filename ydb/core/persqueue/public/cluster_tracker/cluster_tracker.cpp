@@ -42,6 +42,10 @@ public:
     void Bootstrap() {
         ListClustersQuery = MakeListClustersQuery();
 
+        if (Cfg().GetTopicsAreFirstClassCitizen()) {
+            ClustersList = MakeIntrusive<TClustersList>();
+        }
+
         Become(&TThis::WaitingForSubscribers);
     }
 
@@ -55,16 +59,33 @@ private:
     STATEFN(WaitingForSubscribers) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvClusterTracker::TEvSubscribe, HandleWhileWaiting);
+            hFunc(TEvClusterTracker::TEvGetClustersList, HandleWhileWaiting);
         }
     }
 
     void HandleWhileWaiting(TEvClusterTracker::TEvSubscribe::TPtr& ev) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "AddSubscriber TEvSubscriber");
 
-        AddSubscriber(ev->Sender);
+        if (Cfg().GetTopicsAreFirstClassCitizen()) {
+            return SendClustersList(ev->Sender);
+        }
 
         Become(&TThis::Working);
 
+        AddSubscriber(ev->Sender);
+        Send(Ctx().SelfID, new TEvents::TEvWakeup);
+    }
+
+    void HandleWhileWaiting(TEvClusterTracker::TEvGetClustersList::TPtr& ev) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWaiting TEvGetClustersList");
+
+        if (Cfg().GetTopicsAreFirstClassCitizen()) {
+            return SendGetClustersListResponse(ev->Sender);
+        }
+
+        Become(&TThis::Working);
+
+        GetClustersListRequests.push_back(ev->Sender);
         Send(Ctx().SelfID, new TEvents::TEvWakeup);
     }
 
@@ -89,12 +110,13 @@ private:
     STATEFN(Working) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvClusterTracker::TEvSubscribe, HandleWhileWorking);
+            hFunc(TEvClusterTracker::TEvGetClustersList, HandleWhileWorking);
             hFunc(TEvents::TEvWakeup, HandleWhileWorking);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleWhileWorking);
         }
     }
 
-    void SendClustersList(TActorId subscriberId) {
+    void SendClustersList(const TActorId& subscriberId) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "SendClustersList");
 
         auto ev = MakeHolder<TEvClusterTracker::TEvClustersUpdate>();
@@ -116,6 +138,26 @@ private:
         }
     }
 
+    void HandleWhileWorking(TEvClusterTracker::TEvGetClustersList::TPtr& ev) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvGetClustersList");
+
+        if (ClustersList) {
+            SendGetClustersListResponse(ev->Sender);
+        } else {
+            GetClustersListRequests.push_back(ev->Sender);
+        }
+    }
+
+    void SendGetClustersListResponse(const TActorId& senderId) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "SendGetClustersListResponse to " << senderId);
+
+        auto ev = MakeHolder<TEvClusterTracker::TEvGetClustersListResponse>();
+        ev->ClustersList = ClustersList;
+        ev->LocalCluster = LocalCluster;
+
+        Send(senderId, ev.Release());
+    }
+
     void BroadcastClustersUpdate() {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "BroadcastClustersUpdate Subscribers.size: " << Subscribers.size());
 
@@ -123,6 +165,15 @@ private:
             LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "BroadcastClustersUpdate subscriberId: " << subscriberId);
             SendClustersList(subscriberId);
         }
+    }
+
+    void ReplyAllGetClustersListRequests() {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "ReplyAllGetClustersListRequests GetClustersListRequests.size: " << GetClustersListRequests.size());
+
+        for (const auto& requestId : GetClustersListRequests) {
+            SendGetClustersListResponse(requestId);
+        }
+        GetClustersListRequests.clear();
     }
 
     void HandleWhileWorking(TEvents::TEvWakeup::TPtr&) {
@@ -157,6 +208,7 @@ private:
                 AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
 
                 BroadcastClustersUpdate();
+                ReplyAllGetClustersListRequests();
 
                 Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutSec()), new TEvents::TEvWakeup);
                 return;
@@ -194,15 +246,20 @@ private:
         } while (parser.TryNextRow());
 
         ClustersList = std::move(clustersList);
+        LocalCluster = FindIfPtr(ClustersList->Clusters, [](const auto& cluster) { return cluster.IsLocal; });
         ClustersListUpdateTimestamp = Ctx().Now();
     }
 
 private:
     TString ListClustersQuery;
     TString PreparedQueryId;
+
     TClustersList::TConstPtr ClustersList = nullptr;
+    const TClustersList::TCluster* LocalCluster = nullptr;
+
     TMaybe<TInstant> ClustersListUpdateTimestamp;
     THashSet<TActorId> Subscribers;
+    TVector<TActorId> GetClustersListRequests;
     TString Database;
 };
 

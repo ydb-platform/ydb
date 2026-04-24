@@ -58,6 +58,8 @@ struct TEvClusterTracker {
     enum EEv {
         EvClustersUpdate = EventSpaceBegin(TKikimrEvents::ES_PQ_CLUSTER_TRACKER),
         EvSubscribe,
+        EvGetClustersList,
+        EvGetClustersListResponse,
         EvEnd
     };
 
@@ -67,6 +69,14 @@ struct TEvClusterTracker {
     };
 
     struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, EvSubscribe> {
+    };
+
+    struct TEvGetClustersList : public NActors::TEventLocal<TEvGetClustersList, EvGetClustersList> {
+    };
+
+    struct TEvGetClustersListResponse : public NActors::TEventLocal<TEvGetClustersListResponse, EvGetClustersListResponse> {
+        const TClustersList::TCluster* LocalCluster;
+        TClustersList::TConstPtr ClustersList;
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_CLUSTER_TRACKER), "Unexpected TEvClusterTracker event range");

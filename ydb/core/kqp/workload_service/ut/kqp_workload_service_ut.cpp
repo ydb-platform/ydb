@@ -2,7 +2,6 @@
 #include <ydb/core/base/path.h>
 
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr::NKqp {
 

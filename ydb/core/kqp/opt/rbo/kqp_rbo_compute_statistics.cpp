@@ -455,9 +455,18 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
-        Props.Metadata->ShuffledByColumns.push_back(leftKey);
+    NKqp::EJoinAlgoType algo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
+    if (algo == NKqp::EJoinAlgoType::MapJoin) {
+        // Build side is always right (broadcast), output keeps left's distribution
+        Props.Metadata->ShuffledByColumns = GetLeftInput()->Props.Metadata->ShuffledByColumns;
+    } else if (algo == NKqp::EJoinAlgoType::GraceJoin) {
+        // Both sides are shuffled by join keys
+        for (const auto& [leftKey, rightKey] : JoinKeys) {
+            Props.Metadata->ShuffledByColumns.push_back(leftKey);
+        }
     }
+    // Currently there are no other algos.
+    // If any other are added, leave ShuffledByColumns empty (unknown distribution) - the safest default.
 }
 
 void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {

@@ -16,100 +16,8 @@ using namespace NKikimrClient;
 
 using grpc::Status;
 
-namespace NKikimr::NGRpcProxy::V1 {
-
-///////////////////////////////////////////////////////////////////////////////
-
-using namespace PersQueue::V1;
-
-class TPQSchemaService : public NActors::TActorBootstrapped<TPQSchemaService>, IClustersCfgProvider {
-public:
-    TPQSchemaService(IClustersCfgProvider** p);
-
-    void Bootstrap(const TActorContext& ctx);
-
-    TIntrusiveConstPtr<TClustersCfg> GetCfg() const override;
-
-private:
-    TString AvailableLocalCluster();
-
-    STFUNC(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
-        }
-    }
-
-private:
-    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev);
-
-    mutable std::shared_mutex Mtx;
-    TIntrusivePtr<TClustersCfg> ClustersCfg;
-};
-
-IActor* CreatePQSchemaService(IClustersCfgProvider** p) {
-    return new TPQSchemaService(p);
-}
-
-TPQSchemaService::TPQSchemaService(IClustersCfgProvider** p)
-    : ClustersCfg(MakeIntrusive<TClustersCfg>())
-{
-    // used from grpc handlers.
-    // GetCfg method in called in the grpc thread context
-    // We have guarantee this object is created before grpc start
-    // and the the object destroyed after grpc stop
-    *p = this;
-}
-
-void TPQSchemaService::Bootstrap(const TActorContext& ctx) {
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration]: switch to haveClusters
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQSchemaService: send TEvClusterTracker::TEvSubscribe");
-
-        ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
-                 new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
-    }
-
-    Become(&TThis::StateFunc);
-}
-
-void TPQSchemaService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) {
-    AFL_ENSURE(ev->Get()->ClustersList);
-    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size());
-
-    const auto& clusters = ev->Get()->ClustersList->Clusters;
-
-    auto cfg = MakeIntrusive<TClustersCfg>();
-
-    auto it = std::find_if(begin(clusters), end(clusters), [](const auto& cluster) { return cluster.IsLocal; });
-    if (it != end(clusters)) {
-        cfg->LocalCluster = it->Name;
-    }
-
-    cfg->Clusters.resize(clusters.size());
-    for (size_t i = 0; i < clusters.size(); ++i) {
-        cfg->Clusters[i] = clusters[i].Name;
-    }
-
-    std::unique_lock lock(Mtx);
-    ClustersCfg = cfg;
-}
-
-TIntrusiveConstPtr<TClustersCfg> TPQSchemaService::GetCfg() const {
-    std::shared_lock lock(Mtx);
-    return ClustersCfg;
-}
-
-}
-
 namespace NKikimr {
 namespace NGRpcService {
-
-void EnsureReq(const IRequestOpCtx* ctx, const TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg>& cfg) {
-    if (Y_UNLIKELY(!ctx))
-        throw yexception() << "no req ctx after cast";
-
-    if (Y_UNLIKELY(!cfg))
-        throw yexception() << "no cluster cfg provided";
-}
 
 void EnsureReq(const IRequestOpCtx* ctx) {
     if (Y_UNLIKELY(!ctx))
@@ -125,8 +33,7 @@ void DoDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpc
     f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDropTopicActor(p));
 }
 
-void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f,
-    TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg> )
+void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f)
 {
     auto p = dynamic_cast<TEvCreateTopicRequest*>(ctx.release());
 
@@ -189,23 +96,21 @@ void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
     f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateDropTopicActor(p));
 }
 
-void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,
-    TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg> cfg)
+void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f)
 {
     auto p = dynamic_cast<TEvPQCreateTopicRequest*>(ctx.release());
 
-    EnsureReq(p, cfg);
+    EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Create topic request");
     f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateCreateTopicActor(p));
 }
 
-void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,
-    TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg> cfg)
+void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f)
 {
     auto p = dynamic_cast<TEvPQAlterTopicRequest*>(ctx.release());
 
-    EnsureReq(p, cfg);
+    EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Alter topic request");
     f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAlterTopicActor(p));

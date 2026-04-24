@@ -6,24 +6,4 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-inline NActors::TActorId GetPQSchemaServiceActorID() {
-    return NActors::TActorId(0, "PQSchmSvc");
-}
-
-struct TClustersCfg : public TThrRefBase {
-    TClustersCfg()
-        : LocalCluster("")
-    {}
-    TString LocalCluster;
-    TVector<TString> Clusters;
-};
-
-// TODO remove it
-class IClustersCfgProvider {
-public:
-    virtual ~IClustersCfgProvider() = default;
-    virtual TIntrusiveConstPtr<TClustersCfg> GetCfg() const = 0;
-};
-
-NActors::IActor* CreatePQSchemaService(IClustersCfgProvider** cfgProvider);
 }

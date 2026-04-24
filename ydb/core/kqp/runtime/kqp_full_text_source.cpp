@@ -626,8 +626,6 @@ public:
  * used for efficient columnar transfer of Uint64 doc_ids.
  */
 class TIndexTableImplReader : public TTableReader<TIndexTableImplReader> {
-    i32 FrequencyColumnIndex = 0;
-
 public:
     TIndexTableImplReader(const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
@@ -638,10 +636,8 @@ public:
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
-        const TVector<i32>& resultColumnIds,
-        i32 frequencyColumnIndex)
-        : TTableReader(counters, tableId, tablePath,  snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
-        , FrequencyColumnIndex(frequencyColumnIndex)
+        const TVector<i32>& resultColumnIds)
+        : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
     {}
 
     static TIntrusivePtr<TIndexTableImplReader> FromSettings(
@@ -657,65 +653,100 @@ public:
         auto& columns = info.GetColumns();
         auto& keyColumns = info.GetKeyColumns();
 
+        bool isCompact = (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
+            settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
+            settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact);
+
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultColumnTypes;
         TVector<i32> resultColumnIds;
+        bool useArrowFormat = false;
 
         for (const auto& keyColumn : keyColumns) {
             keyColumnTypes.push_back(NScheme::TypeInfoFromProto(
                 keyColumn.GetTypeId(), keyColumn.GetTypeInfo()));
-
             if (keyColumn.GetName() == TokenColumn) {
                 // dont request token column because it's not a part of document id
                 continue;
             }
-
             resultColumnTypes.push_back(keyColumnTypes.back());
             resultColumnIds.push_back(keyColumn.GetId());
         }
 
-        bool useArrowFormat = false;
-
-        // arrow format is only supported when key is a single int column.
-        // doc_id (Uint64|Int64|Uint32|Int32), [freq (Uint32)]
-        if (resultColumnTypes.size() == 1) {
-            auto typeId = resultColumnTypes[0].GetTypeId();
-            useArrowFormat =
-                typeId == NScheme::NTypeIds::Uint64 ||
-                typeId == NScheme::NTypeIds::Int64  ||
-                typeId == NScheme::NTypeIds::Uint32 ||
-                typeId == NScheme::NTypeIds::Int32;
-        }
-
-        YQL_ENSURE(useArrowFormat);
-
-        i32 freqColumnIndex = -1;
-        if (withRelevance) {
-            NScheme::TTypeInfo freqColumnType;
-            for (const auto& column: columns) {
-                if (column.GetName() == FreqColumn) {
-                    freqColumnIndex = column.GetId();
-                    freqColumnType = NScheme::TypeInfoFromProto(
-                        column.GetTypeId(), column.GetTypeInfo());
+        if (isCompact) {
+            YQL_ENSURE(keyColumns.size() == 3);
+            YQL_ENSURE(keyColumns[0].GetName() == TokenColumn);
+            YQL_ENSURE(keyColumns[1].GetName() == "__ydb_max_id");
+            YQL_ENSURE(keyColumns[2].GetName() == "__ydb_generation");
+            auto addCol = [&](const char* str) {
+                for (auto& column: columns) {
+                    if (column.GetName() == str) {
+                        resultColumnTypes.push_back(NScheme::TypeInfoFromProto(
+                            column.GetTypeId(), column.GetTypeInfo()));
+                        resultColumnIds.push_back(column.GetId());
+                    }
                 }
+            };
+            addCol("__ydb_added");
+            addCol("__ydb_segment");
+            YQL_ENSURE(resultColumnTypes.size() == 4);
+        } else {
+            // arrow format is only supported when key is a single int column.
+            // doc_id (Uint64|Int64|Uint32|Int32), [freq (Uint32)]
+            if (resultColumnTypes.size() == 1) {
+                auto typeId = resultColumnTypes[0].GetTypeId();
+                useArrowFormat =
+                    typeId == NScheme::NTypeIds::Uint64 ||
+                    typeId == NScheme::NTypeIds::Int64  ||
+                    typeId == NScheme::NTypeIds::Uint32 ||
+                    typeId == NScheme::NTypeIds::Int32;
             }
-            YQL_ENSURE(freqColumnIndex != -1);
-            resultColumnTypes.push_back(freqColumnType);
-            resultColumnIds.push_back(freqColumnIndex);
-            freqColumnIndex = resultColumnTypes.size()-1;
+
+            YQL_ENSURE(useArrowFormat);
+
+            i32 freqColumnIndex = -1;
+            if (withRelevance) {
+                NScheme::TTypeInfo freqColumnType;
+                for (const auto& column: columns) {
+                    if (column.GetName() == FreqColumn) {
+                        freqColumnIndex = column.GetId();
+                        freqColumnType = NScheme::TypeInfoFromProto(
+                            column.GetTypeId(), column.GetTypeInfo());
+                    }
+                }
+                YQL_ENSURE(freqColumnIndex != -1);
+                resultColumnTypes.push_back(freqColumnType);
+                resultColumnIds.push_back(freqColumnIndex);
+                freqColumnIndex = resultColumnTypes.size()-1;
+            }
         }
 
         TIntrusivePtr<TIndexTableImplReader> reader = MakeIntrusive<TIndexTableImplReader>(
             counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
-            settings->GetDatabase(),settings->GetPoolId(),
-            keyColumnTypes, resultColumnTypes, resultColumnIds, freqColumnIndex);
+            settings->GetDatabase(), settings->GetPoolId(),
+            keyColumnTypes, resultColumnTypes, resultColumnIds);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
     }
+};
 
-    ui32 GetFrequencyColumnIndex() const {
-        return FrequencyColumnIndex;
+template <typename TDocId>
+class TTokenStream {
+protected:
+    bool ReadFinished = false;
+public:
+    virtual ~TTokenStream() = default;
+    virtual bool IsEof() const = 0;
+    void SetReadFinished() {
+        ReadFinished = true;
     }
+    virtual TDocId GetMaxKey() const = 0;
+    virtual std::pair<ui64, ui64> GetStats() const = 0;
+    virtual ui32 GetUnprocessedDocumentCount() const = 0;
+    virtual void AddResult(std::unique_ptr<TEvDataShard::TEvReadResult> result) = 0;
+    virtual bool MoveToNext() = 0;
+    virtual ui32 GetLeastDocFrequency() const = 0;
+    virtual TDocId GetLeastDocId() const = 0;
 };
 
 /**
@@ -738,12 +769,11 @@ public:
  * are pending.
  */
 template <typename TDocId>
-class TArrowTokenStream {
+class TArrowTokenStream: public TTokenStream<TDocId> {
     using TArrowArray = typename TDocIdTraits<TDocId>::TArrowArray;
 
     std::deque<std::shared_ptr<TArrowArray>> PendingDocumentIds;
     std::deque<std::shared_ptr<arrow::UInt32Array>> PendingDocumentFrequencies;
-    bool ReadFinished = false;
     i64 UnprocessedDocumentPos = 0;
     ui64 UnprocessedDocumentCount = 0;
     ui64 Bytes = 0;
@@ -752,36 +782,26 @@ class TArrowTokenStream {
     bool MaxKeySet = false;
 
 public:
-    TArrowTokenStream(ui64 tokenIndex)
-    {
-        Y_UNUSED(tokenIndex);
+    bool IsEof() const override {
+        return UnprocessedDocumentCount == 0 && this->ReadFinished;
     }
 
-    bool IsEof() const {
-        return UnprocessedDocumentCount == 0 && ReadFinished;
-    }
-
-    void SetReadFinished() {
-        ReadFinished = true;
-    }
-
-    TDocId GetMaxKey() const {
+    TDocId GetMaxKey() const override {
         return MaxKey;
     }
 
-    std::pair<ui64, ui64> GetStats() const {
+    std::pair<ui64, ui64> GetStats() const override {
         return {Rows, Bytes};
     }
 
-    ui32 GetUnprocessedDocumentCount() const {
+    ui32 GetUnprocessedDocumentCount() const override {
         return UnprocessedDocumentCount;
     }
 
-    void AddResult(std::unique_ptr<TEvDataShard::TEvReadResult> result) {
+    void AddResult(std::unique_ptr<TEvDataShard::TEvReadResult> result) override {
         if (result->GetRowsCount() == 0) {
             return;
         }
-
         YQL_ENSURE(result->Record.GetResultFormat() == NKikimrDataEvents::EDataFormat::FORMAT_ARROW);
         auto batch = result->GetArrowBatch();
         YQL_ENSURE(batch && batch->num_columns() >= 1);
@@ -805,7 +825,7 @@ public:
         UnprocessedDocumentCount += result->GetRowsCount();
     }
 
-    bool MoveToNext() {
+    bool MoveToNext() override {
         YQL_ENSURE(!PendingDocumentIds.empty());
         UnprocessedDocumentPos++;
         UnprocessedDocumentCount--;
@@ -822,14 +842,119 @@ public:
         return UnprocessedDocumentCount > 0;
     }
 
-    ui32 GetLeastDocFrequency() const {
+    ui32 GetLeastDocFrequency() const override {
         YQL_ENSURE(!PendingDocumentFrequencies.empty());
         return PendingDocumentFrequencies.front()->Value(UnprocessedDocumentPos);
     }
 
-    TDocId GetLeastDocId() {
+    TDocId GetLeastDocId() const override {
         YQL_ENSURE(!PendingDocumentIds.empty());
         return PendingDocumentIds.front()->Value(UnprocessedDocumentPos);
+    }
+};
+
+/**
+ * TCompactTokenStream -- streaming buffer for one token's posting list
+ * in compacted segment format.
+ */
+template <typename TDocId>
+class TCompactTokenStream: public TTokenStream<TDocId> {
+    bool WithFreq = false;
+    std::deque<std::unique_ptr<TEvDataShard::TEvReadResult>> Results;
+    bool IsEmpty = true;
+    NFulltext::TDeltaReader CurSegment;
+    size_t RowIdx = 0;
+    ui64 CurDocId = 0;
+    ui32 CurFreq = 0;
+    ui64 MaxDocId = 0;
+    ui64 Bytes = 0;
+    ui64 Rows = 0;
+    bool WithFreq = false;
+
+    void SelectNextSegment() {
+        if (!CurSegment.IsEnded()) {
+            return;
+        }
+        if (!IsEmpty) {
+            RowIdx++;
+            if (RowIdx >= Results.front()->GetRowsCount()) {
+                Results.pop_front();
+                RowIdx = 0;
+                if (!Results.size()) {
+                    IsEmpty = true;
+                    return;
+                }
+            }
+        }
+        auto row = Results.front()->GetCells(RowIdx);
+        IsEmpty = false;
+        CurSegment.Reset(0, TConstArrayRef<ui8>((const ui8*)row[3].Data(), row[3].Size()));
+    }
+public:
+    TCompactTokenStream(bool withFreq): WithFreq(withFreq) {
+    }
+
+    bool IsEof() const override {
+        return !Results.size() && this->ReadFinished;
+    }
+
+    TDocId GetMaxKey() const override {
+        // FIXME: Support signed types correctly
+        return (TDocId)MaxDocId;
+    }
+
+    std::pair<ui64, ui64> GetStats() const override {
+        return {Rows, Bytes};
+    }
+
+    ui32 GetUnprocessedDocumentCount() const override {
+        return Results.size() ? 1 : 0; // absolute number seems to be not required
+    }
+
+    void AddResult(std::unique_ptr<TEvDataShard::TEvReadResult> result) override {
+        if (result->GetRowsCount() == 0) {
+            return;
+        }
+        YQL_ENSURE(result->Record.GetResultFormat() == NKikimrDataEvents::EDataFormat::FORMAT_CELLVEC);
+        // FIXME Correctly merge segments with added/removed, just a prototype for now
+        Rows += result->GetRowsCount();
+        for (size_t i = 0; i < result->GetRowsCount(); i++) {
+            for (auto& cell: result->GetCells(i)) {
+                Bytes += cell.Size();
+            }
+        }
+        auto lastRow = result->GetCells(result->GetRowsCount()-1);
+        MaxDocId = lastRow[0].AsValue<ui64>();
+        Results.push_back(std::move(result));
+        if (Results.size() == 1) {
+            SelectNextSegment();
+            if (WithFreq) {
+                CurSegment.Read(CurDocId, CurFreq);
+            } else {
+                CurSegment.Read(CurDocId);
+            }
+        }
+    }
+
+    bool MoveToNext() override {
+        SelectNextSegment();
+        if (CurSegment.IsEnded()) {
+            return false;
+        }
+        if (WithFreq) {
+            CurSegment.Read(CurDocId, CurFreq);
+        } else {
+            CurSegment.Read(CurDocId);
+        }
+        return true;
+    }
+
+    TDocId GetLeastDocId() const override {
+        return (TDocId)CurDocId;
+    }
+
+    ui32 GetLeastDocFrequency() const override {
+        return CurFreq;
     }
 };
 
@@ -927,12 +1052,12 @@ public:
 /**
  * IMergeAlgorithm -- base interface for merging sorted posting lists.
  *
- * Subclasses consume TArrowTokenStream entries (one stream per query token)
+ * Subclasses consume TTokenStream entries (one stream per query token)
  * and emit batches of TDocumentInfo for documents that satisfy the match
  * criteria (AND / OR with minimum_should_match).
  *
  * Key state:
- *   - Streams[]: one TArrowTokenStream per L1 (or L2) token.
+ *   - Streams[]: one TTokenStream per L1 (or L2) token.
  *   - MinShouldMatch: minimum number of tokens a document must match.
  *   - FinishedTokens: count of streams that have been fully consumed.
  *   - WithFrequencies: whether to extract term frequencies for BM25 scoring.
@@ -944,11 +1069,10 @@ public:
 template <typename TDocId>
 class IMergeAlgorithm {
 protected:
-    using TStream = TArrowTokenStream<TDocId>;
     using THeapEntry = TDocIdHeapEntry<TDocId>;
     using TDocInfoPtr = typename TDocumentInfo<TDocId>::TPtr;
 
-    std::vector<std::unique_ptr<TStream>> Streams;
+    std::vector<std::unique_ptr<TTokenStream<TDocId>>> Streams;
     ui64 TokenCount;
     ui64 MinShouldMatch;
     typename THeapEntry::TEquals DocIdEquals;
@@ -959,7 +1083,7 @@ protected:
 
 public:
 
-    IMergeAlgorithm(std::vector<std::unique_ptr<TStream>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
+    IMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : Streams(std::move(streams))
         , TokenCount(Streams.size())
         , MinShouldMatch(minShouldMatch)
@@ -1031,7 +1155,6 @@ public:
 template <typename TDocId>
 class TAndOptimizedMergeAlgorithm : public IMergeAlgorithm<TDocId> {
     using TBase = IMergeAlgorithm<TDocId>;
-    using TStream = typename TBase::TStream;
     using TDocInfoPtr = typename TBase::TDocInfoPtr;
     using TBase::Streams;
     using TBase::TokenCount;
@@ -1042,7 +1165,7 @@ class TAndOptimizedMergeAlgorithm : public IMergeAlgorithm<TDocId> {
     std::deque<ui32> ReadyStreams;
 
 public:
-    TAndOptimizedMergeAlgorithm(std::vector<std::unique_ptr<TStream>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
+    TAndOptimizedMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : TBase(std::move(streams), minShouldMatch, withFrequencies, keyColumnTypes)
     {
         YQL_ENSURE(Streams.size() == TokenCount, "Misuse of TAndOptimizedMatchAlgo: minShouldMatch must be equal to tokenCount");
@@ -1180,7 +1303,6 @@ public:
 template <typename TDocId>
 class TDefaultMergeAlgorithm : public IMergeAlgorithm<TDocId> {
     using TBase = IMergeAlgorithm<TDocId>;
-    using TStream = typename TBase::TStream;
     using THeapEntry = typename TBase::THeapEntry;
     using TDocInfoPtr = typename TBase::TDocInfoPtr;
     using TBase::Streams;
@@ -1194,7 +1316,7 @@ class TDefaultMergeAlgorithm : public IMergeAlgorithm<TDocId> {
     std::priority_queue<THeapEntry, TStackVec<THeapEntry, 64>, typename THeapEntry::TCompare> MergeQueue;
 
 public:
-    TDefaultMergeAlgorithm(std::vector<std::unique_ptr<TStream>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
+    TDefaultMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : TBase(std::move(streams), minShouldMatch, withFrequencies, keyColumnTypes)
         , MergeQueue(DocIdCompare)
     {
@@ -1361,6 +1483,7 @@ public:
     ui64 GetDocumentLength(const TConstArrayRef<TCell>& row) const {
         switch (IndexType) {
             case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance:
                 return row[GetResultColumnTypes().size() - 1].AsValue<ui32>();
             default:
                 return 0;
@@ -1460,6 +1583,7 @@ public:
     ui64 GetDocCount(const TConstArrayRef<TCell>& row) const {
         switch (IndexType) {
             case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance:
                 return row[0].AsValue<ui64>();
             default:
                 return 0;
@@ -1488,6 +1612,7 @@ public:
     ui64 GetSumDocLength(const TConstArrayRef<TCell>& row) const {
         switch (IndexType) {
             case NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance:
+            case NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance:
                 return row[1].AsValue<ui64>();
             default:
                 return 0;
@@ -1526,7 +1651,8 @@ public:
         const TString& logPrefix,
         const NKikimrKqp::TKqpFullTextSourceSettings* settings)
     {
-        if (settings->GetIndexType() != NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
+        if (settings->GetIndexType() != NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance &&
+            settings->GetIndexType() != NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
             return nullptr;
         }
 
@@ -1685,7 +1811,8 @@ public:
             resultColumnIds.push_back(column.GetId());
         }
 
-        withRelevance = withRelevance && settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance;
+        withRelevance = withRelevance && (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance ||
+            settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
 
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()), settings->GetTable().GetPath(),
             snapshot, logPrefix, settings->GetDatabase(), settings->GetPoolId(), keyColumnTypes, resultColumnTypes, resultColumnIds,
@@ -2257,7 +2384,8 @@ private:
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
 
-        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson ||
+            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
             // For JSON index, tokens are pre-compiled at query compile time
             YQL_ENSURE(Settings->GetQuerySettings().TokensSize() > 0, "Expected non-empty tokens");
             YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
@@ -2363,6 +2491,17 @@ private:
         WordsReadingQueue.Enqueue(DictTableReader.Get(), EReadKind_WordStats, Words, 0);
     }
 
+    std::unique_ptr<TTokenStream<TDocId>> MakeStream() {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
+            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
+            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
+            bool withFreq = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance;
+            return std::make_unique<TCompactTokenStream<TDocId>>(withFreq);
+        } else {
+            return std::make_unique<TArrowTokenStream<TDocId>>();
+        }
+    }
+
     // Configure merge algorithms and begin posting list reads.
     //
     // This is the central orchestration point called after stats/dict reads complete.
@@ -2372,7 +2511,7 @@ private:
     //      into L1 (rare, full scan) and L2 (frequent, point lookups).
     //   2. Compute MinimumShouldMatch from the query operator and settings.
     //   3. Create TQueryCtx with IDF values from dict table frequencies.
-    //   4. Build TArrowTokenStream instances and instantiate the appropriate
+    //   4. Build TTokenStream instances and instantiate the appropriate
     //      merge algorithm:
     //        - AND -> TAndOptimizedMergeAlgorithm (leapfrog)
     //        - OR  -> TDefaultMergeAlgorithm (min-heap)
@@ -2452,19 +2591,17 @@ private:
             }
         }
 
-        YQL_ENSURE(IndexTableReader->GetUseArrowFormat());
-        using TStream = TArrowTokenStream<TDocId>;
-        std::vector<std::unique_ptr<TStream>> l1streams;
-        std::vector<std::unique_ptr<TStream>> l2streams;
+        std::vector<std::unique_ptr<TTokenStream<TDocId>>> l1streams;
+        std::vector<std::unique_ptr<TTokenStream<TDocId>>> l2streams;
 
         for (size_t i = 0; i < Words.size(); ++i) {
             auto& wordInfo = Words[i];
             if (wordInfo->L1) {
-                l1streams.emplace_back(std::make_unique<TStream>(i));
+                l1streams.emplace_back(MakeStream());
             } else {
                 int idx = l2streams.size();
                 wordInfo->L2StreamIndex = idx;
-                l2streams.emplace_back(std::make_unique<TStream>(idx));
+                l2streams.emplace_back(MakeStream());
             }
         }
 
@@ -2528,7 +2665,8 @@ private:
         request->DatabaseName = Database;
         MainTableReader->AddResolvePartitioningRequest(request);
         IndexTableReader->AddResolvePartitioningRequest(request);
-        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance ||
+            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
             DictTableReader->AddResolvePartitioningRequest(request);
             if (DocsTableReader) {
                 DocsTableReader->AddResolvePartitioningRequest(request);
@@ -2859,7 +2997,8 @@ public:
         YQL_ENSURE(resultSet.size() >= 2, "Expected at least 2 tables for fulltext index");
         MainTableReader->SetPartitionInfo(resultSet[0].KeyDescription);
         IndexTableReader->SetPartitionInfo(resultSet[1].KeyDescription);
-        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance) {
+        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance ||
+            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
             size_t count = 3 + (DocsTableReader ? 1 : 0) + (StatsTableReader ? 1 : 0);
             YQL_ENSURE(resultSet.size() == count, "Expected " << count << " tables for flat relevance index");
             DictTableReader->SetPartitionInfo(resultSet[2].KeyDescription);

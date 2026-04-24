@@ -1127,7 +1127,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextMatchAndSnowball, Compact) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexSnowball(db, "english");
+    AddIndexSnowball(db, "english", Compact ? "fulltext_compact" : "fulltext_plain");
 
     {
         TString query = R"sql(
@@ -1208,7 +1208,6 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
     }
 
     DropIndex(db);
-    AddIndexSnowball(db, "russian");
 
     {
         TString query = R"sql(
@@ -1218,6 +1217,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+
+    AddIndexSnowball(db, "russian", Compact ? "fulltext_compact" : "fulltext_plain");
 
     {
         TString query = R"sql(

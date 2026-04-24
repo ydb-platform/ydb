@@ -107,10 +107,10 @@ void AddIndexCovered(NQuery::TQueryClient& db, const TString& indexName) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void AddIndexSnowball(NQuery::TQueryClient& db, const TString& language) {
+void AddIndexSnowball(NQuery::TQueryClient& db, const TString& language, const TString& type) {
     TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext_plain
+            GLOBAL USING %s
             ON (Text)
             WITH (
                 tokenizer=standard,
@@ -118,7 +118,7 @@ void AddIndexSnowball(NQuery::TQueryClient& db, const TString& language) {
                 use_filter_snowball=true,
                 language=%s
             )
-    )sql", language.c_str());
+    )sql", type.c_str(), language.c_str());
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }

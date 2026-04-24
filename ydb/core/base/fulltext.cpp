@@ -511,72 +511,41 @@ ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
     return r;
 }
 
-TVector<ui8> DeltaCompress(TConstArrayRef<ui64> ids) {
-    TVector<ui8> buf;
-    if (!ids.size()) {
-        return buf;
-    }
-    AddVarint(buf, ids[0]);
-    for (size_t i = 1; i < ids.size(); i++) {
-        Y_ENSURE(ids[i] > ids[i-1]);
-        AddVarint(buf, ids[i] - ids[i-1]);
-    }
-    return buf;
+void TDeltaReader::Reset(ui64 firstId, TConstArrayRef<ui8> buf)
+{
+    Buf = buf;
+    Pos = 0;
+    LastId = firstId;
 }
 
-TVector<ui64> DeltaDecompress(TConstArrayRef<ui8> buf) {
-    TVector<ui64> ids;
-    if (!buf.size()) {
-        return ids;
-    }
-    size_t pos = 0;
-    ui64 docId = 0;
-    while (pos < buf.size()) {
-        ui64 deltaId = ReadVarint(buf, pos);
-        if (!deltaId && pos > 0) {
-            break;
-        }
-        docId += deltaId;
-        ids.push_back(docId);
-    }
-    return ids;
+bool TDeltaReader::Read(ui64& docId)
+{
+    if (Pos >= Buf.size())
+        return false;
+    docId = LastId + ReadVarint(Buf, Pos);
+    LastId = docId;
+    return true;
 }
 
-TVector<ui8> DeltaCompressWithFreq(TConstArrayRef<TTermFreq> terms) {
-    TVector<ui8> buf;
-    if (!terms.size()) {
-        return buf;
-    }
-    ui64 prevId = 0;
-    for (auto & term: terms) {
-        Y_ENSURE(term.DocId > prevId);
-        AddVarintWithFlag(buf, term.DocId - prevId, term.Freq > 1);
-        if (term.Freq > 1) {
-            AddVarint(buf, term.Freq);
-        }
-        prevId = term.DocId;
-    }
-    return buf;
-}
-
-TVector<TTermFreq> DeltaDecompressWithFreq(TConstArrayRef<ui8> buf) {
-    TVector<TTermFreq> terms;
-    if (buf.size() < sizeof(ui64)) {
-        return terms;
-    }
-    size_t pos = 0;
-    ui64 docId = 0;
+bool TDeltaReader::Read(ui64& docId, ui32& freq)
+{
+    if (Pos >= Buf.size())
+        return false;
     bool hasFreq = false;
-    while (pos < buf.size()) {
-        ui64 deltaId = ReadVarintWithFlag(buf, pos, hasFreq);
-        if (!deltaId && pos > 0) {
-            break;
-        }
-        docId += deltaId;
-        ui64 freq = !hasFreq ? 1 : ReadVarint(buf, pos);
-        terms.emplace_back(docId, freq);
-    }
-    return terms;
+    docId = LastId + ReadVarintWithFlag(Buf, Pos, hasFreq);
+    freq = hasFreq ? ReadVarint(Buf, Pos) : 1;
+    LastId = docId;
+    return true;
+}
+
+size_t TDeltaReader::GetPos() const
+{
+    return Pos;
+}
+
+bool TDeltaReader::IsEnded() const
+{
+    return Pos >= Buf.size();
 }
 
 void TDeltaWriter::Reset()

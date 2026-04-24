@@ -239,15 +239,24 @@ assert len(EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN) == len(
 ), "Handlers list must be the same"
 
 
-def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
+def _test_endpoint(endpoint_url, endpoint_path, token, expected_status, method='GET', json_body=None):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
-    response = requests.get(endpoint_url, headers=headers, verify=False)
+    response = requests.request(
+        method=method,
+        url=endpoint_url,
+        headers=headers,
+        json=json_body,
+        verify=False,
+    )
     token_desc = token if token is not None else "null"
     assert (
         response.status_code == expected_status
-    ), f"Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}"
+    ), (
+        f"Expected {method} {endpoint_path} with token={token_desc} to return "
+        f"{expected_status}, got {response.status_code}"
+    )
 
 
 def _test_endpoints_via_node_proxy(cluster, node_index, path_suffix, expected_statuses_by_token):
@@ -260,7 +269,7 @@ def _test_endpoints_via_node_proxy(cluster, node_index, path_suffix, expected_st
         _test_endpoint(endpoint_url, full_path, token, expected_status)
 
 
-def _test_endpoints(cluster, expected_results):
+def _test_endpoints(cluster, expected_results, method='GET', json_body=None):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
     base_url = f'https://{host}:{mon_port}'
@@ -268,7 +277,20 @@ def _test_endpoints(cluster, expected_results):
     for endpoint_path, expected_statuses in expected_results.items():
         endpoint_url = f'{base_url}{endpoint_path}'
         for token, expected_status in expected_statuses.items():
-            _test_endpoint(endpoint_url, endpoint_path, token, expected_status)
+            _test_endpoint(endpoint_url, endpoint_path, token, expected_status, method=method, json_body=json_body)
+
+
+def _test_endpoints_with_payloads(cluster, endpoint_cases, method):
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+
+    for endpoint_path, case in endpoint_cases.items():
+        endpoint_url = f'{base_url}{endpoint_path}'
+        expected_statuses = case['expected_statuses']
+        json_body = case.get('json_body')
+        for token, expected_status in expected_statuses.items():
+            _test_endpoint(endpoint_url, endpoint_path, token, expected_status, method=method, json_body=json_body)
 
 
 def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
@@ -430,3 +452,90 @@ def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
         '/monitoring',
         all_ok,
     )
+
+
+VIEWER_ENDPOINTS_LIST = sorted([
+    '/storage/groups',
+    '/viewer/autocomplete',
+    '/viewer/bsgroupinfo',
+    '/viewer/compute',
+    '/viewer/counters',
+    '/viewer/feature_flags',
+    '/viewer/groups',
+    '/viewer/hiveinfo',
+    '/viewer/hivestats',
+    '/viewer/labeledcounters',
+    '/viewer/multipart_counter',
+    '/viewer/netinfo',
+    '/viewer/nodeinfo',
+    '/viewer/nodelist',
+    '/viewer/nodes',
+    '/viewer/pdiskinfo',
+    '/viewer/peers',
+    '/viewer/pqconsumerinfo',
+    '/viewer/simple_counter',
+    '/viewer/sse_counter',
+    '/viewer/storage',
+    '/viewer/storage_usage',
+    '/viewer/sysinfo',
+    '/viewer/tabletinfo',
+    '/viewer/tenantinfo',
+    '/viewer/tenants',
+    '/viewer/topicinfo',
+    '/viewer/v2/json/nodeinfo',
+    '/viewer/v2/json/pdiskinfo',
+    '/viewer/v2/json/sysinfo',
+    '/viewer/v2/json/tabletinfo',
+    '/viewer/v2/json/vdiskinfo',
+    '/viewer/vdiskinfo',
+    '/viewer/whoami',
+])
+
+
+def test_viewer_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in VIEWER_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = sorted([
+    '/viewer/acl',
+    '/viewer/browse',
+    '/viewer/check_access',
+    '/viewer/database_stats',
+    '/viewer/describe',
+    '/viewer/graph',
+    '/viewer/hotkeys',
+    '/viewer/metainfo',
+    '/viewer/query',
+    '/viewer/render',
+    '/viewer/storage_stats',
+])
+
+
+def test_viewer_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_statuses_for_invalid_viewer_request = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 400,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    }
+
+    expected_results_get = {
+        endpoint_path: expected_statuses_for_invalid_viewer_request
+        for endpoint_path in VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results_get)

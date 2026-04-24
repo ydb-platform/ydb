@@ -41,9 +41,7 @@ struct TRequestSettings {
 
     template <class TBloomFilterProto>
     void SerializeToProtoFilterRaw(TBloomFilterProto& bFilter) const {
-        if (CaseSensitive) {
-            bFilter.SetCaseSensitive(*CaseSensitive);
-        }
+        bFilter.SetCaseSensitive(ResolvedCaseSensitive());
 
         if (NGrammSize) {
             bFilter.SetNGrammSize(*NGrammSize);
@@ -64,20 +62,6 @@ struct TRequestSettings {
             }
         } else if (FalsePositiveProbability) {
             bFilter.SetFalsePositiveProbability(*FalsePositiveProbability);
-        }
-    }
-
-    template <class TBloomFilterProto>
-    void SerializeToProtoFilterResolved(TBloomFilterProto& bFilter) const {
-        bFilter.SetCaseSensitive(ResolvedCaseSensitive());
-        bFilter.SetNGrammSize(ResolvedNGrammSize());
-        bFilter.SetFalsePositiveProbability(ResolvedFalsePositiveProbability());
-        bFilter.SetHashesCount(ResolvedHashesCount());
-        bFilter.SetFilterSizeBytes(ResolvedFilterSizeBytes());
-        if (IsOldSizingMode()) {
-            bFilter.SetRecordsCount(ResolvedRecordsCount());
-        } else {
-            bFilter.ClearRecordsCount();
         }
     }
 
@@ -140,7 +124,10 @@ public:
             static_cast<ui32>(std::ceil(bitsCount / 8.0)), MinFilterSizeBytes, MaxFilterSizeBytes);
     }
 
-    static double FalsePositiveProbabilityFromDeprecatedSizing(const std::optional<ui32> hashesCount, const std::optional<ui32> filterSizeBytes, const std::optional<ui32> recordsCount) {
+    static double FalsePositiveProbabilityFromDeprecatedSizing(
+        const std::optional<ui32> hashesCount,
+        const std::optional<ui32> filterSizeBytes,
+        const std::optional<ui32> recordsCount) {
         const double k = static_cast<double>(hashesCount.value_or(NDefaults::HashesCount));
         const double m = static_cast<double>(filterSizeBytes.value_or(CalcDeprecatedFilterSizeBytes(NDefaults::FalsePositiveProbability)) * 8);
         const double n = static_cast<double>(recordsCount.value_or(DeprecatedRecordsCount));

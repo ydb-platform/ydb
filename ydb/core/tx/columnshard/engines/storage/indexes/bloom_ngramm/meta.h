@@ -39,10 +39,6 @@ private:
     }
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
-        if (ValidateRequest().IsFail()) {
-            return false;
-        }
-
         switch (op.GetOperation()) {
             case EOperation::Equals:
             case EOperation::StartsWith:
@@ -124,7 +120,7 @@ protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
         auto* filterProto = proto.MutableBloomNGrammFilter();
         TBase::SerializeToProtoImpl(*filterProto);
-        Request.SerializeToProtoFilterResolved(*filterProto);
+        Request.SerializeToProtoFilterRaw(*filterProto);
         filterProto->SetColumnId(GetColumnId());
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }

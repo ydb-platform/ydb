@@ -14,7 +14,6 @@ namespace NKikimr::NOlap::NIndexes {
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    AFL_VERIFY(!ValidateRequest().IsFail());
     const ui32 hashesCount = Request.ResolvedHashesCount();
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
@@ -75,7 +74,6 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
 
 bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
-    AFL_VERIFY(!ValidateRequest().IsFail());
     const ui32 hashesCount = Request.ResolvedHashesCount();
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());

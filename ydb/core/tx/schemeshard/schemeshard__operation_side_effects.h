@@ -89,6 +89,13 @@ public:
 
     void PublishToSchemeBoard(TOperationId opId, TPathId pathId);
     void RePublishToSchemeBoard(TOperationId opId, TPathId pathId);
+    // Publishes `pathId` AND all its ancestors up to (and including) the domain root.
+    // Rationale: parent describes embed children's versions (e.g. TableIndex.SchemaVersion
+    // reads its impl-table's AlterVersion). If a parent is published *after* its child's
+    // state changes, the parent's cached describe carries the fresh child version.
+    // Gated by FeatureFlags.EnableCascadePublication: when disabled, behaves like
+    // PublishToSchemeBoard (single path only).
+    void PublishToSchemeBoardWithAncestors(TOperationId opId, TPathId pathId, TSchemeShard* ss);
 
     void Send(TActorId dst, ::NActors::IEventBase* message, ui64 cookie = 0, ui32 flags = 0);
     template <typename TEvent>

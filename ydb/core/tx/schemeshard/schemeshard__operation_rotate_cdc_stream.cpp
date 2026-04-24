@@ -440,12 +440,7 @@ protected:
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxRotateCdcStreamAtTable);
-
-        table->InitAlterData(OperationId);
-        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
+        notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         auto newStreamPathId = txState->CdcPathId;
         auto oldStreamPathId = txState->SourcePathId;

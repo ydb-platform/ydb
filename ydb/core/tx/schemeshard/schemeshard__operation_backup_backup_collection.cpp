@@ -202,7 +202,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                             auto implTablePath = context.SS->PathsById.at(implTablePathId);
                             if (implTablePath->IsTable()) {
                                 context.SS->ClearDescribePathCaches(implTablePath);
-                                context.OnComplete.PublishToSchemeBoard(opId, implTablePathId);
+                                context.OnComplete.PublishToSchemeBoardWithAncestors(opId, implTablePathId, context.SS);
                             }
                         }
                     }

@@ -178,7 +178,7 @@ public:
         NTableIndexVersion::SyncChildIndexVersions(path, table, table->AlterVersion, OperationId, context, db, true);
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->PathId, context.SS);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

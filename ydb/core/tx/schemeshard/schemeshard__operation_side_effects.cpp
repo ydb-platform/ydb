@@ -159,6 +159,40 @@ void TSideEffects::RePublishToSchemeBoard(TOperationId opId, TPathId pathId) {
     RePublishPaths[opId.GetTxId()].push_back(pathId);
 }
 
+void TSideEffects::PublishToSchemeBoardWithAncestors(TOperationId opId, TPathId pathId, TSchemeShard* ss) {
+    // Always publish the path itself.
+    PublishPaths[opId.GetTxId()].push_back(pathId);
+
+    if (!AppData()->FeatureFlags.GetEnableCascadePublication()) {
+        return;
+    }
+
+    // Walk up to the domain root, republishing each ancestor so its
+    // describe cache picks up the new child state.
+    TPathId cur = pathId;
+    THashSet<TPathId> seen;
+    seen.insert(cur);
+    while (ss && ss->PathsById.contains(cur)) {
+        auto path = ss->PathsById.at(cur);
+        if (path->IsDomainRoot() || path->IsRoot()) {
+            break;
+        }
+        TPathId parent = path->ParentPathId;
+        if (!parent || !seen.insert(parent).second) {
+            break;
+        }
+        if (!ss->PathsById.contains(parent)) {
+            break;
+        }
+        // Invalidate the cached describe for the ancestor so that the
+        // publish transaction rebuilds it with the fresh child versions.
+        auto parentPath = ss->PathsById.at(parent);
+        ss->ClearDescribePathCaches(parentPath);
+        PublishPaths[opId.GetTxId()].push_back(parent);
+        cur = parent;
+    }
+}
+
 void TSideEffects::ReadyToNotify(TOperationId opId) {
     ReadyToNotifyOperations.insert(opId);
 }

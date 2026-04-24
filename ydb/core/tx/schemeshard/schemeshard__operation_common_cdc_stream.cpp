@@ -25,40 +25,6 @@ bool IsExpectedTxType(TTxState::ETxType txType) {
     }
 }
 
-struct TTableVersionContext {
-    TPathId PathId;
-    TPathId ParentPathId;
-    TPathId GrandParentPathId;
-    bool IsIndexImplTable = false;
-};
-
-bool DetectIndexImplTable(TPathElement::TPtr path, TOperationContext& context, TPathId& outGrandParentPathId) {
-    const TPathId& parentPathId = path->ParentPathId;
-    if (!parentPathId || !context.SS->PathsById.contains(parentPathId)) {
-        return false;
-    }
-
-    auto parentPath = context.SS->PathsById.at(parentPathId);
-    if (parentPath->IsTableIndex()) {
-        outGrandParentPathId = parentPath->ParentPathId;
-        return true;
-    }
-
-    return false;
-}
-
-TTableVersionContext BuildTableVersionContext(
-    const TTxState& txState,
-    TPathElement::TPtr path,
-    TOperationContext& context)
-{
-    TTableVersionContext ctx;
-    ctx.PathId = txState.TargetPathId;
-    ctx.ParentPathId = path->ParentPathId;
-    ctx.IsIndexImplTable = DetectIndexImplTable(path, context, ctx.GrandParentPathId);
-    return ctx;
-}
-
 }  // namespace anonymous
 
 
@@ -157,104 +123,63 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     NIceDb::TNiceDb db(context.GetDB());
 
-    // Don't call InitAlterData() here - it was already called in ConfigureParts,
-    // and calling it again after another subop's Done() updated AlterVersion
-    // would incorrectly create a new version.
-    Y_ABORT_UNLESS(table->AlterData && table->AlterData->CoordinatedSchemaVersion,
-        "AlterData with CoordinatedSchemaVersion must be set in ConfigureParts before Done phase");
-    table->AlterVersion = Max(table->AlterVersion, *table->AlterData->CoordinatedSchemaVersion);
-
-    // Persist updated AlterVersion so it survives restart
+    table->AlterVersion += 1;
     context.SS->PersistTableAlterVersion(db, pathId, table);
-
-    // After successful completion, clear AlterTableFull if this was the last user
-    if (table->ReleaseAlterData(OperationId)) {
-        context.SS->PersistClearAlterTableFull(db, pathId);
-    }
-
-    // Sync index versions before publishing (indexes must be published before parent table)
-    auto versionCtx = BuildTableVersionContext(*txState, path, context);
-    TVector<TPathId> indexesToPublish;
-    TPathId mainTableToPublish;
-
-    if (versionCtx.IsIndexImplTable) {
-        if (context.SS->Indexes.contains(versionCtx.ParentPathId)) {
-            auto index = context.SS->Indexes.at(versionCtx.ParentPathId);
-            ui64 targetVersion = table->AlterVersion;
-            if (index->AlterVersion < targetVersion) {
-                index->AlterVersion = targetVersion;
-                if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
-                    index->AlterData->AlterVersion = targetVersion;
-                    context.SS->PersistTableIndexAlterData(db, versionCtx.ParentPathId);
-                }
-                context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
-            }
-
-            if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
-                auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
-
-                ++indexPath->DirAlterVersion;
-                context.SS->PersistPathDirAlterVersion(db, indexPath);
-
-                context.SS->ClearDescribePathCaches(indexPath);
-
-                indexesToPublish.push_back(versionCtx.ParentPathId);
-
-                if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
-                    auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
-                    if (mainTablePath->IsTable()) {
-                        mainTableToPublish = indexPath->ParentPathId;
-
-                        ++mainTablePath->DirAlterVersion;
-                        context.SS->PersistPathDirAlterVersion(db, mainTablePath);
-
-                        context.SS->ClearDescribePathCaches(mainTablePath);
-                    }
-                }
-            }
-        }
-    } else {
-        // For main tables, sync all child indexes
-        // Note: We collect indexes to publish but don't publish here since we control ordering
-        ui64 targetVersion = table->AlterVersion;
-        for (const auto& [childName, childPathId] : path->GetChildren()) {
-            if (!context.SS->PathsById.contains(childPathId)) {
-                continue;
-            }
-            auto childPath = context.SS->PathsById.at(childPathId);
-            if (!childPath->IsTableIndex() || childPath->Dropped()) {
-                continue;
-            }
-            if (!context.SS->Indexes.contains(childPathId)) {
-                continue;
-            }
-            auto index = context.SS->Indexes.at(childPathId);
-            if (index->AlterVersion < targetVersion) {
-                index->AlterVersion = targetVersion;
-                if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
-                    index->AlterData->AlterVersion = targetVersion;
-                    context.SS->PersistTableIndexAlterData(db, childPathId);
-                }
-                context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
-                context.SS->ClearDescribePathCaches(childPath);
-                indexesToPublish.push_back(childPathId);
-            }
-        }
-        mainTableToPublish = pathId;
-    }
-
     context.SS->ClearDescribePathCaches(path);
 
-    // Publish indexes first, then impl table, then main table
-    for (const auto& indexPathId : indexesToPublish) {
-        context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
+    // If the table is an indexImplTable (parent is a TableIndex), keep the
+    // parent index's AlterVersion in sync with the impl table AND bump the
+    // grandparent main table's AlterVersion so its GeneralVersion advances.
+    // Without this, the main table's scheme-board entry gets republished with
+    // the same GeneralVersion as before, scheme-cache clients do not evict the
+    // stale entry, and KQP sees:
+    //   T.TableIndexes[idx].SchemaVersion (stale) != implTable.SchemaVersion (fresh)
+    // producing "schema version mismatch during metadata loading".
+    if (path->ParentPathId && context.SS->PathsById.contains(path->ParentPathId)) {
+        auto indexPath = context.SS->PathsById.at(path->ParentPathId);
+        if (indexPath->IsTableIndex() && context.SS->Indexes.contains(path->ParentPathId)) {
+            const TPathId indexPathId = path->ParentPathId;
+            auto index = context.SS->Indexes.at(indexPathId);
+            if (index->AlterVersion < table->AlterVersion) {
+                index->AlterVersion = table->AlterVersion;
+                if (index->AlterData && index->AlterData->AlterVersion < table->AlterVersion) {
+                    index->AlterData->AlterVersion = table->AlterVersion;
+                    context.SS->PersistTableIndexAlterData(db, indexPathId);
+                }
+                context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
+            }
+
+            // Advance the parent index's DirAlterVersion (ChildrenVersion
+            // component of GeneralVersion) so its scheme-board describe is
+            // recognised as a new version on republish.
+            ++indexPath->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, indexPath);
+            context.SS->ClearDescribePathCaches(indexPath);
+
+            // Also advance the main table's DirAlterVersion (ChildrenVersion
+            // component of GeneralVersion) so scheme-cache clients see a new
+            // version for the table path and evict the stale cached describe
+            // (which embedded the old index SchemaVersion).
+            // We bump DirAlterVersion rather than AlterVersion because
+            // AlterVersion changes trigger schema-change transactions to
+            // datashards; DirAlterVersion is purely a descriptor-staleness
+            // counter that does not affect datashard schema negotiations.
+            const TPathId mainTablePathId = indexPath->ParentPathId;
+            if (mainTablePathId && context.SS->PathsById.contains(mainTablePathId)) {
+                auto mainTablePath = context.SS->PathsById.at(mainTablePathId);
+                if (mainTablePath->IsTable()) {
+                    ++mainTablePath->DirAlterVersion;
+                    context.SS->PersistPathDirAlterVersion(db, mainTablePath);
+                    context.SS->ClearDescribePathCaches(mainTablePath);
+                }
+            }
+        }
     }
-    if (versionCtx.IsIndexImplTable) {
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-    }
-    if (mainTableToPublish) {
-        context.OnComplete.PublishToSchemeBoard(OperationId, mainTableToPublish);
-    }
+
+    // Cascade publication republishes this path together with all its ancestors
+    // up to the domain root, so that parent describes (which embed child
+    // versions, e.g. TableIndex.SchemaVersion) reflect the current child state.
+    context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, pathId, context.SS);
 
     context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
     return true;

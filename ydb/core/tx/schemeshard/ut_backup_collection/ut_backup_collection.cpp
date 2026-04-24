@@ -3403,4 +3403,391 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         // Without fix: init sets PathState=EPathStateCopying on dropped source -> crash.
         DescribePath(runtime, "/MyRoot/Table1");
     }
+
+    // ====================================================================
+    // BackupInvariant / BackupInvariant_NoCascade
+    //
+    // Exercises scheme-board pairwise cache-consistency after a full +
+    // incremental backup on a table with two global indexes.
+    //
+    // With cascade publication enabled (default), the invariant holds.
+    // With cascade disabled, simple backup+rotate scenarios still PASS because
+    // the direct PublishToSchemeBoard on each modified path is sufficient for
+    // pairwise consistency in the non-raced case — the race is covered by
+    // ConcurrentCleanerVsUserCdcRace_*.
+    // ====================================================================
+
+    void RunBackupBackupCollectionInvariantScenario(bool enableCascade) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableBackupService(true)
+            .EnableCascadePublication(enableCascade));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/T"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "T"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value1" Type: "Utf8" }
+                Columns { Name: "Value2" Type: "Utf8" }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription {
+                Name: "Idx1"
+                KeyColumnNames: ["Value1"]
+                Type: EIndexTypeGlobal
+            }
+            IndexDescription {
+                Name: "Idx2"
+                KeyColumnNames: ["Value2"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto navigateSync = [&](const TString& path,
+                                NSchemeCache::TSchemeCacheNavigate::EOp op)
+        {
+            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+            using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+            using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+            const auto sender = runtime.AllocateEdgeActor();
+            auto request = MakeHolder<TNavigate>();
+            auto& entry = request->ResultSet.emplace_back();
+            entry.Path = SplitPath(path);
+            entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+            entry.Operation = op;
+            entry.ShowPrivatePath = true;
+            entry.SyncVersion = false;
+            runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender,
+                new TEvRequest(request.Release())));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+            UNIT_ASSERT(ev && ev->Get());
+            auto* response = ev->Get()->Request.Release();
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
+            return THolder<TNavigate>(response);
+        };
+
+        struct TRow {
+            ui64 TableView_SchemaVersion = 0;
+            ui64 Index_OwnSchemaVersion = 0;
+            ui64 IndexChildView_SchemaVersion = 0;
+            ui64 Impl_OwnSchemaVersion = 0;
+            TString ImplName;
+        };
+        auto readCacheVersions = [&]() {
+            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+            THashMap<TString, TRow> out;
+
+            auto mainNav = navigateSync("/MyRoot/T", TNavigate::EOp::OpTable);
+            const auto& mainEntry = mainNav->ResultSet.back();
+            UNIT_ASSERT_VALUES_EQUAL_C(static_cast<ui32>(mainEntry.Status),
+                static_cast<ui32>(TNavigate::EStatus::Ok),
+                "scheme-cache navigate for /MyRoot/T returned status "
+                << static_cast<ui32>(mainEntry.Status));
+            for (const auto& idx : mainEntry.Indexes) {
+                out[idx.GetName()].TableView_SchemaVersion = idx.GetSchemaVersion();
+            }
+
+            for (auto& [indexName, row] : out) {
+                auto idxNav = navigateSync("/MyRoot/T/" + indexName,
+                    TNavigate::EOp::OpList);
+                const auto& idxEntry = idxNav->ResultSet.back();
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<ui32>(idxEntry.Status),
+                    static_cast<ui32>(TNavigate::EStatus::Ok),
+                    "scheme-cache navigate for /MyRoot/T/" << indexName
+                    << " returned status " << static_cast<ui32>(idxEntry.Status));
+                UNIT_ASSERT_C(idxEntry.Self,
+                    "scheme cache has no Self for /MyRoot/T/" << indexName);
+                row.Index_OwnSchemaVersion =
+                    idxEntry.Self->Info.GetVersion().GetTableIndexVersion();
+                UNIT_ASSERT_C(idxEntry.ListNodeEntry,
+                    "scheme cache has no ListNodeEntry for /MyRoot/T/" << indexName);
+                UNIT_ASSERT_VALUES_EQUAL(idxEntry.ListNodeEntry->Children.size(), 1);
+                const auto& implChild = idxEntry.ListNodeEntry->Children.front();
+                row.ImplName = implChild.Name;
+                row.IndexChildView_SchemaVersion = implChild.SchemaVersion;
+
+                auto implNav = navigateSync(
+                    "/MyRoot/T/" + indexName + "/" + row.ImplName,
+                    TNavigate::EOp::OpTable);
+                const auto& implEntry = implNav->ResultSet.back();
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<ui32>(implEntry.Status),
+                    static_cast<ui32>(TNavigate::EStatus::Ok),
+                    "scheme-cache navigate for /MyRoot/T/" << indexName << "/"
+                    << row.ImplName << " returned status "
+                    << static_cast<ui32>(implEntry.Status));
+                row.Impl_OwnSchemaVersion = implEntry.TableId.SchemaVersion;
+            }
+            return out;
+        };
+
+        const auto checkInvariant = [&](const THashMap<TString, TRow>& snap, const TString& stage) {
+            for (const auto& [name, row] : snap) {
+                if (enableCascade) {
+                    // With cascade on, every mutation republishes ancestors.
+                    // T's cache view of the index and the index's own cache
+                    // entry must agree — this is the invariant KQP relies on.
+                    UNIT_ASSERT_VALUES_EQUAL_C(row.TableView_SchemaVersion, row.Index_OwnSchemaVersion,
+                        "cascade=true stage=" << stage
+                        << " T-to-Idx cache MISMATCH on " << name
+                        << ": T.cache.Indexes[" << name << "].SchemaVersion=" << row.TableView_SchemaVersion
+                        << " vs " << name << ".cache.Self.Version.TableIndexVersion=" << row.Index_OwnSchemaVersion);
+                } else {
+                    // With cascade off, schemeshard still bumps the parent
+                    // index's AlterVersion (required for internal consistency)
+                    // but does NOT republish the index to scheme board. When
+                    // T gets republished, its TableIndexes[i].SchemaVersion
+                    // picks up the FRESH Indexes[...]->AlterVersion, but the
+                    // index's own scheme-board entry may still hold the OLD
+                    // value. T.cache >= Idx.cache is the weaker invariant
+                    // (Idx.cache can lag T.cache); equality is not guaranteed
+                    // and is what cascade would restore.
+                    UNIT_ASSERT_C(row.TableView_SchemaVersion >= row.Index_OwnSchemaVersion,
+                        "cascade=false stage=" << stage
+                        << " expected T.cache >= Idx.cache on " << name
+                        << "; got T.cache.Indexes[" << name << "].SchemaVersion=" << row.TableView_SchemaVersion
+                        << " vs " << name << ".cache.Self.Version.TableIndexVersion=" << row.Index_OwnSchemaVersion);
+                }
+            }
+        };
+
+        const auto before = readCacheVersions();
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto afterFull = readCacheVersions();
+        checkInvariant(afterFull, "afterFull");
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        const auto afterIncremental = readCacheVersions();
+        checkInvariant(afterIncremental, "afterIncremental");
+
+        for (const auto& [name, rowAfter] : afterIncremental) {
+            const auto& rowBefore = before.at(name);
+            UNIT_ASSERT_C(rowAfter.Impl_OwnSchemaVersion > rowBefore.Impl_OwnSchemaVersion,
+                "cascade=" << enableCascade
+                << " " << name << " impl table did not advance: "
+                << rowBefore.Impl_OwnSchemaVersion << " -> " << rowAfter.Impl_OwnSchemaVersion);
+        }
+    }
+
+    Y_UNIT_TEST(BackupInvariant) {
+        RunBackupBackupCollectionInvariantScenario(/* enableCascade = */ true);
+    }
+
+    Y_UNIT_TEST(BackupInvariant_NoCascade) {
+        RunBackupBackupCollectionInvariantScenario(/* enableCascade = */ false);
+    }
+
+    // ====================================================================
+    // ConcurrentCleanerVsUserCdcRace / ConcurrentCleanerVsUserCdcRace_NoCascade
+    //
+    // Parks the continuous-backup cleaner's drop-CDC proposals with
+    // TBlockEvents, interleaves a user CREATE-CDC on the main table, then
+    // releases the parked drops and counts publication fan-out per pathId.
+    //
+    //   Cascade ON : cleaner drop-CDC on impl1/impl2 fans out to parent
+    //                indexes Idx1/Idx2 → pIdx1 > 0, pIdx2 > 0.
+    //   Cascade OFF: only the impl table itself is published →
+    //                pIdx1 == 0, pIdx2 == 0 (stale-describe window exposed).
+    // ====================================================================
+    void RunConcurrentCleanerVsUserCdcRace(bool enableCascade = true) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableBackupService(true)
+            .EnableCascadePublication(enableCascade));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/T"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "T"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value1" Type: "Utf8" }
+                Columns { Name: "Value2" Type: "Utf8" }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription {
+                Name: "Idx1"
+                KeyColumnNames: ["Value1"]
+                Type: EIndexTypeGlobal
+            }
+            IndexDescription {
+                Name: "Idx2"
+                KeyColumnNames: ["Value2"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto lookupPathId = [&](const TString& path) {
+            auto desc = DescribePrivatePath(runtime, path);
+            const auto& self = desc.GetPathDescription().GetSelf();
+            return TPathId(self.GetSchemeshardId(), self.GetPathId());
+        };
+        const TPathId tPathId    = lookupPathId("/MyRoot/T");
+        const TPathId idx1PathId = lookupPathId("/MyRoot/T/Idx1");
+        const TPathId idx2PathId = lookupPathId("/MyRoot/T/Idx2");
+        const TPathId impl1PathId = lookupPathId("/MyRoot/T/Idx1/indexImplTable");
+        const TPathId impl2PathId = lookupPathId("/MyRoot/T/Idx2/indexImplTable");
+        const TPathId rootPathId  = lookupPathId("/MyRoot");
+
+        ui64 publishIdx1 = 0, publishIdx2 = 0;
+        ui64 publishImpl1 = 0, publishImpl2 = 0;
+        ui64 publishT = 0, publishRoot = 0;
+        bool recordingEnabled = false;
+
+        auto observerFn = runtime.AddObserver<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
+            [&](TEvSchemeShard::TEvDescribeSchemeResultBuilder::TPtr& ev) {
+                if (!recordingEnabled) return;
+                const auto& rec = ev->Get()->GetRecord();
+                if (!rec.HasPathOwnerId() || !rec.HasPathId()) return;
+                TPathId pid(rec.GetPathOwnerId(), rec.GetPathId());
+                if      (pid == idx1PathId)  ++publishIdx1;
+                else if (pid == idx2PathId)  ++publishIdx2;
+                else if (pid == impl1PathId) ++publishImpl1;
+                else if (pid == impl2PathId) ++publishImpl2;
+                else if (pid == tPathId)     ++publishT;
+                else if (pid == rootPathId)  ++publishRoot;
+            });
+
+        // Step 1: full backup — creates the first generation of CDC streams.
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // Step 2: park cleaner drop-CDC proposals on index impl tables.
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blockedDrops(runtime,
+            [](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return false;
+                const auto& tx = rec.GetTransaction(0);
+                if (!tx.HasDropCdcStream()) return false;
+                const TString& wd = tx.GetWorkingDir();
+                if (!wd.Contains("/Idx")) return false;
+                Cerr << "RACE_TEST: blocking cleaner DropCdcStream wd=" << wd
+                     << " streams=" << tx.GetDropCdcStream().StreamNameSize() << Endl;
+                return true;
+            });
+
+        // Step 3: trigger incremental backup — rotation schedules cleaner drops.
+        runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        UNIT_ASSERT_C(blockedDrops.size() > 0,
+            "expected at least one blocked cleaner drop-CDC tx; got none.");
+
+        // Step 4: user CREATE-CDC on main table T (separate top-level tx).
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "T"
+            StreamDescription {
+              Name: "UserStreamRace"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // Step 5: enable observer, release parked drops.
+        recordingEnabled = true;
+        blockedDrops.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+        recordingEnabled = false;
+
+        const auto pIdx1  = publishIdx1;
+        const auto pIdx2  = publishIdx2;
+        const auto pImpl1 = publishImpl1;
+        const auto pImpl2 = publishImpl2;
+        const auto pT     = publishT;
+        const auto pRoot  = publishRoot;
+
+        Cerr << "RACE_PUBLISH cascade=" << enableCascade
+             << " Idx1=" << pIdx1 << " Idx2=" << pIdx2
+             << " Impl1=" << pImpl1 << " Impl2=" << pImpl2
+             << " T=" << pT << " Root=" << pRoot << Endl;
+
+        UNIT_ASSERT_C(pImpl1 > 0,
+            "cascade=" << enableCascade << " cleaner did not publish impl1 (Impl1=" << pImpl1 << ")");
+        UNIT_ASSERT_C(pImpl2 > 0,
+            "cascade=" << enableCascade << " cleaner did not publish impl2 (Impl2=" << pImpl2 << ")");
+
+        if (enableCascade) {
+            UNIT_ASSERT_C(pIdx1 > 0,
+                "cascade=true: cleaner drop-CDC on impl1 should republish parent Idx1. "
+                "Idx1=" << pIdx1 << " Idx2=" << pIdx2
+                << " Impl1=" << pImpl1 << " Impl2=" << pImpl2
+                << " T=" << pT << " Root=" << pRoot);
+            UNIT_ASSERT_C(pIdx2 > 0,
+                "cascade=true: cleaner drop-CDC on impl2 should republish parent Idx2. "
+                "Idx1=" << pIdx1 << " Idx2=" << pIdx2
+                << " Impl1=" << pImpl1 << " Impl2=" << pImpl2
+                << " T=" << pT << " Root=" << pRoot);
+        } else {
+            UNIT_ASSERT_C(pIdx1 == 0,
+                "cascade=false: parent index Idx1 MUST NOT be republished by the cleaner drop. "
+                "Idx1=" << pIdx1 << " Idx2=" << pIdx2
+                << " Impl1=" << pImpl1 << " Impl2=" << pImpl2
+                << " T=" << pT << " Root=" << pRoot);
+            UNIT_ASSERT_C(pIdx2 == 0,
+                "cascade=false: parent index Idx2 MUST NOT be republished. "
+                "Idx1=" << pIdx1 << " Idx2=" << pIdx2
+                << " Impl1=" << pImpl1 << " Impl2=" << pImpl2
+                << " T=" << pT << " Root=" << pRoot);
+        }
+    }
+
+    Y_UNIT_TEST(ConcurrentCleanerVsUserCdcRace) {
+        RunConcurrentCleanerVsUserCdcRace(/* enableCascade = */ true);
+    }
+
+    Y_UNIT_TEST(ConcurrentCleanerVsUserCdcRace_NoCascade) {
+        RunConcurrentCleanerVsUserCdcRace(/* enableCascade = */ false);
+    }
 } // TBackupCollectionTests

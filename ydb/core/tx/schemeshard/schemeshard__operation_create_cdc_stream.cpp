@@ -363,14 +363,9 @@ protected:
         auto& notice = *tx.MutableCreateCdcStreamNotice();
         NCdcStreamAtTable::FillNotice(pathId, context, notice);
 
-        // Override table schema version with coordinated version from AlterData
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
-        table->InitAlterData(OperationId);
-        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
+        notice.SetTableSchemaVersion(table->AlterVersion + 1);
     }
 
 public:

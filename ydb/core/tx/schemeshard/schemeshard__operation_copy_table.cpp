@@ -140,20 +140,15 @@ public:
                 auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
 
-                // Get coordinated version from source table's AlterData (shared across both drop and create)
                 // GrabTable is needed for proper rollback if operation fails
                 context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
                 auto srcTable = context.SS->Tables.at(txState->SourcePathId);
-                srcTable->InitAlterData(OperationId);
-                ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
-
-                NIceDb::TNiceDb db(context.GetDB());
-                context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
+                ui64 tableSchemaVersion = srcTable->AlterVersion + 1;
 
                 if (hasDrop) {
                     auto& dropNotice = *combined.MutableDropCdcStreamNotice();
                     txState->SourcePathId.ToProto(dropNotice.MutablePathId());
-                    dropNotice.SetTableSchemaVersion(coordVersion);
+                    dropNotice.SetTableSchemaVersion(tableSchemaVersion);
 
                     for (const auto& id : streamsToDrop) {
                         id.ToProto(dropNotice.AddStreamPathId());
@@ -162,7 +157,7 @@ public:
 
                 if (hasCreate) {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
-                    combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(coordVersion);
+                    combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(tableSchemaVersion);
                 }
 
             } else {
@@ -245,7 +240,7 @@ public:
                     }
                     context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
                     context.SS->ClearDescribePathCaches(dstParentPath);
-                    context.OnComplete.PublishToSchemeBoard(OperationId, path->ParentPathId);
+                    context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->ParentPathId, context.SS);
                 }
             }
         }
@@ -301,20 +296,8 @@ public:
                 context.MemChanges.GrabTable(context.SS, srcPathId);
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
-                // Don't call InitAlterData() here - it was already called in ConfigureParts,
-                // and calling it again after another subop's Done() updated AlterVersion
-                // would incorrectly create a new version.
-                Y_ABORT_UNLESS(srcTable->AlterData && srcTable->AlterData->CoordinatedSchemaVersion,
-                    "AlterData with CoordinatedSchemaVersion must be set in ConfigureParts before Done phase");
-                srcTable->AlterVersion = Max(srcTable->AlterVersion, *srcTable->AlterData->CoordinatedSchemaVersion);
-
-                // Persist updated AlterVersion so it survives restart
+                srcTable->AlterVersion += 1;
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
-
-                // After successful completion, clear AlterTableFull if this was the last user
-                if (srcTable->ReleaseAlterData(OperationId)) {
-                    context.SS->PersistClearAlterTableFull(db, srcPathId);
-                }
 
                 TPathId parentPathId = srcPath->ParentPathId;
                 if (parentPathId && context.SS->PathsById.contains(parentPathId)) {

@@ -659,6 +659,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
     app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
     app.SetEnableIndexMaterialization(opts.EnableIndexMaterialization_);
+    if (opts.EnableCascadePublication_.has_value()) {
+        app.FeatureFlags.SetEnableCascadePublication(*opts.EnableCascadePublication_);
+    }
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

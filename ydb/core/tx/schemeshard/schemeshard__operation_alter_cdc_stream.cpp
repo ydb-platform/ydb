@@ -245,12 +245,7 @@ protected:
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-
-        table->InitAlterData(OperationId);
-        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
+        notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {

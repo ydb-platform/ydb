@@ -1926,7 +1926,6 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
 
     TTableIndexInfo::TPtr alterData = index->AlterData;
     Y_ABORT_UNLESS(alterData);
-    // Relaxed to <= to allow convergence when multiple operations use CoordinatedSchemaVersion
     Y_ABORT_UNLESS(index->AlterVersion <= alterData->AlterVersion);
 
     db.Table<Schema::TableIndex>().Key(element->PathId.LocalPathId).Update(

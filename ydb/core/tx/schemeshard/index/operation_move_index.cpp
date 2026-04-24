@@ -289,7 +289,7 @@ public:
         NTableIndexVersion::SyncChildIndexVersions(path.Base(), table, table->AlterVersion, OperationId, context, db);
 
         context.SS->ClearDescribePathCaches(path.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->PathId, context.SS);
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }

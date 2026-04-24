@@ -391,7 +391,8 @@ public:
     static constexpr int DefaultMaxListKeys = 1000;
 
     bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
-                            Aws::S3::Model::ListObjectsResult& result) {
+        Aws::S3::Model::ListObjectsResult& result)
+    {
         TVector<TString> children;
         dir.ListNames(children);
         Sort(children);

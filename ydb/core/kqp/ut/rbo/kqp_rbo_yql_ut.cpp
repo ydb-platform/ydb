@@ -2933,6 +2933,74 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                           expectedResult);
     }
 
+    // A flat 3-way join on TPCH tables with overridden statistics and fixed
+    // join order & type to only test SE, not anything around it
+    Y_UNIT_TEST(ShuffleEliminationSimpleJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/customer": {"n_rows": 150000, "byte_size": 15000000},
+            "/Root/orders":   {"n_rows": 1500000, "byte_size": 150000000},
+            "/Root/lineitem": {"n_rows": 6000000, "byte_size": 600000000}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, "schema/tpch.sql", /*useColumnStore*/ true);
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints =
+            '
+                JoinType(c o Shuffle)
+                JoinType(o l Shuffle)
+            ';
+
+            SELECT c.c_custkey, o.o_orderkey, l.l_linenumber
+            FROM `/Root/customer` c
+            JOIN `/Root/orders` o ON c.c_custkey = o.o_custkey
+            JOIN `/Root/lineitem` l ON o.o_orderkey = l.l_orderkey
+        )";
+
+        auto queryDb = kikimr.GetQueryClient();
+        auto querySession = queryDb.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto plan = TString{*result.GetStats()->GetPlan()};
+
+        NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+        queryPlanPrinter.Print(plan);
+
+        // Parse the plan and check shuffle elimination
+        auto detailedPlan = GetDetailedJoinOrder(plan, TGetPlanParams{
+            .IncludeFilters = false,
+            .IncludeOptimizerEstimation = false,
+            .IncludeTables = true,
+            .IncludeShuffles = true
+        });
+
+        Cout << "Detailed plan: " << detailedPlan.GetStringRobust() << Endl;
+    }
+
     /*
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;

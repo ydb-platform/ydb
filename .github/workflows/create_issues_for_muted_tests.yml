@@ -89,11 +89,14 @@ jobs:
         with:
             ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
-      - name: Resolve muted YA file path
+      - name: Resolve and load muted YA from base branch
         run: |
+          set -euo pipefail
           MUTED_YA_RELATIVE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ matrix.build_type }}")"
-          echo "MUTED_YA_FILE_PATH=${{ github.workspace }}/$MUTED_YA_RELATIVE" >> "$GITHUB_ENV"
-          echo "Using build_type=${{ matrix.build_type }} muted_ya_file=$MUTED_YA_RELATIVE"
+          git fetch origin "${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}"
+          git show "origin/${{ env.BASE_BRANCH }}:${MUTED_YA_RELATIVE}" > base_muted_ya.txt
+          echo "MUTED_YA_FILE_PATH=${{ github.workspace }}/base_muted_ya.txt" >> "$GITHUB_ENV"
+          echo "Using base_branch=${{ env.BASE_BRANCH }} build_type=${{ matrix.build_type }} muted_ya_file=$MUTED_YA_RELATIVE"
 
       - name: Install dependencies
         run: |

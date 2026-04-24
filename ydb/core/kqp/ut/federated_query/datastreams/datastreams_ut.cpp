@@ -1259,7 +1259,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         test("SystemMetadata('offset') < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('offset') <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('offset') >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
-
         test("SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
@@ -1267,6 +1266,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
         test("1 <= SystemMetadata('offset') AND 3 > SystemMetadata('offset')", 2,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+        test("SystemMetadata('offset') IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
     }

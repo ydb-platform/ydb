@@ -437,6 +437,7 @@ public:
         {
             auto offsetSettings = TPushdownSettings();
             offsetSettings.EnableMember("_yql_sys_offset");
+            offsetSettings.Enable(NPushdown::TSettings::EFeatureFlag::InOperator);
             NPushdown::TPredicateNode offsetPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), offsetSettings);
             if (!offsetPredicate.IsEmpty()) {
                 NYql::NConnector::NApi::TPredicate proto;

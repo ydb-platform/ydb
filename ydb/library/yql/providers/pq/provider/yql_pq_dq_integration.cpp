@@ -940,6 +940,27 @@ public:
         return useSharedReading;
     }
 
+    bool ConvertTypedValueToInt64(const Ydb::TypedValue& typedValue, ui64& offset) {
+        auto v = typedValue.value();
+        switch(v.value_case()) {
+            case Ydb::Value::kInt32Value:
+                offset = v.int32_value() >= 0 ? v.int32_value() : 0;
+                break; 
+            case Ydb::Value::kUint32Value:
+                offset = v.uint32_value();
+                break;
+            case Ydb::Value::kInt64Value:
+                offset = v.int64_value() >= 0 ? v.int64_value() : 0; 
+                break;
+            case Ydb::Value::kUint64Value:
+                offset = v.uint64_value();
+                break;
+            default:
+                return false; // not supported
+        }
+        return true;
+    }
+
     void FillOffsetComparation(NConnector::NApi::TPredicate_TComparison comparison, NPq::NProto::TOffsetPredicate& proto) {
         bool leftIsColumn = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kColumn;
         bool leftIsValue = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kTypedValue;
@@ -975,22 +996,8 @@ public:
             }
         }
         ui64 offset = 0;
-        auto v = typedValue.typed_value().value();
-        switch(v.value_case()) {
-            case Ydb::Value::kInt32Value:
-                offset = v.int32_value() >= 0 ? v.int32_value() : 0;
-                break; 
-            case Ydb::Value::kUint32Value:
-                offset = v.uint32_value();
-                break;
-            case Ydb::Value::kInt64Value:
-                offset = v.int64_value() >= 0 ? v.int64_value() : 0; 
-                break;
-            case Ydb::Value::kUint64Value:
-                offset = v.uint64_value();
-                break;
-            default:
-                return ; // not supported
+        if (!ConvertTypedValueToInt64( typedValue.typed_value(), offset)) {
+            return;
         }
 
         switch (operation) {
@@ -1011,7 +1018,7 @@ public:
             proto.SetBegin(offset + 1);
             break;
         case NConnector::NApi::TPredicate_TComparison::NE:
-            // TODO?
+            break;  // not supported
         default:
             break;
         }
@@ -1035,6 +1042,27 @@ public:
             FillOffsetComparation(predicate.comparison(), proto);
             if (proto.HasBegin() || proto.HasEnd()) {
                 srcDesc.AddOffsetPredicate()->CopyFrom(proto);
+            }
+        }
+        if (predicate.payload_case() == NConnector::NApi::TPredicate::kIn) {
+            if (predicate.in().value().payload_case() != NConnector::NApi::TExpression::kColumn) {
+                return false;
+            }
+            std::set<ui64> offsets;
+            for (const auto& expr : predicate.in().set()) {
+                if (expr.payload_case() != NConnector::NApi::TExpression::kTypedValue) {
+                    return false;
+                }
+                ui64 offset = 0;
+                if (!ConvertTypedValueToInt64(expr.typed_value(), offset)) {
+                    return false;
+                }
+                offsets.insert(offset);
+            }
+            if (!offsets.empty()) {
+                auto* proto = srcDesc.AddOffsetPredicate();
+                proto->SetBegin(*offsets.begin());
+                proto->SetEnd(*offsets.rbegin() + 1);
             }
         }
         return true;

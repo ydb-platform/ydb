@@ -21,13 +21,8 @@ private:
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     }
 
-<<<<<<< HEAD
-    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op) const override;
-=======
     virtual bool DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const override;
->>>>>>> 4b171e0e744 (Refactor IBitsStorageConstructor: separate serialization/restoration, simplify viewer interface (#37183))
+        const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const override;
 

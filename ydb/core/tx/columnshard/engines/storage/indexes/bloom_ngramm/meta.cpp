@@ -186,89 +186,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-class TVectorInserter {
-private:
-    TDynBitMap Values;
-    const ui32 Size;
-
-public:
-    TDynBitMap ExtractBits() {
-        return std::move(Values);
-    }
-
-    TVectorInserter(const ui32 bitsSize)
-        : Size(bitsSize) {
-        AFL_VERIFY(bitsSize);
-        Values.Reserve(bitsSize);
-    }
-
-    void operator()(const ui64 hash) {
-        Values.Set(hash % Size);
-    }
-};
-
-template <ui64 BitsSize>
-class TVectorInserterPower2 {
-private:
-    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> Values;
-    static constexpr ui32 SizeMask = BitsSize - 1;
-    static_assert(((BitsSize - 1) & BitsSize) == 0);
-
-public:
-    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> ExtractBits() {
-        return std::move(Values);
-    }
-
-    void operator()(const ui64 hash) {
-        Values.Set(hash & SizeMask);
-    }
-};
-
-namespace {
-
-template <ui64 Size>
-class TBitmapDetector {
-private:
-    const TSkipBitmapIndex* Meta;
-    const ui32 ExtSize;
-    static constexpr ui64 NextSize = Size >> 1;
-
-public:
-    TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
-        : Meta(meta)
-        , ExtSize(size) {
-        AFL_VERIFY(ExtSize <= Size);
-    }
-
-    template <class TFiller>
-    TString Detector(const TFiller& filler) const {
-        if (ExtSize == Size) {
-            TVectorInserterPower2<Size> inserter;
-            filler(inserter);
-            return Meta->GetBitsStorageConstructor()->SerializeToString(inserter.ExtractBits());
-        } else {
-            return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
-        }
-    }
-};
-
-template <>
-class TBitmapDetector<0> {
-public:
-    TBitmapDetector(const TSkipBitmapIndex* /*meta*/, const ui32 /*size*/) {
-        AFL_VERIFY(false);
-    }
-
-    template <class TFiller>
-    static TString Detector(const TFiller& /*filler*/) {
-        AFL_VERIFY(false);
-        return "";
-    }
-};
-}   // namespace
-=======
->>>>>>> 59554ea611c (Speed up building bloom_ngram index (#36689))
 
 namespace {
 
@@ -368,13 +285,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-<<<<<<< HEAD
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
-=======
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
->>>>>>> 4b171e0e744 (Refactor IBitsStorageConstructor: separate serialization/restoration, simplify viewer interface (#37183))
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;

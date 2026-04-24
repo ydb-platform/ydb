@@ -1,6 +1,6 @@
 #include "constructor.h"
 #include "meta.h"
-#include "misc/misc.h"
+#include "ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h"
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 

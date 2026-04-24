@@ -175,19 +175,24 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
             if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
                 return fail(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
             }
+
             if (index.name().empty()) {
                 return fail("Local min_max index must have a name");
             }
+            
             if (index.index_columns_size() != 1) {
                 return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
             }
+            
             if (!index.data_columns().empty()) {
                 return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns()));
             }
+            
             auto columnIdIt = nameToId.find(index.index_columns(0));
             if (columnIdIt == nameToId.end()) {
                 return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0)));
             }
+            
             auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
             olapIndex->SetId(nextIndexId++);
             olapIndex->SetName(index.name());
@@ -1420,16 +1425,19 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns());
                 return false;
             }
+            
             if (!index.data_columns().empty()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns());
                 return false;
             }
+            
             if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
                 status = Ydb::StatusIds::UNSUPPORTED;
                 error = NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage;
                 return false;
             }
+            
             auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
             alterColumnTable->SetName(name);
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
@@ -1440,7 +1448,6 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             min_max_proto->SetColumnName(index.index_columns()[0]);
             return true;
         }
-
 
         if (index.index_columns_size() > 1) {
             status = Ydb::StatusIds::BAD_REQUEST;
@@ -1478,7 +1485,6 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 } else if (index.index_columns_size() == 1) {
                     bloom->SetFalsePositiveProbability(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
                 }
-
                 if (index.index_columns_size() == 1) {
                     bloom->AddColumnNames(index.index_columns(0));
                 }

@@ -19,6 +19,7 @@
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
+
 #include <util/generic/overloaded.h>
 
 namespace NKikimr::NKqp {

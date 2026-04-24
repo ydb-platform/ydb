@@ -1,5 +1,4 @@
 #pragma once
-#include <optional>
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {

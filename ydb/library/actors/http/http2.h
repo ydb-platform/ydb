@@ -81,7 +81,7 @@ public:
     void RegisterUpgradeStream(TStringBuf path, TStringBuf authority);
 
     // Send GOAWAY and close
-    void SendGoaway(EErrorCode errorCode = EErrorCode::SUCCESS, TStringBuf debugData = {});
+    void SendGoaway(EErrorCode errorCode = EErrorCode::NO_ERROR, TStringBuf debugData = {});
 
     // Returns true if session has been initialized (preface received/sent)
     bool IsReady() const { return PrefaceReceived; }
@@ -164,7 +164,7 @@ private:
     void ProcessContinuationFrame(const TFrameHeader& header, TStringBuf payload);
 
     void CompleteHeaderBlock(uint32_t streamId, TStream& stream, bool endStream);
-    void CloseStream(uint32_t streamId, EErrorCode errorCode = EErrorCode::SUCCESS);
+    void CloseStream(uint32_t streamId, EErrorCode errorCode = EErrorCode::NO_ERROR);
 
     void ConnectionError(EErrorCode errorCode, TStringBuf message = {});
 };

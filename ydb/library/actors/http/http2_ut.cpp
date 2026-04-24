@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(Http2FrameBuilder) {
 
     Y_UNIT_TEST(BuildGoaway) {
         TString debug = "test error";
-        TString frame = TFrameBuilder::BuildGoaway(3, EErrorCode::SUCCESS, debug);
+        TString frame = TFrameBuilder::BuildGoaway(3, EErrorCode::NO_ERROR, debug);
 
         TFrameHeader hdr;
         hdr.Parse(frame.data());
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(Http2FrameBuilder) {
         uint32_t lastStreamId = ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) & 0x7FFFFFFF;
         UNIT_ASSERT_VALUES_EQUAL(lastStreamId, 3u);
         uint32_t errorCode = (p[4] << 24) | (p[5] << 16) | (p[6] << 8) | p[7];
-        UNIT_ASSERT_VALUES_EQUAL(errorCode, static_cast<uint32_t>(EErrorCode::SUCCESS));
+        UNIT_ASSERT_VALUES_EQUAL(errorCode, static_cast<uint32_t>(EErrorCode::NO_ERROR));
 
         TStringBuf debugPayload(frame.data() + FRAME_HEADER_SIZE + 8, debug.size());
         UNIT_ASSERT_VALUES_EQUAL(debugPayload, debug);
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(Http2Session) {
         TSessionPair pair;
         pair.Initialize();
 
-        pair.Client->SendGoaway(EErrorCode::SUCCESS, "shutting down");
+        pair.Client->SendGoaway(EErrorCode::NO_ERROR, "shutting down");
         pair.Pump();
 
         UNIT_ASSERT(pair.Client->IsGoaway());
@@ -871,7 +871,7 @@ Y_UNIT_TEST_SUITE(Http2Session) {
         TSessionPair pair;
         pair.Initialize();
 
-        pair.Server->SendGoaway(EErrorCode::SUCCESS);
+        pair.Server->SendGoaway(EErrorCode::NO_ERROR);
         pair.Pump();
 
         UNIT_ASSERT(pair.Server->IsGoaway());
@@ -882,8 +882,8 @@ Y_UNIT_TEST_SUITE(Http2Session) {
         TSessionPair pair;
         pair.Initialize();
 
-        pair.Client->SendGoaway(EErrorCode::SUCCESS);
-        pair.Client->SendGoaway(EErrorCode::SUCCESS); // should be noop
+        pair.Client->SendGoaway(EErrorCode::NO_ERROR);
+        pair.Client->SendGoaway(EErrorCode::NO_ERROR); // should be noop
         pair.Pump();
 
         UNIT_ASSERT(pair.Client->IsGoaway());
@@ -2696,7 +2696,7 @@ Y_UNIT_TEST_SUITE(Http2ErrorHandling) {
 
     Y_UNIT_TEST(GoawayValid) {
         TRawServerSession srv;
-        srv.Feed(TFrameBuilder::BuildGoaway(0, EErrorCode::SUCCESS));
+        srv.Feed(TFrameBuilder::BuildGoaway(0, EErrorCode::NO_ERROR));
         UNIT_ASSERT(srv.Error.empty());
         UNIT_ASSERT(srv.GotGoaway);
     }

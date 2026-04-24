@@ -19,13 +19,13 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
 
     }
 
-    inline TString DisabledForRowTablesErrorMessage = "Local min_max index is supported only for column tables";
+    inline const TString DisabledForRowTablesErrorMessage = "Local min_max index is supported only for column tables";
 
     inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName) {
         return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName << "'";
     }
 
-    inline TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableCsMinMaxIndex feature flag";
+    inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableCsMinMaxIndex feature flag";
 
 
 }

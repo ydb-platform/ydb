@@ -636,7 +636,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 }
                 if (!index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.KeyColumns);
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
                     return false;
                 }
                 auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());

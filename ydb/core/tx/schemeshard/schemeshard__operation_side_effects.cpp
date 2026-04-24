@@ -1151,7 +1151,7 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
             };
         }
 
-        ss->PersistRemoveUserLevelTransactions(db, txId);
+        ss->PersistRemoveUserLevelTransactions(db, txId, operation->UserLevelTransactions.size());
         ss->Operations.erase(txId);
     }
 }

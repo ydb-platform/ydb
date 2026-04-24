@@ -897,7 +897,7 @@ public:
     // so that DoPersistSchemeChangeRecords can emit a parent-level record
     // even if the tablet restarts between ignite and done.
     void PersistUserLevelTransaction(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx, const TString& body) const;
-    void PersistRemoveUserLevelTransactions(NIceDb::TNiceDb& db, TTxId txId) const;
+    void PersistRemoveUserLevelTransactions(NIceDb::TNiceDb& db, TTxId txId, ui32 count) const;
     ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
     // Caller is responsible for a single PersistUpdateNextSchemeChangeOrder
     // at the end of its tx; use for multi-record batches.

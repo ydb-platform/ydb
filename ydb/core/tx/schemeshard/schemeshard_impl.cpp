@@ -3707,20 +3707,13 @@ void TSchemeShard::PersistUserLevelTransaction(NIceDb::TNiceDb& db, TTxId txId, 
         NIceDb::TUpdate<Schema::UserLevelTransactions::Body>(body));
 }
 
-void TSchemeShard::PersistRemoveUserLevelTransactions(NIceDb::TNiceDb& db, TTxId txId) const {
-    auto rowset = db.Table<Schema::UserLevelTransactions>()
-        .GreaterOrEqual(txId, 0u)
-        .LessOrEqual(txId, Max<ui32>())
-        .Select();
-    if (!rowset.IsReady()) {
-        return;
-    }
-    while (!rowset.EndOfSet()) {
-        ui32 idx = rowset.GetValue<Schema::UserLevelTransactions::UserTxIdx>();
-        db.Table<Schema::UserLevelTransactions>().Key(txId, idx).Delete();
-        if (!rowset.Next()) {
-            return;
-        }
+void TSchemeShard::PersistRemoveUserLevelTransactions(NIceDb::TNiceDb& db, TTxId txId, ui32 count) const {
+    // Point deletes by known count avoid a range scan, which would otherwise
+    // trigger a late Precharge and abort in non-init transactions (reads in
+    // the caller's tx have already set NoMoreUnprechargedReadsFlag without
+    // including table UserLevelTransactions).
+    for (ui32 i = 0; i < count; ++i) {
+        db.Table<Schema::UserLevelTransactions>().Key(txId, i).Delete();
     }
 }
 

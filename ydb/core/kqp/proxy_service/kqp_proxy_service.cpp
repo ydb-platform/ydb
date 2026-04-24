@@ -594,7 +594,7 @@ public:
         for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
             if (sessionInfo.AttachedRpcId) {
-                auto ev = FeatureFlags.GetEnableNodeShutdownHints()
+                auto ev = AppData()->FeatureFlags.GetEnableNodeShutdownHints()
                     ? CreateEvCloseSessionResponseWithNodeShutdown(sessionInfo.SessionId)
                     : CreateEvCloseSessionResponse(sessionInfo.SessionId);
                 Send(sessionInfo.AttachedRpcId, ev.release());
@@ -1173,7 +1173,7 @@ public:
         Counters->ReportSessionShutdownRequest(sessionInfo->DbCounters);
         Send(sessionInfo->WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
         if (sessionInfo->AttachedRpcId) {
-            auto ev = FeatureFlags.GetEnableNodeShutdownHints()
+            auto ev = AppData()->FeatureFlags.GetEnableNodeShutdownHints()
                 ? CreateEvCloseSessionResponseWithSessionShutdown(sessionInfo->SessionId)
                 : CreateEvCloseSessionResponse(sessionInfo->SessionId);
             Send(sessionInfo->AttachedRpcId, ev.release());

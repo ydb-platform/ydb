@@ -252,7 +252,7 @@ void ValidatePredicate(TQueryClient& db, const std::string& predicate) {
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
-void ValidateError(TQueryClient& db, const std::string& predicate) {
+void ValidateError(TQueryClient& db, const std::string& predicate, const std::string& errorMessage = "Failed to extract search terms from predicate") {
     static constexpr const char* table = "TestTable";
     static constexpr const char* indexTable = "json_idx";
 
@@ -264,7 +264,7 @@ void ValidateError(TQueryClient& db, const std::string& predicate) {
 
     auto result = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(!result.IsSuccess(), "Predicate: " + predicate + ", issues: " + result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Failed to extract search terms from predicate", "for predicate = " << predicate);
+    UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), errorMessage, "for predicate = " << predicate);
 }
 
 void TestSelectJsonWithIndex(const std::string& jsonType, const std::optional<bool>& jsonExistsStrict,
@@ -2047,11 +2047,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // Outer AND/OR over range comparisons with bool literal
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2') <= true)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > false OR JSON_EXISTS(Text, '$.k2') < true)");
-            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2'))");
+            // AND: non-indexable range cmp on k1, but standalone JE($.k2) IS indexable - post-filter applies
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2'))", {"\2k2"});
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true OR JSON_EXISTS(Text, '$.k2') == true)");
 
             // Outer AND/OR over cross JSON_EXISTS comparisons
-            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))");
+            // AND: JE1 > JE2 not indexable, but standalone JE($.k3) IS indexable - post-filter applies
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\2k3"});
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') != JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))");
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') >= JSON_EXISTS(Text, '$.k2')) AND (JSON_EXISTS(Text, '$.k3') <= JSON_EXISTS(Text, '$.k4')))");
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') == JSON_EXISTS(Text, '$.k2')) OR (JSON_EXISTS(Text, '$.k3') != JSON_EXISTS(Text, '$.k4')))");
@@ -2310,9 +2312,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // REGEXP - not extractable (Re2)
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1') REGEXP "^pattern$")"); // udf
 
-            // String concatenation (||) in a comparison - not extractable
+            // String concatenation (||) in a comparison: JV1 inside concat is not indexable
+            // If JV1 is the only JSON node - nothing to extract
             ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix")");
-            ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix" AND JSON_VALUE(Text, '$.k2') == "b")");
+            // AND: JV1 inside concat is non-indexable, but JV2 == "b" IS indexable - post-filter applies
+            ValidateTokens(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix" AND JSON_VALUE(Text, '$.k2') == "b")", {"\2k2" + strSuffix("b")});
 
             // Nested JSON_QUERY as JSON source for JSON_VALUE - not extractable
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.k1' WITHOUT ARRAY WRAPPER), '$.k2' RETURNING Int32) == 1)");
@@ -2340,6 +2344,105 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             // Both DEFAULT ON EMPTY and DEFAULT ON ERROR with non-NULL value are negation too
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON EMPTY DEFAULT 12 ON ERROR) > 10)");
+        });
+    }
+
+    // CollectJsonIndexPredicate: no JSON_*, only JSON, JSON with non-JSON column, OR rules, path parse, mixed support
+    Y_UNIT_TEST(JsonCombinations) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // No JSON_* in the filter - "no JSON_* functions found"
+            ValidateError(db, R"(Key = 1ul)");
+            ValidateError(db, R"((Data = "a"u) OR (Data = "b"u))");
+
+            // JSON_* only (tokens in explain are successful)
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
+
+            // JSON_* together with a non-JSON column
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u)))", {"\2k1"});
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u)))");
+
+            // JSONPath that cannot be parsed for index extraction
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.[0'))", "Invalid json path");
+
+            // OR: an indexable branch and a non-indexable branch (JSON_VALUE in an arithmetic expression)
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR ((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11))");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND ((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11))", {"\2k1"});
+
+            ValidateError(db, R"(((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11) OR JSON_EXISTS(Text, '$.k1'))");
+            ValidateTokens(db, R"(((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
+
+            // AND: indexable JSON with unsupported JSON (RETURNING Date) - collect error
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Date) == Date("2021-01-01"))))", {"\2k1"});
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k1' RETURNING Date) == Date("2021-01-01"))))");
+
+            // OR: one disjunct is indexable, the other is not
+            ValidateError(db, R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR ((JSON_VALUE(Text, '$.k1' RETURNING Int32) + 10) > 11)))");
+            ValidateTokens(db, R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND ((JSON_VALUE(Text, '$.k1' RETURNING Int32) + 10) > 11)))",
+                {"\2k1" + numSuffix(1)}, "and");
+
+            // AND: several indexable JSON_* in one filter
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)))",
+                {"\2k1" + numSuffix(1), "\2k1"});
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.a') AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0)))",
+                {"\1a", "\1b" + numSuffix(0)});
+
+            // OR: only JSON_*; three-way
+            ValidateTokens(db,
+                R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) OR (JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2) OR (JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+
+            // OR: a non-JSON disjunct
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) OR (Key = 1ul)))");
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) OR (Key = 1ul)))");
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) AND (Key = 1ul)))", {"\2k1" + numSuffix(1), "\2k1"}, "or");
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) AND (Key = 1ul)))", {"\2k1" + numSuffix(1), "\2k1"}, "and");
+
+            // (indexable subexpression) OR (indexable) - "or" mode for tokens
+            ValidateTokens(db,
+                R"(((JSON_EXISTS(Text, '$.a') AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0)) OR (JSON_EXISTS(Text, '$.c'))))",
+                {"\1a", "\1b" + numSuffix(0), "\1c"}, "or");
+
+            // AND: three indexable JSON_* in one filter
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.a') AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0) AND (JSON_VALUE(Text, '$.c') == "z"u)))",
+                {"\1a", "\1b" + numSuffix(0), "\1c" + strSuffix("z")}, "and");
+
+            // AND with JSON_QUERY in the same predicate
+            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)))");
+
+            // (OR of indexable predicates) AND (non-indexable JSON predicate) - OR lookup + post-filter
+            // Case 1: non-indexable is arithmetic JSON_VALUE
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) AND ((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0))",
+                {"\2k1", "\2k2"}, "or");
+            // Case 2: symmetric (non-indexable first)
+            ValidateTokens(db,
+                R"(((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0) AND (JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')))",
+                {"\2k1", "\2k2"}, "or");
+            // Case 3: non-indexable is RETURNING Date (treated as post-filter)
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) AND (JSON_VALUE(Text, '$.k3' RETURNING Date) == Date("2021-01-01")))",
+                {"\2k1", "\2k2"}, "or");
+            // Case 4: OR branch contains (indexable AND non-indexable)
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1') OR (JSON_EXISTS(Text, '$.k2') AND ((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0)))",
+                {"\2k1", "\2k2"}, "or");
+            // Case 5: symmetric (non-indexable-AND first)
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.k1') AND ((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0)) OR JSON_EXISTS(Text, '$.k2'))",
+                {"\2k1", "\2k2"}, "or");
+            // Case 6: OR of two indexable JV comparisons AND a non-indexable RETURNING Date JV
+            ValidateTokens(db,
+                R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2) AND (JSON_VALUE(Text, '$.k3' RETURNING Date) == Date("2021-01-01")))",
+                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2)}, "or");
+
+            // Non-indexable RETURNING types now caught by whitelist (Date, Datetime, Timestamp already tested above)
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Date) > Date("2021-01-01"))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Datetime) > Datetime("2021-01-01T00:00:00Z"))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Timestamp) > Timestamp("2021-01-01T00:00:00Z"))");
+
+            // Nested JSON_* functions as source - specific error message
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.k1'), '$.k2') == "1")", "Nested JSON_* functions are not supported");
         });
     }
 }

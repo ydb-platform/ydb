@@ -270,46 +270,32 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     auto renamesWithTransform = GetRenamesWithTransforms(planProps);
 
-    for (const auto& column : inputMetadata.KeyColumns) {
-        const auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(), [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
-            // Check that a key column has been renamed into something new
-            return column == rename.second;
-        });
-
-        if (it != renamesWithTransform.end()) {
-            // Add the new name to column list
-            Props.Metadata->KeyColumns.push_back(it->first);
-        } else {
-            Props.Metadata->KeyColumns.push_back(column);
-        }
-
-        if (Project && it == renamesWithTransform.end()) {
-            Props.Metadata->KeyColumns = {};
-            break;
-        }
-    }
-
-    // Propagate ShuffledByColumns through Map, applying column renames
-    for (const auto& column : inputMetadata.ShuffledByColumns) {
-        const auto it = std::find_if(
-            renamesWithTransform.begin(), renamesWithTransform.end(),
-            [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
-                return column == rename.second;
+    auto resolveRename = [&](const TInfoUnit& column) -> const TInfoUnit* {
+        for (const auto& [to, from] : renamesWithTransform) {
+            if (column == from) {
+                return &to;
             }
-        );
-
-        if (it != renamesWithTransform.end()) {
-            Props.Metadata->ShuffledByColumns.push_back(it->first);
-        } else {
-            Props.Metadata->ShuffledByColumns.push_back(column);
         }
+        return nullptr;
+    };
 
-        if (Project && it == renamesWithTransform.end()) {
-            // Column not in projection — shuffle guarantee broken
-            Props.Metadata->ShuffledByColumns = {};
-            break;
+    auto propagateColumns = [&](const TVector<TInfoUnit>& inputColumns,
+                                TVector<TInfoUnit>& outputColumns) {
+        for (const auto& column : inputColumns) {
+            if (const auto* renamed = resolveRename(column)) {
+                outputColumns.push_back(*renamed);
+            } else if (!Project) {
+                outputColumns.push_back(column);
+            } else {
+                // Column not preserved by any order-maintaining mapping — guarantee broken
+                outputColumns = {};
+                break;
+            }
         }
-    }
+    };
+
+    propagateColumns(inputMetadata.KeyColumns,        Props.Metadata->KeyColumns);
+    propagateColumns(inputMetadata.ShuffledByColumns, Props.Metadata->ShuffledByColumns);
 
     // Build lineage data
     Props.Metadata->ColumnLineage = {};

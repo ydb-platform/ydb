@@ -3,7 +3,7 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
-    inline const char* kMinMaxClassName = "MIN_MAX";
+    inline const TString kMinMaxClassName = "MIN_MAX";
 
     TString IncorrectDataColumnsErrorMessage(const auto& dataColumns) {
         AFL_VERIFY(!dataColumns.empty());

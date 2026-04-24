@@ -12,7 +12,6 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -649,7 +648,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
                 upsert->SetId(nextIndexId++);
                 upsert->SetName(index.Name);
-                upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::TIndexMeta::GetClassNameStatic());
+                upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
 

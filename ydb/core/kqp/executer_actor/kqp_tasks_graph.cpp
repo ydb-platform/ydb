@@ -2120,7 +2120,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
 
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     const auto& keyTypes = tableInfo->KeyColumnTypes;
-    for (auto i = 0ul, s = stage.TableOpsSize(); i < s; ++i) {
+    for (size_t i = 0, s = stage.TableOpsSize(); i < s; ++i) {
         const auto& op = stage.GetTableOps(i);
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 

@@ -5317,6 +5317,58 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "data0");
         });
     }
+
+     Y_UNIT_TEST_F(TableModeWithOffsetPredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 1;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+        WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+
+        Sleep(TDuration::Seconds(1));
+
+        auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+
+            TString text = fmt::format(R"(
+                SELECT 
+                    SystemMetadata('partition_id') as partition_id,
+                    SystemMetadata("offset") as offset,
+                    key as data
+                FROM `{topic}`
+                WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA = (key String NOT NULL)
+                )
+                WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 3, rowCount, validator);
+        };
+
+        test("SystemMetadata('offset') < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('offset') <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('offset') >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+
+        test("SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
+        test("SystemMetadata('offset') >= 1 AND SystemMetadata('offset') < 3 ", 2,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

@@ -65,6 +65,12 @@ message TTaskSensorLabel {
     string Value = 2;
 }
 
+message TOffsetPredicate {           // (partition = PartitionId AND offset >= Begin AND offset < End)
+    optional uint64 PartitionId = 1; // all partitions if not set
+    optional uint64 Begin = 2;       // inclusive   
+    optional uint64 End = 3;         // exclusive
+}
+
 message TDqPqTopicSource {
     string TopicPath = 1;
     string ConsumerName = 2;
@@ -98,6 +104,7 @@ message TDqPqTopicSource {
     google.protobuf.Duration PartitionsBalancingIdleTimeout = 30;
     repeated string UserSchemaColumns = 31;
     bool StopAtCurrentEndOffsets = 32;
+    repeated TOffsetPredicate OffsetPredicate = 33;
 }
 
 message TDqPqTopicSink {

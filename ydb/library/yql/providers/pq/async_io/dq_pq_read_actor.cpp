@@ -269,6 +269,19 @@ public:
 
         InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
+
+        YQL_ENSURE(SourceParams.OffsetPredicateSize() <= 1, "Multiple PartitionOffset is not implemented");
+        for (const auto& predicateOffset: SourceParams.GetOffsetPredicate()) {
+            YQL_ENSURE(!predicateOffset.HasPartitionId(), "Not empty PartitionId is not implemented");
+
+            if (predicateOffset.HasBegin()) {
+                BeginOffset = predicateOffset.GetBegin();
+            }
+            if (predicateOffset.HasEnd()) {
+                EndOffset = predicateOffset.GetEnd();
+            }
+            SRC_LOG_I("BeginOffset " << BeginOffset << ", EndOffset " << EndOffset);
+        }
     }
 
     ~TDqPqReadActor() {
@@ -523,6 +536,7 @@ private:
                 const auto& partitionsToRead = GetPartitionsToRead(cluster);
                 for (const auto partitionId : partitionsToRead) {
                     Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
+
                 }
             }
 
@@ -992,8 +1006,15 @@ private:
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
 
             auto& partitionInfo = Self.Partitions[partitionKey];
+            if (!partitionInfo.Offset && Self.BeginOffset) {
+                partitionInfo.Offset = *Self.BeginOffset;
+            } 
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
+                if (Self.EndOffset && *Self.EndOffset < *partitionInfo.EndOffset) {
+                    *partitionInfo.EndOffset = *Self.EndOffset;
+                    SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " End offset was changed to " << *partitionInfo.EndOffset);
+                }
                 if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
                     Self.FinishedPartitions.insert(partitionKey);
                 }
@@ -1079,6 +1100,8 @@ private:
     bool CaNotified = false;
     bool FinishedByOffsets = false;
     THashSet<TPartitionKey> FinishedPartitions;
+    TMaybe<ui64> BeginOffset;
+    TMaybe<ui64> EndOffset;
 };
 
 ui32 ExtractPartitionsFromParams(

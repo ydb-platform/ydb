@@ -443,7 +443,9 @@ public:
                 Cerr << "Filter predicate: " << filterPredicateSql << Endl;
                 Cerr << "Offset predicate: " << offsetPredicateSql << Endl;
 
-                FormatPredicate(offsetPredicateProto, srcDesc);
+                if (!streamingTopicRead) {
+                    FillOffsetPredicate(offsetPredicateProto, srcDesc);
+                }
                 if (sharedReading) {
                     srcDesc.SetPredicate(filterPredicateSql);
                     srcDesc.SetSharedReading(true);
@@ -938,107 +940,104 @@ public:
         return useSharedReading;
     }
 
-    bool FormatComparison(TPredicate_TComparison comparison, NPq::NProto::TDqPqTopicSource& srcDes) {
-        bool leftIsColumn = comparison.left_value().payload_case() == TExpression::kColumn;
-        bool leftIsValue = comparison.left_value().payload_case() == TExpression::kTypedValue;
-        bool rightIsColumn = comparison.right_value().payload_case() == TExpression::kColumn;
-        bool rightIsValue = comparison.right_value().payload_case() == TExpression::kTypedValue;
+    void FillOffsetComparation(NConnector::NApi::TPredicate_TComparison comparison, NPq::NProto::TOffsetPredicate& proto) {
+        bool leftIsColumn = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kColumn;
+        bool leftIsValue = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kTypedValue;
+        bool rightIsColumn = comparison.right_value().payload_case() == NConnector::NApi::TExpression::kColumn;
+        bool rightIsValue = comparison.right_value().payload_case() == NConnector::NApi::TExpression::kTypedValue;
 
         if (!(leftIsColumn && rightIsValue || leftIsValue && rightIsColumn)) {
-            return false;
+            return;   // not supported
         }
         bool inverted = rightIsColumn;
         auto typedValue = comparison.right_value();
         auto operation = comparison.operation();
         if (inverted) {
             auto typedValue = comparison.left_value();
-            switch (comparison.operation()) {
-            case TPredicate_TComparison::L:
-                operation = TPredicate_TComparison::G;
+            switch (operation) {
+            case NConnector::NApi::TPredicate_TComparison::L:
+                operation = NConnector::NApi::TPredicate_TComparison::G;
                 break;
-            case TPredicate_TComparison::LE:
-                operation = TPredicate_TComparison::GE;
+            case NConnector::NApi::TPredicate_TComparison::LE:
+                operation = NConnector::NApi::TPredicate_TComparison::GE;
                 break;
-            case TPredicate_TComparison::EQ:
-            case TPredicate_TComparison::NE:
+            case NConnector::NApi::TPredicate_TComparison::EQ:
+            case NConnector::NApi::TPredicate_TComparison::NE:
                 break;
-            case TPredicate_TComparison::GE:
-                operation = TPredicate_TComparison::LE;
+            case NConnector::NApi::TPredicate_TComparison::GE:
+                operation = NConnector::NApi::TPredicate_TComparison::LE;
                 break;
-            case TPredicate_TComparison::G:
-                operation = TPredicate_TComparison::L;
+            case NConnector::NApi::TPredicate_TComparison::G:
+                operation = NConnector::NApi::TPredicate_TComparison::L;
                 break;
             default:
-                throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
+                break;
             }
         }
+        ui64 offset = 0;
+        auto v = typedValue.typed_value().value();
+        switch(v.value_case()) {
+            case Ydb::Value::kInt32Value:
+                offset = v.int32_value() >= 0 ? v.int32_value() : 0;
+                break; 
+            case Ydb::Value::kUint32Value:
+                offset = v.uint32_value();
+                break;
+            case Ydb::Value::kInt64Value:
+                offset = v.int64_value() >= 0 ? v.int64_value() : 0; 
+                break;
+            case Ydb::Value::kUint64Value:
+                offset = v.uint64_value();
+                break;
+            default:
+                return ; // not supported
+        }
 
-        ui64 value = [v = typedValue.typed_value()]() -> ui64 {
-            switch(v.value().value_case())
-                case Ydb::Value::kInt32Value:
-                    return v.value.int32_value();
-                case Ydb::Value::kUint32Value:
-                    return v.value.uint32_value();
-                case Ydb::Value::kInt64Value:
-                    return v.value.int64_value();
-                case Ydb::Value::kUint64Value:
-                    return v.value.uint64_value();
-                default:
-                    throw yexception() << "UnimplementedValue, value " << static_cast<ui64>(v.value.value_case());
-        }();
-
-        auto* offset = srcDes.MutablePartitionOffset();
-
-        switch (comparison.operation()) {
-        case TPredicate_TComparison::L:
-            offset.SetEnd(value);
+        switch (operation) {
+        case NConnector::NApi::TPredicate_TComparison::L:
+            proto.SetEnd(offset);
             break;
-        case TPredicate_TComparison::LE:
-            offset.SetEnd(value + 1);
+        case NConnector::NApi::TPredicate_TComparison::LE:
+            proto.SetEnd(offset + 1);
             break;
-        case TPredicate_TComparison::EQ:
-            offset.SetBegin(value);
-            offset.SetEnd(value + 1);
+        case NConnector::NApi::TPredicate_TComparison::EQ:
+            proto.SetBegin(offset);
+            proto.SetEnd(offset + 1);
             break;
-        case TPredicate_TComparison::GE:
-            offset.SetBegin(value);
+        case NConnector::NApi::TPredicate_TComparison::GE:
+            proto.SetBegin(offset);
             break;
-        case TPredicate_TComparison::G:
-            offset.SetBegin(value + 1);
+        case NConnector::NApi::TPredicate_TComparison::G:
+            proto.SetBegin(offset + 1);
             break;
-        case TPredicate_TComparison::NE:
+        case NConnector::NApi::TPredicate_TComparison::NE:
+            // TODO?
         default:
-            throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
+            break;
         }
     }
 
-    bool FormatPredicate(const TPredicate& predicate, NPq::NProto::TDqPqTopicSource& srcDesc) {
-        switch (predicate.payload_case()) {
-            case TPredicate::PAYLOAD_NOT_SET:
-                return true;
-            case TPredicate::kConjunction:
-                return false;
-                //return FormatConjunction(predicate.conjunction());
-            case TPredicate::kDisjunction:
-                //return FormatDisjunction(predicate.disjunction());
-                return false;
-            case TPredicate::kNegation:
-            case TPredicate::kCoalesce:
-            case TPredicate::kIf:
-            case TPredicate::kIsNull:
-            case TPredicate::kIsNotNull:
-            case TPredicate::kRegexp:
-            case TPredicate::kIn:
-                return false;
-                
-            case TPredicate::kComparison:
-                return FormatComparison(predicate.comparison(), srcDesc);
-            case TPredicate::kBoolExpression:
-                //return FormatExpression(predicate.bool_expression().value());
-                return false;
-            default:
-                false;
+    bool FillOffsetPredicate(const NConnector::NApi::TPredicate& predicate, NPq::NProto::TDqPqTopicSource& srcDesc) {
+         if (predicate.payload_case() == NConnector::NApi::TPredicate::kConjunction) {
+            NPq::NProto::TOffsetPredicate proto;
+            for (const auto& predicate :  predicate.conjunction().operands()) {
+                if (predicate.payload_case() != NConnector::NApi::TPredicate::kComparison) {
+                    continue;
+                }
+                FillOffsetComparation(predicate.comparison(), proto);
+            }
+            if (proto.HasBegin() || proto.HasEnd()) {
+                srcDesc.AddOffsetPredicate()->CopyFrom(proto);
+            }
         }
+        if (predicate.payload_case() == NConnector::NApi::TPredicate::kComparison) {
+            NPq::NProto::TOffsetPredicate proto; 
+            FillOffsetComparation(predicate.comparison(), proto);
+            if (proto.HasBegin() || proto.HasEnd()) {
+                srcDesc.AddOffsetPredicate()->CopyFrom(proto);
+            }
+        }
+        return true;
     }
 
 private:

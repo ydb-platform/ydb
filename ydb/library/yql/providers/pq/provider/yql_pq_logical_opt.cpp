@@ -336,6 +336,8 @@ public:
             }
         }
 
+        Cerr << "PushFilterToPqTopicSource "  << Endl;
+
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
@@ -351,7 +353,7 @@ public:
             return node;
         }
 
-        YQL_CLOG(INFO, ProviderPq) << "topicPartitionsCount " << topicPartitionsCount;
+        Cerr << "topicPartitionsCount " << topicPartitionsCount << Endl;
 
         TString sharedReadingPridicateSerializedProto;
         if (UseSharedReadingForTopic(dqPqTopicSource)) {
@@ -370,6 +372,7 @@ public:
             YQL_ENSURE(predicateProto.SerializeToString(&sharedReadingPridicateSerializedProto));
         }
 
+        bool isPartitionListUpdated = false;
         TExprNode::TPtr partitionList = dqPqTopicSource.Partitions().Ptr();
         {
             auto settings = TPushdownSettings();
@@ -386,6 +389,7 @@ public:
                         .Build()
                     .Done();
 
+                isPartitionListUpdated = true;
                 TExprNode::TPtr partitionList = ctx.Builder(node.Pos())
                     .Callable("EvaluateExpr")
                         .Callable(0, "Map")
@@ -431,25 +435,27 @@ public:
 
         TString offsetPredicateSerializedProto;
         {
-
             auto offsetSettings = TPushdownSettings();
             offsetSettings.EnableMember("_yql_sys_offset");
             NPushdown::TPredicateNode offsetPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), offsetSettings);
-            // rm
-            TStringBuilder err;
-            NYql::NConnector::NApi::TPredicate predicateProto;
-            if (!NYql::SerializeFilterPredicate(ctx, offsetPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
-                ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-                return node;
+            if (!offsetPredicate.IsEmpty()) {
+                NYql::NConnector::NApi::TPredicate proto;
+                TStringBuilder err;
+                if (NYql::SerializeFilterPredicate(ctx, offsetPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &proto, err)) {
+                    YQL_ENSURE(proto.SerializeToString(&offsetPredicateSerializedProto));
+                }
             }
-            TString predicateSql = NYql::FormatPredicate(predicateProto);
-            Cerr  << "offset predicagte " << predicateSql << Endl;
-
-            YQL_ENSURE(predicateProto.SerializeToString(&offsetPredicateSerializedProto));
-
+            // // rm
+            // TStringBuilder err;
+            // if (!NYql::SerializeFilterPredicate(ctx, offsetPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+            //     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+            //     return node;
+            // }
+            // TString predicateSql = NYql::FormatPredicate(predicateProto);
+            // Cerr  << "offset predicate " << predicateSql << Endl;
         }
 
-        if (sharedReadingPridicateSerializedProto.empty() && !partitionList && offsetPredicateSerializedProto.empty()) {
+        if (sharedReadingPridicateSerializedProto.empty() && !isPartitionListUpdated && offsetPredicateSerializedProto.empty()) {
             return node;
         }
 

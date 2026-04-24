@@ -2,10 +2,10 @@
 
 #include <yt/yt/core/actions/bind.h>
 
+#include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/coroutine.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
-
-#include <yt/yt/core/misc/public.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 namespace NYT::NConcurrency {
 namespace {
@@ -150,8 +150,35 @@ TEST_W(TCoroutineTest, WaitFor)
     EXPECT_TRUE(coro.IsCompleted());
 }
 
+TEST_F(TCoroutineTest, ResumeCoroutineAcrossFiberThreads)
+{
+    auto creationQueue = New<TActionQueue>("Creation");
+    auto executionQueue = New<TActionQueue>("Execution");
+
+    std::optional<TCoroutine<void()>> coroutine;
+    bool bodyStarted = false;
+
+    WaitFor(
+        BIND([&] {
+            coroutine.emplace([&] (TCoroutine<void()>& self) {
+                bodyStarted = true;
+                self.Yield();
+            });
+        })
+        .AsyncVia(creationQueue->GetInvoker()).Run())
+        .ThrowOnError();
+
+    WaitFor(
+        BIND([&] {
+            coroutine->Run();
+        })
+        .AsyncVia(executionQueue->GetInvoker()).Run())
+        .ThrowOnError();
+
+    EXPECT_TRUE(bodyStarted);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NConcurrency
-

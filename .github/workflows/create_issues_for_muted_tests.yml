@@ -101,7 +101,7 @@ jobs:
             });
 
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} --muted_ya_file="${{ env.MUTED_YA_FILE_PATH }}"
 
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}

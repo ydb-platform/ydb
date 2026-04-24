@@ -17,11 +17,16 @@ on:
             required: false
             type: string
             default: main
+        build_type:
+            description: 'Build type for mute file resolving (default: relwithdebinfo)'
+            required: false
+            type: string
+            default: relwithdebinfo
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
-  BUILD_TYPE: relwithdebinfo
+  DEFAULT_BUILD_TYPE: relwithdebinfo
+  WORKFLOW_CHECKOUT_REF: ${{ github.ref_name }}
 
 jobs:
   create-issues-for-muted-tests:
@@ -36,14 +41,22 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "BASE_BRANCH=${{ github.event.inputs.base_branch }}" >> "$GITHUB_ENV"
+            echo "BUILD_TYPE=${{ github.event.inputs.build_type || env.DEFAULT_BUILD_TYPE }}" >> "$GITHUB_ENV"
           else
             echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}" >> "$GITHUB_ENV"
+            echo "BUILD_TYPE=${{ env.DEFAULT_BUILD_TYPE }}" >> "$GITHUB_ENV"
           fi
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            ref: main
+            ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+
+      - name: Resolve muted YA file path
+        run: |
+          MUTED_YA_RELATIVE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ env.BUILD_TYPE }}")"
+          echo "MUTED_YA_FILE_PATH=${{ github.workspace }}/$MUTED_YA_RELATIVE" >> "$GITHUB_ENV"
+          echo "Using build_type=${{ env.BUILD_TYPE }} muted_ya_file=$MUTED_YA_RELATIVE"
 
       - name: Install dependencies
         run: |
@@ -59,7 +72,7 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
+        run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
 
       - name: Add issues to PR
         continue-on-error: true

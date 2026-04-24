@@ -953,7 +953,7 @@ public:
         auto typedValue = comparison.right_value();
         auto operation = comparison.operation();
         if (inverted) {
-            auto typedValue = comparison.left_value();
+            typedValue = comparison.left_value();
             switch (operation) {
             case NConnector::NApi::TPredicate_TComparison::L:
                 operation = NConnector::NApi::TPredicate_TComparison::G;

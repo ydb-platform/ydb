@@ -75,26 +75,4 @@ void TPredicateNode::SetPredicates(const std::vector<TPredicateNode>& predicates
     }
 }
 
-TString TPredicateNode::ToString(TStringBuilder& builder, ui32 tabs) const {
-    if (ExprNode) {
-         for (ui32 i = 0; i < tabs; ++i)
-            builder  << "\t";
-        builder << ExprNode.Ref().Content() << " CanBePushed " << CanBePushed << " Op " << static_cast<int>(Op) << Endl;
-    }
-    for (auto& child : Children) {
-        for (ui32 i = 0; i < tabs; ++i)
-            builder  << "\t";
-
-        child.ToString(builder, tabs + 1);
-    } 
-    return builder;
-}
-
-TString TPredicateNode::ToString() const {
-    TStringBuilder builder;
-    builder << "TPredicateNode:\n";
-    ToString(builder, 0);
-    return builder;
-}
-
 } // namespace NYql::NPushdown

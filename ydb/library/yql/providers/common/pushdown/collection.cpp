@@ -223,7 +223,6 @@ private:
         // We allow member access only for top level predicate argument
         return member.Struct().Raw() == LambdaArg.Raw() 
             && Settings.IsMemberEnabled(TString(member.Name().Value()));
-        
     }
 
     bool IsMemberColumn(const TExprBase& node) const {

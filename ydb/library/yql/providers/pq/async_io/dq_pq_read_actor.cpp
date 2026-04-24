@@ -270,7 +270,7 @@ public:
         InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
 
-        YQL_ENSURE(SourceParams.OffsetPredicateSize() <= 1, "Multiple PartitionOffset is not implemented");
+        YQL_ENSURE(SourceParams.OffsetPredicateSize() <= 1, "Multiple OffsetPredicate is not implemented");
         for (const auto& predicateOffset: SourceParams.GetOffsetPredicate()) {
             YQL_ENSURE(!predicateOffset.HasPartitionId(), "Not empty PartitionId is not implemented");
 
@@ -536,7 +536,6 @@ private:
                 const auto& partitionsToRead = GetPartitionsToRead(cluster);
                 for (const auto partitionId : partitionsToRead) {
                     Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
-
                 }
             }
 
@@ -937,7 +936,7 @@ private:
                 Self.IngressStats.Bytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
-                
+
                 if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.EndOffset && *partitionInfo.EndOffset <= message.GetOffset()) {
                     SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data (message offset: " << message.GetOffset() << ", end offset: " << *partitionInfo.EndOffset << ")");
                     continue;

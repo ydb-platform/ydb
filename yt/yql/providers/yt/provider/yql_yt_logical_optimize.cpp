@@ -734,7 +734,7 @@ protected:
         }
 
         TVector<TYtTableBaseInfo::TPtr> tableInfos = GetInputTableInfos(list);
-        if (AllOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return !info->Meta->IsDynamic; })) {
+        if (AllOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return !info->Meta->IsDynamic && !info->Meta->HasRLS; })) {
             TExprNodeList calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
             TSet<TStringBuf> rowNumberCols;
             for (auto& calcNode : calcs) {

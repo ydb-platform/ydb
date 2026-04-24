@@ -1,6 +1,6 @@
 # Vector index type: vector_kmeans_tree
 
-[Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/vector_search.md) in multidimensional spaces. They are described in the [overview](vector-indexes.md); this article details the `vector_kmeans_tree` vector index type.
+[Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/query_execution/vector_search.md) in multidimensional spaces. They are described in the [overview](vector-indexes.md); this article details the `vector_kmeans_tree` vector index type.
 
 ## Creating the vector index {#index-create}
 

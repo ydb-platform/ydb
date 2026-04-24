@@ -13,7 +13,7 @@ TRUNCATE TABLE <table_name>;
 * While the operation runs, the table is locked for reads and writes.
 * The operation cannot be interrupted or rolled back after it has started.
 * The operation cannot run if the table has:
-    - An [asynchronous secondary index](../../../concepts/secondary_indexes.md#async),
+    - An [asynchronous secondary index](../../../concepts/query_execution/secondary_indexes.md#async),
     - A [changefeed](alter_table/changefeed.md),
     - [Asynchronous replication](../../../concepts/async-replication.md).
 

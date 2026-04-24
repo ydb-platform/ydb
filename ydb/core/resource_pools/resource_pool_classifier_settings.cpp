@@ -44,7 +44,7 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
     std::unordered_map<TString, TProperty> properties = {
         {"rank", &Rank},
         {"resource_pool", &ResourcePool},
-        {"member_name", &MemberName},
+        {"member_name", &MemberName}
     };
     return properties;
 }
@@ -53,7 +53,6 @@ std::optional<TString> TClassifierSettings::Validate() const {
     if (!MemberName) {
         return std::nullopt;
     }
-
     NACLib::TUserToken token(*MemberName, TVector<NACLib::TSID>{});
     if (token.IsSystemUser()) {
         return TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << *MemberName;

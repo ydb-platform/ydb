@@ -3,16 +3,20 @@
 #include "flush_request.h"
 #include "range_translate.h"
 #include "read_request.h"
-#include "write_request.h"
+#include "write_with_direct_replication_request.h"
+#include "write_with_pb_replication_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_direct_replication_request.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_pb_replication_request.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

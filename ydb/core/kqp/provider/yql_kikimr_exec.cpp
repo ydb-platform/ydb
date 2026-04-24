@@ -2595,7 +2595,20 @@ public:
                             break;
                         case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                             if (table.Metadata->StoreType != EStoreType::Column) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                 NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                return SyncError();
+                            }
+
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(add_index->data_columns())));
+                                return SyncError();
+                            }
+
+                            if (add_index->index_columns_size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(add_index->index_columns())));
                                 return SyncError();
                             }
 

@@ -6,15 +6,15 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
 
     TString IncorrectDataColumnsErrorMessage(const auto& dataColumns) {
         AFL_VERIFY(!dataColumns.empty());
-        return TStringBuilder() << "Local min_max does't need Data columns(COVER from yql), but got "
-            << dataColumns.size() << " of these columns: [" << JoinStrings(dataColumns.begin(), dataColumns.end(), ", ") << "]";
+        return TStringBuilder() << "Local min_max index does not require data columns (COVER in YQL), but got "
+            << dataColumns.size() << " columns: [" << JoinStrings(dataColumns.begin(), dataColumns.end(), ", ") << "]";
 
     }
 
     TString IncorrectIndexColumnsErrorMessage(const auto& indexColumns) {
         AFL_VERIFY(indexColumns.size() != 1);
 
-        return TStringBuilder() << "Local min_max is applied to 1 column only(exactly 1 column in ON (...) yql statement), tried to apply to "
+        return TStringBuilder() << "Local min_max index can only be applied to exactly one column (one column in the ON (...) YQL statement), but tried to apply it to "
             << indexColumns.size() << " columns: [" << JoinStrings(indexColumns.begin(), indexColumns.end(), ", ") << "]";
 
     }

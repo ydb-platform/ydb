@@ -15,18 +15,20 @@ using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(CreateExternalDataSource, TStreamingTestFixture) {
-        CreatePqSource("sourceName");
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        CreatePqSource(sourceName);
 
         // DataStreams is not allowed.
         ExecSchemeQuery(fmt::format(
             R"sql(
-                CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
+                CREATE EXTERNAL DATA SOURCE `{source_name}2` WITH (
                     SOURCE_TYPE="DataStreams",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
             )sql",
+            "source_name"_a = sourceName,
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
         ), EStatus::SCHEME_ERROR);
@@ -34,13 +36,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // YdbTopics is not allowed.
         ExecSchemeQuery(fmt::format(
             R"sql(
-                CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
+                CREATE EXTERNAL DATA SOURCE `{source_name}2` WITH (
                     SOURCE_TYPE="{source_type}",
                     LOCATION="{location}",
                     DATABASE_NAME="{database_name}",
                     AUTH_METHOD="NONE"
                 );
             )sql",
+            "source_name"_a = sourceName,
             "source_type"_a = ToString(NYql::EDatabaseType::YdbTopics),
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
@@ -48,12 +51,22 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceBasic, TStreamingTestFixture) {
-        CreatePqSourceBasicAuth("sourceName");
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        CreatePqSourceBasicAuth(sourceName);
     }
 
     Y_UNIT_TEST_F(FailedWithoutAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
-        SetupAppConfig().MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
+        const auto saveCfg = cfg;
+        Y_DEFER {
+            cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
+        };
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         ExecSchemeQuery(fmt::format(
             R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName` WITH (
@@ -69,22 +82,37 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
+        auto saveCfg = cfg;
+        Y_DEFER {
+            cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
+        };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
-        CreatePqSource("sourceName");
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        CreatePqSource(sourceName);
     }
 
     Y_UNIT_TEST_F(ReadTopicFailedWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
+        auto saveCfg = cfg;
+        Y_DEFER {
+            cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
+        };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
-        const std::string sourceName = "sourceName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(sourceName);
 
-        const std::string topicName = "topicName";
+        const TString topicName = TStringBuilder() << "topicName" << Name_;
         CreateTopic(topicName);
 
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
@@ -104,37 +132,48 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/" + sourceName + ".[" + topicName + "] data source generic doesn't exist");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
+        auto saveCfg = cfg;
+        Y_DEFER {
+            cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
+        };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
-        constexpr char sourceName[] = "sourceName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        const TString topicName = TStringBuilder() << "topicName" << Name_;
         CreatePqSource(sourceName);
 
         // Execute script without existing topic
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
+            SELECT * FROM `{source}`.`{topic_name}` WITH (STREAMING = "TRUE")
             )",
+            "topic_name"_a=topicName,
             "source"_a=sourceName
         ), EExecStatus::Failed);
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/" + sourceName + ".[" + topicName + "] data source generic doesn't exist");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
-        constexpr char sourceName[] = "sourceName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        const TString topicName = TStringBuilder() << "topicName" << Name_;
         CreatePqSource(sourceName);
 
         // Execute script without existing topic
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
+            SELECT * FROM `{source}`.`{topic_name}` WITH (STREAMING = "TRUE")
             )",
+            "topic_name"_a=topicName,
             "source"_a=sourceName
         ), EExecStatus::Failed);
 
@@ -142,17 +181,24 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
         const auto& issues = status.GetIssues().ToString();
         UNIT_ASSERT_STRING_CONTAINS(issues, "Couldn't determine external YDB entity type");
-        UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database '/local'");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/" + topicName + "' in external YDB database '/local'");
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& cfg = *appConfig.MutableQueryServiceConfig();
+        auto saveCfg = cfg;
+        Y_DEFER {
+            cfg = std::move(saveCfg);
+            UpdateConfig(appConfig);
+        };
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.AddAvailableExternalDataSources("YdbTopics");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        UpdateConfig(appConfig);
 
-        const std::string sourceName = "sourceName";
-        const std::string topicName = "topicName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        const TString topicName = TStringBuilder() << "topicName" << Name_;
         ui32 partitionCount = 10;
 
         CreateTopic(topicName, NTopic::TCreateTopicSettings()
@@ -187,16 +233,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {
-        TestReadTopicBasic("-with-new-secret");
+        TestReadTopicBasic(TStringBuilder() << "-with-new-secret" << Name_);
     }
 
     Y_UNIT_TEST_F(ReadTopicBasicOldSecrets, TStreamingTestFixture) {
-        TestReadTopicBasic("-with-old-secret");
+        TestReadTopicBasic(TStringBuilder() << "-with-old-secret" << Name_);
     }
 
     Y_UNIT_TEST_F(ReadTopicExplainBasic, TStreamingTestFixture) {
-        const std::string sourceName = "sourceName";
-        const std::string topicName = "topicName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        const TString topicName = TStringBuilder() << "topicName" << Name_;
         CreateTopic(topicName);
 
         CreatePqSourceBasicAuth(sourceName);
@@ -221,12 +267,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(InsertTopicBasic, TStreamingTestFixture) {
-        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1000);
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableQueryServiceConfig();
+        auto saveConfig = config;
+        Y_DEFER {
+            config = saveConfig;
+            UpdateConfig(appConfig);
+        };
+        config.SetProgressStatsPeriodMs(1000);
+        UpdateConfig(appConfig);
 
-        const std::string sourceName = "sourceName";
-        const std::string inputTopicName = "inputTopicName";
-        const std::string outputTopicName = "outputTopicName";
-        const std::string tableName = "tableName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
+        const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "outputTopicName" << Name_;
+        const TString tableName = TStringBuilder() << "tableName" << Name_;
 
         CreateTopic(outputTopicName);
         CreateTopic(inputTopicName);
@@ -269,10 +323,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(ReadTopicWithColumnOrder, TStreamingTestFixture) {
-        constexpr char topicName[] = "readTopicWithColumnOrder";
+        const TString topicName = TStringBuilder() << "readTopicWithColumnOrder" << Name_;
         CreateTopic(topicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
         const auto op = ExecScript(fmt::format(R"(
@@ -313,10 +367,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(ReadTopicWithDefaultSchema, TStreamingTestFixture) {
-        constexpr char topicName[] = "readTopicWithDefaultSchema";
+        const TString topicName = TStringBuilder() << "readTopicWithDefaultSchema" << Name_;
         CreateTopic(topicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
         const auto op = ExecScript(fmt::format(R"(
@@ -335,16 +389,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphBasic, TStreamingTestFixture) {
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph";
+        const TString writeBucket = TStringBuilder() << "test_bucket_restore_script_physical_graph";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopic";
+        const TString topicName = TStringBuilder() << "restoreScriptTopic" << Name_;
         CreateTopic(topicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char s3SinkName[] = "s3Sink";
+        const TString s3SinkName = TStringBuilder() << "s3Sink" << Name_;
         CreateS3Source(writeBucket, s3SinkName);
 
         const auto executeQuery = [&](TScriptQuerySettings settings) {
@@ -370,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         };
 
         const auto executionId = executeQuery({.SaveState = true});
-        const std::string sampleResult = "{\"key\":\"key1\",\"value\":\"value1\"}\n";
+        const TString sampleResult = "{\"key\":\"key1\",\"value\":\"value1\"}\n";
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), sampleResult);
 
         ExecQuery(fmt::format(R"(
@@ -385,12 +439,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphGroupByHop, TStreamingTestFixture) {
-        constexpr char sourceTopicName[] = "restoreScriptGroupByHopTopicSource";
-        constexpr char sinkTopicName[] = "restoreScriptGroupByHopTopicSink";
+        const TString sourceTopicName = TStringBuilder() << "restoreScriptGroupByHopTopicSource" << Name_;
+        const TString sinkTopicName = TStringBuilder() << "restoreScriptGroupByHopTopicSink" << Name_;
         CreateTopic(sourceTopicName);
         CreateTopic(sinkTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
         std::vector<std::string> expectedMessages;
@@ -444,16 +498,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
+        const TString writeBucket = TStringBuilder() << "test_bucket_restore_script_physical_graph_on_retry";
         CreateBucket(writeBucket);
 
-        constexpr char topicName[] = "restoreScriptTopicOnRetry";
+        const TString topicName = TStringBuilder() << "restoreScriptTopicOnRetry" << Name_;
         CreateTopic(topicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char s3SinkName[] = "s3Sink";
+        const TString s3SinkName = TStringBuilder() << "s3Sink" << Name_;
         CreateS3Source(writeBucket, s3SinkName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
@@ -496,15 +550,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetryWithCheckpoints, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "inputTopicName";
+        const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
         CreateTopic(inputTopicName);
-        constexpr char outputTopicName[] = "outputTopicName";
+        const TString outputTopicName = TStringBuilder() << "outputTopicName" << Name_;
         CreateTopic(outputTopicName);
 
-        constexpr char sourceName[] = "sourceName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}` WITH (
                     STREAMING = "TRUE",
@@ -552,15 +606,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         LogSettings.Freeze = true;
         CheckpointPeriod = TDuration::Seconds(5);
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "outputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char sourceName[] = "sourceName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -620,15 +674,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CheckpointPeriod = TDuration::Seconds(3);
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "outputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char sourceName[] = "sourceName";
+        const TString sourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(sourceName);
 
-        const std::string checkpointId = CreateGuidAsString();
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -656,7 +710,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         writeSession->Lock();
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
-        const std::string value(1_KB, 'x');
+        const TString value(1_KB, 'x');
         TInstant time = TInstant::Now();
         for (ui64 i = 0; i < 100000; ++i, time += TDuration::Hours(2)) {
             readSession->AddDataReceivedEvent(i, fmt::format(R"({{"time": "{time}", "event": "{event}"}})", "time"_a = time.ToString(), "event"_a = value));
@@ -671,12 +725,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(S3RuntimeListingDisabledForStreamingQueries, TStreamingTestFixture) {
-        constexpr char sourceBucket[] = "test_bucket_disable_runtime_listing";
+        const TString sourceBucket = TStringBuilder() << "test_bucket_disable_runtime_listing";
         constexpr char objectPath[] = "test_bucket_object.json";
         constexpr char objectContent[] = R"({"data": "x"})";
         CreateBucketWithObject(sourceBucket, objectPath, objectContent);
 
-        constexpr char s3SourceName[] = "s3Source";
+        const TString s3SourceName = TStringBuilder() << "s3Source" << Name_;
         CreateS3Source(sourceBucket, s3SourceName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
@@ -699,12 +753,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(S3AtomicUploadCommitDisabledForStreamingQueries, TStreamingTestFixture) {
-        constexpr char sourceBucket[] = "test_bucket_disable_atomic_upload_commit";
+        const TString sourceBucket = TStringBuilder() << "test_bucket_disable_atomic_upload_commit";
         constexpr char objectPath[] = "test_bucket_object.json";
         constexpr char objectContent[] = R"({"data": "x"})";
         CreateBucketWithObject(sourceBucket, objectPath, objectContent);
 
-        constexpr char s3SourceName[] = "s3Source";
+        const TString s3SourceName = TStringBuilder() << "s3Source" << Name_;
         CreateS3Source(sourceBucket, s3SourceName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
@@ -728,13 +782,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(S3PartitioningKeysFlushTimeout, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
-        constexpr char sourceBucket[] = "test_bucket_partitioning_keys_flush";
-        constexpr char s3SourceName[] = "s3Source";
+        const TString sourceBucket = TStringBuilder() << "test_bucket_partitioning_keys_flush";
+        const TString s3SourceName = TStringBuilder() << "s3Source" << Name_;
         CreateBucket(sourceBucket);
         CreateS3Source(sourceBucket, s3SourceName);
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char pqSourceName[] = "pqSourceName";
+        const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
         CreateTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
@@ -773,10 +827,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(CrossJoinWithNotExistingDataSource, TStreamingTestFixture) {
         const auto connectorClient = SetupMockConnectorClient();
 
-        constexpr char ydbSourceName[] = "ydbSourceName";
+        const TString ydbSourceName = TStringBuilder() << "ydbSourceName" << Name_;
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "unknownSourceLookup";
+        const TString ydbTable = TStringBuilder() << "unknownSourceLookup" << Name_;
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
@@ -816,19 +870,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_TWIN_F(ReplicatedFederativeWriting, UseColumnTable, TStreamingTestFixture) {
-        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
-        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
-        constexpr char pqSource[] = "pqSourceName";
+        const TString firstOutputTopic = TStringBuilder() << "replicatedWritingOutputTopicName1" << Name_;
+        const TString secondOutputTopic = TStringBuilder() << "replicatedWritingOutputTopicName2" << Name_;
+        const TString pqSource = TStringBuilder() << "pqSourceName" << Name_;
         CreateTopic(firstOutputTopic);
         CreateTopic(secondOutputTopic);
         CreatePqSource(pqSource);
 
-        constexpr char solomonSink[] = "solomonSinkName";
+        const TString solomonSink = TStringBuilder() << "solomonSinkName" << Name_;
         CreateSolomonSource(solomonSink);
 
-        constexpr char sourceTable[] = "source";
-        constexpr char rowSinkTable[] = "rowSink";
-        constexpr char columnSinkTable[] = "columnSink";
+        const TString sourceTable = TStringBuilder() << "source" << Name_;
+        const TString rowSinkTable = TStringBuilder() << "rowSink" << Name_;
+        const TString columnSinkTable = TStringBuilder() << "columnSink" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE TABLE `{source_table}` (
                 Data String NOT NULL,
@@ -989,21 +1043,29 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         InternalInitFederatedQuerySetupFactory = true;
 
         auto& config = SetupAppConfig();
+        auto saveCfg = config;
+        Y_DEFER {
+            config = std::move(saveCfg);
+            UpdateConfig(config);
+        };
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        UpdateConfig(config);
 
-        constexpr char inputTopic[] = "inputTopicName";
-        constexpr char outputTopic[] = "outputTopicName";
+        const TString inputTopic = TStringBuilder() << "inputTopicName" << Name_;
+        const TString outputTopic = TStringBuilder() << "outputTopicName" << Name_;
         CreateTopic(inputTopic, std::nullopt, /* local */ true);
         CreateTopic(outputTopic, std::nullopt, /* local */ true);
+        const TString testConsumer = TStringBuilder() << "test_consumer" << Name_;
 
         auto asyncResult = GetQueryClient()->ExecuteQuery(fmt::format(R"(
-                PRAGMA pq.Consumer = "test_consumer";
+                PRAGMA pq.Consumer = "{test_consumer}";
                 INSERT INTO `{output_topic}`
                 SELECT * FROM `{input_topic}` WITH (
                     STREAMING = "TRUE"
                 ) LIMIT 2
             )",
+            "test_consumer"_a = testConsumer,
             "input_topic"_a = inputTopic,
             "output_topic"_a = outputTopic
         ), TTxControl::NoTx());
@@ -1025,14 +1087,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
-        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
-        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
-        constexpr char pqSource[] = "pqSourceName";
+        const TString firstOutputTopic = TStringBuilder() << "replicatedWritingOutputTopicName1" << Name_;
+        const TString secondOutputTopic = TStringBuilder() << "replicatedWritingOutputTopicName2" << Name_;
+        const TString pqSource = TStringBuilder() << "pqSourceName" << Name_;
         CreateTopic(firstOutputTopic);
         CreateTopic(secondOutputTopic);
         CreatePqSource(pqSource);
 
-        constexpr char solomonSink[] = "solomonSinkName";
+        const TString solomonSink = TStringBuilder() << "solomonSinkName" << Name_;
         CreateSolomonSource(solomonSink);
 
         const TSolomonLocation soLocation = {
@@ -1139,12 +1201,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
         auto& appConfig = SetupAppConfig();
+        auto saveCfg = appConfig;
+        Y_DEFER {
+            appConfig = std::move(saveCfg);
+            UpdateConfig(appConfig);
+        };
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
+        UpdateConfig(appConfig);
         constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
 
-        constexpr char inputTopicName[] = "createExternalDataSourceAuthMethodIam";
+        const TString inputTopicName = TStringBuilder() << "createExternalDataSourceAuthMethodIam" << Name_;
         CreateTopic(inputTopicName);
-        constexpr char secretPath[] = "eds_iam_token";
+        const TString secretPath = TStringBuilder() << "eds_iam_token" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE SECRET {secret} WITH (value = "{token}");
             )",
@@ -1153,7 +1221,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             ));
 
         constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
-        constexpr char pqSourceName[] = "sourceNameCloud";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
                 SOURCE_TYPE = "Ydb",

@@ -1,12 +1,10 @@
 #include "common.h"
 
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 #include <fmt/format.h>
 
@@ -22,19 +20,21 @@ using namespace NTestUtils;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createAndAlterStreamingQueryInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createAndAlterStreamingQueryOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
+        const TString testSecret = TStringBuilder() << "testSecret" << Name_;
+        const TString testTable = TStringBuilder() << "testTable" << Name_;
         ExecQuery(fmt::format(R"(
-            CREATE SECRET test_secret WITH (value = "1234");
-            CREATE TABLE test_table1 (Key Int32 NOT NULL, PRIMARY KEY (Key));
-            GRANT ALL ON `/Root/test_table1` TO `test@builtin`;
+            CREATE SECRET `{test_secret}` WITH (value = "1234");
+            CREATE TABLE `{test_table}1` (Key Int32 NOT NULL, PRIMARY KEY (Key));
+            GRANT ALL ON `/Root/{test_table}1` TO `test@builtin`;
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
@@ -47,6 +47,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 )
                 WHERE value REGEXP ".*v.*a.*l.*"
             END DO;)",
+            "test_secret"_a = testSecret,
+            "test_table"_a = testTable,
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
@@ -54,7 +56,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         {
-            const auto tableDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/test_table1", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto tableDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/" + testTable + "1", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& table = tableDesc->ResultSet.at(0);
             UNIT_ASSERT_VALUES_EQUAL(table.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindTable);
             UNIT_ASSERT(table.SecurityObject->CheckAccess(NACLib::GenericFull, NACLib::TUserToken("test@builtin", {})));
@@ -67,7 +69,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessages(outputTopicName, {"key1value1"});
 
         ExecQuery(fmt::format(R"(
-            CREATE TABLE test_table2 (Key Int32 NOT NULL, PRIMARY KEY (Key));
+            CREATE TABLE `{test_table}2` (Key Int32 NOT NULL, PRIMARY KEY (Key));
             ALTER STREAMING QUERY `{query_name}` SET (
                 FORCE = TRUE
             ) AS
@@ -81,6 +83,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     )
                 )
             END DO;)",
+            "test_table"_a = testTable,
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
@@ -104,15 +107,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createAndDropStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndDropStreamingQueryOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createAndDropStreamingQueryInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createAndDropStreamingQueryOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -147,16 +150,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(MaxPartitionReadSkewWithRestartAndCheckpoint, TStreamingTestFixture) {
         constexpr ui32 partitionCount = 10;
-        constexpr char inputTopicName[] = "maxPartitionReadSkewRestartInputTopic";
-        constexpr char outputTopicName[] = "maxPartitionReadSkewRestartOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "maxPartitionReadSkewRestartInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "maxPartitionReadSkewRestartOutputTopic" << Name_;
         CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -218,16 +221,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(IdleTimeoutPartitionSessionBalancer, TStreamingTestFixture) {
         constexpr ui32 partitionCount = 2;
-        constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
-        constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "idleTimeoutBalancerInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "idleTimeoutBalancerOutputTopic" << Name_;
         CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -262,15 +265,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
         constexpr ui64 executionsLimit = 3;
-        constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";
-        constexpr char outputTopicName[] = "maxStreamingQueryExecutionsLimitOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "maxStreamingQueryExecutionsLimitInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "maxStreamingQueryExecutionsLimitOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -330,15 +333,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CreateStreamingQueryWithDefineAction, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createAndAlterStreamingQueryInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createAndAlterStreamingQueryOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -369,15 +372,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CreateStreamingQueryMatchRecognize, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createStreamingQueryMatchRecognizeInputTopic";
-        constexpr char outputTopicName[] = "createStreamingQueryMatchRecognizeOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createStreamingQueryMatchRecognizeInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createStreamingQueryMatchRecognizeOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -423,15 +426,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryReplaceAfterError, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createAndAlterStreamingQueryInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createAndAlterStreamingQueryOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -478,15 +481,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryTextChangeWithCreateOrReplace, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createAndReplaceStreamingQueryInputTopic";
-        constexpr char outputTopicName[] = "createAndReplaceStreamingQueryOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createAndReplaceStreamingQueryInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createAndReplaceStreamingQueryOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -537,15 +540,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryCreateOrReplaceFailure, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createOrReplaceStreamingQueryFailInputTopic";
-        constexpr char outputTopicName[] = "createOrReplaceStreamingQueryFailOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createOrReplaceStreamingQueryFailInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createOrReplaceStreamingQueryFailOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -585,13 +588,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithSolomonInsert, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "streamingQuerySolomonInsertInputTopic";
+        const TString inputTopicName = TStringBuilder() << "streamingQuerySolomonInsertInputTopic" << Name_;
         CreateTopic(inputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char solomonSinkName[] = "sinkName";
+        const TString solomonSinkName = TStringBuilder() << "sinkName" << Name_;
         CreateSolomonSource(solomonSinkName);
 
         constexpr char queryName[] = "streamingQuery";
@@ -674,17 +677,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithS3Insert, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "streamingQueryS3InsertInputTopic";
-        constexpr char pqSourceName[] = "sourceName";
+        const TString inputTopicName = TStringBuilder() << "streamingQueryS3InsertInputTopic" << Name_;
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreateTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
-        constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert";
-        constexpr char s3SinkName[] = "sinkName";
+        const TString sourceBucket = TStringBuilder() << "test_bucket_streaming_query_s3_insert";
+        const TString s3SinkName = TStringBuilder() << "sinkName" << Name_;
         CreateBucket(sourceBucket);
         CreateS3Source(sourceBucket, s3SinkName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -727,30 +730,39 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {
         // Test that defaults are overridden for streaming queries
-        auto& setting = *SetupAppConfig().MutableKQPConfig()->AddSettings();
+        auto& appConfig = SetupAppConfig();
+        auto& kqpSettings = *appConfig.MutableKQPConfig();
+        auto saveSettings = kqpSettings;
+        Y_DEFER {
+            kqpSettings = saveSettings;
+            UpdateConfig(appConfig);
+        };
+        auto& setting = *kqpSettings.AddSettings();
         setting.SetName("HashJoinMode");
         setting.SetValue("grace");
 
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char sourceBucket[] = "test_streaming_query_with_s3_join";
+        UpdateConfig(appConfig);
+
+        const TString sourceBucket = TStringBuilder() << "test_streaming_query_with_s3_join";
         constexpr char objectContent[] = R"(
 {"fqdn": "host1.example.com", "payload": "P1"}
 {"fqdn": "host2.example.com", "payload": "P2"}
 {"fqdn": "host3.example.com", "payload": "P3"})";
         CreateBucketWithObject(sourceBucket, "path/test_object.json", objectContent);
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "outputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "pqSourceName";
-        constexpr char s3SourceName[] = "s3Source";
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
+        const TString s3SourceName = TStringBuilder() << "s3Source" << Name_;
         CreatePqSource(pqSourceName);
         CreateS3Source(sourceBucket, s3SourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -807,24 +819,33 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(StreamingQueryWithYdbJoin, TStreamingTestFixture) {
         // Test that defaults are overridden for streaming queries
-        auto& setting = *SetupAppConfig().MutableKQPConfig()->AddSettings();
+        auto& appConfig = SetupAppConfig();
+        auto& kqpSettings = *appConfig.MutableKQPConfig();
+        auto saveSettings = kqpSettings;
+        Y_DEFER {
+            kqpSettings = saveSettings;
+            UpdateConfig(appConfig);
+        };
+        auto& setting = *kqpSettings.AddSettings();
         setting.SetName("HashJoinMode");
         setting.SetValue("grace");
 
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        UpdateConfig(appConfig);
+
+        const TString inputTopicName = TStringBuilder() << "inputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "outputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "pqSourceName";
-        constexpr char ydbSourceName[] = "ydbSourceName";
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
+        const TString ydbSourceName = TStringBuilder() << "ydbSourceName" << Name_;
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "lookup";
+        const TString ydbTable = TStringBuilder() << "lookup" << Name_;
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
@@ -865,7 +886,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
         }
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -919,17 +940,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "doubleYdbJoinInputTopicName";
-        constexpr char outputTopicName[] = "doubleYdbJoinOutputTopicName";
+        const TString inputTopicName = TStringBuilder() << "doubleYdbJoinInputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "doubleYdbJoinOutputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "pqSourceName";
-        constexpr char ydbSourceName[] = "ydbSourceName";
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
+        const TString ydbSourceName = TStringBuilder() << "ydbSourceName" << Name_;
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "doubleYdbJoinLookup";
+        const TString ydbTable = TStringBuilder() << "doubleYdbJoinLookup" << Name_;
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
@@ -958,7 +979,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
         }
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1001,28 +1022,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, TStreamingTestFixture) {
-        {
-            auto& setupAppConfig = SetupAppConfig();
-            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
-            if (WithFeatureFlag) {
-                setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
-            }
-        }
-
+        auto& appConfig = SetupAppConfig();
+        auto saveConfig = appConfig;
+        Y_DEFER {
+            appConfig = saveConfig;
+            UpdateConfig(appConfig);
+        };
+        appConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+        appConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(WithFeatureFlag);
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "sljInputTopicName";
-        constexpr char outputTopicName[] = "sljOutputTopicName";
+        UpdateConfig(appConfig);
+
+        const TString inputTopicName = TStringBuilder() << "sljInputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "sljOutputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "pqSourceName";
-        constexpr char ydbSourceName[] = "ydbSourceName";
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
+        const TString ydbSourceName = TStringBuilder() << "ydbSourceName" << Name_;
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
-        constexpr char ydbTable[] = "lookup";
+        const TString ydbTable = TStringBuilder() << "lookup" << Name_;
         ExecExternalQuery(fmt::format(R"(
             CREATE TABLE `{table}` (
                 fqdn String,
@@ -1068,7 +1091,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             }
         }
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1140,16 +1163,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
-        constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
-        constexpr char pqSourceName[] = "pqSourceName";
+        const TString inputTopicName = TStringBuilder() << "streamingQueryWithLocalYdbJoinInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "streamingQueryWithLocalYdbJoinOutputTopic" << Name_;
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
-        constexpr char streamLookupTableName[] = "oltpStreamLookupTable";
-        constexpr char oltpTableName[] = "oltpTable";
-        constexpr char olapTableName[] = "olapTable";
+        const TString streamLookupTableName = TStringBuilder() << "oltpStreamLookupTable" << Name_;
+        const TString oltpTableName = TStringBuilder() << "oltpTable" << Name_;
+        const TString olapTableName = TStringBuilder() << "olapTable" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE TABLE `{oltp_streamlookup_table}` (
                 Key Int32 NOT NULL,
@@ -1187,7 +1210,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "olap_table"_a = olapTableName
         ));
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1245,14 +1268,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithPrecompute, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
-        constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
-        constexpr char pqSourceName[] = "pqSourceName";
+        const TString inputTopicName = TStringBuilder() << "streamingQueryWithPrecomputeInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "streamingQueryWithPrecomputeOutputTopic" << Name_;
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
-        constexpr char tableName[] = "oltpTable";
+        const TString tableName = TStringBuilder() << "oltpTable" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE TABLE `{table_name}` (
                 Key Int32 NOT NULL,
@@ -1270,7 +1293,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "table_name"_a = tableName
         ));
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1326,18 +1349,27 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
         auto& appConfig = SetupAppConfig();
+        auto saveConfig = appConfig;
+        auto saveEnableSecureScriptExecutions = GetRuntime().GetAppData().FeatureFlags.GetEnableSecureScriptExecutions();
+        Y_DEFER {
+            appConfig = std::move(saveConfig);
+            GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(saveEnableSecureScriptExecutions);
+            UpdateConfig(appConfig);
+        };
+
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
         GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(true);
+        UpdateConfig(appConfig);
 
-        constexpr char inputTopicName[] = "streamingQueryUnderSecureScriptExecutionsInputTopic";
-        constexpr char outputTopicName[] = "streamingQueryUnderSecureScriptExecutionsOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "streamingQueryUnderSecureScriptExecutionsInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "streamingQueryUnderSecureScriptExecutionsOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1412,24 +1444,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            const auto edgeActor = runtime.AllocateEdgeActor();
             appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
 
-            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evProxy->Record.MutableConfig() = appConfig;
-
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
-            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evStorage->Record.MutableConfig() = appConfig;
-
-            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
-            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            Sleep(TDuration::Seconds(1));
+            UpdateConfig(appConfig);
 
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
@@ -1451,16 +1468,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(OffsetsRecoveryAfterManualAndInternalRetry, TStreamingTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
-        constexpr char inputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,InputTopic";
-        constexpr char outputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,OutputTopic";
+        const TString inputTopicName = TStringBuilder() << "offsetsRecoveryAfterManualAndInternalRetry,InputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "offsetsRecoveryAfterManualAndInternalRetry,OutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
         constexpr char consumerName[] = "unknownConsumer";
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1537,24 +1554,24 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         // Join with S3 used for introducing temporary failure and force retry on specific key
 
-        constexpr char sourceBucket[] = "test_streaming_query_recovery_on_internal_retry";
+        const TString sourceBucket = TStringBuilder() << "test_streaming_query_recovery_on_internal_retry";
         constexpr char objectContent[] = R"(
 {"fqdn": "host1.example.com", "payload": "P1"}
 {"fqdn": "host2.example.com"                              })";
         constexpr char objectPath[] = "path/test_object.json";
         CreateBucketWithObject(sourceBucket, objectPath, objectContent);
 
-        constexpr char inputTopicName[] = "internalRetryInputTopicName";
-        constexpr char outputTopicName[] = "internalRetryOutputTopicName";
+        const TString inputTopicName = TStringBuilder() << "internalRetryInputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "internalRetryOutputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "pqSourceName";
-        constexpr char s3SourceName[] = "s3Source";
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
+        const TString s3SourceName = TStringBuilder() << "s3Source" << Name_;
         CreatePqSource(pqSourceName);
         CreateS3Source(sourceBucket, s3SourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1674,8 +1691,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         TTestInfo info = {
             .InputTopicName = TStringBuilder() << "inputTopicName" << self.Name_,
             .OutputTopicName = TStringBuilder() << "outputTopicName" << self.Name_,
-            .PqSourceName = "pqSourceName",
-            .QueryName = "streamingQuery"
+            .PqSourceName = TStringBuilder() << "pqSourceName" << self.Name_,
+            .QueryName = TStringBuilder() << "streamingQuery" << self.Name_
         };
         info.QueryText = fmt::format(R"(
             -- Test that offsets are recovered
@@ -1945,19 +1962,24 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
-        {
-            auto& setupAppConfig = SetupAppConfig();
-            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
-        }
+        auto& appConfig = SetupAppConfig();
+        auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
+        auto saveConfig = tableServiceConfig;
+        Y_DEFER {
+            tableServiceConfig = saveConfig;
+            UpdateConfig(appConfig);
+        };
+        tableServiceConfig.SetEnableDqSourceStreamLookupJoin(true);
         const auto connectorClient = SetupMockConnectorClient();
+        UpdateConfig(appConfig);
 
-        constexpr char inputTopicName[] = "sljInputTopicName";
-        constexpr char outputTopicName[] = "sljOutputTopicName";
+        const TString inputTopicName = TStringBuilder() << "sljInputTopicName" << Name_;
+        const TString outputTopicName = TStringBuilder() << "sljOutputTopicName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "pqSourceName";
-        constexpr char ydbSourceName[] = "ydbSourceName";
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
+        const TString ydbSourceName = TStringBuilder() << "ydbSourceName" << Name_;
         CreatePqSource(pqSourceName);
         CreateYdbSource(ydbSourceName);
 
@@ -2000,7 +2022,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
         }
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2062,17 +2084,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CheckpointPropagationWithS3Insert, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "s3InsertCheckpointsInputTopicName";
-        constexpr char pqSourceName[] = "pqSourceName";
+        const TString inputTopicName = TStringBuilder() << "s3InsertCheckpointsInputTopicName" << Name_;
+        const TString pqSourceName = TStringBuilder() << "pqSourceName" << Name_;
         CreateTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
-        constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert_checkpoint_propagation";
-        constexpr char s3SinkName[] = "sinkName";
+        const TString sourceBucket = TStringBuilder() << "test_bucket_streaming_query_s3_insert_checkpoint_propagation";
+        const TString s3SinkName = TStringBuilder() << "sinkName" << Name_;
         CreateBucket(sourceBucket);
         CreateS3Source(sourceBucket, s3SinkName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2116,7 +2138,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
     }
 
-    void CheckTable(TStreamingTestFixture& self, const std::string& tableName, const std::map<std::string, std::string>& rows) {
+    void CheckTable(TStreamingTestFixture& self, const TString& tableName, const std::map<std::string, std::string>& rows) {
         const auto results = self.ExecQuery(fmt::format(
             "SELECT * FROM `{table}` ORDER BY Key",
             "table"_a = tableName
@@ -2132,14 +2154,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(WritingInLocalYdbTablesWithCheckpoints, TStreamingTestFixture) {
-        constexpr char pqSourceName[] = "pqSource";
+        const TString pqSourceName = TStringBuilder() << "pqSource" << Name_;
         CreatePqSource(pqSourceName);
 
         for (const bool rowTables : {true, false}) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbInputTopicName" << rowTables;
             CreateTopic(inputTopicName);
 
-            const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
+            const auto ydbTable = TStringBuilder() << "tableSink" << Name_ << rowTables;
             ExecQuery(fmt::format(R"(
                 CREATE TABLE `{table}` (
                     Key String NOT NULL,
@@ -2150,7 +2172,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
             ));
 
-            const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
+            const auto queryName = TStringBuilder() << "streamingQuery" << Name_ << rowTables;
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
@@ -2210,11 +2232,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(WritingInLocalYdbTablesWithLimit, TStreamingTestFixture) {
-        constexpr char pqSourceName[] = "pqSource";
+        const TString pqSourceName = TStringBuilder() << "pqSource" << Name_;
         CreatePqSource(pqSourceName);
 
         for (const bool rowTables : {true, false}) {
-            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << Name_ << rowTables;
             CreateTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
@@ -2266,14 +2288,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(WritingInLocalYdbTablesWithProjection, TStreamingTestFixture) {
-        constexpr char pqSourceName[] = "pqSource";
+        const TString pqSourceName = TStringBuilder() << "pqSource" << Name_;
         CreatePqSource(pqSourceName);
 
         for (const bool rowTables : {true, false}) {
-            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << Name_ << rowTables;
             CreateTopic(inputTopicName);
 
-            const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
+            const auto ydbTable = TStringBuilder() << "tableSink" << Name_ << rowTables;
             ExecQuery(fmt::format(R"(
                 CREATE TABLE `{table}` (
                     Key String NOT NULL,
@@ -2323,11 +2345,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(DropStreamingQueryUnderLoad, TStreamingTestFixture) {
         LogSettings.Freeze = true;
-        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1);
+        auto& appConfig = SetupAppConfig();
+        auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
+        auto saveConfig = queryServiceConfig;
+        Y_DEFER {
+            queryServiceConfig = saveConfig;
+        };
+        queryServiceConfig.SetProgressStatsPeriodMs(1);
+        UpdateConfig(appConfig);
 
-        constexpr char inputTopicName[] = "inputTopic";
-        constexpr char outputTopicName[] = "outputTopic";
-        constexpr char pqSourceName[] = "pqSource";
+        const TString inputTopicName = TStringBuilder() << "inputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "outputTopic" << Name_;
+        const TString pqSourceName = TStringBuilder() << "pqSource" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE TOPIC `{input_topic}` WITH (
                 min_active_partitions = 100,
@@ -2350,7 +2379,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "pq_database_name"_a = "/Root"
         ));
 
-        const auto queryName = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2388,19 +2417,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CreateStreamingQueryUnderTimeout, TStreamingWithSchemaSecretsTestFixture) {
-        auto& config = *SetupAppConfig().MutableQueryServiceConfig();
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableQueryServiceConfig();
+        auto saveConfig = config;
+        Y_DEFER {
+            config = saveConfig;
+            UpdateConfig(appConfig);
+        };
         config.SetQueryTimeoutDefaultSeconds(3);
         config.SetScriptOperationTimeoutDefaultSeconds(3);
+        UpdateConfig(appConfig);
 
-        constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
-        constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createStreamingQueryUnderTimeoutInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createStreamingQueryUnderTimeoutOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2428,12 +2464,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryDisposition, TStreamingWithSchemaSecretsTestFixture) {
-        constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
-        constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "createStreamingQueryUnderTimeoutInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "createStreamingQueryUnderTimeoutOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
         ui64 dataIdx = 0;
@@ -2447,7 +2483,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
 
         // Test OLDEST disposition
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
                 STREAMING_DISPOSITION = OLDEST
@@ -2499,7 +2535,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         writeDisposition = TInstant::Now();
 
         // Test checkpoint dispositions
-        for (const std::string& disposition : {"", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE"}) {
+        for (const TString& disposition : {"", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE"}) {
             Sleep(TDuration::Seconds(1));
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
@@ -2540,25 +2576,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithMultipleWrites, TStreamingWithSchemaSecretsTestFixture) {
-        constexpr char inputTopic[] = "createStreamingQueryWithMultipleWritesInputTopic";
-        constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";
-        constexpr char outputTopic2[] = "createStreamingQueryWithMultipleWritesOutputTopic2";
-        constexpr char pqSource[] = "sourceName";
+        const TString inputTopic = TStringBuilder() << "createStreamingQueryWithMultipleWritesInputTopic" << Name_;
+        const TString outputTopic1 = TStringBuilder() << "createStreamingQueryWithMultipleWritesOutputTopic1" << Name_;
+        const TString outputTopic2 = TStringBuilder() << "createStreamingQueryWithMultipleWritesOutputTopic2" << Name_;
+        const TString pqSource = TStringBuilder() << "sourceName" << Name_;
         CreateTopic(inputTopic);
         CreateTopic(outputTopic1);
         CreateTopic(outputTopic2);
         CreatePqSource(pqSource);
 
-        constexpr char sinkBucket[] = "test_bucket_streaming_query_multi_insert";
-        constexpr char s3SinkName[] = "s3SinkName";
+        const TString sinkBucket = TStringBuilder() << "test_bucket_streaming_query_multi_insert";
+        const TString s3SinkName = TStringBuilder() << "s3SinkName" << Name_;
         CreateBucket(sinkBucket);
         CreateS3Source(sinkBucket, s3SinkName);
 
-        constexpr char solomonSink[] = "solomonSinkName";
+        const TString solomonSink = TStringBuilder() << "solomonSinkName" << Name_;
         CreateSolomonSource(solomonSink);
 
-        constexpr char rowSinkTable[] = "rowSink";
-        constexpr char columnSinkTable[] = "columnSink";
+        const TString rowSinkTable = TStringBuilder() << "rowSink" << Name_;
+        const TString columnSinkTable = TStringBuilder() << "columnSink" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE TABLE `{row_table}` (
                 B Utf8 NOT NULL,
@@ -2574,7 +2610,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "column_table"_a = columnSinkTable
         ));
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         const TSolomonLocation soLocation = {
             .ProjectId = "cloudId1",
             .FolderId = "folderId1",
@@ -2644,7 +2680,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sinkBucket), "test-E");
 
-        const std::string expectedMetrics = R"([
+        const TString expectedMetrics = R"([
   {
     "labels": [
       [
@@ -2664,12 +2700,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
-        constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
-        constexpr char pqSource[] = "pqSource";
+        const TString topic = TStringBuilder() << "dropStreamingQueryDuringRetriesTopic" << Name_;
+        const TString pqSource = TStringBuilder() << "pqSource" << Name_;
         CreateTopic(topic);
         CreatePqSource(pqSource);
 
-        const auto queryName = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2742,9 +2778,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         NodeCount = 5;
         LogSettings.Freeze = true;
 
-        constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
-        constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";
-        constexpr char pqSourceName[] = "sourceName";
+        const TString inputTopicName = TStringBuilder() << "streamingQueryDdlRetriesInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "streamingQueryDdlRetriesOutputTopic" << Name_;
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
@@ -2798,15 +2834,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryRestartAfterShutdown, TStreamingTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
-        constexpr char inputTopicName[] = "streamingQueryRestartAfterShutdownInputTopic";
-        constexpr char outputTopicName[] = "streamingQueryRestartAfterShutdownOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "streamingQueryRestartAfterShutdownInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "streamingQueryRestartAfterShutdownOutputTopic" << Name_;
         CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2865,17 +2901,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithTwoGroupByHops, TStreamingTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
-        constexpr char inputTopicName[] = "streamingQueryWithTwoGroupByHopsInputTopic";
-        constexpr char outputTopicName1[] = "streamingQueryWithTwoGroupByHopsOutputTopic1";
-        constexpr char outputTopicName2[] = "streamingQueryWithTwoGroupByHopsOutputTopic2";
+        const TString inputTopicName = TStringBuilder() << "streamingQueryWithTwoGroupByHopsInputTopic" << Name_;
+        const TString outputTopicName1 = TStringBuilder() << "streamingQueryWithTwoGroupByHopsOutputTopic1" << Name_;
+        const TString outputTopicName2 = TStringBuilder() << "streamingQueryWithTwoGroupByHopsOutputTopic2" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName1);
         CreateTopic(outputTopicName2);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2958,10 +2994,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         InternalInitFederatedQuerySetupFactory = true;
 
         auto& config = SetupAppConfig();
+        auto saveConfig = config;
+        Y_DEFER {
+            config = std::move(saveConfig);
+            UpdateConfig(config);
+        };
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        UpdateConfig(config);
 
-        constexpr char topic[] = "tableMode";
+        const TString topic = TStringBuilder() << "tableMode" << Name_;
 
         ui32 partitionCount = 4;
         CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
@@ -2983,17 +3025,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(UnionAllTwoTopics, TStreamingTestFixture) {
-        constexpr char inputTopicName1[] = "unionAllTwoTopicsInputTopic1";
-        constexpr char inputTopicName2[] = "unionAllTwoTopicsInputTopic2";
-        constexpr char outputTopicName[] = "unionAllTwoTopicsOutputTopic";
+        const TString inputTopicName1 = TStringBuilder() << "unionAllTwoTopicsInputTopic1" << Name_;
+        const TString inputTopicName2 = TStringBuilder() << "unionAllTwoTopicsInputTopic2" << Name_;
+        const TString outputTopicName = TStringBuilder() << "unionAllTwoTopicsOutputTopic" << Name_;
         CreateTopic(inputTopicName1);
         CreateTopic(inputTopicName2);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(
             R"sql(
                 CREATE STREAMING QUERY `{query_name}` AS
@@ -3040,15 +3082,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(UnionAllTopicWithItself, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "unionAllTopicWithItselfInputTopic";
-        constexpr char outputTopicName[] = "unionAllTopicWithItselfOutputTopic";
+        const TString inputTopicName = TStringBuilder() << "unionAllTopicWithItselfInputTopic" << Name_;
+        const TString outputTopicName = TStringBuilder() << "unionAllTopicWithItselfOutputTopic" << Name_;
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
-        constexpr char pqSourceName[] = "sourceName";
+        const TString pqSourceName = TStringBuilder() << "sourceName" << Name_;
         CreatePqSource(pqSourceName);
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
         ExecQuery(fmt::format(
             R"sql(
                 CREATE STREAMING QUERY `{query_name}` AS

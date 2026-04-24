@@ -24,10 +24,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         Setup();
 
         StartQuery("A");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY A");
+        };
         StartQuery("B");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY B");
+        };
         StartQuery("C");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY C");
+        };
         StartQuery("D");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY D");
+        };
         StartQuery("E");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY E");
+        };
         Sleep(STATS_WAIT_DURATION);
 
         CheckSysView({
@@ -68,8 +83,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         Setup();
 
         StartQuery("A");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY A");
+        };
         StartQuery("B");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY B");
+        };
         StartQuery("C");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY C");
+        };
         Sleep(STATS_WAIT_DURATION);
 
         CheckSysView({
@@ -81,9 +105,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         Setup();
 
         StartQuery("A");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY A");
+        };
         StartQuery("B");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY B");
+        };
         StartQuery("C");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY C");
+        };
         StartQuery("D");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY D");
+        };
         Sleep(STATS_WAIT_DURATION);
 
         CheckSysView({
@@ -107,15 +143,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         const auto pqGateway = SetupMockPqGateway();
         Setup();
 
-        constexpr char queryName[] = "streamingQuery";
+        const TString queryName = TStringBuilder() << "streamingQuery" << Name_;
+        const TString resourcePool = TStringBuilder() << "MyResourcePool" << Name_;
         ExecQuery(fmt::format(R"(
             GRANT ALL ON `/Root` TO `root@builtin`;
-            CREATE RESOURCE POOL MyResourcePool WITH (CONCURRENT_QUERY_LIMIT = "-1");
+            CREATE RESOURCE POOL `{resource_pool}` WITH (CONCURRENT_QUERY_LIMIT = "-1");
             CREATE STREAMING QUERY `{query_name}` WITH (
                 RUN = FALSE,
-                RESOURCE_POOL = "MyResourcePool"
+                RESOURCE_POOL = "{resource_pool}"
             ) AS DO BEGIN{text}END DO)",
             "query_name"_a = queryName,
+            "resource_pool"_a = resourcePool,
             "text"_a = GetQueryText(queryName)
         ));
 
@@ -123,7 +161,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             .Name = queryName,
             .Status = "CREATED",
             .Run = false,
-            .Pool = "MyResourcePool",
+            .Pool = resourcePool,
         }});
 
         ExecQuery(fmt::format(R"(
@@ -143,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 .Name = queryName,
                 .Status = "RUNNING",
                 .Run = true,
-                .Pool = "MyResourcePool",
+                .Pool = resourcePool,
             }})[0];
 
             UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 0);
@@ -164,7 +202,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 .Status = "RUNNING",
                 .Issues = "Test pq session failure",
                 .Run = true,
-                .Pool = "MyResourcePool",
+                .Pool = resourcePool,
                 .RetryCount = 1,
                 .LastFailAt = failAt,
             }})[0];
@@ -187,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 .Status = "STOPPED",
                 .Issues = "Request was canceled by user",
                 .Run = false,
-                .Pool = "MyResourcePool",
+                .Pool = resourcePool,
                 .RetryCount = 1,
                 .LastFailAt = failAt,
                 .CheckPlan = true,
@@ -257,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
     Y_UNIT_TEST_F(SysViewForSuspendedStreamingQueries, TStreamingSysViewTestFixture) {
         Setup();
 
-        const std::string text = fmt::format(R"(
+        const TString text = fmt::format(R"(
             PRAGMA pq.Consumer = "unknown";
             INSERT INTO `{pq_source}`.`{output_topic}`
             SELECT * FROM `{pq_source}`.`{input_topic}`;)",
@@ -299,6 +337,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         Setup();
 
         StartQuery("A");
+        Y_DEFER {
+            ExecQuery("DROP STREAMING QUERY A");
+        };
 
         const auto& result = ExecQuery(R"(
             SELECT
@@ -321,7 +362,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
-        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
+        auto saveConfig = config;
+        Y_DEFER {
+            config = saveConfig;
+            UpdateConfig(appConfig);
+        };
+        config.SetChannelBufferSize(1_KB);
+        UpdateConfig(appConfig);
         Setup();
 
         constexpr ui64 NUMBER_OF_QUERIES = 2010;
@@ -329,7 +378,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         std::vector<TSysViewRow> rows;
         rows.reserve(NUMBER_OF_QUERIES);
         for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
-            const auto name = TStringBuilder() << "query-" << i;
+            const auto name = TStringBuilder() << "query-" << i << Name_;
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{name}` WITH (
                     RUN = FALSE
@@ -349,16 +398,24 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
     Y_UNIT_TEST_F(ReadSysViewWithRowSizeBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
-        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
+        auto saveConfig = config;
+        Y_DEFER {
+            config = saveConfig;
+            UpdateConfig(appConfig);
+        };
+        config.SetChannelBufferSize(1_KB);
+        UpdateConfig(appConfig);
         Setup();
 
         constexpr ui64 NUMBER_OF_QUERIES = 50;
-        const std::string payload(100_KB, 'x');
+        const TString payload(100_KB, 'x');
 
         std::vector<TSysViewRow> rows;
         rows.reserve(NUMBER_OF_QUERIES);
         for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
-            const auto name = TStringBuilder() << "query-" << i;
+            const auto name = TStringBuilder() << "query-" << i << Name_;
             const auto text = TStringBuilder() << GetQueryText(name) << " /* " << payload << " */";
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{name}` WITH (
@@ -380,19 +437,27 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
     Y_UNIT_TEST_F(ReadSysViewWithMetadataSizeBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
-        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+        auto& appConfig = SetupAppConfig();
+        auto& config = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
+        auto saveConfig = config;
+        Y_DEFER {
+            config = saveConfig;
+            UpdateConfig(appConfig);
+        };
+        config.SetChannelBufferSize(1_KB);
+        UpdateConfig(appConfig);
         Setup();
 
         constexpr ui64 NUMBER_OF_QUERIES = 50;
-        const std::string payload(50_KB, 'x');
+        const TString payload(50_KB, 'x');
 
         std::vector<TSysViewRow> rows;
         std::vector<std::string> resultMessages;
         rows.reserve(NUMBER_OF_QUERIES);
         resultMessages.reserve(NUMBER_OF_QUERIES);
         for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
-            const auto name = TStringBuilder() << "query-" << i;
-            const std::string text = fmt::format(R"(
+            const TString name = TStringBuilder() << "query-" << i << Name_;
+            const TString text = fmt::format(R"(
                 ;INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Data || "{payload}" FROM `{pq_source}`.`{input_topic}`
                 LIMIT 1;)",

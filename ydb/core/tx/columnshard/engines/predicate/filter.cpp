@@ -249,20 +249,22 @@ TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
 void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
     auto addRow = [this](TConstArrayRef<TCell> cells) -> ui32 {
         std::vector<TCell> cellsWithDefaults;
-        ui32 nonNullCount = 0;
+        // Length of the prefix taken from serialized cells (non-null values and explicit NULL markers).
+        // Typed defaults appended after the serialized prefix do not increase this count.
+        ui32 explicitPrefixLen = 0;
         const size_t size = YdbPK.size();
         Y_ASSERT(size <= (size_t)ArrPK->num_fields());
         cellsWithDefaults.reserve(size);
         for (size_t i = 0; i < size; ++i) {
             if (i < cells.size() && !cells[i].IsNull()) {
                 cellsWithDefaults.push_back(cells[i]);
-                AFL_VERIFY(nonNullCount == i)("non_null", nonNullCount)("i", i);
-                ++nonNullCount;
+                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                ++explicitPrefixLen;
             } else if (i < cells.size() && cells[i].IsNull()) {
                 // Explicit NULL in TSerializedCellVec is an open-bound marker for this column (not a typed default).
                 cellsWithDefaults.emplace_back();
-                AFL_VERIFY(nonNullCount == i)("non_null", nonNullCount)("i", i);
-                ++nonNullCount;
+                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                ++explicitPrefixLen;
             } else {
                 TConclusion<TCell> defaultCell = MakeDefaultCell(YdbPK[i]);
                 AFL_VERIFY(!!defaultCell);
@@ -272,7 +274,7 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
         AFL_VERIFY(cellsWithDefaults.size() == YdbPK.size());
         BatchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(YdbPK.data(), cellsWithDefaults.data(), cellsWithDefaults.size()));
 
-        return nonNullCount;
+        return explicitPrefixLen;
     };
 
     const ui32 leftPrefix = addRow(range.From.GetCells());

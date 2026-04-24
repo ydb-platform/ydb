@@ -96,7 +96,13 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
         UNIT_ASSERT_VALUES_EQUAL(filter->Size(), 1);
-        UNIT_ASSERT(!filter->DebugString().empty());
+        const TString dbg = filter->DebugString();
+        UNIT_ASSERT_C(!dbg.empty(), dbg);
+        // Явный NULL во втором ключе должен входить в префикс предиката (старый код давал NumColumns==1 для To).
+        const NOlap::TPKRangeFilter& pkRange = *filter->begin();
+        UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateFrom().NumColumns(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateTo().NumColumns(), 2u);
+        UNIT_ASSERT_C(dbg.Contains("resource_type"), dbg);
     }
 
     // scheme_tabledefs.h: "probably most used case" — full prefix on both sides, inclusive.
@@ -355,6 +361,10 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         builder.AddRange(std::move(ser));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
+        const NOlap::TPKRangeFilter& pkRange = *filter->begin();
+        UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateFrom().NumColumns(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateTo().NumColumns(), 2u);
+        UNIT_ASSERT(filter->DebugString().Contains("resource_type"));
     }
 
     // 2-column PK only: reject 3-column serialized prefix (IsAmbiguousReason).

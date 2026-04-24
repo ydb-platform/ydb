@@ -16,6 +16,11 @@ struct TOverlappingItem
     ui64 Key;
     TBlockRange64 Range;
     TInflightInfo* Value;
+
+    bool operator<(const TOverlappingItem& other) const
+    {
+        return Key < other.Key;
+    }
 };
 
 void AddReadHint(TReadHint& result, TReadRangeHint&& hint)
@@ -36,55 +41,6 @@ void AddReadHint(TReadHint& result, TReadRangeHint&& hint)
         result.RangeHints.push_back(std::move(hint));
     }
 }
-
-// Answers suffix-max queries "find item with maximum Key (LSN) among active
-// items whose Range.End >= threshold" in O(log n) per operation.
-//
-// Maintains a map ordered by Range.End (ascending) where Key values are
-// strictly decreasing. This means lower_bound(threshold) immediately gives
-// the entry with the smallest qualifying End, which — by the invariant —
-// also has the largest Key among all entries with End >= threshold.
-//
-// An entry (E_old, K_old) is dominated by a new entry (E_new, K_new) when
-// E_new >= E_old AND K_new >= K_old: the new item is at least as good for
-// every possible threshold. Dominated entries are removed on insertion.
-//
-// Each item is inserted and erased at most once → amortized O(log n) insert.
-class TParetoMaxMap
-{
-public:
-    void Insert(const TOverlappingItem* item)
-    {
-        const ui64 end = item->Range.End;
-        const ui64 key = item->Key;
-
-        auto it = Map.lower_bound(end);
-        if (it != Map.end() && it->second->Key >= key) {
-            return;
-        }
-
-        while (it != Map.begin()) {
-            auto prev = std::prev(it);
-            if (prev->second->Key <= key) {
-                it = Map.erase(prev);
-            } else {
-                break;
-            }
-        }
-
-        Map[end] = item;
-    }
-
-    [[nodiscard]] const TOverlappingItem* BestWithEndAtLeast(
-        ui64 threshold) const
-    {
-        auto it = Map.lower_bound(threshold);
-        return (it != Map.end()) ? it->second : nullptr;
-    }
-
-private:
-    TMap<ui64, const TOverlappingItem*> Map;
-};
 
 }   // namespace
 
@@ -371,21 +327,6 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
 
 // Create multiple readRangeHints for specified range with possible overlapping
 // with infilght requests
-
-// Algorithm works via Sweep line + Pareto-optimal map for O(n log n) total
-// complexity.
-// 1. Going through all overlapping ranges and creating:
-//  - vector boundaries: edges of ranges. They are possible edges of resulting
-//  HintRanges for reading from different locations
-//  - vector overlappingItems: we use it for building resulting HintRanges
-// 2. Sorting both vectors and erasing duplicates
-// 3. Doing sweep-line algorithm.
-//  - going with each boundary edge through all matched overlapping item and
-//  storing overlappingItes.End with LSN into ParettoMap
-//  - for the boundary segmentEnd recieving best item (lsn and location mask)
-//  from pareto map
-//  - adding boundaries segment into resultHints with locations based on
-//  overlappingItems lsn info
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
@@ -395,79 +336,38 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    TVector<ui64> boundaries;
-    TVector<TOverlappingItem> overlappingItems;
+    struct TBoundary
+    {
+        ui64 Offset{};
+        ui64 Lsn{};
+        bool Open{};
 
-    boundaries.push_back(range.Start);
-    boundaries.push_back(range.End + 1);
-
-    Inflight.EnumerateOverlapping(
-        range,
-        [&](TInflightMap::TFindItem& item)
+        bool operator<(const TBoundary& rhs) const
         {
-            overlappingItems.push_back({item.Key, item.Range, &item.Value});
-
-            if (item.Range.Start > range.Start && item.Range.Start <= range.End)
-            {
-                boundaries.push_back(item.Range.Start);
-            }
-
-            const ui64 rangeEnd = item.Range.End + 1;
-            if (rangeEnd > range.Start && rangeEnd <= range.End + 1) {
-                boundaries.push_back(rangeEnd);
-            }
-
-            return TInflightMap::EEnumerateContinuation::Continue;
-        });
-
-    Sort(boundaries.begin(), boundaries.end());
-    boundaries.erase(std::ranges::unique(boundaries).begin(), boundaries.end());
-
-    Sort(
-        overlappingItems.begin(),
-        overlappingItems.end(),
-        [](const TOverlappingItem& lhs, const TOverlappingItem& rhs)
-        {
-            if (lhs.Range.Start != rhs.Range.Start) {
-                return lhs.Range.Start < rhs.Range.Start;
-            }
-            return lhs.Key > rhs.Key;
-        });
-
-    TParetoMaxMap paretoMap;
-    result.RangeHints.reserve(boundaries.size() - 1);
-
-    ui64 offsetBlocks = 0;
-    size_t nextItemIdx = 0;
-    for (ui64 i = 0; i + 1 < boundaries.size(); ++i) {
-        const ui64 segmentStart = boundaries[i];
-        const ui64 nextBoundary = boundaries[i + 1];
-        const ui64 segmentEnd = nextBoundary - 1;
-        const auto segmentRange =
-            TBlockRange64::MakeClosedInterval(segmentStart, segmentEnd);
-
-        // Activate all items whose Range.Start <= segmentStart
-        while (nextItemIdx < overlappingItems.size() &&
-               overlappingItems[nextItemIdx].Range.Start <= segmentStart)
-        {
-            // attention: inserting overlappingItems, not boundaries
-            paretoMap.Insert(&overlappingItems[nextItemIdx]);
-            ++nextItemIdx;
+            return std::make_tuple(Offset, Open, Lsn) <
+                   std::make_tuple(rhs.Offset, rhs.Open, rhs.Lsn);
         }
+    };
 
-        // Best item with Range.End >= segmentEnd
-        const TOverlappingItem* bestItem =
-            paretoMap.BestWithEndAtLeast(segmentEnd);
-
-        if (bestItem == nullptr) {
+    TVector<TBoundary> boundaries;
+    TSet<TOverlappingItem> ranges;
+    ui64 offsetBlocks{};
+    auto addItem = [&ranges,
+                    &offsetBlocks,
+                    &result,
+                    this](ui64 lsn, ui64 start, ui64 end) -> bool
+    {
+        const auto segmentRange = TBlockRange64::MakeClosedInterval(start, end);
+        if (lsn == 0) {
             auto hint = MakeReadRangeHint({}, 0, segmentRange, offsetBlocks);
             AddReadHint(result, std::move(hint));
         } else {
+            auto bestItem = ranges.find({lsn, {}, {}});
             const auto readMask = bestItem->Value->ReadMask();
             if (readMask.Empty()) {
                 result.WaitReady = bestItem->Value->GetQuorumReadyFuture();
                 result.RangeHints.clear();
-                return result;
+                return false;
             }
 
             const ui64 lsn = readMask.OnlyDDisk() ? 0 : bestItem->Key;
@@ -477,6 +377,58 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         }
 
         offsetBlocks += segmentRange.Size();
+        return true;
+    };
+
+    boundaries.push_back({range.Start, 0, true});
+    boundaries.push_back({range.End + 1, 0, false});
+
+    Inflight.EnumerateOverlapping(
+        range,
+        [&](TInflightMap::TFindItem& item)
+        {
+            ranges.insert({item.Key, item.Range, &item.Value});
+
+            const ui64 clippedStart = Max(item.Range.Start, range.Start);
+            const ui64 clippedEnd = Min(item.Range.End + 1, range.End + 1);
+
+            boundaries.push_back({clippedStart, item.Key, true});
+            boundaries.push_back({clippedEnd, item.Key, false});
+
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    Sort(boundaries.begin(), boundaries.end());
+    result.RangeHints.reserve(boundaries.size());
+
+    TSet<ui64, std::greater<ui64>> currentLsn;
+    currentLsn.insert(boundaries[0].Lsn);
+    ui64 segmentStartOffset = boundaries[0].Offset;
+    ui64 currentBestLsn = *currentLsn.begin();
+
+    for (ui64 i = 1; i < boundaries.size(); ++i) {
+        if (boundaries[i].Open) {
+            currentLsn.insert(boundaries[i].Lsn);
+        } else {
+            currentLsn.erase(boundaries[i].Lsn);
+        }
+
+        ui64 newBestLsn =
+            currentLsn.empty() ? 0 : *currentLsn.begin();
+        bool isLast = currentLsn.empty();
+        if (isLast) {
+            Y_ABORT_IF(i != boundaries.size() - 1);
+        }
+        if (newBestLsn != currentBestLsn || isLast) {
+            if (boundaries[i].Offset > segmentStartOffset) {
+                ui64 segmentEnd = boundaries[i].Offset - 1;
+                if (!addItem(currentBestLsn, segmentStartOffset, segmentEnd)) {
+                    return result;
+                }
+            }
+            segmentStartOffset = boundaries[i].Offset;
+            currentBestLsn = newBestLsn;
+        }
     }
 
     return result;

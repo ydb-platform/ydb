@@ -31,19 +31,8 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
     const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
     const IIndexMeta& existingMeta) const {
-    if (!ColumnName.empty()) {
-        return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
-    }
-
-    auto resolvedColumnName = ResolveColumnNameForAlterIndex(currentSchema, existingMeta);
-    if (resolvedColumnName.IsFail()) {
-        errors.AddError(resolvedColumnName.GetErrorMessage());
-        return nullptr;
-    }
-
-    TBloomIndexConstructor patched = *this;
-    patched.ColumnName = *resolvedColumnName;
-    return patched.DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+    return DoCreateOrPatchSingleColumnIndexMeta<TBloomIndexConstructor>(
+        indexId, indexName, currentSchema, errors, existingMeta);
 }
 
 TConclusionStatus TBloomIndexConstructor::ValidateValues() const {

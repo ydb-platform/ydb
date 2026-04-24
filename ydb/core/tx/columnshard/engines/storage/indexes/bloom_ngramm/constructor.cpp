@@ -23,19 +23,8 @@ bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, co
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
     const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
     const IIndexMeta& existingMeta) const {
-    if (!ColumnName.empty()) {
-        return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
-    }
-
-    auto resolvedColumnName = ResolveColumnNameForAlterIndex(currentSchema, existingMeta);
-    if (resolvedColumnName.IsFail()) {
-        errors.AddError(resolvedColumnName.GetErrorMessage());
-        return nullptr;
-    }
-
-    TIndexConstructor patched = *this;
-    patched.ColumnName = *resolvedColumnName;
-    return patched.DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+    return DoCreateOrPatchSingleColumnIndexMeta<TIndexConstructor>(
+        indexId, indexName, currentSchema, errors, existingMeta);
 }
 
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(

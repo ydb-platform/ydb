@@ -11568,12 +11568,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
-            CREATE RESOURCE POOL `_my_pool` WITH (
+            CREATE RESOURCE POOL `reject` WITH (
                 CONCURRENT_QUERY_LIMIT=20
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-            "Resource pool id should not start with '_'", result.GetIssues().ToString());
+            "Resource pool id 'reject' is reserved", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (

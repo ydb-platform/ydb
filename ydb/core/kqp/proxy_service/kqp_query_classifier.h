@@ -9,16 +9,11 @@
 
 namespace NKikimr::NKqp {
 
-constexpr char DEFAULT_POOL_ID[] = "default";
-constexpr char REJECT_POOL_ID[]  = "_reject";
-
 struct TClassifyContext {
     const TString PoolId;
     const TString DatabaseId;
     const TString AppName;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-
-    mutable std::unordered_map<TString, bool> MemberNameCache;
 };
 
 class TPoolInfoSnapshot {
@@ -62,7 +57,12 @@ private:
 ///
 class IWmQueryClassifier {
 public:
-    static inline const NResourcePool::TPoolSettings EMPTY_POOL{};
+    enum class EState {
+        None,               // Initial state, no classification performed
+        PreCompileDone,     // Classified without query plan, final result available
+        WaitCompile,        // Awaiting query plan for final classification
+        PostCompileDone,    // Classified with query plan, final result available
+    };
 
     struct TResolvedPoolId {
         TString PoolId;
@@ -80,7 +80,7 @@ public:
     };
 
     using TPreClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject, TPendingCompilation>;
-    using TPostClassifyResult = std::variant<TResolvedPoolId, TBypass, TReject>;
+    using TPostClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject>;
 
     virtual ~IWmQueryClassifier() = default;
 
@@ -88,12 +88,13 @@ public:
     [[nodiscard]]
     virtual TPreClassifyResult PreCompileClassify() = 0;
 
-    [[nodiscard]]
-    virtual bool NeedsPostCompileClassify() const = 0;
-
     /// Refines classification once the query plan is available
     [[nodiscard]]
     virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) = 0;
+
+    /// Get the current classification state
+    [[nodiscard]]
+    virtual EState GetState() const = 0;
 };
 
 using TClassifierSnapshotPtr = std::shared_ptr<const TResourcePoolClassifierSnapshot>;

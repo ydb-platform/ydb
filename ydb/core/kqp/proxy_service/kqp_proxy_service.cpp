@@ -1589,13 +1589,12 @@ private:
         if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
             || ev->Get()->IsInternalCall()
             || ev->Get()->GetIsWarmupCompilation()) {
-            ev->Get()->SetPoolId(DEFAULT_POOL_ID);
             ev->Get()->SetWmQueryClassifier(CreateWmBypassClassifier());
             return true;
         }
 
         auto poolId = ev->Get()->GetPoolId();
-        ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : DEFAULT_POOL_ID, ActorContext());
+        ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : NResourcePool::DEFAULT_POOL_ID, ActorContext());
 
         auto context = TClassifyContext{
             // This parameter is set when user creates a request with an explicit PoolId

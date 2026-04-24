@@ -23,15 +23,21 @@ public:
         return PreClassifyResult;
     }
 
-    virtual bool NeedsPostCompileClassify() const override {
-        return std::holds_alternative<TPendingCompilation>(PreClassifyResult);
+    EState GetState() const override {
+        if (std::holds_alternative<TPendingCompilation>(PreClassifyResult)) {
+            return !PostCompileCalled ? EState::WaitCompile : EState::PostCompileDone;
+        }
+
+        return EState::PreCompileDone;
     }
 
     TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder&) override {
+        PostCompileCalled = true;
         return PostClassifyResult;
     }
 
 private:
+    bool PostCompileCalled;
     TPreClassifyResult PreClassifyResult;
     TPostClassifyResult PostClassifyResult;
 };
@@ -105,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPreClassifier) {
 
     Y_UNIT_TEST(ShouldResolveDefaultOnPreClassify) {
         auto resolve = IWmQueryClassifier::TResolvedPoolId{
-            .PoolId = DEFAULT_POOL_ID
+            .PoolId = NResourcePool::DEFAULT_POOL_ID
         };
         auto reply = RunQueryWithPreClassify(resolve);
         UNIT_ASSERT_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -133,7 +139,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPostClassifier) {
 
     Y_UNIT_TEST(ShouldResolveDefaultOnPostClassify) {
         auto resolve = IWmQueryClassifier::TResolvedPoolId{
-            .PoolId = DEFAULT_POOL_ID
+            .PoolId = NResourcePool::DEFAULT_POOL_ID
         };
         auto reply = RunQueryWithPostClassify(resolve);
         UNIT_ASSERT_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);

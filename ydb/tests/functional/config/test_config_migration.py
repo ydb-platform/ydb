@@ -22,6 +22,38 @@ import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
 logger = logging.getLogger(__name__)
 
 
+def verify_domain_name_in_v2_config(config_client, expected_domain_name):
+    fetched_config = fetch_config(config_client)
+    assert_that(fetched_config is not None)
+    parsed_config = yaml.safe_load(fetched_config)
+    config_section = parsed_config.get("config", {})
+    domain_name_in_config = config_section.get("domain_name")
+    logger.info(f"domain_name in V2 config: {domain_name_in_config}")
+
+    if expected_domain_name != "Root":
+        assert domain_name_in_config == expected_domain_name, \
+            f"Expected domain_name '{expected_domain_name}', but got '{domain_name_in_config}'"
+    else:
+        assert domain_name_in_config in (None, "Root"), \
+            f"Expected domain_name to be absent or 'Root' for Root domain, but got '{domain_name_in_config}'"
+    return parsed_config
+
+
+def verify_domain_name_in_v1_config(dynconfig_client, expected_domain_name):
+    v1_config = fetch_config_dynconfig(dynconfig_client)
+    assert_that(v1_config is not None)
+    parsed_v1_config = yaml.safe_load(v1_config)
+    v1_config_section = parsed_v1_config.get("config", {})
+    domains_config = v1_config_section.get("domains_config", {})
+    domain_list = domains_config.get("domain", [])
+    assert len(domain_list) > 0, "domains_config.domain list is empty"
+    v1_domain_name = domain_list[0].get("name")
+    logger.info(f"domain name in V1 domains_config: {v1_domain_name}")
+    assert v1_domain_name == expected_domain_name, \
+        f"Expected domain name '{expected_domain_name}', but got '{v1_domain_name}'"
+    return parsed_v1_config
+
+
 def generate_config(dynconfig_client):
     generate_config_response = dynconfig_client.fetch_startup_config()
     assert_that(generate_config_response.operation.status == StatusIds.SUCCESS)
@@ -86,11 +118,19 @@ def check_kikimr_is_operational(cluster, table_path, tablet_ids):
         write_resp = cluster.kv_client.kv_write(
             table_path, partition_id, "key", value_for("key", tablet_id)
         )
+
+        if write_resp.operation.status != StatusIds.SUCCESS:
+            logger.debug(f"Failed write response: {write_resp}")
+
         assert_that(write_resp.operation.status == StatusIds.SUCCESS)
 
         read_resp = cluster.kv_client.kv_read(
             table_path, partition_id, "key"
         )
+
+        if write_resp.operation.status != StatusIds.SUCCESS:
+            logger.debug(f"Failed read response: {read_resp}")
+
         assert_that(read_resp.operation.status == StatusIds.SUCCESS)
 
 
@@ -143,7 +183,7 @@ def wait_for_all_nodes_start(swagger_client, expected_nodes_count, timeout_secon
     raise TimeoutError(error_message)
 
 
-def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, table_path, tablet_ids):
+def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, table_path, tablet_ids, extract_storage_pool_types=False):
     # 1 step: fetch config with dynconfig client
     fetched_config = fetch_config_dynconfig(dynconfig_client)
     config_was_in_console = fetched_config is not None
@@ -192,6 +232,8 @@ def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, ta
     cluster.restart_nodes()
     wait_for_all_nodes_start(swagger_client, len(cluster.nodes))
 
+    time.sleep(2)
+
     check_kikimr_is_operational(cluster, table_path, tablet_ids)
 
     logger.debug(f"Replacing config: {yaml.dump(parsed_fetched_config)}")
@@ -230,6 +272,21 @@ def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, ta
     # 12 step: move security_config to root
     parsed_fetched_config["config"]["security_config"] = parsed_fetched_config["config"]["domains_config"].pop("security_config")
 
+    # 12.5 step: extract domain_name and optionally storage_pool_types from domains_config before removing it
+    domains_config = parsed_fetched_config["config"].get("domains_config", {})
+    domain_list = domains_config.get("domain", [])
+    if domain_list and len(domain_list) > 0:
+        domain = domain_list[0]
+        domain_name = domain.get("name")
+        if domain_name and domain_name != "Root":
+            parsed_fetched_config["config"]["domain_name"] = domain_name
+
+        if extract_storage_pool_types:
+            storage_pool_types = domain.get("storage_pool_types", [])
+            if storage_pool_types:
+                parsed_fetched_config["config"]["storage_pool_types"] = storage_pool_types
+                logger.info(f"Extracted {len(storage_pool_types)} storage_pool_types to top level")
+
     # 13 step: remove unnecessary fields
     parsed_fetched_config["config"].pop("domains_config")
     parsed_fetched_config["config"].pop("blob_storage_config")
@@ -247,6 +304,8 @@ def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, ta
     logger.debug("Restarting nodes")
     cluster.restart_nodes()
     wait_for_all_nodes_start(swagger_client, len(cluster.nodes))
+
+    time.sleep(2)
 
     fetched_config = fetch_config(config_client)
     assert_that(fetched_config is not None)
@@ -315,19 +374,20 @@ def migration_to_v1(cluster, config_client, dynconfig_client, swagger_client, ta
     replace_config_dynconfig(dynconfig_client, v1_fetch_config)
 
 
-class TestConfigMigrationFromV1(object):
+class BaseConfigMigrationTest:
     erasure = Erasure.MIRROR_3_DC
     separate_node_configs = True
+    domain_name = "Root"
+    use_self_management = False
+    use_config_store = False
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
         "cluster": "",
     }
 
-    @pytest.fixture(autouse=True)
-    def setup_test(self):
-        nodes_count = 3
-        log_configs = {
+    def get_log_configs(self):
+        return {
             'BS_NODE': LogLevels.DEBUG,
             'TX_PROXY': LogLevels.DEBUG,
             'TICKET_PARSER': LogLevels.DEBUG,
@@ -335,80 +395,24 @@ class TestConfigMigrationFromV1(object):
             'TABLET_EXECUTOR': LogLevels.DEBUG,
             'TABLET_MAIN': LogLevels.DEBUG,
         }
-        self.configurator = KikimrConfigGenerator(
-            self.erasure,
-            nodes=nodes_count,
-            use_in_memory_pdisks=False,
-            separate_node_configs=self.separate_node_configs,
-            simple_config=True,
-            extra_grpc_services=['config'],
-            additional_log_configs=log_configs,
-            explicit_hosts_and_host_configs=True,
-        )
-
-        self.cluster = KiKiMR(configurator=self.configurator)
-        self.cluster.start()
-
-        cms.request_increase_ratio_limit(self.cluster.client)
-        host = self.cluster.nodes[1].host
-        grpc_port = self.cluster.nodes[1].port
-        self.swagger_client = SwaggerClient(host, self.cluster.nodes[1].mon_port)
-        self.config_client = ConfigClient(host, grpc_port)
-        self.dynconfig_client = DynConfigClient(host, grpc_port)
-
-        yield
-
-        self.cluster.stop()
-
-    def test_migration_from_v1_to_v2_to_v1_to_v2(self):
-        table_path = '/Root/mydb/mytable_migration'
-        number_of_tablets = 5
-
-        tablet_ids = create_kv_tablets_and_wait_for_start(
-            self.cluster.client,
-            self.cluster.kv_client,
-            self.swagger_client,
-            number_of_tablets,
-            table_path,
-            timeout_seconds=3
-        )
-
-        migration_to_v2(self.cluster, self.config_client, self.dynconfig_client, self.swagger_client, table_path, tablet_ids)
-        migration_to_v1(self.cluster, self.config_client, self.dynconfig_client, self.swagger_client, table_path, tablet_ids)
-        migration_to_v2(self.cluster, self.config_client, self.dynconfig_client, self.swagger_client, table_path, tablet_ids)
-
-
-class TestConfigMigrationFromV2(object):
-    erasure = Erasure.MIRROR_3_DC
-    separate_node_configs = True
-    metadata_section = {
-        "kind": "MainConfig",
-        "version": 0,
-        "cluster": "",
-    }
 
     @pytest.fixture(autouse=True)
     def setup_test(self):
         nodes_count = 3
-        log_configs = {
-            'BS_NODE': LogLevels.DEBUG,
-            'GRPC_SERVER': LogLevels.DEBUG,
-            'GRPC_PROXY': LogLevels.DEBUG,
-            'TX_PROXY': LogLevels.DEBUG,
-            'TICKET_PARSER': LogLevels.DEBUG,
-            'BS_CONTROLLER': LogLevels.DEBUG,
-        }
+        log_configs = self.get_log_configs()
+
         self.configurator = KikimrConfigGenerator(
             self.erasure,
             nodes=nodes_count,
             use_in_memory_pdisks=False,
-            use_self_management=True,
-            use_config_store=True,
             separate_node_configs=self.separate_node_configs,
             simple_config=True,
             extra_grpc_services=['config'],
             additional_log_configs=log_configs,
             explicit_hosts_and_host_configs=True,
+            domain_name=self.domain_name,
+            use_self_management=self.use_self_management,
+            use_config_store=self.use_config_store,
         )
 
         self.cluster = KiKiMR(configurator=self.configurator)
@@ -425,11 +429,11 @@ class TestConfigMigrationFromV2(object):
 
         self.cluster.stop()
 
-    def test_migration_from_v2_to_v1_to_v2_to_v1(self):
-        table_path = '/Root/mydb/mytable_migration'
-        number_of_tablets = 5
+    def get_table_path(self, suffix="migration"):
+        return f'/{self.domain_name}/mydb/mytable_{suffix}'
 
-        tablet_ids = create_kv_tablets_and_wait_for_start(
+    def create_tablets(self, table_path, number_of_tablets=5):
+        return create_kv_tablets_and_wait_for_start(
             self.cluster.client,
             self.cluster.kv_client,
             self.swagger_client,
@@ -437,6 +441,243 @@ class TestConfigMigrationFromV2(object):
             table_path,
             timeout_seconds=3
         )
-        migration_to_v1(self.cluster, self.config_client, self.dynconfig_client, self.swagger_client, table_path, tablet_ids)
-        migration_to_v2(self.cluster, self.config_client, self.dynconfig_client, self.swagger_client, table_path, tablet_ids)
-        migration_to_v1(self.cluster, self.config_client, self.dynconfig_client, self.swagger_client, table_path, tablet_ids)
+
+    def do_migration_to_v2(self, table_path, tablet_ids, extract_storage_pool_types=False):
+        migration_to_v2(self.cluster, self.config_client, self.dynconfig_client,
+                        self.swagger_client, table_path, tablet_ids,
+                        extract_storage_pool_types=extract_storage_pool_types)
+        verify_domain_name_in_v2_config(self.config_client, self.domain_name)
+        check_kikimr_is_operational(self.cluster, table_path, tablet_ids)
+
+    def do_migration_to_v1(self, table_path, tablet_ids):
+        migration_to_v1(self.cluster, self.config_client, self.dynconfig_client,
+                        self.swagger_client, table_path, tablet_ids)
+        verify_domain_name_in_v1_config(self.dynconfig_client, self.domain_name)
+        check_kikimr_is_operational(self.cluster, table_path, tablet_ids)
+
+
+class TestConfigMigrationFromV1(BaseConfigMigrationTest):
+    use_self_management = False
+    use_config_store = False
+
+    def test_migration_from_v1_to_v2_to_v1_to_v2(self):
+        table_path = self.get_table_path()
+        tablet_ids = self.create_tablets(table_path)
+
+        self.do_migration_to_v2(table_path, tablet_ids)
+        self.do_migration_to_v1(table_path, tablet_ids)
+        self.do_migration_to_v2(table_path, tablet_ids)
+
+
+class TestConfigMigrationFromV1WithCustomDomain(BaseConfigMigrationTest):
+    domain_name = "MyCluster"
+    use_self_management = False
+    use_config_store = False
+
+    def test_migration_with_custom_domain_full_cycle(self):
+        table_path = self.get_table_path("full_cycle")
+        tablet_ids = self.create_tablets(table_path)
+
+        self.do_migration_to_v2(table_path, tablet_ids)
+        self.do_migration_to_v1(table_path, tablet_ids)
+        self.do_migration_to_v2(table_path, tablet_ids)
+
+
+class TestConfigMigrationFromV2(BaseConfigMigrationTest):
+    use_self_management = True
+    use_config_store = True
+
+    def test_migration_from_v2_to_v1_to_v2_to_v1(self):
+        table_path = self.get_table_path()
+        tablet_ids = self.create_tablets(table_path)
+
+        self.do_migration_to_v1(table_path, tablet_ids)
+        self.do_migration_to_v2(table_path, tablet_ids)
+        self.do_migration_to_v1(table_path, tablet_ids)
+
+
+class TestConfigMigrationFromV2WithCustomDomain(BaseConfigMigrationTest):
+    domain_name = "CustomCluster"
+    use_self_management = True
+    use_config_store = True
+
+    def test_migration_from_v2_with_custom_domain(self):
+        table_path = self.get_table_path("v2_custom")
+        tablet_ids = self.create_tablets(table_path)
+
+        self.do_migration_to_v1(table_path, tablet_ids)
+        self.do_migration_to_v2(table_path, tablet_ids)
+
+
+def verify_security_config_preserved(config_client, dynconfig_client, is_v2_mode, config_in_console=True):
+    if is_v2_mode:
+        fetched_config = fetch_config(config_client)
+        assert_that(fetched_config is not None)
+        parsed_config = yaml.safe_load(fetched_config)
+        config_section = parsed_config.get("config", {})
+        security_config = config_section.get("security_config", {})
+    else:
+        if config_in_console:
+            v1_config = fetch_config_dynconfig(dynconfig_client)
+            assert_that(v1_config is not None)
+            parsed_config = yaml.safe_load(v1_config)
+            config_section = parsed_config.get("config", {})
+        else:
+            generated_config = generate_config(dynconfig_client)
+            config_section = yaml.safe_load(generated_config)
+        domains_config = config_section.get("domains_config", {})
+        security_config = domains_config.get("security_config", {})
+
+    default_users = security_config.get("default_users", [])
+    logger.info(f"security_config.default_users: {default_users}")
+    assert len(default_users) > 0, "security_config.default_users should not be empty"
+    return security_config
+
+
+class TestConfigMigrationWithSecurityConfig(BaseConfigMigrationTest):
+    use_self_management = False
+    use_config_store = False
+
+    def test_security_config_preserved_during_migration(self):
+        table_path = self.get_table_path("security")
+        tablet_ids = self.create_tablets(table_path)
+
+        verify_security_config_preserved(self.config_client, self.dynconfig_client, is_v2_mode=False, config_in_console=False)
+
+        self.do_migration_to_v2(table_path, tablet_ids)
+        verify_security_config_preserved(self.config_client, self.dynconfig_client, is_v2_mode=True)
+
+        self.do_migration_to_v1(table_path, tablet_ids)
+        verify_security_config_preserved(self.config_client, self.dynconfig_client, is_v2_mode=False, config_in_console=True)
+
+
+def verify_storage_pool_types_in_v1_config(dynconfig_client, expected_pool_kinds, config_in_console=True):
+    if config_in_console:
+        v1_config = fetch_config_dynconfig(dynconfig_client)
+        assert_that(v1_config is not None)
+        parsed_config = yaml.safe_load(v1_config)
+        config_section = parsed_config.get("config", {})
+    else:
+        generated_config = generate_config(dynconfig_client)
+        config_section = yaml.safe_load(generated_config)
+
+    domains_config = config_section.get("domains_config", {})
+    domain_list = domains_config.get("domain", [])
+    assert len(domain_list) > 0, "domains_config.domain list is empty"
+    storage_pool_types = domain_list[0].get("storage_pool_types", [])
+    actual_kinds = [spt.get("kind") for spt in storage_pool_types]
+    logger.info(f"storage_pool_types kinds in V1 config: {actual_kinds}")
+    for expected_kind in expected_pool_kinds:
+        assert expected_kind in actual_kinds, \
+            f"Expected storage_pool_type kind '{expected_kind}' not found in {actual_kinds}"
+    return storage_pool_types
+
+
+def verify_storage_pool_types_in_v2_config(config_client, expected_pool_kinds):
+    fetched_config = fetch_config(config_client)
+    assert_that(fetched_config is not None)
+    parsed_config = yaml.safe_load(fetched_config)
+    config_section = parsed_config.get("config", {})
+    storage_pool_types = config_section.get("storage_pool_types", [])
+    actual_kinds = [spt.get("kind") for spt in storage_pool_types]
+    logger.info(f"storage_pool_types kinds in V2 config: {actual_kinds}")
+    for expected_kind in expected_pool_kinds:
+        assert expected_kind in actual_kinds, \
+            f"Expected storage_pool_type kind '{expected_kind}' not found in {actual_kinds}"
+    return storage_pool_types
+
+
+class TestConfigMigrationWithStoragePoolTypes(BaseConfigMigrationTest):
+    use_self_management = False
+    use_config_store = False
+
+    def test_storage_pool_types_extracted_during_migration(self):
+        table_path = self.get_table_path("pools")
+        tablet_ids = self.create_tablets(table_path)
+
+        expected_kinds = ["hdd", "hdd1", "hdd2", "hdde"]
+        verify_storage_pool_types_in_v1_config(self.dynconfig_client, expected_kinds, config_in_console=False)
+
+        self.do_migration_to_v2(table_path, tablet_ids, extract_storage_pool_types=True)
+        verify_storage_pool_types_in_v2_config(self.config_client, expected_kinds)
+
+        self.do_migration_to_v1(table_path, tablet_ids)
+        verify_storage_pool_types_in_v1_config(self.dynconfig_client, expected_kinds, config_in_console=True)
+
+
+class TestConfigMigrationWithMixedDiskTypes(BaseConfigMigrationTest):
+    use_self_management = False
+    use_config_store = False
+
+    @pytest.fixture(autouse=True)
+    def setup_test(self):
+        nodes_count = 3
+        log_configs = self.get_log_configs()
+
+        self.configurator = KikimrConfigGenerator(
+            self.erasure,
+            nodes=nodes_count,
+            use_in_memory_pdisks=False,
+            separate_node_configs=self.separate_node_configs,
+            simple_config=True,
+            extra_grpc_services=['config'],
+            additional_log_configs=log_configs,
+            explicit_hosts_and_host_configs=True,
+            domain_name=self.domain_name,
+            use_self_management=self.use_self_management,
+            use_config_store=self.use_config_store,
+        )
+
+        host_configs = self.configurator.yaml_config["host_configs"]
+        max_id = max(hc["host_config_id"] for hc in host_configs)
+        host_configs.append({
+            "host_config_id": max_id + 1,
+            "drive": [
+                {"path": "/dev/disk/by-partlabel/fake_ssd_1", "type": "SSD"},
+                {"path": "/dev/disk/by-partlabel/fake_ssd_2", "type": "SSD"},
+                {"path": "/dev/disk/by-partlabel/fake_ssd_3", "type": "SSD"},
+            ]
+        })
+
+        domain = self.configurator.yaml_config["domains_config"]["domain"][0]
+        existing_geometry = domain["storage_pool_types"][0].get("pool_config", {}).get("geometry")
+        ssd_pool = {
+            "kind": "ssd",
+            "pool_config": {
+                "box_id": 1,
+                "erasure_species": "mirror-3-dc",
+                "vdisk_kind": "Default",
+                "kind": "ssd",
+                "pdisk_filter": [{"property": [{"type": "SSD"}]}],
+            }
+        }
+        if existing_geometry:
+            ssd_pool["pool_config"]["geometry"] = existing_geometry.copy()
+        domain["storage_pool_types"].append(ssd_pool)
+
+        self.cluster = KiKiMR(configurator=self.configurator)
+        self.cluster.start()
+
+        cms.request_increase_ratio_limit(self.cluster.client)
+        host = self.cluster.nodes[1].host
+        grpc_port = self.cluster.nodes[1].port
+        self.swagger_client = SwaggerClient(host, self.cluster.nodes[1].mon_port)
+        self.config_client = ConfigClient(host, grpc_port)
+        self.dynconfig_client = DynConfigClient(host, grpc_port)
+
+        yield
+
+        self.cluster.stop()
+
+    def test_mixed_disk_types_extracted_during_migration(self):
+        table_path = self.get_table_path("mixed_disks")
+        tablet_ids = self.create_tablets(table_path)
+
+        expected_kinds = ["hdd", "hdd1", "hdd2", "hdde", "ssd"]
+        verify_storage_pool_types_in_v1_config(self.dynconfig_client, expected_kinds, config_in_console=False)
+
+        self.do_migration_to_v2(table_path, tablet_ids, extract_storage_pool_types=True)
+        verify_storage_pool_types_in_v2_config(self.config_client, expected_kinds)
+
+        self.do_migration_to_v1(table_path, tablet_ids)
+        verify_storage_pool_types_in_v1_config(self.dynconfig_client, expected_kinds, config_in_console=True)

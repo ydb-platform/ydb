@@ -74,11 +74,25 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     }
 }
 
+void TKafkaSaslAuthActor::HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext&) {
+    auto& mtlsRequest = *ev->Get();
+    ClientCert = mtlsRequest.ClientCertificate;
+    if (CurrentStateFunc() == &TThis::StateWork) {
+        StartMtlsAuth();
+        SendDescribeRequest();
+        Become(&TKafkaSaslAuthActor::StateResolveDatabase);
+    }
+ }
+
 bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
     return TryParseAuthDataTo(ClientAuthData, ctx);
 }
 
 void TKafkaSaslAuthActor::StartScramAuth() {
+    DatabasePath = AppData()->TenantName;
+}
+
+void TKafkaSaslAuthActor::StartMtlsAuth() {
     DatabasePath = AppData()->TenantName;
 }
 
@@ -336,6 +350,13 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
     }
 }
 
+void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
+                                                                                                     .Database = DatabasePath,
+                                                                                                     .PeerName = TStringBuilder() << Address}));
+    Become(&TKafkaSaslAuthActor::StateTicketResolve);
+}
+
 void TKafkaSaslAuthActor::SendDescribeRequest() {
     auto schemeCacheRequest = std::make_unique<NKikimr::NSchemeCache::TSchemeCacheNavigate>();
     NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -432,6 +453,9 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             // Scram Login/Password authentication
             SendScramLoginRequest(ctx);
+        } else if (Context->SaslMechanism == "MTLS") {
+            // Mtls authentication
+            SendMtlsAuthRequest(ctx);
         }
     }
 }

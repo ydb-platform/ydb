@@ -527,6 +527,10 @@ protected:
 
     void FeedSample(TArrayRef<const TCell> row)
     {
+        if (row.at(EmbeddingPos).IsNull()) {
+            return;
+        }
+
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
             InvalidEmbeddingError = Clusters->FormatError(embedding);
@@ -540,6 +544,9 @@ protected:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
+        if (row.at(EmbeddingPos).IsNull()) {
+            return;
+        }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
@@ -548,6 +555,9 @@ protected:
     void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
+        if (row.at(EmbeddingPos).IsNull()) {
+            return;
+        }
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
             InvalidEmbeddingError = Clusters->FormatError(embedding);

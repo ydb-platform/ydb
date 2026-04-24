@@ -363,6 +363,42 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
     }
 
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // 2 valid rows, 2 rows with NULL embedding (column omitted)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"\x30\x30\2\", \"one\"),"
+            "(2, \"\x31\x31\2\", \"two\");");
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, data) VALUES )"
+            "(3, \"null_one\"),"
+            "(4, \"null_two\");");
+
+        std::vector<TString> level = { "\x30\x30\2", "\x31\x31\2" };
+        auto recomputed = DoRecomputeKMeans(server, sender, 0, level,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
+
+        // Clusters should still be recomputed from the 2 valid rows
+        UNIT_ASSERT_STRING_CONTAINS(recomputed, "cluster = ");
+    }
+
     Y_UNIT_TEST(EmptyCluster) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

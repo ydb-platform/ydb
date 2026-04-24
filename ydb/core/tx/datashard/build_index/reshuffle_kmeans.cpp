@@ -359,6 +359,9 @@ protected:
     void FeedRow(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
+        if (row.at(EmbeddingPos).IsNull()) {
+            return;
+        }
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
             InvalidEmbeddingError = Clusters->FormatError(embedding);

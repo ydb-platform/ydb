@@ -418,6 +418,53 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         TString issuesStr = issues.ToOneLineString();
         UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
     }
+
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"key", "Uint32", true, true},
+            {"value", "String", false, false},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-1", options);
+
+        // 2 valid rows, 1 row with NULL embedding (column omitted)
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES "
+            "(2, \"ab\x02\"), (5, \"de\x02\");");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key) VALUES (3);");
+
+        auto snapshot = CreateVolatileSnapshot(server, {kTable});
+        auto datashards = GetTableShards(server, sender, kTable);
+        UNIT_ASSERT_VALUES_EQUAL(datashards.size(), 1);
+
+        ui64 seed = 0, k = 10;
+        TString data = DoSampleK(server, sender, kTable, snapshot, seed, k, [&](NKikimrTxDataShard::TEvSampleKRequest& rec) {
+            VectorIndexSettings settings;
+            settings.set_vector_dimension(2);
+            settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+            settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+            *rec.MutableSettings() = settings;
+        });
+
+        // Valid rows should be sampled, null row should be skipped
+        UNIT_ASSERT_STRING_CONTAINS(data, "key = 2");
+        UNIT_ASSERT_STRING_CONTAINS(data, "key = 5");
+        UNIT_ASSERT(!data.Contains("key = 3"));
+    }
 }
 
 } // namespace NKikimr

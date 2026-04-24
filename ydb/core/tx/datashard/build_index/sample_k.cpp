@@ -141,6 +141,10 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
+        if (Clusters && row.Get(0).IsNull()) {
+            return EScan::Feed;
+        }
+
         if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
             InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
             return EScan::Final;

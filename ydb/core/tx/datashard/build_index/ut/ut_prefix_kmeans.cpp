@@ -954,6 +954,50 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Empty vector data");
     }
+
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+
+        // user-1: 2 valid rows, 1 row with NULL embedding (column omitted)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
+            "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+            "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\");");
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (user, key, data) VALUES )"
+            "(\"user-1\", 13, \"1-three\");");
+
+        CreatePrefixTable(server, sender, options);
+        CreateLevelTable(server, sender, options);
+        CreatePostingTable(server, sender, options);
+
+        ui64 seed = 0, k = 2;
+        auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE, 50000);
+
+        // Valid rows should be in posting, null embedding row should be skipped
+        UNIT_ASSERT(posting.Contains("1-one"));
+        UNIT_ASSERT(posting.Contains("1-two"));
+        UNIT_ASSERT(!posting.Contains("1-three"));
+    }
 }
 
 }

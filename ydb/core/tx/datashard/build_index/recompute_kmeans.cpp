@@ -213,6 +213,9 @@ protected:
                 return;
             }
         }
+        if (row.at(EmbeddingPos).IsNull()) {
+            return;
+        }
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
             InvalidEmbeddingError = Clusters->FormatError(embedding);

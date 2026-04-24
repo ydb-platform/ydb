@@ -276,12 +276,6 @@ namespace NKikimr::NDDisk {
                 }
             }
 
-            //// TODO
-
-
-
-
-
             STLOG(PRI_DEBUG, BS_DDISK, BSDD16, "TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
             ProcessPersistentBufferQueue();

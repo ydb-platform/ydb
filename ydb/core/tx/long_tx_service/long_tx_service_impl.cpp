@@ -1643,16 +1643,13 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
     THashMap<size_t, TLockStateHandle> sccYoungestLock;
     {
         size_t sccId = 0;
+        TVector<TWaitNode*> sccNodes;
         TVector<TWaitNode*> stack;
         for (auto it = finishOrder.rbegin(); it != finishOrder.rend(); ++it) {
             TWaitNode* start = *it;
             if (start->SccId != size_t(-1)) {
                 continue;
             }
-
-            size_t sccSize = 0;
-            TLockStateHandle youngest;
-            bool hasLockWithoutTimestamp = false;
 
             stack.push_back(start);
             while (!stack.empty()) {
@@ -1662,18 +1659,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
                     continue;
                 }
                 node->SccId = sccId;
-
-                ++sccSize;
-                if (!node->Awaiters.Empty()) {
-                    TLockStateHandle handle(node->Awaiters.Front()->Blocker);
-                    if (!handle.TimestampReady()) {
-                        // Timestamp not yet known, ignore this SCC for now.
-                        // Re-invocation will be scheduled when it arrives.
-                        hasLockWithoutTimestamp = true;
-                    } if (!youngest || youngerLockCmp(handle, youngest)) {
-                        youngest = handle;
-                    }
-                }
+                sccNodes.push_back(node);
 
                 // Reversed edges: node->Awaiters contains edges where node is the Blocker,
                 // so edge.Awaiter is the neighbor in the reversed graph.
@@ -1683,11 +1669,32 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
                     }
                 }
             }
-            if (sccSize > 1 && !hasLockWithoutTimestamp) {
-                Y_ABORT_UNLESS(youngest);
-                sccYoungestLock[sccId] = youngest;
+
+            if (sccNodes.size() > 1) {
+                TLockStateHandle youngest;
+                bool hasLockWithoutTimestamp = false;
+                for (const auto* node : sccNodes) {
+                    if (!node->Awaiters.Empty()) {
+                        TLockStateHandle handle(node->Awaiters.Front()->Blocker);
+                        if (!handle.TimestampReady()) {
+                            // Timestamp not yet known, ignore this SCC for now.
+                            // Re-invocation will be scheduled when it arrives.
+                            hasLockWithoutTimestamp = true;
+                            break;
+                        } if (!youngest || youngerLockCmp(handle, youngest)) {
+                            youngest = handle;
+                        }
+                    }
+                }
+
+                if (!hasLockWithoutTimestamp) {
+                    Y_ABORT_UNLESS(youngest);
+                    sccYoungestLock[sccId] = youngest;
+                }
             }
+
             ++sccId;
+            sccNodes.clear();
         }
     }
 

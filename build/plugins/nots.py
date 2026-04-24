@@ -1072,12 +1072,18 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
-def on_ts_check_configure(unit: NotsUnitType) -> None:
+def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     if not _is_tests_enabled(unit):
         return
 
     ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
+        if validation_mode == "TS_TEST_FOR":
+            ymake.report_configure_error(
+                f"{COLORS.red}Missing test script{COLORS.reset} \n"
+                f"{COLORS.cyan}TS_TEST_FOR{COLORS.reset} requires to use at least one {COLORS.cyan}TS_TEST{COLORS.reset} macro \n"
+                "https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_TEST_FOR"
+            )
         return
 
     test_files = df.TestFiles.ts_check_srcs(unit, (), {})

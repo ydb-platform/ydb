@@ -65,8 +65,13 @@ enum class ESettingsId : uint16_t {
 };
 
 // Error codes (RFC 7540 Section 7)
+// Windows' <winerror.h> defines NO_ERROR as a macro, which would otherwise
+// clash with the enumerator below. Save and restore the macro so downstream
+// code that relies on Win32's NO_ERROR is unaffected.
 #ifdef NO_ERROR
-#undef NO_ERROR // windows.h pollution
+#pragma push_macro("NO_ERROR")
+#undef NO_ERROR
+#define YDB_HTTP2_RESTORE_NO_ERROR
 #endif
 enum class EErrorCode : uint32_t {
     NO_ERROR            = 0x0,
@@ -84,6 +89,10 @@ enum class EErrorCode : uint32_t {
     INADEQUATE_SECURITY = 0xc,
     HTTP_1_1_REQUIRED   = 0xd,
 };
+#ifdef YDB_HTTP2_RESTORE_NO_ERROR
+#pragma pop_macro("NO_ERROR")
+#undef YDB_HTTP2_RESTORE_NO_ERROR
+#endif
 
 // Stream states (RFC 7540 Section 5.1)
 enum class EStreamState {

@@ -664,7 +664,7 @@ namespace NKikimr::NDDisk {
             static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
             static constexpr ui32 HeaderChecksumOffset = 24;
             static constexpr ui32 HeaderChecksumSize = 8;
-            static constexpr ui32 MaxBarriersPerHeader = 29;
+            static constexpr ui32 MaxBarriersPerHeader = 240;
 
             struct TRecord {
                 ui64 TabletId;
@@ -686,17 +686,25 @@ namespace NKikimr::NDDisk {
                 TBarrierRecord Barriers[MaxBarriersPerHeader];
             };
 
+            enum EFlags : ui64 {
+                NONE = 0,
+                IS_BARRIER = 1,
+            };
+
             ui8 Signature[16];
             ui64 HeaderChecksum;
-            enum {
-                RECORD,
-                BARRIER
-            } Type;
+            ui64 Flags;
+
             union {
                 TRecord Record;
                 TBarrier Barrier;
             };
+            
+            ui64 Reserved[26];
         };
+
+        static_assert(sizeof(TPersistentBufferHeader) == 4096);
+
         struct TEraseBarrier {
             ui32 ChunkIdx;
             ui32 SectorIdx;

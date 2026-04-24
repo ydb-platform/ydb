@@ -207,6 +207,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
                     pbufferFormat.InitChunks = Cfg->PBufferConfig->GetInitChunks();
                 }
+                if (Cfg->PBufferConfig->HasMaxChunks()) {
+                    pbufferFormat.MaxChunks = Cfg->PBufferConfig->GetMaxChunks();
+                }
                 if (Cfg->PBufferConfig->HasMaxInMemoryCache()) {
                     pbufferFormat.MaxInMemoryCache = Cfg->PBufferConfig->GetMaxInMemoryCache();
                 }

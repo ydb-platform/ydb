@@ -27,20 +27,14 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateOrPatchIndexMeta(const ui
         return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
     }
 
-    const auto colId = existingMeta.GetSingleColumnId();
-    if (!colId) {
-        errors.AddError("existing index has no single column; cannot determine column for ALTER INDEX");
-        return nullptr;
-    }
-
-    const auto* col = currentSchema.GetColumns().GetById(*colId);
-    if (!col) {
-        errors.AddError(TStringBuilder() << "column id " << *colId << " not found in schema for ALTER INDEX");
+    auto resolvedColumnName = ResolveColumnNameForAlterIndex(currentSchema, existingMeta);
+    if (resolvedColumnName.IsFail()) {
+        errors.AddError(resolvedColumnName.GetErrorMessage());
         return nullptr;
     }
 
     TIndexConstructor patched = *this;
-    patched.ColumnName = col->GetName();
+    patched.ColumnName = *resolvedColumnName;
     return patched.DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
 }
 
@@ -57,17 +51,14 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
         return nullptr;
     }
 
-    auto canonical = TConstants::BuildCanonicalSettings(
-        Request.FalsePositiveProbability, Request.NGrammSize, Request.CaseSensitive,
-        Request.DeprecatedHashesCount, Request.DeprecatedFilterSizeBytes, Request.DeprecatedRecordsCount);
-    if (canonical.IsFail()) {
-        errors.AddError(canonical.GetErrorMessage());
+    if (auto c = TConstants::ValidateRequest(Request); c.IsFail()) {
+        errors.AddError(c.GetErrorMessage());
         return nullptr;
     }
 
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), TBase::GetBitsStorageConstructor(), *canonical);
+        GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), TBase::GetBitsStorageConstructor(), Request);
 }
 
 TConclusionStatus TIndexConstructor::ValidateValues() const {
@@ -78,11 +69,8 @@ TConclusionStatus TIndexConstructor::ValidateValues() const {
         }
     }
 
-    auto canonical = TConstants::BuildCanonicalSettings(
-        Request.FalsePositiveProbability, Request.NGrammSize, Request.CaseSensitive,
-        Request.DeprecatedHashesCount, Request.DeprecatedFilterSizeBytes, Request.DeprecatedRecordsCount);
-    if (canonical.IsFail()) {
-        return canonical;
+    if (auto c = TConstants::ValidateRequest(Request); c.IsFail()) {
+        return c;
     }
 
     return TConclusionStatus::Success();
@@ -132,16 +120,7 @@ TConclusionStatus TIndexConstructor::FillRequestFromJson(const NJson::TJsonValue
 }
 
 void TIndexConstructor::FillRequestFromProtoFilter(const NKikimrSchemeOp::TRequestedBloomNGrammFilter& bFilter) {
-    Request.FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
-        ? std::optional<double>(bFilter.GetFalsePositiveProbability()) : std::nullopt;
-    Request.NGrammSize = bFilter.HasNGrammSize()
-        ? std::optional<ui32>(bFilter.GetNGrammSize()) : std::nullopt;
-    Request.CaseSensitive = bFilter.HasCaseSensitive()
-        ? std::optional<bool>(bFilter.GetCaseSensitive()) : std::nullopt;
-    Request.DeprecatedHashesCount = bFilter.HasHashesCount() ? std::optional<ui32>(bFilter.GetHashesCount()) : std::nullopt;
-    Request.DeprecatedFilterSizeBytes = bFilter.HasFilterSizeBytes() ? std::optional<ui32>(bFilter.GetFilterSizeBytes()) : std::nullopt;
-    Request.DeprecatedRecordsCount = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0
-        ? std::optional<ui32>(bFilter.GetRecordsCount()) : std::nullopt;
+    Request = TRequestSettings::FromProtoFilter(bFilter);
 }
 
 NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
@@ -178,16 +157,7 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
         filterProto->SetColumnName(ColumnName);
     }
 
-    NIndexParameters::SetProtoIfPresent(Request.CaseSensitive, [&](bool v) { filterProto->SetCaseSensitive(v); });
-    NIndexParameters::SetProtoIfPresent(Request.NGrammSize, [&](ui32 v) { filterProto->SetNGrammSize(v); });
-
-    if (TConstants::IsDeprecatedSizingMode(Request.DeprecatedHashesCount, Request.DeprecatedFilterSizeBytes, Request.DeprecatedRecordsCount)) {
-        NIndexParameters::SetProtoIfPresent(Request.DeprecatedHashesCount, [&](ui32 v) { filterProto->SetHashesCount(v); });
-        NIndexParameters::SetProtoIfPresent(Request.DeprecatedFilterSizeBytes, [&](ui32 v) { filterProto->SetFilterSizeBytes(v); });
-        NIndexParameters::SetProtoIfPresent(Request.DeprecatedRecordsCount, [&](ui32 v) { filterProto->SetRecordsCount(v); });
-    } else {
-        NIndexParameters::SetProtoIfPresent(Request.FalsePositiveProbability, [&](double v) { filterProto->SetFalsePositiveProbability(v); });
-    }
+    Request.SerializeToProtoFilterRaw(*filterProto);
 
     *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }

@@ -39,6 +39,12 @@ public:
         return ColumnName;
     }
 
+protected:
+    TConclusion<TString> ResolveColumnNameForAlterIndex(
+        const NSchemeShard::TOlapSchema& currentSchema,
+        const IIndexMeta& existingMeta) const;
+
+public:
     const TReadDataExtractorContainer& GetDataExtractor() const {
         AFL_VERIFY(!!DataExtractor);
         return DataExtractor;

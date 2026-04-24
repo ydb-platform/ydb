@@ -13,14 +13,81 @@
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
-struct TCanonicalSettings {
-    ui32 NgramSize = NDefaults::NGrammSize;
-    bool CaseSensitive = NDefaults::CaseSensitive;
-    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
-    ui32 HashesCount = 0;
-    ui32 FilterSizeBytes = 0;
-    ui32 RecordsCount = 0;
-    bool UseDeprecatedSizing = false;
+struct TRequestSettings {
+    std::optional<ui32> NGrammSize;
+    std::optional<double> FalsePositiveProbability;
+    std::optional<bool> CaseSensitive;
+    std::optional<ui32> DeprecatedHashesCount;
+    std::optional<ui32> DeprecatedFilterSizeBytes;
+    std::optional<ui32> DeprecatedRecordsCount;
+
+    template <class TBloomFilterProto>
+    static TRequestSettings FromProtoFilter(const TBloomFilterProto& bFilter) {
+        TRequestSettings result;
+        result.FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
+            ? std::optional<double>(bFilter.GetFalsePositiveProbability()) : std::nullopt;
+        result.NGrammSize = bFilter.HasNGrammSize()
+            ? std::optional<ui32>(bFilter.GetNGrammSize()) : std::nullopt;
+        result.CaseSensitive = bFilter.HasCaseSensitive()
+            ? std::optional<bool>(bFilter.GetCaseSensitive()) : std::nullopt;
+        result.DeprecatedHashesCount = bFilter.HasHashesCount()
+            ? std::optional<ui32>(bFilter.GetHashesCount()) : std::nullopt;
+        result.DeprecatedFilterSizeBytes = bFilter.HasFilterSizeBytes()
+            ? std::optional<ui32>(bFilter.GetFilterSizeBytes()) : std::nullopt;
+        result.DeprecatedRecordsCount = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0
+            ? std::optional<ui32>(bFilter.GetRecordsCount()) : std::nullopt;
+        return result;
+    }
+
+    template <class TBloomFilterProto>
+    void SerializeToProtoFilterRaw(TBloomFilterProto& bFilter) const {
+        if (CaseSensitive) {
+            bFilter.SetCaseSensitive(*CaseSensitive);
+        }
+
+        if (NGrammSize) {
+            bFilter.SetNGrammSize(*NGrammSize);
+        }
+
+        const bool useOldSizing = IsOldSizingMode();
+        if (useOldSizing) {
+            if (DeprecatedHashesCount) {
+                bFilter.SetHashesCount(*DeprecatedHashesCount);
+            }
+
+            if (DeprecatedFilterSizeBytes) {
+                bFilter.SetFilterSizeBytes(*DeprecatedFilterSizeBytes);
+            }
+
+            if (DeprecatedRecordsCount) {
+                bFilter.SetRecordsCount(*DeprecatedRecordsCount);
+            }
+        } else if (FalsePositiveProbability) {
+            bFilter.SetFalsePositiveProbability(*FalsePositiveProbability);
+        }
+    }
+
+    template <class TBloomFilterProto>
+    void SerializeToProtoFilterResolved(TBloomFilterProto& bFilter) const {
+        bFilter.SetCaseSensitive(ResolvedCaseSensitive());
+        bFilter.SetNGrammSize(ResolvedNGrammSize());
+        bFilter.SetFalsePositiveProbability(ResolvedFalsePositiveProbability());
+        bFilter.SetHashesCount(ResolvedHashesCount());
+        bFilter.SetFilterSizeBytes(ResolvedFilterSizeBytes());
+        if (IsOldSizingMode()) {
+            bFilter.SetRecordsCount(ResolvedRecordsCount());
+        } else {
+            bFilter.ClearRecordsCount();
+        }
+    }
+
+    bool IsOldSizingMode() const;
+    ui32 ResolvedNGrammSize() const;
+    bool ResolvedCaseSensitive() const;
+    double ResolvedFalsePositiveProbability() const;
+    ui32 ResolvedHashesCount() const;
+    ui32 ResolvedFilterSizeBytes() const;
+    ui32 ResolvedRecordsCount() const;
 };
 
 class TConstants {
@@ -51,12 +118,6 @@ public:
 
     static bool CheckFilterSizeBytes(const ui32 value) {
         return MinFilterSizeBytes <= value && value <= MaxFilterSizeBytes;
-    }
-
-    static bool IsDeprecatedSizingMode(const std::optional<ui32>& /*hashesCount*/,
-        const std::optional<ui32>& /*filterSizeBytes*/,
-        const std::optional<ui32>& recordsCount) {
-        return recordsCount && *recordsCount != 0;
     }
 
     static ui32 CalcHashesCount(const double falsePositiveProbability) {
@@ -120,59 +181,77 @@ public:
         return TConclusionStatus::Success();
     }
 
-    static TConclusion<TCanonicalSettings> BuildCanonicalSettings(
-        const std::optional<double>& falsePositiveProbability,
-        const std::optional<ui32>& ngramSize,
-        const std::optional<bool>& caseSensitive,
-        const std::optional<ui32>& hashesCount,
-        const std::optional<ui32>& filterSizeBytes,
-        const std::optional<ui32>& recordsCount) {
-        std::optional<ui32> normalizedRecordsCount = recordsCount;
-        if (!falsePositiveProbability && (hashesCount || filterSizeBytes) && !normalizedRecordsCount) {
-            normalizedRecordsCount = DeprecatedRecordsCount;
+    static TConclusionStatus ValidateRequest(const TRequestSettings& request) {
+        if (request.IsOldSizingMode() && !CheckRecordsCount(request.ResolvedRecordsCount())) {
+            return TConclusionStatus::Fail(
+                "records_count have to be in bloom ngramm filter in interval " + GetRecordsCountIntervalString());
         }
 
-        TCanonicalSettings result;
-        result.NgramSize = ngramSize.value_or(NDefaults::NGrammSize);
-        result.CaseSensitive = caseSensitive.value_or(NDefaults::CaseSensitive);
-        result.UseDeprecatedSizing = IsDeprecatedSizingMode(hashesCount, filterSizeBytes, normalizedRecordsCount);
-        if (result.UseDeprecatedSizing) {
-            result.FalsePositiveProbability = falsePositiveProbability.value_or(
-                FalsePositiveProbabilityFromDeprecatedSizing(hashesCount, filterSizeBytes, normalizedRecordsCount));
-            result.HashesCount = hashesCount.value_or(NDefaults::HashesCount);
-            result.FilterSizeBytes = filterSizeBytes.value_or(CalcDeprecatedFilterSizeBytes(result.FalsePositiveProbability));
-            result.RecordsCount = *normalizedRecordsCount;
-            if (!CheckRecordsCount(result.RecordsCount)) {
-                return TConclusionStatus::Fail(
-                    "records_count have to be in bloom ngramm filter in interval " + GetRecordsCountIntervalString());
-            }
-        } else {
-            result.FalsePositiveProbability = falsePositiveProbability.value_or(NDefaults::FalsePositiveProbability);
-            result.HashesCount = CalcHashesCount(result.FalsePositiveProbability);
-            result.FilterSizeBytes = CalcDeprecatedFilterSizeBytes(result.FalsePositiveProbability);
-            result.RecordsCount = DeprecatedRecordsCount;
-        }
-
-        if (auto c = ValidateParams(result.FalsePositiveProbability, result.NgramSize, result.HashesCount, result.FilterSizeBytes);
-            c.IsFail()) {
-            return c;
-        }
-
-        return result;
-    }
-
-    template <class TBloomFilterProto>
-    static TConclusion<TCanonicalSettings> BuildCanonicalSettingsFromProtoFilter(const TBloomFilterProto& bFilter) {
-        const auto recordsCount = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0
-            ? std::optional<ui32>(bFilter.GetRecordsCount()) : std::nullopt;
-        return BuildCanonicalSettings(
-            bFilter.HasFalsePositiveProbability() ? std::optional<double>(bFilter.GetFalsePositiveProbability()) : std::nullopt,
-            bFilter.HasNGrammSize() ? std::optional<ui32>(bFilter.GetNGrammSize()) : std::nullopt,
-            bFilter.HasCaseSensitive() ? std::optional<bool>(bFilter.GetCaseSensitive()) : std::nullopt,
-            bFilter.HasHashesCount() ? std::optional<ui32>(bFilter.GetHashesCount()) : std::nullopt,
-            bFilter.HasFilterSizeBytes() ? std::optional<ui32>(bFilter.GetFilterSizeBytes()) : std::nullopt,
-            recordsCount);
+        return ValidateParams(
+            request.ResolvedFalsePositiveProbability(),
+            request.ResolvedNGrammSize(),
+            request.ResolvedHashesCount(),
+            request.ResolvedFilterSizeBytes());
     }
 };
+
+inline bool TRequestSettings::IsOldSizingMode() const {
+    return DeprecatedRecordsCount && *DeprecatedRecordsCount != 0;
+}
+
+inline ui32 TRequestSettings::ResolvedNGrammSize() const {
+    return NGrammSize.value_or(NDefaults::NGrammSize);
+}
+
+inline bool TRequestSettings::ResolvedCaseSensitive() const {
+    return CaseSensitive.value_or(NDefaults::CaseSensitive);
+}
+
+inline double TRequestSettings::ResolvedFalsePositiveProbability() const {
+    if (FalsePositiveProbability) {
+        return *FalsePositiveProbability;
+    }
+
+    if (!IsOldSizingMode() && !(DeprecatedHashesCount || DeprecatedFilterSizeBytes)) {
+        return FalsePositiveProbability.value_or(NDefaults::FalsePositiveProbability);
+    }
+
+    const auto normalizedRecordsCount = (DeprecatedRecordsCount && *DeprecatedRecordsCount != 0)
+        ? DeprecatedRecordsCount
+        : std::optional<ui32>(TConstants::DeprecatedRecordsCount);
+
+    return TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
+        DeprecatedHashesCount,
+        DeprecatedFilterSizeBytes,
+        normalizedRecordsCount);
+}
+
+inline ui32 TRequestSettings::ResolvedHashesCount() const {
+    if (IsOldSizingMode()) {
+        return DeprecatedHashesCount.value_or(NDefaults::HashesCount);
+    }
+
+    return TConstants::CalcHashesCount(ResolvedFalsePositiveProbability());
+}
+
+inline ui32 TRequestSettings::ResolvedFilterSizeBytes() const {
+    if (IsOldSizingMode()) {
+        return DeprecatedFilterSizeBytes.value_or(TConstants::CalcDeprecatedFilterSizeBytes(ResolvedFalsePositiveProbability()));
+    }
+
+    return TConstants::CalcDeprecatedFilterSizeBytes(ResolvedFalsePositiveProbability());
+}
+
+inline ui32 TRequestSettings::ResolvedRecordsCount() const {
+    if (IsOldSizingMode()) {
+        if (DeprecatedRecordsCount && *DeprecatedRecordsCount != 0) {
+            return *DeprecatedRecordsCount;
+        }
+
+        return TConstants::DeprecatedRecordsCount;
+    }
+
+    return TConstants::DeprecatedRecordsCount;
+}
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -19,15 +20,6 @@ public:
     }
 
 private:
-    struct TRequestSettings {
-        std::optional<ui32> NGrammSize;
-        std::optional<double> FalsePositiveProbability;
-        std::optional<bool> CaseSensitive;
-        std::optional<ui32> DeprecatedHashesCount;
-        std::optional<ui32> DeprecatedFilterSizeBytes;
-        std::optional<ui32> DeprecatedRecordsCount;
-    };
-
     TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 

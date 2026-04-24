@@ -1,4 +1,7 @@
 #pragma once
+
+#include "const.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
@@ -16,10 +19,6 @@ public:
     }
 
 private:
-    struct TRequestSettings {
-        std::optional<double> FalsePositiveProbability;
-    };
-
     TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
@@ -36,7 +35,6 @@ protected:
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) override;
 
 private:
-    TConclusion<double> BuildCanonicalFalsePositiveProbability() const;
     TConclusionStatus ValidateValues() const;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const override;
 

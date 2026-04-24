@@ -220,10 +220,10 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return GetPBInfo()->Get()->InMemoryCacheSize;
         }
 
-        TAutoPtr<TEventHandle<NDDisk::TEvPersistentBufferInfo>> GetPBInfo() {
+        TAutoPtr<TEventHandle<NDDisk::TEvPersistentBufferInfo>> GetPBInfo(bool describeFreeSpace = false, bool describeTablets = false) {
             Cerr << "get persistent buffer info \n";
 
-            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo(true, true));
+            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo(describeFreeSpace, describeTablets));
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvPersistentBufferInfo>(Edge, false);
             return res;
@@ -653,7 +653,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         f.ErasePB();
         {
-            auto info = f.GetPBInfo();
+            auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
             UNIT_ASSERT(b.size() == 1);
             UNIT_ASSERT(b.begin()->first == f.PBCreds.TabletId);
@@ -662,10 +662,34 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.RestartNode();
         f.ListPB();
         {
-            auto info = f.GetPBInfo();
-                        Cerr << "!!!!!!!!!!  0" << Endl;
+            auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-                        Cerr << "!!!!!!!!!!  1" << Endl;
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b.begin()->first == f.PBCreds.TabletId);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferEraseBarrierDeleted) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 i = 1; i < 20; ++i) {
+            f.WritePB();
+        }
+        f.ErasePB();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b.begin()->first == f.PBCreds.TabletId);
+        }
+        f.ListPB();
+        f.RestartNode();
+        f.ListPB();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
             UNIT_ASSERT(b.size() == 1);
             UNIT_ASSERT(b.begin()->first == f.PBCreds.TabletId);
         }

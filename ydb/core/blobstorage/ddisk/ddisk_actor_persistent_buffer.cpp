@@ -241,11 +241,6 @@ namespace NKikimr::NDDisk {
                 }
             }
             std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
-            for (auto& [_, pb] : PersistentBuffers) {
-                for (auto& [__, record] : pb.Records) {
-                    PersistentBufferSpaceAllocator.MarkOccupied(record.Sectors);
-                }
-            }
             PersistentBufferSectorsChecksum.clear();
 
             for (ui32 pos = 0; pos < PersistentBufferBarriers.size(); pos++) {
@@ -253,7 +248,7 @@ namespace NKikimr::NDDisk {
                 for (ui32 FreeBarrierPosition = 0; FreeBarrierPosition < TPersistentBufferHeader::MaxBarriersPerHeader && b.Header.Barrier.Barriers[FreeBarrierPosition].TabletId > 0; FreeBarrierPosition++) {
                     auto& barrier = b.Header.Barrier.Barriers[FreeBarrierPosition];
                     auto it = PersistentBuffers.lower_bound({barrier.TabletId, 0});
-                    if (it == PersistentBuffers.end()) {
+                    if (it == PersistentBuffers.end() || std::get<0>(it->first) != barrier.TabletId) {
                         PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
                     }
                     for (; it != PersistentBuffers.end() &&
@@ -271,6 +266,12 @@ namespace NKikimr::NDDisk {
                             ++it;
                         }
                     }
+                }
+            }
+
+            for (auto& [_, pb] : PersistentBuffers) {
+                for (auto& [__, record] : pb.Records) {
+                    PersistentBufferSpaceAllocator.MarkOccupied(record.Sectors);
                 }
             }
 
@@ -749,8 +750,8 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD31, "TDDiskActor::BarierErasePersistentBuffer", (tabletId, creds.TabletId), (lsn, lsn));
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.BarierErasePersistentBuffer",
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD31, "TDDiskActor::BarrierErasePersistentBuffer", (tabletId, creds.TabletId), (lsn, lsn));
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.BarrierErasePersistentBuffer",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId)));
         const ui64 barrierEraseCookie = NextCookie++;
@@ -797,6 +798,7 @@ namespace NKikimr::NDDisk {
                 barrierIdx = std::get<0>(PersistentBufferBarrierHoles.back());
                 pos = std::get<1>(PersistentBufferBarrierHoles.back());
                 PersistentBufferBarrierHoles.pop_back();
+                PersistentBufferBarriersLocation[creds.TabletId] = {barrierIdx, pos};
             } else {
                 if (FreeBarrierPosition >= TPersistentBufferHeader::MaxBarriersPerHeader || PersistentBufferBarriers.empty()) {
                     FreeBarrierPosition = 0;

@@ -187,7 +187,7 @@ namespace NKikimr {
                                             TABLED() {str << ti.TabletId;}
                                             TABLED() {str << ti.Generation;}
                                             if (auto it = b->EraseBarriers.find(ti.TabletId); it != b->EraseBarriers.end()) {
-                                                TABLED() {str << b->EraseBarriers[ti.TabletId];}
+                                                TABLED() {str << it->second;}
                                             } else {
                                                 TABLED() {str << "No barrier";}
                                             }

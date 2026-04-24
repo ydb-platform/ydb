@@ -133,7 +133,7 @@ void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new create topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateCreateTopicActor(p, cfg->LocalCluster));
 }
 
 void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
@@ -197,7 +197,7 @@ void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityP
     EnsureReq(p, cfg);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Create topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
 }
 
 void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,

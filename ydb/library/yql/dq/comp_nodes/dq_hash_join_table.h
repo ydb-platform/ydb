@@ -132,6 +132,34 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         });
     }
 
+    void LookupWithIndex(TSingleTuple row, auto consume) {
+        if (Empty()) {
+            return;
+        }
+        Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
+            size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
+            if (TrackUsed_) {
+                MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+                Used_[index] = 1;
+            }
+            consume(static_cast<ui32>(index),
+                    TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
+        });
+    }
+
+    void ForEachUnusedWithIndex(auto consume) const {
+        MKQL_ENSURE(TrackUsed_, "ForEachUnusedWithIndex called but not tracking used tuples");
+        for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
+            if (!Used_[i]) {
+                consume(static_cast<ui32>(i),
+                        TSingleTuple{
+                            BuildData_.PackedTuples.data() + i * RowWidth_,
+                            BuildData_.Overflow.data()
+                        });
+            }
+        }
+    }
+
     void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
         MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
         for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {

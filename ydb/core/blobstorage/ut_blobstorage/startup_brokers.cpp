@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
+#include <ydb/core/blobstorage/vdisk/syncer/syncer_job_task.h>
+#include <ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.h>
 
 #include <algorithm>
@@ -186,7 +188,7 @@ namespace {
 
             UNIT_FAIL("failed to choose peer node for group"
                 << " groupId# " << groupId);
-            
+
             return 0;
         }
 
@@ -503,8 +505,10 @@ namespace {
             }
 
             if (IsSelectedCompletionEvent(ev->GetTypeRewrite(), ev->Recipient)) {
-                StashIfSelected(ev);
-                return false;
+                if (ShouldStashSelectedCompletionEvent) {
+                    StashIfSelected(ev);
+                    return false;
+                }
             }
 
             return true;
@@ -581,10 +585,39 @@ namespace {
         }
     };
 
+    struct TStartupCatchupJobDoneCapture : TStartupCatchupCapture {
+        std::unique_ptr<IEventHandle> StashedSyncerJobDone;
+
+        TStartupCatchupJobDoneCapture() {
+            ShouldStashSelectedCompletionEvent = false;
+        }
+
+        bool Handle(std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSyncerJobDone::EventType && SelectedOwnerActor && !StashedSyncerJobDone) {
+                StashedSyncerJobDone = std::move(ev);
+                return false;
+            }
+
+            return TStartupCatchupCapture::Handle(ev);
+        }
+
+        void ResumeStashedSyncerJobDone(TEnvironmentSetup& env) {
+            UNIT_ASSERT(StashedSyncerJobDone);
+            auto* raw = StashedSyncerJobDone.release();
+            const TActorId recipient = raw->Recipient;
+            const bool delivered = env.Runtime->WrapInActorContext(recipient, [&](IActor* actor) {
+                TAutoPtr<IEventHandle> ev(raw);
+                actor->Receive(ev);
+            });
+            UNIT_ASSERT_C(delivered, "failed to deliver stashed TEvSyncerJobDone to actor; recipient# " << recipient);
+        }
+    };
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
 
+    // Active startup-catchup owner dies; the broker frees its token and grants a new owner.
     Y_UNIT_TEST(StartupCatchupBrokerAllowsNewOwnerAfterActiveOwnerDies) {
         TRestartScenario scenario;
         ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 0, 0, 1, 0);
@@ -606,6 +639,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             "expected new owner to get startup catchup token after previous owner died");
     }
 
+    // Queued startup-catchup owner dies; a replacement waits and receives the token after release.
     Y_UNIT_TEST(StartupCatchupBrokerAllowsNewOwnerAfterWaitingOwnerDies) {
         TRestartScenario scenario;
         ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 0, 0, 1, 0);
@@ -632,6 +666,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             "expected replacement owner to get startup catchup token after stale waiting owner died");
     }
 
+    // Dead queued owner is skipped when activated, so the next queued owner is not stuck.
     Y_UNIT_TEST(StartupCatchupBrokerDoesNotHangWhenQueuedOwnerDiesBeforeActivation) {
         TRestartScenario scenario;
         ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 0, 0, 1, 0);
@@ -662,6 +697,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             "expected next queued owner to get startup catchup token after stale queued owner dies");
     }
 
+    // Node-wide local recovery limit allows one VDisk at a time and hands off after completion.
     Y_UNIT_TEST(LocalRecoveryBrokerSerializesStartupPerNode) {
         TRestartScenario scenario;
         TLocalRecoveryCapture capture;
@@ -687,6 +723,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             << " secondVDiskActorId# " << capture.GrantedVDisks[1]);
     }
 
+    // Failed local recovery owner releases its node-wide token for another VDisk.
     Y_UNIT_TEST(LocalRecoveryBrokerReleasesTokenOnStartupFailurePerNode) {
         TRestartScenario scenario;
         TLocalRecoveryCapture capture;
@@ -710,6 +747,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             << " secondGrantedVDiskActorId# " << capture.GrantedVDisks[1]);
     }
 
+    // Per-PDisk local recovery limit blocks one PDisk while another PDisk keeps progressing.
     Y_UNIT_TEST(LocalRecoveryBrokerSerializesStartupPerPDisk) {
         TRestartScenario scenario;
         TLocalRecoveryCapture capture(scenario.PerPDiskSelection.FocusPDiskId);
@@ -735,6 +773,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
         }, "expected another VDisk on focus PDisk to get token after the first one proceeds");
     }
 
+    // Failed local recovery owner releases its per-PDisk token for another VDisk on that PDisk.
     Y_UNIT_TEST(LocalRecoveryBrokerReleasesTokenOnStartupFailurePerPDisk) {
         TRestartScenario scenario;
         TLocalRecoveryCapture capture(scenario.PerPDiskSelection.FocusPDiskId);
@@ -755,6 +794,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
         }, "expected failed local recovery owner to release token for another VDisk on the same PDisk");
     }
 
+    // Node-wide startup-catchup limit allows one Syncer at a time and hands off after completion.
     Y_UNIT_TEST(StartupCatchupBrokerSerializesStartupCatchupPerNode) {
         TRestartScenario scenario;
         TStartupCatchupCapture capture;
@@ -791,6 +831,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             << " secondVDiskActorId# " << capture.GrantedVDisks[1]);
     }
 
+    // Dead Syncer releases its node-wide startup-catchup token for another VDisk.
     Y_UNIT_TEST(StartupCatchupBrokerReleasesTokenWhenSyncerDiesPerNode) {
         TRestartScenario scenario;
         TStartupCatchupCapture capture;
@@ -814,6 +855,33 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             << " secondVDiskActorId# " << capture.GrantedVDisks[1]);
     }
 
+    // Startup-catchup token stays held until the initial due sync job result is applied.
+    Y_UNIT_TEST(StartupCatchupBrokerKeepsTokenUntilInitialDueSyncAttemptCompletes) {
+        TRestartScenario scenario;
+        TStartupCatchupJobDoneCapture capture;
+        TScopedCaptureFilter guard(scenario.Env, capture);
+        RestartNodeForBrokerTest(scenario, {.MaxInProgressStartupCatchupCount = 1});
+
+        WaitUntil(scenario.Env, [&] { return capture.StashedSyncerJobDone != nullptr; },
+            "expected first startup sync job to finish while startup catchup token is still held");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(capture.GrantedVDisks.size(), 1,
+            "startup catchup token must not be released before the initial due sync attempt is applied;"
+            << " granted_vdisks# " << FormatActorIdList(capture.GrantedVDisks)
+            << " released_vdisks# " << FormatActorIdList(capture.ReleasedVDisks));
+        UNIT_ASSERT_C(capture.ReleasedVDisks.empty(),
+            "startup catchup token was released before the initial due sync attempt was applied;"
+            << " released_vdisks# " << FormatActorIdList(capture.ReleasedVDisks));
+
+        const TActorId firstVDiskActorId = capture.SelectedVDiskActor();
+        capture.ResumeStashedSyncerJobDone(scenario.Env);
+
+        WaitUntil(scenario.Env, [&] {
+            return capture.HasReleasedVDisk(firstVDiskActorId) && capture.GrantedVDisks.size() >= 2;
+        }, "expected startup catchup token to be released after the initial due sync attempt is applied");
+    }
+
+    // Offline peer does not keep the node-wide startup-catchup token held forever.
     Y_UNIT_TEST(StartupCatchupBrokerReleasesTokenWhenPeerIsOfflinePerNode) {
         TRestartScenario scenario;
         const ui32 offlinePeerNodeId = scenario.SelectPeerNodeForGroup(scenario.StartupTargets.front().GroupId);
@@ -844,6 +912,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
             << " offlinePeerNodeId# " << offlinePeerNodeId);
     }
 
+    // Per-PDisk startup-catchup limit blocks one PDisk while another PDisk keeps progressing.
     Y_UNIT_TEST(StartupCatchupBrokerSerializesStartupCatchupPerPDisk) {
         TRestartScenario scenario;
         TStartupCatchupCapture capture(scenario.PerPDiskSelection.FocusPDiskId);
@@ -871,6 +940,7 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
         }, "expected another VDisk on focus PDisk to get startup catchup token after the first one completes");
     }
 
+    // Dead Syncer releases its per-PDisk startup-catchup token for another VDisk on that PDisk.
     Y_UNIT_TEST(StartupCatchupBrokerReleasesTokenWhenSyncerDiesPerPDisk) {
         TRestartScenario scenario;
         TStartupCatchupCapture capture(scenario.PerPDiskSelection.FocusPDiskId);

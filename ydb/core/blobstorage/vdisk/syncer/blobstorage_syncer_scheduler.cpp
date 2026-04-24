@@ -238,16 +238,11 @@ namespace NKikimr {
                 if (!x.Myself) {
                     Y_DEBUG_ABORT_UNLESS(x.Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
                     SchedulerQueue.push(&x);
-                    if (!NSyncer::TPeerSyncState::Good(x.Get().PeerSyncState.LastSyncStatus)) {
-                        StartupCatchupPeers.insert(x.OrderNumber);
-                    }
+                    StartupCatchupPeers.insert(x.OrderNumber);
                 }
             }
 
             ActualizeUnsyncedDisksNum();
-            if (StartupCatchupPeers.empty()) {
-                ReportStartupCatchupDone(ctx);
-            }
 
             // if we haven't found any neighbors to sync with, notify skeleton
             if (SchedulerQueue.empty()) {
@@ -255,6 +250,10 @@ namespace NKikimr {
             } else {
                 // start sync immediately
                 Schedule(ctx);
+            }
+
+            if (StartupCatchupPeers.empty()) {
+                ReportStartupCatchupDone(ctx);
             }
         }
 

@@ -42,9 +42,9 @@ public:
     void Bootstrap() {
         ListClustersQuery = MakeListClustersQuery();
 
-        if (Cfg().GetTopicsAreFirstClassCitizen()) {
-            ClustersList = MakeIntrusive<TClustersList>();
-        }
+        // if (Cfg().GetTopicsAreFirstClassCitizen()) {
+        //     ClustersList = MakeIntrusive<TClustersList>();
+        // }
 
         Become(&TThis::WaitingForSubscribers);
     }
@@ -66,9 +66,9 @@ private:
     void HandleWhileWaiting(TEvClusterTracker::TEvSubscribe::TPtr& ev) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "AddSubscriber TEvSubscriber");
 
-        if (Cfg().GetTopicsAreFirstClassCitizen()) {
-            return SendClustersList(ev->Sender);
-        }
+        // if (Cfg().GetTopicsAreFirstClassCitizen()) {
+        //     return SendClustersList(ev->Sender);
+        // }
 
         Become(&TThis::Working);
 
@@ -79,9 +79,9 @@ private:
     void HandleWhileWaiting(TEvClusterTracker::TEvGetClustersList::TPtr& ev) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWaiting TEvGetClustersList");
 
-        if (Cfg().GetTopicsAreFirstClassCitizen()) {
-            return SendGetClustersListResponse(ev->Sender);
-        }
+        // if (Cfg().GetTopicsAreFirstClassCitizen()) {
+        //     return SendGetClustersListResponse(ev->Sender);
+        // }
 
         Become(&TThis::Working);
 

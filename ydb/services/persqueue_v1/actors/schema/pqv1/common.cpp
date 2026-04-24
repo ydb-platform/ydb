@@ -205,7 +205,6 @@ TResult ApplyChangesInt( // create and alter
 
     bool local = !settings.client_write_disabled();
 
-    auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
     if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto converter = NPersQueue::TTopicNameConverter::ForFederation(
                 pqConfig.GetRoot(),

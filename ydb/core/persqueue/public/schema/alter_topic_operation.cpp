@@ -59,7 +59,11 @@ private:
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
             case NDescriber::EStatus::SUCCESS: {
-                return DoGetClustersList();
+                if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                    return DoAlter();
+                } else {
+                    return DoGetClustersList();
+                }
             }
             case NDescriber::EStatus::NOT_FOUND: {
                 if (Settings.IfExists) {
@@ -152,9 +156,9 @@ private:
         if (result) {
             result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
         }
-        if (result) {
-            result = ValidateLocalCluster(ClustersList, config->GetPQTabletConfig());
-        }
+        // if (result && Settings.ValidateClusters) {
+        //     result = ValidateLocalCluster(ClustersList, config->GetPQTabletConfig());
+        // }
 
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));

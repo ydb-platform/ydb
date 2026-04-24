@@ -56,6 +56,7 @@ public:
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TAlterTopicStrategy>(*GetProtoRequest(), std::move(database)),
+            .ValidateClusters = true,
         }));
     }
 

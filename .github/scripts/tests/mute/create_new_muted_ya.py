@@ -940,7 +940,36 @@ def read_tests_from_file(file_path):
     return result
 
 
-def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', build_type=DEFAULT_BUILD_TYPE):
+def _format_issue_date_window(value):
+    if value is None:
+        return 'N/A'
+    if isinstance(value, datetime.datetime):
+        return value.date().strftime('%Y-%m-%d')
+    if isinstance(value, datetime.date):
+        return value.strftime('%Y-%m-%d')
+    if isinstance(value, int):
+        base_date = datetime.date(1970, 1, 1)
+        return (base_date + datetime.timedelta(days=value)).strftime('%Y-%m-%d')
+    return str(value)
+
+
+def _compute_summary_from_counts(row):
+    pass_count = int(row.get('pass_count') or 0)
+    fail_count = int(row.get('fail_count') or 0)
+    mute_count = int(row.get('mute_count') or 0)
+    skip_count = int(row.get('skip_count') or 0)
+    total_runs = pass_count + fail_count + mute_count + skip_count
+    return f"p-{pass_count}, f-{fail_count}, m-{mute_count}, s-{skip_count}, total-{total_runs}"
+
+
+def create_mute_issues(
+    all_tests,
+    file_path,
+    aggregated_tests,
+    close_issues=True,
+    branch='main',
+    build_type=DEFAULT_BUILD_TYPE,
+):
     tests_from_file = read_tests_from_file(file_path)
     issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests_in_issues = get_muted_tests_from_issues(issues_index)
@@ -962,6 +991,11 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
         if t.get('full_name'):
             bt = t.get('build_type') or DEFAULT_BUILD_TYPE
             monitor_by_name[(t['full_name'], bt)] = t
+    aggregated_by_name = {}
+    for t in aggregated_tests:
+        if t.get('full_name'):
+            bt = t.get('build_type') or DEFAULT_BUILD_TYPE
+            aggregated_by_name[(t['full_name'], bt)] = t
 
     for test_from_file in tests_from_file:
         full_name = test_from_file['full_name']
@@ -987,23 +1021,51 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
             continue
 
         monitor = monitor_by_name.get((full_name, build_type))
+        aggregated = aggregated_by_name.get((full_name, build_type))
         if monitor and is_chunk_test(monitor):
             logging.info(f"Skipping chunk test: {full_name}")
             continue
         if monitor:
+            if not aggregated:
+                logging.warning(
+                    "No aggregated row for %s (%s): using raw monitor fields",
+                    full_name,
+                    build_type,
+                )
+            days_in_state = monitor.get('days_in_state')
+            if days_in_state is None:
+                logging.warning(
+                    "Raw monitor row for %s (%s) has no days_in_state: using 0",
+                    full_name,
+                    build_type,
+                )
+                days_in_state = 0
+            source = aggregated or monitor
+            success_rate = source.get('success_rate')
+            if success_rate is None:
+                pass_count = int(source.get('pass_count') or 0)
+                fail_count = int(source.get('fail_count') or 0)
+                mute_count = int(source.get('mute_count') or 0)
+                skip_count = int(source.get('skip_count') or 0)
+                total_runs = pass_count + fail_count + mute_count + skip_count
+                success_rate = round((pass_count / total_runs) * 100, 1) if total_runs > 0 else 0.0
+            summary = source.get('summary') or _compute_summary_from_counts(source)
+            state = source.get('state') or monitor.get('state') or 'Muted'
+            date_window = source.get('date_window') or monitor.get('date_window')
+
             entry = {
                 'mute_string': f"{monitor.get('suite_folder')} {monitor.get('test_name')}",
                 'test_name': monitor.get('test_name'),
                 'suite_folder': monitor.get('suite_folder'),
                 'full_name': full_name,
-                'success_rate': monitor.get('success_rate'),
-                'days_in_state': monitor.get('days_in_state'),
-                'date_window': monitor.get('date_window', 'N/A'),
+                'success_rate': success_rate,
+                'days_in_state': days_in_state,
+                'date_window': _format_issue_date_window(date_window),
                 'owner': monitor.get('owner'),
-                'state': monitor.get('state'),
-                'summary': monitor.get('summary'),
-                'fail_count': monitor.get('fail_count'),
-                'pass_count': monitor.get('pass_count'),
+                'state': state,
+                'summary': summary,
+                'fail_count': source.get('fail_count'),
+                'pass_count': source.get('pass_count'),
                 'branch': monitor.get('branch'),
                 'build_type': monitor.get('build_type', DEFAULT_BUILD_TYPE),
             }
@@ -1415,6 +1477,7 @@ def mute_worker(args):
             queue_items = create_mute_issues(
                 all_data,
                 file_path,
+                aggregated_tests=aggregated_for_mute,
                 close_issues=args.close_issues,
                 branch=args.branch,
                 build_type=build_type,

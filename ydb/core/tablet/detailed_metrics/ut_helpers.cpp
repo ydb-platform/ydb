@@ -61,16 +61,15 @@ TString NormalizeJson(
     );
 }
 
-/**
- * Create and initialize the Tablet Counters Aggregator actor.
- *
- * @param[in] runtime The test runtime
- *
- * @return The ID of the Tablet Counters Aggregator actor
- */
-TActorId InitializeTabletCountersAggregator(TTestBasicRuntime& runtime, bool forFollowers) {
-    // Enable the per-database counters in the Tablet Counters Aggregator
+TActorId InitializeTabletCountersAggregator(
+    TTestBasicRuntime& runtime,
+    bool forFollowers,
+    bool enableDetailedMetrics
+) {
+    // NOTE: Enable the per-database counters in the Tablet Counters Aggregator
+    //       (required to use detailed metrics)
     runtime.GetAppData().FeatureFlags.SetEnableDbCounters(true);
+    runtime.GetAppData().FeatureFlags.SetEnableDetailedMetrics(enableDetailedMetrics);
 
     // Register the Tablet Counters Aggregator actor
     TActorId aggregatorId = runtime.Register(CreateTabletCountersAggregator(forFollowers));

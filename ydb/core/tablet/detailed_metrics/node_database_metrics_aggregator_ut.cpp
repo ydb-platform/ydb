@@ -107,6 +107,61 @@ R"json(
     }
 
     /**
+     * Verify that the Tablet Counters Aggregator (leaders) does not process
+     * any detailed metrics, if the EnableDetailedMetrics feature flag is disabled.
+     */
+    Y_UNIT_TEST(NoDetailedMetricsFeatureFlagDisabled) {
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.SetLogPriority(NKikimrServices::TABLET_AGGREGATOR, NActors::NLog::PRI_TRACE);
+
+        TActorId aggregatorId = InitializeTabletCountersAggregator(
+            runtime,
+            false /* forFollowers */,
+            false /* enableDetailedMetrics */
+        );
+
+        TActorId edgeActorId = runtime.AllocateEdgeActor();
+
+        // Send an update for detailed metrics, but it should not be processed
+        TEvTabletCounters::TTableMetricsConfig tableMetricsConfig = {
+            .TableId = 1234,
+            .TablePath = "/Root/fake-db/fake-table",
+            .TableSchemaVersion = 1000111,
+            .TenantDbSchemaVersion = 2000111,
+            .MetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition,
+            .MonitoringProjectId = "fake-monitoring-project-id"
+        };
+
+        SendDataShardMetrics(runtime, aggregatorId, edgeActorId, 1, 101, 0, &tableMetricsConfig);
+
+        // The "ydb_detailed_raw" counter group should contain no metrics
+        auto detailedCounters = runtime.GetAppData(0).Counters->FindSubgroup(
+            "counters",
+            "ydb_detailed_raw"
+        );
+
+        UNIT_ASSERT(detailedCounters);
+
+        TString countersJson = NormalizeJson(GetPrivateJsonForCounters(*detailedCounters));
+        Cerr << "TEST Current counters:" << Endl << countersJson << Endl;
+
+        TString expectedJson = NormalizeJson(
+R"json(
+{
+}
+)json"
+        );
+
+        UNIT_ASSERT_EQUAL_C(
+            countersJson,
+            expectedJson,
+            "Expected JSON:" << Endl << expectedJson
+        );
+    }
+
+    /**
      * Verify that the Tablet Counters Aggregator ignores detailed metrics
      * for new tables with the given low metrics level.
      *

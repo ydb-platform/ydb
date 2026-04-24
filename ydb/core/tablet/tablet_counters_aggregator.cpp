@@ -1069,13 +1069,13 @@ public:
             NMonitoring::TDynamicCounterPtr detailedMetricsRoot,
             const TPathId& tenantPathId
         ) : SolomonCounters(new ::NMonitoring::TDynamicCounters)
-          , NodeDatabaseMetricsAggregator(
-                MakeIntrusive<TNodeDatabaseMetricsAggregator>(
+        {
+            if (AppData()->FeatureFlags.GetEnableDetailedMetrics()) {
+                NodeDatabaseMetricsAggregator = MakeIntrusive<TNodeDatabaseMetricsAggregator>(
                     tenantPathId,
                     detailedMetricsRoot
-                )
-            )
-        {
+                );
+            }
         }
 
         TTabletCountersForDb(::NMonitoring::TDynamicCounterPtr externalGroup,

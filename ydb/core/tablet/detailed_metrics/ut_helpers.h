@@ -39,12 +39,14 @@ TString NormalizeJson(
  *
  * @param[in] runtime The test runtime
  * @param[in] forFollowers Indicates if the aggregator should process leaders or followers data
+ * @param[in] enableDetailedMetrics Indicates whether to enable the feature flag for detailed metrics
  *
  * @return The ID of the Tablet Counters Aggregator actor
  */
 NActors::TActorId InitializeTabletCountersAggregator(
     NActors::TTestBasicRuntime& runtime,
-    bool forFollowers
+    bool forFollowers,
+    bool enableDetailedMetrics = true
 );
 
 /**

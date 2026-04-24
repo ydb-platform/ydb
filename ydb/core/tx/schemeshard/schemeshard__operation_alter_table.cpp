@@ -114,6 +114,17 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     if (copyAlter.HasDetailedMetricsSettings()) {
+        // Do not allow changing detailed metrics settings without the feature flag
+        if (!AppData()->FeatureFlags.GetEnableDetailedMetrics()) {
+            errStr =
+                "The detailed metrics settings are specified in the request, "
+                "but the detailed metrics feature is disabled by the corresponding "
+                "feature flag (EnableDetailedMetrics)";
+
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
+
         // New detailed metrics settings are specified in the request,
         // make sure the detailed metrics settings are valid (correct metrics level etc)
         if (!ValidateTableDetailedMetricsSettings(
@@ -176,6 +187,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableSetColumnConstraint = AppData()->FeatureFlags.GetEnableSetColumnConstraint(),
+        .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDetailedMetrics(),
     };
 
 

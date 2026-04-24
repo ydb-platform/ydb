@@ -1156,11 +1156,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
     return queue_items
 
 
-def load_configured_digest_profile_ids():
-    """Profile IDs listed in mute_issue_and_digest_config.json (branch:build_type).
-
-    Only these may be written to digest_queue so unsent rows always match a send_digest profile.
-    """
+def _load_issue_digest_profiles():
     try:
         with open(_DIGEST_NOTIFICATION_CONFIG, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -1176,8 +1172,13 @@ def load_configured_digest_profile_ids():
             _DIGEST_NOTIFICATION_CONFIG,
             exc,
         )
-        return set()
-    profiles = data.get('profiles') or []
+        return []
+    return data.get('profiles') or []
+
+
+def load_configured_issue_profile_ids():
+    """Profiles allowed for issue sync (branch:build_type)."""
+    profiles = _load_issue_digest_profiles()
     ids = {
         make_profile_id(p['branch'], p['build_type'])
         for p in profiles
@@ -1185,7 +1186,30 @@ def load_configured_digest_profile_ids():
     }
     if not ids:
         logging.warning(
-            'No profiles in %s — not enqueueing to digest_queue',
+            'No profiles in %s — skipping issue creation',
+            _DIGEST_NOTIFICATION_CONFIG,
+        )
+    return ids
+
+
+def load_configured_digest_profile_ids():
+    """Profiles allowed for digest queue enqueue (branch:build_type).
+
+    Enqueue is enabled only for profiles that define digest schedule
+    via non-empty "schedule_utc_hours".
+    """
+    profiles = _load_issue_digest_profiles()
+    ids = {
+        make_profile_id(p['branch'], p['build_type'])
+        for p in profiles
+        if p.get('branch')
+        and p.get('build_type')
+        and isinstance(p.get('schedule_utc_hours'), list)
+        and len(p.get('schedule_utc_hours')) > 0
+    }
+    if not ids:
+        logging.warning(
+            'No profiles with non-empty schedule_utc_hours in %s — not enqueueing to digest_queue',
             _DIGEST_NOTIFICATION_CONFIG,
         )
     return ids
@@ -1381,7 +1405,7 @@ def mute_worker(args):
             logging.info(f"Creating issues from file: {file_path}")
 
             profile_id = make_profile_id(args.branch, build_type)
-            allowed_profiles = load_configured_digest_profile_ids()
+            allowed_profiles = load_configured_issue_profile_ids()
             if profile_id not in allowed_profiles:
                 logging.info(
                     f"Profile {profile_id!r} not in mute_issue_and_digest_config.json — skipping issue creation"

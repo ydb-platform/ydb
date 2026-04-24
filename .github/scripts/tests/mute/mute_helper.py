@@ -9,9 +9,6 @@ import os
 import sys
 from typing import Dict, List, Optional, Set, Tuple
 
-from mute_utils import dedicated_relative
-
-
 def _parse_csv(raw: str) -> List[str]:
     return [p.strip() for p in (raw or '').replace('\n', ',').split(',') if p.strip()]
 
@@ -97,6 +94,8 @@ def _emit_matrix_to_outputs(matrix: List[Dict[str, str]]) -> None:
 
 
 def cmd_matrix(args: argparse.Namespace) -> int:
+    from mute_utils import dedicated_relative
+
     branches_raw = args.branches_override or os.environ.get('INPUT_BRANCHES', '')
     build_types_raw = args.build_types_override or os.environ.get('INPUT_BUILD_TYPES', '')
     event_name = args.event_name or os.environ.get('GITHUB_EVENT_NAME', '')
@@ -141,7 +140,47 @@ def cmd_matrix(args: argparse.Namespace) -> int:
 
 
 def cmd_resolve_path(args: argparse.Namespace) -> int:
+    from mute_utils import dedicated_relative
+
     print(dedicated_relative(args.preset))
+    return 0
+
+
+def cmd_issue_build_types(args: argparse.Namespace) -> int:
+    try:
+        with open(args.profiles_config, encoding='utf-8') as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError(f'{args.profiles_config}: expected JSON object')
+
+        profiles = data.get('profiles') or []
+        if not isinstance(profiles, list):
+            raise ValueError(f'{args.profiles_config}: "profiles" must be a JSON array')
+
+        out: List[str] = []
+        seen: Set[str] = set()
+        for p in profiles:
+            if not isinstance(p, dict):
+                continue
+            if p.get('branch') != args.branch:
+                continue
+            bt = p.get('build_type')
+            if not isinstance(bt, str):
+                continue
+            bt = bt.strip()
+            if not bt or bt in seen:
+                continue
+            seen.add(bt)
+            out.append(bt)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f'::error::{exc}', file=sys.stderr)
+        return 1
+
+    if not out:
+        print('::error::Issue build-type matrix is empty.', file=sys.stderr)
+        return 1
+
+    print(json.dumps(out, ensure_ascii=False))
     return 0
 
 
@@ -184,6 +223,22 @@ def main() -> int:
         help='build_preset / BUILD_TYPE, e.g. relwithdebinfo, release-asan',
     )
     rp.set_defaults(func=cmd_resolve_path)
+
+    ib = sub.add_parser(
+        'issue-build-types',
+        help='Print JSON array of build types for issue workflow from profiles config',
+    )
+    ib.add_argument(
+        '--profiles-config',
+        required=True,
+        help='Path to mute_issue_and_digest_config.json',
+    )
+    ib.add_argument(
+        '--branch',
+        required=True,
+        help='Branch name to select matching profiles',
+    )
+    ib.set_defaults(func=cmd_issue_build_types)
 
     args = parser.parse_args()
     return args.func(args)

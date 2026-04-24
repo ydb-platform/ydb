@@ -336,7 +336,7 @@ if __name__ == "__main__":
         'upload_muted_tests', help='apply mute rules for all tests in main and upload to database'
     )
     upload_muted_tests_parser.add_argument(
-        '--branch', required=True, default='main', help='branch for getting all tests'
+        '--branch', default='main', help='branch for getting all tests'
     )
     upload_muted_tests_parser.add_argument(
         '--build_type', required=True, help='build type for filtering tests'

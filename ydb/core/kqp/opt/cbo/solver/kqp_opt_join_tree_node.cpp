@@ -65,14 +65,6 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
         return {};
     };
 
-    newJoin->LeftShuffleEliminated =
-        enableShuffleElimination &&
-        join->ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::DontShuffle;
-
-    newJoin->RightShuffleEliminated =
-        enableShuffleElimination &&
-        join->ShuffleRightSideByOrderingIdx == TJoinOptimizerNodeInternal::DontShuffle;
-
     newJoin->ShuffleLeftSideBy = pickShuffleBy(join->ShuffleLeftSideByOrderingIdx, join->LeftJoinKeys);
     newJoin->ShuffleRightSideBy = pickShuffleBy(join->ShuffleRightSideByOrderingIdx, join->RightJoinKeys);
 

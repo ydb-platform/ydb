@@ -117,6 +117,19 @@ NYql::EStorageType TOpRead::GetTableStorageType() const {
     return StorageType;
 }
 
+NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    // Tables are usually named in a path-like fashion, like "/<path>/<name>".
+    // In such case we extract the name of a table from a path,
+    // fallback to the whole name otherwise.
+    auto path = TKqpTable(TableCallable).Path().StringValue();
+    auto slash = path.rfind('/');
+    res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
+
+    return res;
+}
+
 TString TOpRead::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     auto res = TStringBuilder();

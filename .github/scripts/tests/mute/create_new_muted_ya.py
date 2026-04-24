@@ -1316,14 +1316,6 @@ def mute_worker(args):
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
         logging.info(f"build_type: {build_type}")
-        
-        # Resolve muted_ya path from build_type when path isn't passed explicitly.
-        input_muted_ya_path = resolve_muted_ya_path(getattr(args, 'muted_ya_file', ''), build_type)
-        logging.info(f"Using muted_ya file: {input_muted_ya_path}")
-        
-        mute_check = YaMuteCheck()
-        mute_check.load(input_muted_ya_path)
-        logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
         mute_window_days = get_mute_window_days()
         unmute_window_days = get_unmute_window_days()
@@ -1369,6 +1361,14 @@ def mute_worker(args):
             )
 
         if args.mode == 'update_muted_ya':
+            # update_muted_ya uses mute rules to build output files,
+            # so only this mode requires loading muted_ya into YaMuteCheck.
+            input_muted_ya_path = resolve_muted_ya_path(getattr(args, 'muted_ya_file', ''), build_type)
+            logging.info(f"Using muted_ya file: {input_muted_ya_path}")
+            mute_check = YaMuteCheck()
+            mute_check.load(input_muted_ya_path)
+            logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
+
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")

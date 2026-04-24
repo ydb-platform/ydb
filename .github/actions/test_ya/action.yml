@@ -340,7 +340,6 @@ runs:
           ".github/scripts/check_ydb_qa_config.py"
           ".github/scripts/tests/generate-summary.py"
           ".github/scripts/tests/fail-checker.py"
-          ".github/scripts/tests/transform_build_results.py"
         )
         
         # Ensure main is available (may be missing in shallow clone)

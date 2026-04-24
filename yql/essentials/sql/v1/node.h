@@ -89,8 +89,8 @@ enum class ETableType {
 };
 
 class TContext;
-class ITableKeys;
 class ISource;
+class ITableKeys;
 class IAggregation;
 class TObjectOperatorContext;
 using TAggregationPtr = TIntrusivePtr<IAggregation>;
@@ -388,6 +388,34 @@ private:
 protected:
     const TNodePtr Inner_;
 };
+
+class TLangVerProxyNode: public IProxyNode {
+public:
+    TLangVerProxyNode(TPosition pos, TNodePtr parent, TString feature, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)
+        : IProxyNode(pos, std::move(parent))
+        , Feature_(std::move(feature))
+        , MinLangVer_(minLangVer)
+        , MaxLangVer_(maxLangVer)
+    {
+    }
+
+protected:
+    bool DoInit(TContext& ctx, ISource* src) override;
+    TAstNode* Translate(TContext& ctx) const override;
+    TPtr DoClone() const override;
+
+private:
+    TString Feature_;
+    NYql::TLangVersion MinLangVer_;
+    NYql::TLangVersion MaxLangVer_;
+};
+
+inline TNodeResult WrapWithLangVerProxy(TPosition pos, TNodeResult node, const TString& feature, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer) {
+    if (node && (minLangVer != NYql::UnknownLangVersion || maxLangVer != NYql::UnknownLangVersion)) {
+        return TNonNull(TNodePtr(new TLangVerProxyNode(pos, *node, feature, minLangVer, maxLangVer)));
+    }
+    return node;
+}
 
 using TTableHints = TMap<TString, TVector<TNodePtr>>;
 void MergeHints(TTableHints& base, const TTableHints& overrides);

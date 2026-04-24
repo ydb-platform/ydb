@@ -19,7 +19,6 @@ namespace {
         TRecordWithNewline(const TLogRecord& rec)
             : Priority(rec.Priority)
             , Buf(rec.Len + 1)
-            , StructMessage(rec.StructMessage)
         {
             Buf.Append(rec.Data, rec.Len);
             if (rec.Len > 0 && rec.Data[rec.Len - 1] != '\n') {
@@ -28,7 +27,7 @@ namespace {
         }
 
         operator TLogRecord() const {
-            return TLogRecord(Priority, Buf.Data(), Buf.Filled(), StructMessage);
+            return TLogRecord(Priority, Buf.Data(), Buf.Filled());
         }
     };
 
@@ -40,7 +39,6 @@ namespace {
         TRecordWithColorsAndNewline(const TLogRecord& rec)
             : Priority(rec.Priority)
             , Buf(rec.Len + 16)
-            , StructMessage(rec.StructMessage)
         {
             switch (rec.Priority) {
                 case ELogPriority::TLOG_EMERG:
@@ -80,7 +78,7 @@ namespace {
         }
 
         operator TLogRecord() const {
-            return TLogRecord(Priority, Buf.Data(), Buf.Filled(), StructMessage);
+            return TLogRecord(Priority, Buf.Data(), Buf.Filled());
         }
     };
 
@@ -572,7 +570,7 @@ namespace NActors {
                 }
                 logRecord << ": " << formatted;
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), structMessage));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
 
             case NActors::NLog::TSettings::PLAIN_SHORT_FORMAT: {
@@ -581,7 +579,7 @@ namespace NActors {
                     << Settings->ComponentName(component)
                     << ": " << formatted;
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), structMessage));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
@@ -638,7 +636,7 @@ namespace NActors {
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), structMessage));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
         }
 

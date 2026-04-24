@@ -18,6 +18,7 @@ public:
     constexpr TKeyName(const char(&name)[N]) : CompileTime(name), CompileTimeLength(N - 1 /* zero char */) {}
     TKeyName(const char* name, std::size_t length) : CompileTime(name), CompileTimeLength(length) {}
     TKeyName(const TString& name) : RunTime(name) {}
+    TKeyName(const TStringBuf& name) : RunTime(name) {}
     TKeyName(TString&& name) : RunTime(std::move(name)) {}
 
     const char* GetData() const {

@@ -93,14 +93,14 @@ protected:
 };
 
 #define YDBLOG_CREATE_MESSAGE(...) [&]() -> TStructuredMessage { \
-    TCreateMessageArg::TGuard guard; \
-    std::initializer_list<TCreateMessageArg> args{__VA_ARGS__}; \
+    NKikimr::NStructLog::TCreateMessageArg::TGuard guard; \
+    std::initializer_list<NKikimr::NStructLog::TCreateMessageArg> args{__VA_ARGS__}; \
     Y_UNUSED(args); \
     return guard.Pop(); }()
 
 #define YDBLOG_UPDATE_MESSAGE(M, ...) { \
-    TCreateMessageArg::TGuard guard; \
-    std::initializer_list<TCreateMessageArg> args{__VA_ARGS__}; \
+    NKikimr::NStructLog::TCreateMessageArg::TGuard guard; \
+    std::initializer_list<NKikimr::NStructLog::TCreateMessageArg> args{__VA_ARGS__}; \
     Y_UNUSED(args); \
     M.AppendMessage(guard.Pop()); }
 

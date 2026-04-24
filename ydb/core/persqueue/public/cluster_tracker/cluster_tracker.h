@@ -2,6 +2,7 @@
 
 #include "cluster_tracker_factory.h"
 
+#include <util/string/join.h>
 #include <ydb/core/base/events.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -55,6 +56,10 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     const TString& GetLocalClusterName() const {
         static const TString Empty = "";
         return LocalCluster ? LocalCluster->Name : Empty;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "[" << JoinSeq(", ", Clusters | std::views::transform([](const auto& cluster) { return cluster.DebugString(); })) << "]";
     }
 
     i64 Version = 0;

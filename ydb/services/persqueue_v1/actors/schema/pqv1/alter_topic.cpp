@@ -10,10 +10,9 @@ namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 namespace {
 
 struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
-    TAlterTopicStrategy(const Ydb::PersQueue::V1::AlterTopicRequest& request, TString&& database, TString&& localDc)
+    TAlterTopicStrategy(const Ydb::PersQueue::V1::AlterTopicRequest& request, TString&& database)
         : Request(request)
         , Database(std::move(database))
-        , LocalDc(std::move(localDc))
     {
     }
 
@@ -22,6 +21,7 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
     }
 
     NPQ::NSchema::TResult ApplyChanges(
+        const TString& localCluster,
         const NPQ::NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
@@ -30,21 +30,19 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         if (topicInfo.CdcStream) {
             return {Ydb::StatusIds::SCHEME_ERROR, "Full alter of CDC stream is forbidden"};
         }
-        return ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, LocalDc);
+        return ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, localCluster);
     }
 
     const Ydb::PersQueue::V1::AlterTopicRequest Request;
     const TString Database;
-    const TString LocalDc;
 };
 
 class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvPQAlterTopicRequest> {
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TAlterTopicActor, NGRpcService::TEvPQAlterTopicRequest>;
 
 public:
-    TAlterTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc)
+    TAlterTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvPQAlterTopicRequest>(request)
-        , LocalDc(localDc)
     {
     }
 
@@ -57,7 +55,7 @@ public:
             .Database = database,
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
-            .Strategy = std::make_unique<TAlterTopicStrategy>(*GetProtoRequest(), std::move(database), std::move(LocalDc)),
+            .Strategy = std::make_unique<TAlterTopicStrategy>(*GetProtoRequest(), std::move(database)),
         }));
     }
 
@@ -77,15 +75,12 @@ private:
                 TRpcOpBase::StateFuncBase(ev);
         }
     }
-
-private:
-    TString LocalDc;
 };
 
 } // namespace
     
-NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc) {
-    return new TAlterTopicActor(request, localDc);
+NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request) {
+    return new TAlterTopicActor(request);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1

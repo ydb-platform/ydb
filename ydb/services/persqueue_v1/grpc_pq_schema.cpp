@@ -208,7 +208,7 @@ void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityPr
     EnsureReq(p, cfg);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Alter topic request");
-    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAlterTopicActor(p, cfg->LocalCluster));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAlterTopicActor(p));
 }
 
 void DoPQDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {

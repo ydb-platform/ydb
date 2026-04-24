@@ -112,7 +112,7 @@ TResult AddConsumerImpl(
 }
 
 
-TResult FillProposeRequest( // create and alter
+TResult ApplyChangesInt( // create and alter
     const TString& database,
     const TString& name,
     const Ydb::PersQueue::V1::TopicSettings& settings,
@@ -442,7 +442,7 @@ NPQ::NSchema::TResult ApplyChangesInt(
     NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
     const TString& localDc
 ) {
-    return FillProposeRequest(
+    return ApplyChangesInt(
         database,
         name,
         request.settings(),
@@ -461,7 +461,7 @@ NPQ::NSchema::TResult ApplyChangesInt(
 ) {
     targetConfig.SetPartitionPerTablet(1);
 
-    return FillProposeRequest(
+    return ApplyChangesInt(
         database,
         targetConfig.GetName(),
         request.settings(),

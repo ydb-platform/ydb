@@ -357,6 +357,7 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     }
 
     TResult ApplyChanges(
+        const TString& /*localCluster*/,
         const NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,

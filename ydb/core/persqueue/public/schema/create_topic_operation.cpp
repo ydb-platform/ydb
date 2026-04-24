@@ -90,10 +90,8 @@ private:
         auto* config = modifyScheme.MutableCreatePersQueueGroup();
         config->SetName(name);
 
-        auto localCluster = ClustersList ? ClustersList->GetLocalClusterName() : "";
-
         auto result = Settings.Strategy->ApplyChanges(
-            localCluster,
+            GetLocalClusterName(ClustersList),
             Settings.Database,
             modifyScheme,
             *config
@@ -101,25 +99,12 @@ private:
         if (result) {
             result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Create);
         }
+        if (result) {
+            result = ValidateLocalCluster(ClustersList, config->GetPQTabletConfig());
+        }
 
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
-        }
-
-        if (ClustersList) {
-            const auto& tabletConfig = config->GetPQTabletConfig();
-            const auto& cluster = tabletConfig.GetDC();
-
-            if (tabletConfig.GetLocalDC() && !localCluster.empty() && cluster != localCluster) {
-                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Local cluster is not correct - provided '"
-                    << tabletConfig.GetDC() << "' instead of " << localCluster);
-            }
-
-            const auto clusterFound = CountIf(ClustersList->Clusters, [&](const auto& c) { return c.Name == cluster; });
-            if (!clusterFound)  {
-                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "Unknown cluster '" << cluster << "'");
-            }
         }
 
         ModifyScheme = modifyScheme;
@@ -160,7 +145,6 @@ private:
     const TCreateTopicOperationSettings Settings;
 
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
-
     NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
 };
 

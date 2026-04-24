@@ -59,7 +59,7 @@ private:
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
             case NDescriber::EStatus::SUCCESS: {
-                return DoAlter();
+                return DoGetClustersList();
             }
             case NDescriber::EStatus::NOT_FOUND: {
                 if (Settings.IfExists) {
@@ -79,6 +79,29 @@ private:
     STFUNC(DescribeState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void DoGetClustersList() {
+        LOG_D("DoGetClustersList");
+        Become(&TAlterTopicOperationActor::GetClustersListState);
+        Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
+    }
+
+    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
+        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: " << ev->Get()->ClustersList->DebugString());
+
+        auto& response = *ev->Get();
+        ClustersList = std::move(response.ClustersList);
+
+        return DoAlter();
+    }
+
+    STFUNC(GetClustersListState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -116,9 +139,21 @@ private:
             applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
         }
 
-        auto result = Settings.Strategy->ApplyChanges(TopicInfo, modifyScheme, *config, TopicInfo.Info->Description);
+        LOG_D("BEFORE: " << TopicInfo.Info->Description.DebugString());
+
+        auto result = Settings.Strategy->ApplyChanges(
+            GetLocalClusterName(ClustersList),
+            TopicInfo,
+            modifyScheme,
+            *config,
+            TopicInfo.Info->Description
+        );
+        LOG_D("AFTER: " << config->DebugString());
         if (result) {
             result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
+        }
+        if (result) {
+            result = ValidateLocalCluster(ClustersList, config->GetPQTabletConfig());
         }
 
         if (!result) {
@@ -164,6 +199,7 @@ private:
 
     NDescriber::TTopicInfo TopicInfo;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
+    NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
 };
 
 }

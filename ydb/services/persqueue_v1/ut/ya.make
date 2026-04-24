@@ -18,6 +18,8 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+TIMEOUT(300)
+
 SRCS(
     persqueue_ut.cpp
     persqueue_common_ut.cpp

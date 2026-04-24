@@ -50,6 +50,12 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     bool operator==(const TClustersList& other) const;
 
     std::vector<TCluster> Clusters;
+    TCluster* LocalCluster = nullptr;
+
+    const TString& GetLocalClusterName() const {
+        static const TString Empty = "";
+        return LocalCluster ? LocalCluster->Name : Empty;
+    }
 
     i64 Version = 0;
 };
@@ -75,7 +81,6 @@ struct TEvClusterTracker {
     };
 
     struct TEvGetClustersListResponse : public NActors::TEventLocal<TEvGetClustersListResponse, EvGetClustersListResponse> {
-        const TClustersList::TCluster* LocalCluster;
         TClustersList::TConstPtr ClustersList;
     };
 

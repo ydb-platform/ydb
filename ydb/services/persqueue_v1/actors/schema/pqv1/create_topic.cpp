@@ -10,10 +10,8 @@ namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 namespace {
 
 struct TCreateTopicStrategy: public NPQ::NSchema::ICreateTopicStrategy {
-    TCreateTopicStrategy(const Ydb::PersQueue::V1::CreateTopicRequest& request, TString&& localDc, TVector<TString>&& clusters)
+    TCreateTopicStrategy(const Ydb::PersQueue::V1::CreateTopicRequest& request)
         : Request(request)
-        , LocalDc(std::move(localDc))
-        , Clusters(std::move(clusters))
     {
     }
 
@@ -22,43 +20,23 @@ struct TCreateTopicStrategy: public NPQ::NSchema::ICreateTopicStrategy {
     }
 
     NPQ::NSchema::TResult ApplyChanges(
+        const TString localCluster,
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig
     ) override {
-        auto result = ApplyChangesInt(database, Request, modifyScheme, targetConfig, LocalDc);
-        if (!result) {
-            return result;
-        }
-
-        const auto& pqDescr = modifyScheme.GetCreatePersQueueGroup();
-        const auto& config = pqDescr.GetPQTabletConfig();
-        if (!LocalDc.empty() && config.GetLocalDC() && config.GetDC() != LocalDc) {
-           auto error = TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC()
-                                        << "' instead of " << LocalDc;
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
-        }
-        if (!Clusters.empty() && Count(Clusters, config.GetDC()) == 0)  {
-            auto error = TStringBuilder() << "Unknown cluster '" << config.GetDC() << "'";
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
-        }
-    
-        return {};
+        return ApplyChangesInt(database, Request, modifyScheme, targetConfig, localCluster);
     }
 
     const Ydb::PersQueue::V1::CreateTopicRequest Request;
-    const TString LocalDc;
-    const TVector<TString> Clusters;
 };
 
 class TCreateTopicActor: public TGrpcProxyActor<TCreateTopicActor, NGRpcService::TEvPQCreateTopicRequest> {
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TCreateTopicActor, NGRpcService::TEvPQCreateTopicRequest>;
 
 public:
-    TCreateTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc, const TVector<TString>& clusters)
+    TCreateTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TCreateTopicActor, NGRpcService::TEvPQCreateTopicRequest>(request)
-        , LocalDc(localDc)
-        , Clusters(clusters)
     {
     }
 
@@ -71,7 +49,7 @@ public:
             .Database = database,
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
-            .Strategy = std::make_unique<TCreateTopicStrategy>(*GetProtoRequest(), std::move(LocalDc), std::move(Clusters)),
+            .Strategy = std::make_unique<TCreateTopicStrategy>(*GetProtoRequest()),
         }));
     }
 
@@ -91,16 +69,12 @@ private:
                 TRpcOpBase::StateFuncBase(ev);
         }
     }
-
-private:
-    TString LocalDc;
-    TVector<TString> Clusters;
 };
 
 } // namespace
     
-NActors::IActor* CreateCreateTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc, const TVector<TString>& clusters) {
-    return new TCreateTopicActor(request, localDc, clusters);
+NActors::IActor* CreateCreateTopicActor(NGRpcService::IRequestOpCtx* request) {
+    return new TCreateTopicActor(request);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1

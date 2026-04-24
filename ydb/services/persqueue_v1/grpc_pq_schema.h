@@ -18,6 +18,7 @@ struct TClustersCfg : public TThrRefBase {
     TVector<TString> Clusters;
 };
 
+// TODO remove it
 class IClustersCfgProvider {
 public:
     virtual ~IClustersCfgProvider() = default;

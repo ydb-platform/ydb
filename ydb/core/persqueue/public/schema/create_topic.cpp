@@ -195,9 +195,8 @@ TResult ApplyChangesInt(
 
 
 struct TCreateTopicStrategy: public ICreateTopicStrategy {
-    TCreateTopicStrategy(Ydb::Topic::CreateTopicRequest&& request, TString&& localDc)
+    TCreateTopicStrategy(Ydb::Topic::CreateTopicRequest&& request)
         : Request(std::move(request))
-        , LocalDc(std::move(localDc))
     {
     }
 
@@ -206,27 +205,15 @@ struct TCreateTopicStrategy: public ICreateTopicStrategy {
     }
 
     TResult ApplyChanges(
+        const TString localCluster,
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig
     ) override {
-        auto result = ApplyChangesInt(database, Request, modifyScheme, targetConfig, LocalDc);
-        if (!result) {
-            return result;
-        }
-
-        const auto& config = targetConfig.GetPQTabletConfig();
-        if (!LocalDc.empty() && config.GetLocalDC() && config.GetDC() != LocalDc) {
-            auto error = TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC()
-                                        << "' instead of " << LocalDc;
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
-        }
-
-        return {};
+        return ApplyChangesInt(database, Request, modifyScheme, targetConfig, localCluster);
     }
 
     Ydb::Topic::CreateTopicRequest Request;
-    const TString LocalDc;
 };
 
 } // namespace
@@ -236,7 +223,7 @@ NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCrea
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
         .UserToken = std::move(settings.UserToken),
-        .Strategy = std::make_unique<TCreateTopicStrategy>(std::move(settings.Request), std::move(settings.LocalDc)),
+        .Strategy = std::make_unique<TCreateTopicStrategy>(std::move(settings.Request)),
         .Cookie = settings.Cookie,
     });
 }

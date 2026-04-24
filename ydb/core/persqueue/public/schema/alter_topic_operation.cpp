@@ -2,7 +2,6 @@
 #include "schema_operation.h"
 
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
@@ -60,7 +59,7 @@ private:
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
             case NDescriber::EStatus::SUCCESS: {
-                return DoGetClustersList();
+                return DoAlter();
             }
             case NDescriber::EStatus::NOT_FOUND: {
                 if (Settings.IfExists) {
@@ -80,29 +79,6 @@ private:
     STFUNC(DescribeState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
-private:
-    void DoGetClustersList() {
-        LOG_D("DoGetClustersList");
-        Become(&TAlterTopicOperationActor::GetClustersListState);
-        Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
-    }
-
-    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
-        auto& response = *ev->Get();
-        ClustersList = std::move(response.ClustersList);
-        LocalCluster = response.LocalCluster;
-
-        return DoAlter();
-    }
-
-    STFUNC(GetClustersListState) {
-        switch(ev->GetTypeRewrite()) {
-            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -188,9 +164,6 @@ private:
 
     NDescriber::TTopicInfo TopicInfo;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
-
-    NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
-    const NPQ::NClusterTracker::TClustersList::TCluster* LocalCluster;
 };
 
 }

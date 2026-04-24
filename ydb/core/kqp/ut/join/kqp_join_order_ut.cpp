@@ -966,6 +966,30 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(ShuffleEliminationMapJoinProbeReuse, EnableSeparationComputeActorsFromRead) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/shuffle_elimination_map_join_probe_reuse.sql", "stats/tpch1000s.json",
+            false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
+        );
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+
+        // Inner join: nation (25 rows) is broadcast -> MapJoin.
+        {
+            auto join = joinFinder.Find({"nation", "customer"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
+        }
+
+        // Outer join: the (nation join customer) output inherits customer's c_custkey partitioning.
+        // SE should eliminate the left shuffle; only orders needs to be shuffled.
+        {
+            auto join = joinFinder.Find({"nation", "customer", "orders"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
+            UNIT_ASSERT_C(!join.LhsShuffled, "Expected SE to eliminate left (nation inner customer) shuffle");
+            UNIT_ASSERT_C(join.RhsShuffled,  "Expected orders to be shuffled");
+        }
+    }
+
     Y_UNIT_TEST(TPCH12_100) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch12.sql", "stats/tpch100s.json", false, true, true);
     }

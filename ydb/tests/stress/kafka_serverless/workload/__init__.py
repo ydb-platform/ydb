@@ -27,7 +27,7 @@ class Workload(unittest.TestCase):
         self.duration = duration
         self.tmp_dirs = []
         self.archive_path = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
-        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
+        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-SNAPSHOT-all-serverless.jar"
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
@@ -70,14 +70,25 @@ class Workload(unittest.TestCase):
         workloadConsumerName = self.workload_consumer_name
 
         print("Creating test topic")
-        testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
+        testOptions = [("0", "1"), ("0", "0")]
         checkerConsumer = "targetCheckerConsumer"
         self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer] + [f"{checkerConsumer}-{i}" for i in range(len(testOptions))])
-
+        user_creation_command = "CREATE USER iwgrnkn PASSWORD 'abrengo'"
+        command = f"{self.cli_path} -e {self.endpoint} -d {self.database} yql -s {user_creation_command}"
+        print("Running user creation:", command)
+        processes = [
+            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "yql", "-s", user_creation_command]),
+            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "scheme", "permissions", "grant", "-p", "ydb.generic.full", self.database, "iwgrnkn"])
+        ]
+        processes[0].wait()
+        print("Created user")
+        processes[1].wait()
+        print("Granted access")
         print("Running workload topic run")
         processes = [
             subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write", "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"])
         ]
+
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
 
@@ -117,13 +128,13 @@ class Workload(unittest.TestCase):
                 totalMessCountTarget += targetCount
 
             print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest},"
-                  "totalMessCountTarget = {totalMessCountTarget}")
+                  f"totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
+                assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
                        f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             else:
                 assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
-                       "{totalMessCountTest} and {totalMessCountTarget} respectively."
+                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             print(f"Total num of messages: {totalMessCountTest}")
         return
 

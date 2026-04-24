@@ -378,7 +378,6 @@ public:
             auto settings = TPushdownSettings();
             settings.EnableMember("_yql_sys_partition_id");
             NPushdown::TPredicateNode partitionIdPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
-
             if (!partitionIdPredicate.IsEmpty()) {
                 auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
                 auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
@@ -390,7 +389,7 @@ public:
                     .Done();
 
                 isPartitionListUpdated = true;
-                TExprNode::TPtr partitionList = ctx.Builder(node.Pos())
+                partitionList = ctx.Builder(node.Pos())
                     .Callable("EvaluateExpr")
                         .Callable(0, "Map")
                             .Callable(0, "Filter")

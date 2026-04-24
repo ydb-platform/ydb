@@ -186,15 +186,13 @@ jobs:
           build_type = "${{ env.BUILD_TYPE }}"
           max_tests = 50
 
-          def read_lines(path: str) -> list[str]:
+          def read_lines(path):
               p = Path(path)
               if not p.exists() or p.stat().st_size == 0:
                   return []
               return p.read_text(encoding="utf-8").splitlines()
 
-          def append_debug_section(
-              parts: list[str], title: str, lines: list[str], count_override: int | None = None
-          ) -> None:
+          def append_debug_section(parts, title, lines, count_override=None):
               if not lines:
                   return
               count = count_override if count_override is not None else len(lines)
@@ -207,7 +205,7 @@ jobs:
           to_mute = read_lines("mute_update/to_mute.txt")
           to_unmute = read_lines("mute_update/to_unmute.txt")
 
-          body: list[str] = [f"# Muted tests update for {base_branch} (build: {build_type})\n\n"]
+          body = [f"# Muted tests update for {base_branch} (build: {build_type})\n\n"]
           append_debug_section(body, "Removed from mute", to_delete, count_override=len(to_delete))
           append_debug_section(body, "Muted flaky", to_mute, count_override=len(to_mute))
 
@@ -273,7 +271,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
           # Возвращаемся на WORKFLOW_CHECKOUT_REF для доступа к скриптам
-          git checkout ${{ env.WORKFLOW_CHECKOUT_REF }}
+          git checkout "origin/${{ env.WORKFLOW_CHECKOUT_REF }}"
           
           python .github/scripts/create_or_update_pr.py create_or_update \
             --base_branch="${{ env.BASE_BRANCH }}" \

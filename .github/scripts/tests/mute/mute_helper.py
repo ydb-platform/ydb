@@ -7,17 +7,18 @@ import argparse
 import json
 import os
 import sys
+from typing import Dict, List, Optional, Set, Tuple
 
 from mute_utils import dedicated_relative
 
 
-def _parse_csv(raw: str) -> list[str]:
+def _parse_csv(raw: str) -> List[str]:
     return [p.strip() for p in (raw or '').replace('\n', ',').split(',') if p.strip()]
 
 
-def _normalize_unique(items: list[object]) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
+def _normalize_unique(items: List[object]) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
     for item in items:
         t = str(item).strip().lower()
         if not t or t in seen:
@@ -27,7 +28,7 @@ def _normalize_unique(items: list[object]) -> list[str]:
     return out
 
 
-def load_policy(config_path: str) -> tuple[list[str], dict[str, list[str]]]:
+def load_policy(config_path: str) -> Tuple[List[str], Dict[str, List[str]]]:
     with open(config_path, encoding='utf-8') as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -43,7 +44,7 @@ def load_policy(config_path: str) -> tuple[list[str], dict[str, list[str]]]:
     if not isinstance(overrides_raw, dict):
         raise ValueError(f'{config_path}: "branch_overrides" must be a JSON object')
 
-    overrides: dict[str, list[str]] = {}
+    overrides: Dict[str, List[str]] = {}
     for branch, values in overrides_raw.items():
         branch_name = str(branch).strip()
         if not branch_name:
@@ -63,7 +64,7 @@ def load_policy(config_path: str) -> tuple[list[str], dict[str, list[str]]]:
     return defaults, overrides
 
 
-def load_branches_from_file(branches_file: str) -> list[str]:
+def load_branches_from_file(branches_file: str) -> List[str]:
     with open(branches_file, encoding='utf-8') as f:
         data = json.load(f)
     if not isinstance(data, list):
@@ -78,7 +79,7 @@ def _append_github_output(key: str, value: str) -> None:
             f.write(f'{key}={value}\n')
 
 
-def _emit_matrix_to_outputs(matrix: list[dict[str, str]]) -> None:
+def _emit_matrix_to_outputs(matrix: List[Dict[str, str]]) -> None:
     compact = json.dumps(matrix, separators=(',', ':'), ensure_ascii=False)
     _append_github_output('matrix_include', compact)
 
@@ -104,12 +105,12 @@ def cmd_matrix(args: argparse.Namespace) -> int:
         defaults, overrides = load_policy(args.build_types_config)
         branch_list = _parse_csv(branches_raw) if branches_raw.strip() else load_branches_from_file(args.branches_file)
 
-        requested: set[str] | None = None
+        requested: Optional[Set[str]] = None
         raw = build_types_raw.strip().lower()
         if event_name == 'workflow_dispatch' and raw and raw != 'all':
             requested = set(_normalize_unique(_parse_csv(build_types_raw)))
 
-        matrix: list[dict[str, str]] = []
+        matrix: List[Dict[str, str]] = []
         for branch in branch_list:
             branch_types = list(overrides.get(branch, defaults))
             if requested is not None:

@@ -159,6 +159,12 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->StorageType = storageType;
 
+    if (storageType == EStorageType::ColumnStorage && !tableData.Metadata->PartitionedByColumns.empty()) {
+        for (const auto& columnName : tableData.Metadata->PartitionedByColumns) {
+            Props.Metadata->ShuffledByColumns.emplace_back(Alias, columnName);
+        }
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "Inferred metadata for table: " << path.Value();
 }
 
@@ -279,6 +285,28 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
         if (Project && it == renamesWithTransform.end()) {
             Props.Metadata->KeyColumns = {};
+            break;
+        }
+    }
+
+    // Propagate ShuffledByColumns through Map, applying column renames
+    for (const auto& column : inputMetadata.ShuffledByColumns) {
+        const auto it = std::find_if(
+            renamesWithTransform.begin(), renamesWithTransform.end(),
+            [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
+                return column == rename.second;
+            }
+        );
+
+        if (it != renamesWithTransform.end()) {
+            Props.Metadata->ShuffledByColumns.push_back(it->first);
+        } else {
+            Props.Metadata->ShuffledByColumns.push_back(column);
+        }
+
+        if (Project && it == renamesWithTransform.end()) {
+            // Column not in projection — shuffle guarantee broken
+            Props.Metadata->ShuffledByColumns = {};
             break;
         }
     }
@@ -437,6 +465,10 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     } else {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
+    }
+
+    for (const auto& [leftKey, rightKey] : JoinKeys) {
+        Props.Metadata->ShuffledByColumns.push_back(leftKey);
     }
 }
 

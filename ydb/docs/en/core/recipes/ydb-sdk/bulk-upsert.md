@@ -120,7 +120,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     defer db.Close(ctx)
 
     csv := `skip row
-    
+
   id,val
   42,"text42"
   43,"text43"
@@ -319,10 +319,13 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     }
   ```
 
+<<<<<<< HEAD
     In Spring Boot, Hibernate, JOOQ, and other ORM stacks on JDBC you can run native YQL (including from repositories and `@Query`). The driver tries to optimize large inserts; `UPDATE`, `INSERT`, `DELETE`, `UPSERT` through JDBC are batched on the driver side when appropriate.
 
   {% endlist %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 - Python
 
   {% list tabs %}
@@ -408,8 +411,11 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   {% endlist %}
 
+<<<<<<< HEAD
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}

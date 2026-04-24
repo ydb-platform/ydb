@@ -786,10 +786,17 @@ public:
     }
 
     void Finish() override {
+        if (!Bound_) {
+            FinishPending_ = true;
+            return;
+        }
         Serializer->Flush(true);
     }
 
     void Flush() override {
+        if (!Bound_) {
+            return;
+        }
         Serializer->Flush(false);
     }
 
@@ -867,6 +874,8 @@ public:
     IDqChannelStorage::TPtr Storage;
     IDqOutput::TLevelChangeCallback LevelChangeCallback_;
     bool IsLocalChannel = false;
+    bool Bound_ = false;
+    bool FinishPending_ = false;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {

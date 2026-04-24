@@ -501,12 +501,17 @@ struct TPersistentBufferFormat {
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
         std::vector<TTabletInfo> TabletInfos;
+        std::unordered_map<ui64, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
     };
 
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
         bool DescribeFreeSpace = false;
         bool DescribeTablets = false;
+        TEvGetPersistentBufferInfo(bool describeFreeSpace = false, bool describeTablets = false)
+            : DescribeFreeSpace(describeFreeSpace)
+            , DescribeTablets(describeTablets)
+        {}
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBuffer) {

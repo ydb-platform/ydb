@@ -172,6 +172,7 @@ namespace NKikimr {
                                     TABLER() {
                                         TABLEH() {str << "TabletId";}
                                         TABLEH() {str << "Generation";}
+                                        TABLEH() {str << "Barrier";}
                                         TABLEH() {str << "Lsns count";}
                                         TABLEH() {str << "Total space";}
                                         TABLEH() {str << "First lsn";}
@@ -185,6 +186,11 @@ namespace NKikimr {
                                         TABLER() {
                                             TABLED() {str << ti.TabletId;}
                                             TABLED() {str << ti.Generation;}
+                                            if (auto it = b->EraseBarriers.find(ti.TabletId); it != b->EraseBarriers.end()) {
+                                                TABLED() {str << b->EraseBarriers[ti.TabletId];}
+                                            } else {
+                                                TABLED() {str << "No barrier";}
+                                            }
                                             TABLED() {str << ti.LsnsCount;}
                                             TABLED() {str << beautySize(ti.Size);}
                                             TABLED() {str << ti.FirstLsn;}

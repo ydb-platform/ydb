@@ -217,11 +217,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
         ui32 GetPBInMemoryCacheSize() {
             Cerr << "get persistent buffer info \n";
+            return GetPBInfo()->Get()->InMemoryCacheSize;
+        }
 
-            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo());
+        TAutoPtr<TEventHandle<NDDisk::TEvPersistentBufferInfo>> GetPBInfo() {
+            Cerr << "get persistent buffer info \n";
+
+            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo(true, true));
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvPersistentBufferInfo>(Edge, false);
-            return res->Get()->InMemoryCacheSize;
+            return res;
         }
 
         void ReadPB(ui32 repeat = 1) {
@@ -635,6 +640,34 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         for (auto [kd, v] : pbuffsCnt) {
             UNIT_ASSERT(cnt == v);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferEraseBarrier) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 i = 1; i < 20; ++i) {
+            f.WritePB();
+        }
+        f.ErasePB();
+        {
+            auto info = f.GetPBInfo();
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b.begin()->first == f.PBCreds.TabletId);
+        }
+        f.ListPB();
+        f.RestartNode();
+        f.ListPB();
+        {
+            auto info = f.GetPBInfo();
+                        Cerr << "!!!!!!!!!!  0" << Endl;
+            auto& b = info->Get()->EraseBarriers;
+                        Cerr << "!!!!!!!!!!  1" << Endl;
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b.begin()->first == f.PBCreds.TabletId);
         }
     }
 }

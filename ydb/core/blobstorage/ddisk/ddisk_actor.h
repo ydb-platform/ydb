@@ -706,6 +706,7 @@ namespace NKikimr::NDDisk {
         bool IssuePersistentBufferChunkAllocationInflight = false;
         std::vector<TEraseBarrier> PersistentBufferBarriers;
         std::unordered_map<ui64, std::tuple<ui32, ui32>> PersistentBufferBarriersLocation;
+        std::vector<std::tuple<ui32, ui32>> PersistentBufferBarrierHoles;
         ui32 FreeBarrierPosition = 0;
 
         struct TPersistentBufferDiskOperationInFlight {

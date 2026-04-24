@@ -10,21 +10,11 @@
 
 {% note warning %}
 
-Выгрузка доступна только для объектов следующих типов:
-
-- [директория](../../../concepts/datamodel/dir.md);
-- [строковая таблица](../../../concepts/datamodel/table.md#row-oriented-tables);
-- [вторичный индекс](../../../concepts/glossary.md#secondary-index);
-- [векторный индекс](../../../concepts/glossary.md#vector-index);
-- [полнотекстовый индекс](../../../concepts/glossary.md#fulltext-index);
-- [топик](../../../concepts/datamodel/topic.md) (только схема);
-- [представление (view)](../../../concepts/datamodel/view.md);
-- [асинхронная репликация](../../../concepts/async-replication.md);
-- [трансфер](../../../concepts/transfer.md);
-- [внешний источник данных](../../../concepts/datamodel/external_data_source.md);
-- [внешняя таблица](../../../concepts/datamodel/external_table.md).
+{% include [export-supported-object-types.md](_includes/export-supported-object-types.md) %}
 
 {% endnote %}
+
+{% include [server-export-workflow.md](_includes/server-export-workflow.md) %}
 
 ## Параметры командной строки {#pars}
 
@@ -38,11 +28,7 @@
 
 ### Перечень выгружаемых объектов {#items}
 
-`--root-path PATH`: Корневая директория для выгружаемых объектов. Если не указана, используется корневая директория базы данных.
-
-`--include PATH`: Объекты схемы данных для включения в экспорт. Директории обходятся рекурсивно. Пути указываются относительно `root-path`. Данный параметр может быть указан несколько раз для включения нескольких объектов. Если не указан, выполняется выгрузка всех несистемных объектов в `root-path`.
-
-`--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Пути указываются относительно `root-path`. Данный параметр может быть указан несколько раз для разных шаблонов.
+{% include [export-root-include-exclude-params.md](_includes/export-root-include-exclude-params.md) %}
 
 {% cut "Альтернативный способ" %}
 
@@ -55,24 +41,11 @@
 
 `--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз для разных шаблонов.
 
-{% note warning %}
-
-Экспорты, сделанные с использованием альтернативного синтаксиса, не будут содержать списка объектов в составе резервной копии, поэтому некоторые возможности могут быть для них недоступны (в частности, шифрованные резервные копии), а импорт возможен только с использованием соответствующего альтернативного синтаксиса импорта.
-
-{% endnote %}
+{% include [export-alternative-syntax-warning.md](_includes/export-alternative-syntax-warning.md) %}
 
 {% endcut %}
 
-### Дополнительные параметры {#aux}
-
-Параметр | Описание
---- | ---
-`--description STRING` | Текстовое описание операции, сохраняемое в истории операций.
-`--retries NUM` | Количество повторных попыток выгрузки, которые будет предпринимать сервер.<br/>Значение по умолчанию: `10`.
-`--compression STRING` | Сжимать выгружаемые данные.<br/>При уровне сжатия по умолчанию для алгоритма [Zstandard](https://ru.wikipedia.org/wiki/Zstandard) данные могут быть сжаты в 5-10 раз. Сжатие данных использует ресурс CPU и может повлиять на скорость выполнения других операций с БД.<br/>Допустимые значения:<br/><ul><li>`zstd` — сжатие алгоритмом Zstandard c уровнем сжатия по умолчанию (`3`);</li><li>`zstd-N` — сжатие алгоритмом Zstandard, `N` — уровень сжатия (`1` — `22`).</li></ul>
-`--encryption-algorithm ALGORITHM` | Шифровать выгружаемые данные используя указанный алгоритм. Поддерживаемые значения: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
-`--encryption-key-file PATH` | Путь к файлу, содержащему ключ шифрования (только для зашифрованных выгрузок). Данный файл является бинарным и должен содержать точное количество байт, соответствующее длине ключа в выбранном алгоритме шифрования (16 байт для `AES-128-GCM`, 32 байта для `AES-256-GCM` и `ChaCha20-Poly1305`). Ключ также может быть передан через переменную окружения `YDB_ENCRYPTION_KEY`, в шестнадцатеричном строковом представлении.
-`--format STRING` | Формат вывода результата.<br/>Допустимые значения:<br/><ul><li>`pretty` — человекочитаемый формат (по умолчанию);</li><li>`proto-json-base64` — [Protocol Buffers](https://ru.wikipedia.org/wiki/Protocol_Buffers) в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul>
+{% include [export-aux-params-table.md](_includes/export-aux-params-table.md) %}
 
 ## Выполнение выгрузки {#exec}
 

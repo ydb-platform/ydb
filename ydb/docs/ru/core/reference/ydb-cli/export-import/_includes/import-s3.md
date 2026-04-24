@@ -18,6 +18,8 @@
 
 При необходимости догрузки данных в существующие таблицы из S3 вы можете скопировать содержимое S3 в файловую систему (например, с помощью [S3cmd](https://s3tools.org/s3cmd)) и воспользоваться [командой `tools restore`](../tools-restore.md).
 
+{% include [server-import-workflow.md](server-import-workflow.md) %}
+
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:

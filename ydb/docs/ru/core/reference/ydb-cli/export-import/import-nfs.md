@@ -12,6 +12,8 @@
 
 При необходимости догрузки данных в существующие таблицы из NFS вы можете скопировать содержимое NFS в локальную файловую систему и воспользоваться [командой `tools restore`](./tools-restore.md).
 
+{% include [server-import-workflow.md](_includes/server-import-workflow.md) %}
+
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:

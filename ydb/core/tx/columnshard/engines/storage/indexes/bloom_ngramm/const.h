@@ -34,7 +34,7 @@ struct TRequestSettings {
             ? std::optional<ui32>(bFilter.GetHashesCount()) : std::nullopt;
         result.DeprecatedFilterSizeBytes = bFilter.HasFilterSizeBytes()
             ? std::optional<ui32>(bFilter.GetFilterSizeBytes()) : std::nullopt;
-        result.DeprecatedRecordsCount = bFilter.HasRecordsCount() && bFilter.GetRecordsCount() != 0
+        result.DeprecatedRecordsCount = bFilter.HasRecordsCount()
             ? std::optional<ui32>(bFilter.GetRecordsCount()) : std::nullopt;
         return result;
     }
@@ -183,7 +183,7 @@ public:
 };
 
 inline bool TRequestSettings::IsOldSizingMode() const {
-    return DeprecatedRecordsCount && *DeprecatedRecordsCount != 0;
+    return (DeprecatedRecordsCount.has_value() || DeprecatedFilterSizeBytes.has_value()) && !FalsePositiveProbability.has_value();
 }
 
 inline ui32 TRequestSettings::ResolvedNGrammSize() const {
@@ -203,14 +203,10 @@ inline double TRequestSettings::ResolvedFalsePositiveProbability() const {
         return FalsePositiveProbability.value_or(NDefaults::FalsePositiveProbability);
     }
 
-    const auto normalizedRecordsCount = (DeprecatedRecordsCount && *DeprecatedRecordsCount != 0)
-        ? DeprecatedRecordsCount
-        : std::optional<ui32>(TConstants::DeprecatedRecordsCount);
-
     return TConstants::FalsePositiveProbabilityFromDeprecatedSizing(
         DeprecatedHashesCount,
         DeprecatedFilterSizeBytes,
-        normalizedRecordsCount);
+        DeprecatedRecordsCount);
 }
 
 inline ui32 TRequestSettings::ResolvedHashesCount() const {
@@ -231,11 +227,7 @@ inline ui32 TRequestSettings::ResolvedFilterSizeBytes() const {
 
 inline ui32 TRequestSettings::ResolvedRecordsCount() const {
     if (IsOldSizingMode()) {
-        if (DeprecatedRecordsCount && *DeprecatedRecordsCount != 0) {
-            return *DeprecatedRecordsCount;
-        }
-
-        return TConstants::DeprecatedRecordsCount;
+        return DeprecatedRecordsCount.value_or(TConstants::DeprecatedRecordsCount);
     }
 
     return TConstants::DeprecatedRecordsCount;

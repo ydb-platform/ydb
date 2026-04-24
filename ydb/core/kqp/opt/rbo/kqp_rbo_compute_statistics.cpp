@@ -460,9 +460,23 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         // Build side is always right (broadcast), output keeps left's distribution
         Props.Metadata->ShuffledByColumns = GetLeftInput()->Props.Metadata->ShuffledByColumns;
     } else if (algo == NKqp::EJoinAlgoType::GraceJoin) {
-        // Both sides are shuffled by join keys
+        // Both sides will be partitioned by their respective join keys,
+        // but the columns by which they are shuffled may not survive after the join.
+
+        // For example, if you do a right semi join, the columns from the right
+        // table won't be available.
+
+        // For consistency, we'll take join keys from the right table for the "right"
+        // family of joins (including ones like a simple right join in which
+        // we can probably take either) and columns from the left keys otherwise.
+
+        // TODO: Later down the line, we should store ordering id instead of a column
+        // list. This will allow us to not discard compatible joins, when one of
+        // the equal columns is dropped by a projection later.
+
+        bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
         for (const auto& [leftKey, rightKey] : JoinKeys) {
-            Props.Metadata->ShuffledByColumns.push_back(leftKey);
+            Props.Metadata->ShuffledByColumns.push_back(rightSided ? rightKey : leftKey);
         }
     }
     // Currently there are no other algos.

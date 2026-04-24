@@ -11,6 +11,81 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
+    TIntrusivePtr<TOpCBOTree>& cboTree,
+    TTableAliasMap& tableAliasMap)
+{
+    TFDStorage fdStorage;
+    auto& rootLineage = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
+
+    // Build table alias map: canonical alias -> base table name
+    THashSet<TString> addedAliases;
+    for (const auto& [iu, entry] : rootLineage.Mapping) {
+        auto alias = entry.GetCannonicalAlias();
+        if (addedAliases.insert(alias).second) {
+            tableAliasMap.AddMapping(entry.TableName, alias);
+        }
+    }
+
+    auto resolveColumn = [&](const TInfoUnit& column) -> TInfoUnit {
+        auto& mapping = rootLineage.Mapping;
+        if (mapping.contains(column)) {
+            return mapping.at(column).GetInfoUnit();
+        }
+
+        return column;
+    };
+
+    // Collect interesting orderings and FDs from join conditions
+    for (auto node : cboTree->TreeNodes) {
+        auto join = CastOperator<TOpJoin>(node);
+        TVector<TJoinColumn> leftKeys, rightKeys;
+        for (auto [leftKey, rightKey] : join->JoinKeys) {
+            auto mappedLeft = resolveColumn(leftKey);
+            auto mappedRight = resolveColumn(rightKey);
+
+            leftKeys.emplace_back(mappedLeft.GetAlias(), mappedLeft.GetColumnName());
+            rightKeys.emplace_back(mappedRight.GetAlias(), mappedRight.GetColumnName());
+        }
+
+        fdStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle, &tableAliasMap);
+        fdStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle, &tableAliasMap);
+
+        for (size_t i = 0; i < leftKeys.size(); ++i) {
+            fdStorage.AddFD(leftKeys[i], rightKeys[i], TFunctionalDependency::EEquivalence, false, &tableAliasMap);
+        }
+    }
+
+    // Collect base table shufflings and sortings from child metadata
+    for (auto child : cboTree->Children) {
+        if (!child->Props.Metadata.has_value()) {
+            continue;
+        }
+        const auto& metadata = *child->Props.Metadata;
+
+        if (!metadata.ShuffledByColumns.empty()) {
+            TVector<TJoinColumn> shuffledBy;
+            for (const auto& col : metadata.ShuffledByColumns) {
+                auto mapped = resolveColumn(col);
+                shuffledBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
+            }
+            fdStorage.AddShuffling(TShuffling(shuffledBy), &tableAliasMap);
+        }
+
+        if (!metadata.KeyColumns.empty()) {
+            TVector<TJoinColumn> sortedBy;
+            for (const auto& col : metadata.KeyColumns) {
+                auto mapped = resolveColumn(col);
+                sortedBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
+            }
+            TVector<TOrdering::TItem::EDirection> dirs(sortedBy.size(), TOrdering::TItem::EDirection::EAscending);
+            fdStorage.AddSorting(TSorting(sortedBy, dirs), &tableAliasMap);
+        }
+    }
+
+    return MakeSimpleShared<TOrderingsStateMachine>(std::move(fdStorage), TOrdering::EType::EShuffle);
+}
+
 // To use DP CBO, we need to use the column lineage map and map all variables in join condition to
 // original aliases and column names in order to correctly use column statistics and shuffle elimination
 //
@@ -195,11 +270,20 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
     };
 
-    // Shuffle elimination is currently disabled
-    //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+    bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+
+    TTableAliasMap tableAliasMap;
+    TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM;
+    if (enableShuffleElimination) {
+        orderingsFSM = BuildShuffleEliminationFSM(cboTree, tableAliasMap);
+    }
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
-    auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx.ExprCtx, false, nullptr, nullptr));
+    auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(
+        providerCtx, settings, ctx.ExprCtx,
+        enableShuffleElimination,
+        orderingsFSM,
+        enableShuffleElimination ? &tableAliasMap : nullptr));
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;

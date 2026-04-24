@@ -5,6 +5,10 @@
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 
+NActors::IActor* CreateAddConsumerActor(NGRpcService::IRequestOpCtx* request);
+NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc);
+NActors::IActor* CreateCreateTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc, const TVector<TString>& clusters);
+NActors::IActor* CreateRemoveConsumerActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDropTopicActor(NGRpcService::IRequestOpCtx* request);
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1

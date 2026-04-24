@@ -415,21 +415,58 @@ public:
             return SuffixSum_.front();
         }
 
+        // at border value, in EstimateGreater,
+        //  we return all the values to the right plus average count of current bucket.
         const auto index = Histogram_->FindBucketIndex(val);
         const auto numBuckets = Histogram_->GetNumBuckets();
-        // TODO: handle the case at the border
-        // const auto border = Histogram_->GetBorderValue<T>(index);
-        // if (val == border) {
-        //     if (index + 1 == numBuckets) {
-        //         return 0;
-        //     }
-        //     return SuffixSum_[index + 1];
-        // }
-
         if (index + 1 == numBuckets) {
             return EstimateEqual(val);
         }
         return SuffixSum_[index + 1] + EstimateEqual(val);
+    }
+
+    // `left val` < all values < `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterLess(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLess(rightVal);
+        const ui64 left = EstimateLessOrEqual(leftVal);
+        return right > left ? right - left : 0;
+    }
+
+    // `left val` < all values <= `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterLessOrEqual(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLessOrEqual(rightVal);
+        const ui64 left = EstimateLessOrEqual(leftVal);
+        return right > left ? right - left : 0;
+    }
+
+    // `left val` <= all values < `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterOrEqualLess(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLess(rightVal);
+        const ui64 left = EstimateLess(leftVal);
+        return right > left ? right - left : 0;
+    }
+
+    // `left val` <= all values <= `right val`.
+    template <typename T>
+    ui64 EstimateRangeGreaterOrEqualLessOrEqual(T leftVal, T rightVal) const {
+        if (leftVal > rightVal) {
+            return 0;
+        }
+        const ui64 right = EstimateLessOrEqual(rightVal);
+        const ui64 left = EstimateLess(leftVal);
+        return right > left ? right - left : 0;
     }
 
     template <typename T>
@@ -443,7 +480,8 @@ public:
             const ui64 width = LoadFrom<ui64>(bucketWidth.Value.data());
             return count / width;
         }
-        // TODO: currenty return count due to close-to-zero width thus count / width generates large value
+        // TODO: close-to-zero width generates large value (i.e. count / width),
+        //  thus return count for now.
         // const T width = LoadFrom<T>(bucketWidth.Value.data());
         // return static_cast<ui64>(count / width);
         return count;
@@ -453,6 +491,40 @@ public:
     // Could be used to adjust scale.
     ui64 GetNumElements() const {
         return PrefixSum_.back();
+    }
+
+    // Returns cardinality of overlapping keys based on PK domain bucket counts.
+    // NOTE: number of buckets and widths may differ (e.g. PK-FK) due to different min/max values.
+    // Also, max value can be large than the last bucket border value.
+    TMaybe<ui64> GetOverlappingCardinality(const TEqWidthHistogramEstimator& other) const {
+        Y_ENSURE(Histogram_->GetType() == other.Histogram_->GetType(), "Histogram value types must match");
+        switch (Histogram_->GetType()) {
+#define HIST_TYPE_CHECK(type, layout)                          \
+    case EHistogramValueType::type: {                          \
+        return GetOverlappingCardinalityHelper<layout>(other); \
+    }
+            KNOWN_FIXED_HISTOGRAM_TYPES(HIST_TYPE_CHECK)
+#undef HIST_TYPE_CHECK
+            default:
+                Y_ENSURE(false, "Unsupported histogram data type");
+                return Nothing();
+        }
+    }
+
+    // Assumes that domain is PK, otherDomain is FK (i.e. FK is a subset of PK)
+    template <typename T>
+    ui64 GetOverlappingCardinalityHelper(const TEqWidthHistogramEstimator& other) const {
+        const T otherDomainStart = LoadFrom<T>(other.Histogram_->GetDomainRange().Start.data());
+        const T otherDomainEnd = LoadFrom<T>(other.Histogram_->GetDomainRange().End.data());
+
+        ui32 leftIndex = Histogram_->FindBucketIndex(otherDomainStart);
+        ui32 rightIndex = Histogram_->FindBucketIndex(otherDomainEnd);
+
+        ui64 cardinality = 0;
+        for (size_t i = leftIndex; i < rightIndex + 1; ++i) {
+            cardinality += Histogram_->GetNumElementsInBucket(i);
+        }
+        return cardinality;
     }
 
 private:

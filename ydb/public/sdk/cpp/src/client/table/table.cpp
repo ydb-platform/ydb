@@ -2511,6 +2511,10 @@ uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes_;
 }
 
+void TIndexDescription::SetParallel(uint32_t parallel) {
+    Parallel_ = parallel;
+}
+
 TIndexDescription TIndexDescription::CreateGlobalIndex(
     const std::string& name,
     const std::vector<std::string>& indexColumns,
@@ -3055,6 +3059,9 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
         result.SizeBytes_ = proto.size_bytes();
     }
+    if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndex>) {
+        result.Parallel_ = proto.parallel();
+    }
 
     return result;
 }
@@ -3066,6 +3073,8 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     }
 
     *proto.mutable_data_columns() = {DataColumns_.begin(), DataColumns_.end()};
+
+    proto.set_parallel(Parallel_);
 
     switch (IndexType_) {
     case EIndexType::GlobalSync: {

@@ -266,6 +266,7 @@ message TClickHouseClusterConfig {
     repeated string GroupAllowed = 14;
     optional bool ForceUseBalancer = 15 [default = false];
     optional bool JsonFormatHeader = 16 [default = false];
+    optional bool IdmOnlyAccess = 17 [default = false];
 }
 
 message TClickHouseGatewayConfig {

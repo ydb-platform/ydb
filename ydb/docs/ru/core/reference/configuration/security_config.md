@@ -26,6 +26,9 @@ security_config:
   disable_builtin_security: false
   disable_builtin_groups: false
   disable_builtin_access: false
+
+  # настройки сокрытия ошибок доступа
+  hide_authentication_failure_reasons: true
 ```
 
 ## Настройки режима аутентификации {#security-auth}
@@ -275,5 +278,18 @@ default_access:
 || `disable_builtin_access` | Отказаться от добавления прав на корне кластера для [встроенных групп](../../security/builtin-security.md), даже если явные права по умолчанию ([`security_config.default_access`](security_config.md)) заданы.
 
 Значение по умолчанию: `false`
+    ||
+|#
+
+## Настройки сокрытия ошибок доступа
+
+#|
+|| Параметр | Описание ||
+|| `hide_authentication_failure_reasons` | Скрывает от пользователя причины ошибок аутентификации.
+
+Позволяет предотвратить утечку информации о внутреннем устройстве и содержимом систем аутентификации {{ ydb-short-name }}.
+Например, усложняет для злоумышленника задачу выявления существующих пользователей методом перебора.
+
+Значение по умолчанию: `true`.
     ||
 |#

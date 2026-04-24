@@ -825,6 +825,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         auto& out = *settings->MutableVectorTopK();
         out.SetColumn(in.GetColumn());
         *out.MutableSettings() = in.GetSettings();
+        const auto guard = TxAlloc->TypeEnv.BindAllocator();
         auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
         out.SetTargetVector(TString(target.AsStringRef()));
         out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());
@@ -1422,11 +1423,19 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             }
 
             if (lockTxId && GetMeta().LockMode && !isTableImmutable) {
-                input.Meta.StreamLookupSettings->SetLockMode(
+                if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE
+                        && GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
                     // Unique Index needs read lock even in snapshot isolation mode.
-                    input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
-                        ? *GetMeta().LockMode
-                        : NKikimrDataEvents::OPTIMISTIC);
+                    input.Meta.StreamLookupSettings->SetLockMode(NKikimrDataEvents::OPTIMISTIC);
+                } else if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE) {
+                    input.Meta.StreamLookupSettings->SetLookupStrategy(NKqpProto::EStreamLookupStrategy::LOOKUP);
+                    input.Meta.StreamLookupSettings->SetLockMode(*GetMeta().LockMode);
+                } else {
+                    input.Meta.StreamLookupSettings->SetLockMode(*GetMeta().LockMode);
+                }
+            } else if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE
+                    && GetMeta().RequestIsolationLevel != NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
+                input.Meta.StreamLookupSettings->SetLookupStrategy(NKqpProto::EStreamLookupStrategy::LOOKUP);
             }
 
             if (!isTableImmutable) {
@@ -2372,7 +2381,9 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
             queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
         }
         task.Meta.TaskParams.emplace("query_path", queryPath);
-
+        if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
+            task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
+        }
         tasksIds.push_back(task.Id);
     }
 
@@ -2737,6 +2748,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             settings->SetItemsLimit(*GetMeta().MaxBatchSize);
             settings->SetIsBatch(true);
         } else {
+            const auto guard = TxAlloc->TypeEnv.BindAllocator();
             ui64 itemsLimit = ExtractPhyValue(stageInfo, source.GetItemsLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             settings->SetItemsLimit(itemsLimit);
         }
@@ -2746,6 +2758,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             auto& out = *settings->MutableVectorTopK();
             out.SetColumn(in.GetColumn());
             *out.MutableSettings() = in.GetSettings();
+            const auto guard = TxAlloc->TypeEnv.BindAllocator();
             auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
             out.SetTargetVector(TString(target.AsStringRef()));
             out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());

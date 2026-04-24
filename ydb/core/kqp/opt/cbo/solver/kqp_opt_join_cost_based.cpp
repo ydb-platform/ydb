@@ -502,12 +502,10 @@ private:
                     }
                 }
 
-                if (!lhsShuffled) {
-                    joinNode->ShuffleLeftSideByOrderingIdx = leftJoinKeysOrderingIdx;
-                }
-                if (!rhsShuffled) {
-                    joinNode->ShuffleRightSideByOrderingIdx = rightJoinKeysOrderingIdx;
-                }
+                joinNode->ShuffleLeftSideByOrderingIdx = lhsShuffled
+                    ? TJoinOptimizerNodeInternal::DontShuffle : leftJoinKeysOrderingIdx;
+                joinNode->ShuffleRightSideByOrderingIdx = rhsShuffled
+                    ? TJoinOptimizerNodeInternal::DontShuffle : rightJoinKeysOrderingIdx;
 
                 joinNode->Stats.LogicalOrderings.SetOrdering(leftJoinKeysOrderingIdx);
 

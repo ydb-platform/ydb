@@ -678,6 +678,9 @@ bool TOrderingsStateMachine::TLogicalOrderings::IsInitialized() const {
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::IsSubsetOf(const TLogicalOrderings& logicalOrderings) {
+    if (!HasState() && !logicalOrderings.HasState()) {
+        return true; // empty isSubsetOf empty
+    }
     return HasState() && logicalOrderings.HasState() &&
            IsInitialized() && logicalOrderings.IsInitialized() &&
            Dfsm_ == logicalOrderings.Dfsm_ &&

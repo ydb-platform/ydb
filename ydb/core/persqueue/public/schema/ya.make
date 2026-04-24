@@ -1,13 +1,18 @@
 LIBRARY()
 
 SRCS(
+    add_consumer.cpp
     alter_topic.cpp
     alter_topic_internal.cpp
+    alter_topic_operation.cpp
     common.cpp
+    create_topic.cpp
+    create_topic_operation.cpp
     drop_topic.cpp
+    drop_topic_operation.cpp
+    remove_consumer.cpp
     schema.cpp
-    schema_int.cpp
-    topic_alterer.cpp
+    schema_operation.cpp
     validation.cpp
 )
 

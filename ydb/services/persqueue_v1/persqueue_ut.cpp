@@ -5680,7 +5680,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(SchemeOperationsTest) {
         NPersQueue::TTestServer server;
-        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR, NKikimrServices::PQ_ALTER_TOPIC});
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR, NKikimrServices::PQ_SCHEMA});
         TString topic1 = "rt3.dc1--acc--topic1";
         TString topic3 = "rt3.dc1--acc--topic3";
         server.AnnoyingClient->CreateTopic(topic1, 1);
@@ -6463,7 +6463,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             settings.PQConfig.AddClientServiceType()->SetName("SecondType");
         }
         NPersQueue::TTestServer server(settings);
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_SCHEMA, NKikimrServices::BLACKBOX_VALIDATOR });
 
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
 
@@ -6573,7 +6573,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             CreateTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.operation().ShortDebugString());
         }
         checkDescribe({
             {.ConsumerName = "acc/consumer1", .ServiceType = "data-streams", .Important = true, .AvailabilityPeriod = TDuration::Zero()},

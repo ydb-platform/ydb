@@ -627,7 +627,6 @@ namespace NKikimr {
                         Config->BarrierValidation,
                         Config->HullSstSizeInChunksFresh,
                         Config->HullSstSizeInChunksLevel,
-                        Config->HullCompFreeSpaceThreshold,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,

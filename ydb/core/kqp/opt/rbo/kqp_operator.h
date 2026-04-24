@@ -69,7 +69,6 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
-    std::optional<ui32> NumOfConsumers;
     bool EnsureAtMostOne = false;
 
     std::optional<TRBOMetadata> Metadata;
@@ -151,6 +150,10 @@ public:
 
     bool IsSingleConsumer() const {
         return Parents.size() <= 1;
+    }
+
+    ui32 GetNumOfConsumers() const {
+        return Parents.size();
     }
 
     const TTypeAnnotationNode* GetTypeAnn() {
@@ -426,6 +429,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     TExpression GetFilterExpression() const { return FilterExpr; }
 

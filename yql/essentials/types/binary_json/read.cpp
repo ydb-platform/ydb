@@ -217,7 +217,7 @@ TUnboxedValue ReadElementToJsonDom(const TEntryCursor& cursor, const NUdf::IValu
         case EEntryType::Null:
             return MakeEntity();
         case EEntryType::String:
-            return MakeString(cursor.GetString(), valueBuilder);
+            return SetUtf8Mark(MakeString(cursor.GetString(), valueBuilder));
         case EEntryType::Number:
             return MakeDouble(cursor.GetNumber());
         case EEntryType::Container:

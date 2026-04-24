@@ -2,7 +2,7 @@
 
 #include "schema.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
 #include <expected>
@@ -37,7 +37,7 @@ struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
         return first;
     }
 
-    const TString& GetErrorMessage() const {
+    TString& GetErrorMessage() {
         return second;
     }
 
@@ -45,6 +45,14 @@ struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
         return GetStatus() == Ydb::StatusIds::SUCCESS;
     }
 };
+
+std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName);
+
+void CopyConfig(
+    NKikimrSchemeOp::TPersQueueGroupDescription& destination,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& source
+);
+
 
 struct TClientServiceType {
     TString Name;
@@ -57,12 +65,10 @@ TClientServiceTypes GetSupportedClientServiceTypes();
 TResult ValidatePartitionStrategy(const NKikimrPQ::TPQTabletConfig& config);
 TResult ValidateConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 );
 TResult ValidateConsumersConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 );
 
@@ -75,7 +81,7 @@ std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeri
 
 TResult FillMeteringMode(
     NKikimrPQ::TPQTabletConfig& config,
-    Ydb::Topic::MeteringMode mode, 
+    Ydb::Topic::MeteringMode mode,
     EOperation operation
 );
 
@@ -87,14 +93,17 @@ TResult ProcessTopicAttributes(
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings // out parameter
 );
 
-TResult ProcessAddConsumer(
+TResult AddConsumer(
     NKikimrPQ::TPQTabletConfig* config,
     const Ydb::Topic::Consumer& consumerConfig,
     const TClientServiceTypes& supportedClientServiceTypes,
     const bool checkServiceType,
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 );
-TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter);
+TResult ProcessAlterConsumer(
+    Ydb::Topic::Consumer& consumer,
+    const Ydb::Topic::AlterConsumer& alter
+);
 
 TResult ApplyChangesInt(
     const Ydb::Topic::AlterTopicRequest& request,

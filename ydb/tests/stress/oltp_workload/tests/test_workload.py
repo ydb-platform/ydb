@@ -15,6 +15,7 @@ class TestYdbWorkload(StressFixture):
             "enable_table_datetime64": True,
             "enable_vector_index": True,
             "enable_fulltext_index": True,
+            "enable_local_bloom_filter_index": True,
         }
 
     @pytest.fixture(scope="function")

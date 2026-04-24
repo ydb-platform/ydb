@@ -1,5 +1,6 @@
 #include "kqp_rbo_physical_query_builder.h"
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -60,8 +61,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
                 stageInputArgs = StageArgs.at(id);
             }
 
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().BuildNode(ctx, StagePos.at(id)), ctx,
-                                    StagePos.at(id));
+            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New().BuildNode(ctx, StagePos.at(id)),
+                                    ctx, StagePos.at(id));
             phyStages.emplace_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
@@ -107,7 +108,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(TExprNode::TPtr node) {
     auto status =
         ::PeepHoleOptimize(TExprBase(node), afterPeephole, ctx, RBOCtx.PeepholeTypeAnnTransformer, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, true, {});
     if (status != IGraphTransformer::TStatus::Ok) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Peephole optimization failed for precompute in NEW RBO"));
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Peephole optimization failed for materialize in NEW RBO"));
         return nullptr;
     }
 
@@ -121,7 +122,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(TExprNode::TPtr node) {
     .Done().Ptr();
     // clang-format on
 
-    auto phyStage = BuildDqPhyStage({}, {}, rangesProgram, NYql::NDq::TDqStageSettings().BuildNode(ctx, node->Pos()), ctx, node->Pos());
+    auto stageSettings = NYql::NDq::TDqStageSettings().New().SetPartitionMode(NYql::NDq::TDqStageSettings::EPartitionMode::Single).BuildNode(ctx, node->Pos());
+    auto phyStage = BuildDqPhyStage({}, {}, rangesProgram, std::move(stageSettings), ctx, node->Pos());
 
     // clang-format off
     auto result = Build<TDqCnValue>(ctx, node->Pos())
@@ -148,13 +150,17 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(TExprNode::TPtr node) {
     return param;
 }
 
+bool TPhysicalQueryBuilder::IsSingleTaskConnection(const TExprBase& input) const {
+    return input.Maybe<TDqCnUnionAll>() || input.Maybe<TDqCnMerge>();
+}
+
 TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {
     auto& ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr finalStage;
     bool needFinalUnionStage = false;
     // Final stage, which is input for DqCnResult, should have only one 1 task.
     for (const auto& input : TDqPhyStage(stage).Inputs()) {
-        if (!input.Maybe<TDqCnUnionAll>()) {
+        if (!IsSingleTaskConnection(input)) {
             needFinalUnionStage = true;
             break;
         }

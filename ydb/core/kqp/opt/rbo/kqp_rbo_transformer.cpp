@@ -408,6 +408,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
 
     TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
+    inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
+    inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineScalarSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
     RBO.AddStage(std::make_unique<TRenameStage>());
@@ -415,6 +417,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Logical stage.
     TVector<std::unique_ptr<IRule>> logicalStageRules;
+    logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
+    logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushMapRule>());

@@ -41,6 +41,10 @@ TResult ApplyChangesInt(
             error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }
+        if (settings.min_active_partitions() >= Max<ui32>()) {
+            error = TStringBuilder() << "Partitions count must be less than " << Max<ui32>() << ", provided " << settings.min_active_partitions();
+            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        }
         minParts = std::max<ui32>(1, settings.min_active_partitions());
         if (request.partitioning_settings().has_auto_partitioning_settings() &&
             request.partitioning_settings().auto_partitioning_settings().strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) {
@@ -89,7 +93,6 @@ TResult ApplyChangesInt(
 
     bool local = true; // TODO: check here cluster;
 
-    auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
     if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto converter = NPersQueue::TTopicNameConverter::ForFederation(
                 pqConfig.GetRoot(),

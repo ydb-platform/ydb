@@ -2513,8 +2513,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             {{"something.read"}, {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}
         };
         runtime->Send(new IEventHandle(
-            MakeTicketParserID(), 
-            sender, 
+            MakeTicketParserID(),
+            sender,
             new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
         ), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2525,7 +2525,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Verify that x-user-ip header was set with the correct value
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
-                                   "Expected x-user-ip header to be '" << testPeerName 
+                                   "Expected x-user-ip header to be '" << testPeerName
                                    << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
 
         accessServiceMock.CapturedXUserIP.clear();
@@ -2535,8 +2535,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             {{"something.write"}, {{"folder_id", "test_folder"}, {"database_id", "test_db"}}}
         };
         runtime->Send(new IEventHandle(
-            MakeTicketParserID(), 
-            sender, 
+            MakeTicketParserID(),
+            sender,
             new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
         ), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2546,7 +2546,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Verify that x-user-ip header was set with the correct value
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
-                                   "Expected x-user-ip header to be '" << testPeerName 
+                                   "Expected x-user-ip header to be '" << testPeerName
                                    << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
     }
 
@@ -2633,11 +2633,27 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT(!res->HasError());
         }
         {
+            auto* res = RunPeernameQuery(runtime, "[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:0");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
             auto* res = RunPeernameQuery(runtime, "[fe80::1]:22");
             UNIT_ASSERT(!res->HasError());
         }
         {
             auto* res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
             UNIT_ASSERT(!res->HasError());
         }
         {
@@ -2692,11 +2708,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]");
-            UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
-        }
-        {
             auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
@@ -2708,11 +2719,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
         {
             auto* res = RunPeernameQuery(runtime, "[::1]:");
-            UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
-        }
-        {
-            auto* res = RunPeernameQuery(runtime, "[::1]:0");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
@@ -2737,17 +2743,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
-            UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
-        }
-        {
             auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:");
-            UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
-        }
-        {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }

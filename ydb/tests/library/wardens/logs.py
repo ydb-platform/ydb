@@ -4,25 +4,14 @@
 import os
 
 from ydb.tests.library.nemesis.safety_warden import (
-    CommandExecutor,
     GrepLogFileForMarkers,
     GrepGzippedLogFilesForMarkersSafetyWarden,
     GrepJournalctlKernelForPatternsSafetyWarden,
-    RemoteCommandExecutor,
 )
 
 
-def _ensure_executor(executor: CommandExecutor, list_of_hosts=None, ssh_username=None):
-    """Return *executor* if given, otherwise build a ``RemoteCommandExecutor`` from legacy args."""
-    if executor is not None:
-        return executor
-    if list_of_hosts is None:
-        raise ValueError("Either executor or list_of_hosts must be provided")
-    return RemoteCommandExecutor(list_of_hosts, username=ssh_username)
-
-
 def kikimr_start_logs_safety_warden_factory(
-        executor: CommandExecutor = None,
+        executor=None,
         deploy_path="/Berkanavt/kikimr/logs/",
         lines_after=5,
         cut=True,
@@ -49,7 +38,7 @@ def kikimr_start_logs_safety_warden_factory(
 
 
 def kikimr_crit_and_alert_logs_safety_warden_factory(
-        executor: CommandExecutor = None,
+        executor=None,
         deploy_path="/Berkanavt/kikimr/logs/",
 ):
     crit_markers = [':BS_HULLRECS CRIT:', ':BS_LOGCUTTER CRIT:', 'ALERT', ':BS_LOCALRECOVERY CRIT:']
@@ -79,7 +68,7 @@ def kikimr_crit_and_alert_logs_safety_warden_factory(
 
 
 def kikimr_grep_kernel_log_safety_warden_factory(
-        executor: CommandExecutor = None,
+        executor=None,
         lines_after=5,
         hours_back=24,
 ):

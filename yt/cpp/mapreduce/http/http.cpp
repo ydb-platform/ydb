@@ -260,6 +260,16 @@ void THttpHeader::SetServiceTicket(const TString& ticket)
     ServiceTicket_ = ticket;
 }
 
+void THttpHeader::SetTraceparent(const TString& traceparent)
+{
+    Traceparent_ = traceparent;
+}
+
+const TString& THttpHeader::GetTraceparent() const
+{
+    return Traceparent_;
+}
+
 void THttpHeader::SetInputFormat(const TMaybe<TFormat>& format)
 {
     InputFormat_ = format;
@@ -357,10 +367,15 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     }
 
     headers->Add("X-YT-Correlation-Id", requestId);
+
     headers->Add("X-YT-Header-Format", "<format=text>yson");
 
     headers->Add("Content-Encoding", RequestCompression_);
     headers->Add("Accept-Encoding", ResponseCompression_);
+
+    if (Traceparent_) {
+        headers->Add("traceparent", Traceparent_);
+    }
 
     auto printYTHeader = [&headers] (const char* headerName, const TString& value) {
         static const size_t maxHttpHeaderSize = 64 << 10;

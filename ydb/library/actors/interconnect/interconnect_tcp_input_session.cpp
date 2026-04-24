@@ -687,8 +687,21 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
-            if (alignment > 1 && headroom == 0 && tailroom == 0 && alignment <= 16) {
-                return TRcBuf(TRopeAlignedBuffer::Allocate(size));
+            if (alignment > 1) {
+                Y_DEBUG_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
+                // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base buffer,
+                // but headroom may still shift the visible data away from the requested alignment, so we always keep
+                // up to alignment - 1 bytes of extra slack and spend part of it as additional headroom.
+                const size_t extra = alignment - 1;
+                TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(size + headroom + tailroom + extra));
+                const uintptr_t ptr = reinterpret_cast<uintptr_t>(buffer.GetData()) + headroom;
+                const size_t misalignment = ptr & (alignment - 1);
+                const size_t shift = misalignment ? alignment - misalignment : 0;
+                tailroom += extra - shift;
+                buffer.TrimFront(size + tailroom);
+                buffer.TrimBack(size);
+                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(buffer.GetData()) % alignment == 0);
+                return buffer;
             }
             return TRcBuf::Uninitialized(size, headroom, tailroom);
         }
@@ -885,19 +898,45 @@ namespace NActors {
             TRope payload;
             if (!pendingEvent.SerializationInfo.Sections.empty()) {
                 // unshuffle inline and external payloads into single event content
+                auto flushAccumulated = [&](TRope*& prev, size_t& accumSize) {
+                    if (accumSize) {
+                        prev->ExtractFront(accumSize, &payload);
+                        accumSize = 0;
+                    }
+                };
+
+                TRope *prev = nullptr;
+                size_t accumSize = 0;
                 for (const auto& s : pendingEvent.SerializationInfo.Sections) {
                     TRope *rope = s.IsInline
                         ? &pendingEvent.InternalPayload
                         : &pendingEvent.ExternalPayload;
-                    if (s.IsInline && s.Alignment > 1 && s.Headroom == 0 && s.Tailroom == 0 && s.Alignment <= 16 && s.Size) {
-                        TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(s.Size));
-                        const bool success = rope->ExtractFrontPlain(buffer.GetDataMut(), s.Size);
-                        Y_ABORT_UNLESS(success);
-                        payload.Insert(payload.End(), TRope(std::move(buffer)));
+
+                    if (s.IsInline && s.Alignment > 1 && s.Size) {
+                        flushAccumulated(prev, accumSize);
+                        auto it = rope->Begin();
+                        const bool alreadyAligned = it.Valid()
+                            && it.ContiguousSize() >= s.Size
+                            && reinterpret_cast<uintptr_t>(it.ContiguousData()) % s.Alignment == 0;
+                        if (alreadyAligned) {
+                            rope->ExtractFront(s.Size, &payload);
+                        } else {
+                            // Headroom/tailroom are already handled when the section buffer is allocated; merging only
+                            // sees the serialized bytes of size s.Size and must preserve alignment for inline sections.
+                            TRcBuf buffer = AllocateRcBuf(s.Size, s.Headroom, s.Tailroom, s.Alignment, false);
+                            const bool success = rope->ExtractFrontPlain(buffer.GetDataMut(), s.Size);
+                            Y_ABORT_UNLESS(success);
+                            payload.Insert(payload.End(), TRope(std::move(buffer)));
+                        }
                     } else {
-                        rope->ExtractFront(s.Size, &payload);
+                        if (rope != prev) {
+                            flushAccumulated(prev, accumSize);
+                            prev = rope;
+                        }
+                        accumSize += s.Size;
                     }
                 }
+                flushAccumulated(prev, accumSize);
 
                 if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {
                     LOG_CRIT_IC_SESSION("ICIS19", "unprocessed payload remains after shuffling"

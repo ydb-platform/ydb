@@ -89,8 +89,45 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 rightShuffleKeys.push_back(key.second);
             }
 
-            props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftOutputIndex));
-            props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightOutputIndex));
+            bool enableSE = ctx.KqpCtx.Config->OptShuffleElimination.Get()
+                .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+
+            auto isAlreadyShuffled = [&](const TVector<TInfoUnit>& keys,
+                                          const std::optional<TRBOMetadata>& meta) -> bool {
+                if (!enableSE || !meta.has_value() || meta->ShuffledByColumns.empty()) {
+                    return false;
+                }
+                return std::all_of(keys.begin(), keys.end(), [&meta](const TInfoUnit& key) {
+                    return std::find(meta->ShuffledByColumns.begin(),
+                                     meta->ShuffledByColumns.end(), key)
+                           != meta->ShuffledByColumns.end();
+                });
+            };
+
+            bool leftEliminated  = isAlreadyShuffled(leftShuffleKeys,  join->GetLeftInput()->Props.Metadata);
+            bool rightEliminated = isAlreadyShuffled(rightShuffleKeys, join->GetRightInput()->Props.Metadata);
+
+            // Don't eliminate both sides at once — local join needs separate handling
+            if (leftEliminated && rightEliminated) {
+                rightEliminated = false;
+            }
+
+            auto seHashFunc = ctx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType();
+            if (leftEliminated || rightEliminated) {
+                seHashFunc = NDq::EHashShuffleFuncType::ColumnShardHashV1;
+            }
+
+            if (leftEliminated) {
+                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>());
+            } else {
+                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, 0u, seHashFunc));
+            }
+
+            if (rightEliminated) {
+                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>());
+            } else {
+                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, 0u, seHashFunc));
+            }
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {

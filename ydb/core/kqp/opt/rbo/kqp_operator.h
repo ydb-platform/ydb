@@ -76,6 +76,9 @@ struct TPhysicalOpProps {
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
 
+    // CBO decision for this join's input edges,
+    // carried from TJoinOptimizerNode into the new RBO
+    // Only applicable when JoinAlgo == GraceJoin
     bool LeftShuffleEliminated = false;
     bool RightShuffleEliminated = false;
 };

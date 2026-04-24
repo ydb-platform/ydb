@@ -31,22 +31,18 @@ def _load_muted_ya_path_policy() -> tuple[str, dict[str, str]]:
 
     per_preset: dict[str, str] = {}
     raw_paths = data.get('muted_ya_paths', {})
-    if raw_paths is None:
-        raw_paths = {}
     if not isinstance(raw_paths, dict):
         raise ValueError(f'{cfg_path}: "muted_ya_paths" must be a JSON object')
     for preset, rel_path in raw_paths.items():
-        preset_key = str(preset).strip().lower()
-        if not preset_key:
-            continue
+        if not isinstance(preset, str) or not preset:
+            raise ValueError(f'{cfg_path}: "muted_ya_paths" keys must be non-empty strings')
         if not isinstance(rel_path, str) or not rel_path.strip():
-            raise ValueError(f'{cfg_path}: muted_ya_paths["{preset_key}"] must be a non-empty string')
-        per_preset[preset_key] = _normalize_relative_path(rel_path.strip())
+            raise ValueError(f'{cfg_path}: muted_ya_paths["{preset}"] must be a non-empty string')
+        per_preset[preset] = _normalize_relative_path(rel_path.strip())
     return default_path, per_preset
 
 
 def dedicated_relative(preset: str) -> str:
-    preset = preset.strip().lower()
     default_path, per_preset = _load_muted_ya_path_policy()
     return per_preset.get(preset, default_path)
 

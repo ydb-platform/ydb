@@ -248,8 +248,6 @@ namespace NKikimr::NDDisk {
             }
             PersistentBufferSectorsChecksum.clear();
 
-
-
             for (ui32 pos = 0; pos < PersistentBufferBarriers.size(); pos++) {
                 auto& b = PersistentBufferBarriers[pos];
                 for (ui32 FreeBarrierPosition = 0; FreeBarrierPosition < TPersistentBufferHeader::MaxBarriersPerHeader && b.Header.Barrier.Barriers[FreeBarrierPosition].TabletId > 0; FreeBarrierPosition++) {

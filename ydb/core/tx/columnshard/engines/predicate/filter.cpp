@@ -258,6 +258,11 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
                 cellsWithDefaults.push_back(cells[i]);
                 AFL_VERIFY(nonNullCount == i)("non_null", nonNullCount)("i", i);
                 ++nonNullCount;
+            } else if (i < cells.size() && cells[i].IsNull()) {
+                // Explicit NULL in TSerializedCellVec is an open-bound marker for this column (not a typed default).
+                cellsWithDefaults.emplace_back();
+                AFL_VERIFY(nonNullCount == i)("non_null", nonNullCount)("i", i);
+                ++nonNullCount;
             } else {
                 TConclusion<TCell> defaultCell = MakeDefaultCell(YdbPK[i]);
                 AFL_VERIFY(!!defaultCell);

@@ -37,12 +37,22 @@ bool IsJsonValueReturningNonIndexable(std::optional<EDataSlot> slot) {
     }
 
     switch (*slot) {
-        case EDataSlot::Date:
-        case EDataSlot::Datetime:
-        case EDataSlot::Timestamp:
-            return true;
-        default:
+        case EDataSlot::Int8:
+        case EDataSlot::Int16:
+        case EDataSlot::Int32:
+        case EDataSlot::Int64:
+        case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
+        case EDataSlot::Uint32:
+        case EDataSlot::Uint64:
+        case EDataSlot::Float:
+        case EDataSlot::Double:
+        case EDataSlot::String:
+        case EDataSlot::Utf8:
+        case EDataSlot::Bool:
             return false;
+        default:
+            return true;
     }
 }
 
@@ -63,7 +73,10 @@ TExprBase UnwrapOptionalNodes(TExprBase node) {
 
 std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode) {
     if (!jsonNode.Json().Maybe<TCoMember>()) {
-        return std::unexpected("Nested JSON_* functions are not supported");
+        if (jsonNode.Json().Maybe<TCoJsonQueryBase>()) {
+            return std::unexpected("Nested JSON_* functions are not supported");
+        }
+        return std::unexpected("JSON source must be a column reference");
     }
 
     if (!jsonNode.JsonPath().Maybe<TCoUtf8>()) {
@@ -285,8 +298,7 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
     }
 
     if (IsJsonValueReturningNonIndexable(leftParams->ReturningType)) {
-        return MakeCollectError(ctx, jsonSide.Pos(),
-            "JSON_VALUE with Date/DateTime/Timestamp RETURNING is not supported by JSON index");
+        return std::nullopt;
     }
 
     if (leftParams->ReturningType.has_value() && *leftParams->ReturningType == EDataSlot::Bool) {
@@ -434,26 +446,6 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
 } // namespace
 
 std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& body, const TExprBase& node, TExprContext& ctx) {
-    auto result = VisitJsonPredicate(body, ctx);
-    if (!result) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: nothing to extract"));
-        return std::nullopt;
-    }
-
-    auto& collectResult = result->Collect;
-    if (collectResult.IsError()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: " << collectResult.GetError().GetMessage()));
-        return std::nullopt;
-    }
-
-    if (collectResult.GetTokens().empty()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: Empty result"));
-        return std::nullopt;
-    }
-
     size_t totalJsonNodes = 0;
     bool hasJsonQuery = false;
 
@@ -476,9 +468,29 @@ std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& bod
         return std::nullopt;
     }
 
-    if (result->ProcessedJsonNodes != totalJsonNodes) {
+    if (totalJsonNodes == 0) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: not all JSON_* functions could be used for index lookup"));
+            << "Failed to extract search terms from predicate: no JSON_* functions found"));
+        return std::nullopt;
+    }
+
+    auto result = VisitJsonPredicate(body, ctx);
+    if (!result.has_value()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "Failed to extract search terms from predicate: nothing to extract"));
+        return std::nullopt;
+    }
+
+    auto& collectResult = result->Collect;
+    if (collectResult.IsError()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "Failed to extract search terms from predicate: " << collectResult.GetError().GetMessage()));
+        return std::nullopt;
+    }
+
+    if (collectResult.GetTokens().empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "Failed to extract search terms from predicate: Empty result"));
         return std::nullopt;
     }
 

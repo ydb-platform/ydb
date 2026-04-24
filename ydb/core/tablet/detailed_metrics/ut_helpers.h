@@ -5,6 +5,10 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
+#include <optional>
+#include <unordered_map>
+#include <unordered_set>
+
 namespace NKikimr {
 
 namespace NDetailedMetricsTests {

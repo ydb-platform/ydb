@@ -226,7 +226,7 @@ void TNodeDatabaseMetricsAggregator::HandleTableSchemaVersionChange(
     std::unordered_map<ui64, TTableMetricsInfo>::iterator tableMetricsIt,
     TEvTabletCounters::TEvTabletAddCounters* message
 ) {
-    // First, check if the database schema version has changed
+    // First, check if the table schema version has changed
     if (message->TableMetricsConfig->TableSchemaVersion
             < tableMetricsIt->second.TableMetricsConfig.TableSchemaVersion) {
         // NOTE: The table schema version in the message is lower than the version,
@@ -277,8 +277,8 @@ void TNodeDatabaseMetricsAggregator::HandleTableSchemaVersionChange(
     //       (as far as table IDs are concerned).
     Y_ABORT_UNLESS(
         message->TableMetricsConfig->TablePath == tableMetricsIt->second.TableMetricsConfig.TablePath,
-        "The table path for the table ID %u changed from %s to %s "
-        "when the table schema version changed from %u to %u",
+        "The table path for the table ID %" PRIu64 " changed from %s to %s "
+        "when the table schema version changed from %" PRIu64 " to %" PRIu64,
         tableMetricsIt->second.TableMetricsConfig.TableId,
         tableMetricsIt->second.TableMetricsConfig.TablePath.c_str(),
         message->TableMetricsConfig->TablePath.c_str(),
@@ -386,7 +386,8 @@ void TNodeDatabaseMetricsAggregator::ProcessTabletCounters(
         // This is an existing table, make sure all tablets have the same type
         Y_ABORT_UNLESS(
             message->TabletType == tableMetricsIt->second.PartitionReplicaTabletType,
-            "The tablet ID %u (type %s) of the table %s (table ID %u) uses an inconsistent type (expected %s)",
+            "The tablet ID %" PRIu64 " (type %s) of the table %s (table ID % " PRIu64
+            ") uses an inconsistent type (expected %s)",
             message->TabletID,
             TTabletTypes::TypeToStr(message->TabletType),
             tableMetricsIt->second.TableMetricsConfig.TablePath.c_str(),
@@ -500,9 +501,10 @@ void TNodeDatabaseMetricsAggregator::ProcessTabletCounters(
 
         Y_ABORT_UNLESS(
             inserted.second,
-            "The combination of the tablet ID %u (type %s) and the follower ID %u is already "
-            "present for the table ID %u when adding a new entry for detailed metrics "
-            "for the table %s (table ID %u)",
+            "The combination of the tablet ID %" PRIu64 " (type %s) and "
+            "the follower ID %" PRIu32 " is already present for the table ID %" PRIu64
+            " when adding a new entry for detailed metrics for the table %s "
+            "(table ID %" PRIu64 ")",
             message->TabletID,
             TTabletTypes::TypeToStr(message->TabletType),
             message->FollowerId,
@@ -602,19 +604,26 @@ void TNodeDatabaseMetricsAggregator::ForgetTablet(ui64 tabletId, ui32 followerId
 
     Y_ABORT_UNLESS(
         tableMetricsIt != PerTableMetrics.end(),
-        "The entry for the detailed metrics for the tablet ID %u and the follower ID %u "
-        "is missing for the table ID %u in the tables map",
+        "The entry for the detailed metrics for the tablet ID %" PRIu64
+        " and the follower ID %" PRIu32 " is missing for the table ID %" PRIu64
+        " in the tables map",
         tabletId,
         followerId,
         lookupIt->second
     );
 
+    // NOTE: The entry in the TabletIdFollowerIdToTableIdMap map is no longer needed,
+    //       remove it now to be able to use "return" in the code below without
+    //       forgetting to remove the entry from this map
+    TabletIdFollowerIdToTableIdMap.erase(lookupIt);
+
     auto partitionMetricsIt = tableMetricsIt->second.PerPartitionMetrics.find(tabletId);
 
     Y_ABORT_UNLESS(
         partitionMetricsIt != tableMetricsIt->second.PerPartitionMetrics.end(),
-        "The entry for the detailed metrics for the tablet ID %u and the follower ID %u "
-        "is missing for the table %s (table ID %u) in the partitions map",
+        "The entry for the detailed metrics for the tablet ID %" PRIu64
+        " and the follower ID %" PRIu32 " is missing for the table %s "
+        "(table ID %" PRIu64 ") in the partitions map",
         tabletId,
         followerId,
         tableMetricsIt->second.TableMetricsConfig.TablePath.c_str(),
@@ -625,8 +634,9 @@ void TNodeDatabaseMetricsAggregator::ForgetTablet(ui64 tabletId, ui32 followerId
 
     Y_ABORT_UNLESS(
         replicaMetricsIt != partitionMetricsIt->second.PerReplicaMetrics.end(),
-        "The entry for the detailed metrics for the tablet ID %u and the follower ID %u "
-        "is missing for the table %s (table ID %u) in the replicas map",
+        "The entry for the detailed metrics for the tablet ID %" PRIu64
+        " and the follower ID %" PRIu32 " is missing for the table %s "
+        "(table ID %" PRIu64 ") in the replicas map",
         tabletId,
         followerId,
         tableMetricsIt->second.TableMetricsConfig.TablePath.c_str(),
@@ -738,7 +748,6 @@ void TNodeDatabaseMetricsAggregator::ForgetTablet(ui64 tabletId, ui32 followerId
     }
 
     PerTableMetrics.erase(tableMetricsIt);
-    TabletIdFollowerIdToTableIdMap.erase(lookupIt);
 }
 
 } // namespace NKikimr

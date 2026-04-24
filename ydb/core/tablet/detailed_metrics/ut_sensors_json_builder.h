@@ -3,6 +3,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <unordered_map>
+
 namespace NKikimr {
 
 namespace NDetailedMetricsTests {
@@ -123,7 +125,7 @@ public:
         };
 
         for (auto [key, value] : buckets) {
-            Y_ABORT_UNLESS(fullBuckets.contains(key), "Invalid bucket key %u", key);
+            Y_ABORT_UNLESS(fullBuckets.contains(key), "Invalid bucket key %" PRIu64, key);
             fullBuckets[key] = value;
         }
 

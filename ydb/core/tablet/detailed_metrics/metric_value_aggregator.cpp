@@ -14,7 +14,8 @@ void THistogramMetricAggregator::AggregateValue(NMonitoring::THistogramPtr sourc
 
     Y_ABORT_UNLESS(
         snapshot1->Count() == snapshot2->Count(),
-        "Unable to aggregate histograms with a different number of buckets (%u vs %u)",
+        "Unable to aggregate histograms with a different number of buckets "
+        "(%" PRIu64 " vs %" PRIu64 ")",
         snapshot1->Count(),
         snapshot2->Count()
     );

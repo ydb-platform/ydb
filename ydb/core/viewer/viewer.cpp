@@ -4,6 +4,7 @@
 #include "json_handlers.h"
 #include "log.h"
 #include "viewer_request.h"
+#include "viewer_database_query_gate.h"
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -676,6 +677,23 @@ private:
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
             auto sender(ev->Sender);
+            const TStringBuf pathKey = TStringBuf(path).Before('?');
+            switch (EvaluateViewerJsonDatabaseQueryGate(
+                KikimrRunConfig.AppConfig.GetDomainsConfig(),
+                pathKey,
+                msg->UserToken,
+                MonHttpRequestHasExplicitDatabaseSelector(msg->Request)))
+            {
+                case EViewerJsonDatabaseQueryGateResult::Allow:
+                    break;
+                case EViewerJsonDatabaseQueryGateResult::ForbiddenMissingDatabaseQueryForDatabaseSid: {
+                    Send(sender, new NMon::TEvHttpInfoRes(
+                        GETHTTPACCESSDENIED(msg, "text/plain", "Explicit database scope is required in the query string for this endpoint"),
+                        0,
+                        NMon::IEvHttpInfoRes::EContentType::Custom));
+                    return;
+                }
+            }
             try {
                 IActor* requestActor = handler->CreateRequestActor(this, ev);
                 if (requestActor == nullptr) {
@@ -763,6 +781,21 @@ private:
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
             auto sender(ev->Sender);
+            const TStringBuf pathKey = TStringBuf(path).Before('?');
+            switch (EvaluateViewerJsonDatabaseQueryGate(
+                KikimrRunConfig.AppConfig.GetDomainsConfig(),
+                pathKey,
+                ev->Get()->UserToken,
+                HttpRequestHasExplicitDatabaseSelector(*ev->Get()->Request)))
+            {
+                case EViewerJsonDatabaseQueryGateResult::Allow:
+                    break;
+                case EViewerJsonDatabaseQueryGateResult::ForbiddenMissingDatabaseQueryForDatabaseSid: {
+                    Send(sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(
+                        GETHTTPACCESSDENIED(ev->Get(), "text/plain", "Explicit database scope is required in the query string for this endpoint"))));
+                    return;
+                }
+            }
             try {
                 IActor* requestActor = handler->CreateRequestActor(this, ev);
                 if (requestActor == nullptr) {

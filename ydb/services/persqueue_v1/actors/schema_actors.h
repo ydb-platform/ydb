@@ -245,26 +245,6 @@ private:
     Ydb::Topic::DescribePartitionResult Result;
 };
 
-
-// class TPQCreateTopicActor : public TPQGrpcSchemaBase<TPQCreateTopicActor, NKikimr::NGRpcService::TEvPQCreateTopicRequest> {
-//     using TBase = TPQGrpcSchemaBase<TPQCreateTopicActor, TEvPQCreateTopicRequest>;
-
-// public:
-//     TPQCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters);
-//     ~TPQCreateTopicActor() = default;
-
-//     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
-//                              const TString& workingDir, const TString& name);
-
-//     void Bootstrap(const NActors::TActorContext& ctx);
-
-//     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-
-// private:
-//     TString LocalCluster;
-//     TVector<TString> Clusters;
-// };
-
 class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,
                                                                TGetPartitionsLocationRequest,
                                                                TEvPQProxy::TEvPartitionLocationResponse>

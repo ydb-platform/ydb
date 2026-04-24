@@ -13,7 +13,6 @@ PEERDIR(
     ydb/core/sys_view/common
     ydb/library/actors/core
     ydb/library/query_actor
-    ydb/library/security
 )
 
 YQL_LAST_ABI_VERSION()

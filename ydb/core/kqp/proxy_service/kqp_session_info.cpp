@@ -1,7 +1,6 @@
 #include "kqp_proxy_service_impl.h"
 
 #include <ydb/core/sys_view/common/registry.h>
-#include <ydb/library/security/util.h>
 
 namespace NKikimr::NKqp {
 
@@ -29,11 +28,12 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
 
     // last executed query or currently running query.
     if (fieldsMap.NeedField(VSessions::Query::ColumnId)) {  // 4
-        TString queryForView = NKikimr::ProtectQueryForLoggingIfSensitive(QueryText);
-        if (queryForView.size() > QUERY_TEXT_LIMIT) {
-            queryForView = queryForView.substr(0, QUERY_TEXT_LIMIT);
+        if (QueryText.size() > QUERY_TEXT_LIMIT) {
+            TString truncatedText = QueryText.substr(0, QUERY_TEXT_LIMIT);
+            proto->SetQuery(QueryText);
+        } else {
+            proto->SetQuery(QueryText);
         }
-        proto->SetQuery(queryForView);
     }
 
     if (fieldsMap.NeedField(VSessions::QueryCount::ColumnId)) {  // 5

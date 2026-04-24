@@ -240,8 +240,8 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         if (join->JoinAlgo != NKikimr::NKqp::EJoinAlgoType::Undefined) {
             res->Props.JoinAlgo = join->JoinAlgo;
         }
-        res->Props.LeftShuffleEliminated = join->LeftShuffleEliminated;
-        res->Props.RightShuffleEliminated = join->RightShuffleEliminated;
+        res->Props.LeftShuffleEliminated = join->ShuffleLeftSideBy.empty();
+        res->Props.RightShuffleEliminated = join->ShuffleRightSideBy.empty();
 
         return res;
     }

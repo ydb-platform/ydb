@@ -372,12 +372,6 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
     ///////////////////
     bool IsReorderable;
 
-    // Set when shuffle elimination is applied to an input (SE decided the side is already
-    // partitioned the way this join needs). When true, the corresponding ShuffleLeftSideBy/
-    // ShuffleRightSideBy below is empty — the downstream emits no shuffle for that side.
-    bool LeftShuffleEliminated = false;
-    bool RightShuffleEliminated = false;
-
     // Columns the CBO wants each input *re-shuffled by* before this join. Empty means
     // "don't shuffle" (either SE eliminated it, or shuffle is not needed, e.g. MapJoin).
     TVector<TJoinColumn> ShuffleLeftSideBy;

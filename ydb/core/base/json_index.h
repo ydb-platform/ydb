@@ -4,6 +4,7 @@
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
 #include <yql/essentials/types/binary_json/format.h>
 
+#include <set>
 #include <variant>
 
 namespace NKikimr {
@@ -14,7 +15,7 @@ namespace NJsonIndex {
 // Contains tokens for the JSON index or an error if the collection process failed
 class TCollectResult {
 public:
-    using TTokens = TVector<TString>;
+    using TTokens = std::set<TString>;
     using TError = NYql::TIssue;
 
     enum class ETokensMode {

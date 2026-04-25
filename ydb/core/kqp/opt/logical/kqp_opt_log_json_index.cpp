@@ -291,7 +291,9 @@ TPredicateCollectResult ParseAndCollectJson(const TString& columnName, const TSt
         YQL_ENSURE(tokens.size() == 1, "Expected exactly one token");
 
         if (auto encodedValue = EncodeValueToJsonPath(*comparisonValue)) {
-            tokens.front() += *encodedValue;
+            auto node = tokens.extract(tokens.begin());
+            node.value() += *encodedValue;
+            tokens.insert(std::move(node));
             collectResult.StopCollecting();
         }
     }

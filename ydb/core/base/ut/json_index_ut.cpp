@@ -9,7 +9,7 @@ using namespace NYql::NJsonPath;
 
 namespace {
 
-TVector<TString> ParseAndCollect(const TString& jsonPath, ECallableType callableType = ECallableType::JsonExists,
+std::set<TString> ParseAndCollect(const TString& jsonPath, ECallableType callableType = ECallableType::JsonExists,
     std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
 {
     NYql::TIssues issues;
@@ -43,10 +43,18 @@ void ValidateError(const TString& jsonPath, const TString& errorMessage, ECallab
     }
 }
 
-void ValidateQueries(const TString& jsonPath, const TVector<TString>& expectedQueries, ECallableType callableType = ECallableType::JsonExists,
+void ValidateQueries(const TString& jsonPath, TVector<TString> expectedQueries, ECallableType callableType = ECallableType::JsonExists,
     std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
 {
-    UNIT_ASSERT_VALUES_EQUAL_C(ParseAndCollect(jsonPath, callableType, tokensMode), expectedQueries, "for path = " << jsonPath);
+    auto result = ParseAndCollect(jsonPath, callableType, tokensMode);
+
+    TVector<TString> resultVector;
+    std::move(result.begin(), result.end(), std::back_inserter(resultVector));
+
+    std::sort(resultVector.begin(), resultVector.end());
+    std::sort(expectedQueries.begin(), expectedQueries.end());
+
+    UNIT_ASSERT_VALUES_EQUAL_C(resultVector, expectedQueries, "for path = " << jsonPath);
 }
 
 void ValidateJsonExists(const TString& jsonPath, const TVector<TString>& expectedQueries,
@@ -384,10 +392,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonExists("$.a.b + $.*", {"\1a\1b", ""});
 
         // Wildcard on both sides - two wildcard tokens collected
-        ValidateJsonExists("$.* + $.*", {"", ""});
+        ValidateJsonExists("$.* + $.*", {""});
         ValidateJsonExists("$.a.* + $.*", {"\1a", ""});
         ValidateJsonExists("$.* + $.a.*", {"", "\1a"});
-        ValidateJsonExists("$.a.b.*.c + $.a.b.*.d", {"\1a\1b", "\1a\1b"});
+        ValidateJsonExists("$.a.b.*.c + $.a.b.*.d", {"\1a\1b"});
 
         // Error on left - propagated immediately, right not collected
         ValidateError("$var + $.b", varError);
@@ -616,7 +624,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // Both operands are paths: merge index tokens with AND (same as comparison ops)
         ValidateJsonValue("$.a == $.b", {"\1a", "\1b"});
         ValidateJsonValue("$.key == $", {"\3key", ""});
-        ValidateJsonValue("$ == $", {"", ""});
+        ValidateJsonValue("$ == $", {""});
         ValidateJsonValue("$.a.b == $.c.d", {"\1a\1b", "\1c\1d"});
 
         // Literals only
@@ -811,7 +819,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         // Comparison in AND inside filter
         ValidateJsonExists("$.a ? (@.b < +10 && @.c == 1)", {"\1a\1b", "\1a\1c" + numSuffix(1)});
-        ValidateJsonExists("$.a ? (@.b > 0 && @.b < 100)", {"\1a\1b", "\1a\1b"});
+        ValidateJsonExists("$.a ? (@.b > 0 && @.b < 100)", {"\1a\1b"});
         ValidateJsonExists("$.a ? (@.b != 5 && @.c >= 0 && @.d <= -10)", {"\1a\1b", "\1a\1c", "\1a\1d"});
 
         // Comparison in OR inside filter

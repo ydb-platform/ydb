@@ -2231,7 +2231,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == 2' RETURNING Bool))", {"\2k1" + numSuffix(2)});
 
             // BETWEEN clause (replaces with JSON_VALUE >= 1 AND JSON_VALUE <= 10)
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) BETWEEN 1 AND 10)", {"\2k1", "\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) BETWEEN 1 AND 10)", {"\2k1"});
 
             // AND/OR combinations - numeric equality
             ValidateTokens(db,
@@ -2352,7 +2352,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
-    // CollectJsonIndexPredicate: without JSON_*, only JSON, JSON with non-JSON column, AND rules, OR rules, path parse, mixed support
     Y_UNIT_TEST(JsonCombinationsTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // No JSON_* in the filter - "no JSON_* functions found"
@@ -2666,6 +2665,280 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND Data = "d1"u)");
         });
     }
-}
 
+    Y_UNIT_TEST(JsonErrorsTokens) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            /*
+                J - indexable predicate (let J = JSON_EXISTS(Text, '$.k1'))
+                P - non-indexable predicate (let P = Data = "d1"u)
+                PJ - non-indexable predicate with JSON_* (let PJ = JSON_EXISTS(Text, '$.k1' TRUE ON ERROR)))
+            */
+
+            // J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            // P -> ERROR
+            ValidateError(db, R"((Data = "d1"u))");
+            // PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+
+            // AND rule: at least one of the sides must be indexable
+            // OR rule: all sides must be indexable
+
+            // J AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            // J AND P -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\2k1"}, "and");
+            // P AND J -> OK
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            // J AND PJ -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            // PJ AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            // P AND P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u))");
+            // P AND PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
+            // PJ AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+
+            // J OR J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            // J OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
+            // P OR J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1'))");
+            // J OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1'))");
+            // P OR P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR (Data = "d1"u))");
+            // P OR PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
+            // PJ OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+
+            // J AND J AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "and");
+            // J AND J AND P -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND (Data = "d1"u))", {"\2k1", "\2k2"}, "and");
+            // J AND J AND PJ -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1", "\2k2"}, "and");
+            // J AND P AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            // J AND P AND P -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND (Data = "d1"u))", {"\2k1"}, "and");
+            // J AND P AND PJ -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            // J AND PJ AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            // J AND PJ AND P -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))", {"\2k1"}, "and");
+            // J AND PJ AND PJ -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            // P AND J AND J -> OK
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            // P AND J AND P -> OK
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\2k1"}, "and");
+            // P AND J AND PJ -> OK
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            // P AND P AND J -> OK
+            ValidateTokens(db, R"((Data = "d1"u) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            // P AND P AND P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u) AND (Data = "d1"u))");
+            // P AND P AND PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P AND PJ AND J -> OK
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            // P AND PJ AND P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
+            // P AND PJ AND PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ AND J AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            // PJ AND J AND P -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\2k1"}, "and");
+            // PJ AND J AND PJ -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            // PJ AND P AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            // PJ AND P AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) AND (Data = "d1"u))");
+            // PJ AND P AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ AND PJ AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            // PJ AND PJ AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
+            // PJ AND PJ AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J AND J OR J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "or");
+            // J AND J OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR (Data = "d1"u))");
+            // J AND J OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J AND P OR J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            // J AND P OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) OR (Data = "d1"u))");
+            // J AND P OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J AND PJ OR J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            // J AND PJ OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
+            // J AND PJ OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P AND J OR J -> OK
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            // P AND J OR P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
+            // P AND J OR PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P AND P OR J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1'))");
+            // P AND P OR P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u) OR (Data = "d1"u))");
+            // P AND P OR PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P AND PJ OR J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1'))");
+            // P AND PJ OR P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
+            // P AND PJ OR PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ AND J OR J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            // PJ AND J OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
+            // PJ AND J OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ AND P OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1'))");
+            // PJ AND P OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) OR (Data = "d1"u))");
+            // PJ AND P OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ AND PJ OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1'))");
+            // PJ AND PJ OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
+            // PJ AND PJ OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J OR J AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "or");
+            // J OR J AND P -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND (Data = "d1"u))", {"\2k1", "\2k2"}, "or");
+            // J OR J AND PJ -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1", "\2k2"}, "or");
+            // J OR P AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            // J OR P AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) AND (Data = "d1"u))");
+            // J OR P AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J OR PJ AND J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            // J OR PJ AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
+            // J OR PJ AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P OR J AND J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
+            // P OR J AND P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))");
+            // P OR J AND PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P OR P AND J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))");
+            // P OR P AND P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR (Data = "d1"u) AND (Data = "d1"u))");
+            // P OR P AND PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P OR PJ AND J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))");
+            // P OR PJ AND P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
+            // P OR PJ AND PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR J AND J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
+            // PJ OR J AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))");
+            // PJ OR J AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR P AND J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))");
+            // PJ OR P AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u) AND (Data = "d1"u))");
+            // PJ OR P AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR PJ AND J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))");
+            // PJ OR PJ AND P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
+            // PJ OR PJ AND PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J OR J OR J -> OK
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "or");
+            // J OR J OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR (Data = "d1"u))");
+            // J OR J OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J OR P OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) OR JSON_EXISTS(Text, '$.k2'))");
+            // J OR P OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) OR (Data = "d1"u))");
+            // J OR P OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // J OR PJ OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k2'))");
+            // J OR PJ OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
+            // J OR PJ OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P OR J OR J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
+            // P OR J OR P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
+            // P OR J OR PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P OR P OR J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1'))");
+            // P OR P OR P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR (Data = "d1"u) OR (Data = "d1"u))");
+            // P OR P OR PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // P OR PJ OR J -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1'))");
+            // P OR PJ OR P -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
+            // P OR PJ OR PJ -> ERROR
+            ValidateError(db, R"((Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR J OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
+            // PJ OR J OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
+            // PJ OR J OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR P OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1'))");
+            // PJ OR P OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u) OR (Data = "d1"u))");
+            // PJ OR P OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            // PJ OR PJ OR J -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1'))");
+            // PJ OR PJ OR P -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
+            // PJ OR PJ OR PJ -> ERROR
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+        });
+    }
+}
 }  // namespace NKikimr::NKqp

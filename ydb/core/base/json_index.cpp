@@ -102,8 +102,7 @@ TCollectResult MergeBooleanOperands(TCollectResult left, TCollectResult right,
         }
     }
 
-    leftTokens.reserve(leftTokens.size() + rightTokens.size());
-    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    leftTokens.insert(rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : combinedMode);
     }
@@ -129,8 +128,7 @@ TCollectResult MergeComparisonPathResults(TCollectResult left, TCollectResult ri
         }
     }
 
-    leftTokens.reserve(leftTokens.size() + rightTokens.size());
-    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    leftTokens.insert(rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
     }
@@ -314,8 +312,10 @@ TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mo
         return result;
     }
 
-    auto& token = result.GetTokens().front();
-    AppendKey(token, item.GetString());
+    auto& tokens = result.GetTokens();
+    auto node = tokens.extract(tokens.begin());
+    AppendKey(node.value(), item.GetString());
+    tokens.insert(std::move(node));
     return result;
 }
 
@@ -379,8 +379,7 @@ TCollectResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EM
         }
     }
 
-    leftTokens.reserve(leftTokens.size() + rightTokens.size());
-    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    leftTokens.insert(rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         leftCollectResult.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
     }
@@ -471,7 +470,7 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
         return inputCollectResult;
     }
 
-    FilterObjectPrefixes.push_back(tokens.front());
+    FilterObjectPrefixes.push_back(*tokens.begin());
     const auto& predicateItem = Reader.ReadFilterPredicate(item);
     auto predicateResult = Collect(predicateItem, EMode::Filter);
     FilterObjectPrefixes.pop_back();
@@ -517,7 +516,9 @@ TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftIt
     auto& pathTokens = pathResult.GetTokens();
     auto& literalTokens = literalResult.GetTokens();
     if (pathResult.CanCollect() && literalTokens.size() == 1) {
-        pathTokens.front() += literalTokens.front();
+        auto node = pathTokens.extract(pathTokens.begin());
+        node.value() += *literalTokens.begin();
+        pathTokens.insert(std::move(node));
     }
 
     pathResult.StopCollecting();
@@ -655,9 +656,10 @@ TCollectResult::TCollectResult(TTokens&& tokens)
 {
 }
 
-TCollectResult::TCollectResult(TString&& token)
-    : Result(TTokens{std::move(token)})
-{
+TCollectResult::TCollectResult(TString&& token) {
+    TTokens tokens;
+    tokens.insert(std::move(token));
+    Result = std::move(tokens);
 }
 
 TCollectResult::TCollectResult(TCollectResult::TError&& issue)

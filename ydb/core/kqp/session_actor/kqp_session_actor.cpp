@@ -579,6 +579,7 @@ public:
         auto classifier = QueryState->QueryClassifier;
 
         if (!classifier) {
+            QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
             return false;
         }
 

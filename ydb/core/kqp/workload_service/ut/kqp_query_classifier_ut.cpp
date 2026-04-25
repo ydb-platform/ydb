@@ -13,7 +13,8 @@ namespace {
 class TestQueryClassifier : public IWmQueryClassifier {
 public:
     TestQueryClassifier(TPreClassifyResult preClassifyResult, TPostClassifyResult postClassifyResult)
-        : PreClassifyResult(preClassifyResult)
+        : PostCompileCalled(false)
+        , PreClassifyResult(preClassifyResult)
         , PostClassifyResult(postClassifyResult)
     {}
     

@@ -103,7 +103,4 @@ using TPoolInfoSnapshotPtr = std::shared_ptr<const TPoolInfoSnapshot>;
 std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
                                                             TClassifierSnapshotPtr classifierSnapshot,
                                                             TClassifyContext context);
-
-std::shared_ptr<IWmQueryClassifier> CreateWmBypassClassifier();
-
 } // namespace NKikimr::NKqp

@@ -770,9 +770,7 @@ public:
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
 
-        if (!TryFillPoolInfoFromCache(ev, sessionInfo, requestId)) {
-            return;
-        }
+        TryFillPoolInfoFromCache(ev, sessionInfo, requestId);
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1582,15 +1580,14 @@ private:
         }
     }
 
-    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
+    void TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
         const auto& databaseId = ev->Get()->GetDatabaseId();
 
         if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
             || ev->Get()->IsInternalCall()
             || ev->Get()->GetIsWarmupCompilation()) {
-            ev->Get()->SetWmQueryClassifier(CreateWmBypassClassifier());
-            return true;
+            return;
         }
 
         auto poolId = ev->Get()->GetPoolId();
@@ -1611,7 +1608,6 @@ private:
         );
 
         ev->Get()->SetWmQueryClassifier(classifier);
-        return true;
     }
 
     void UpdateYqlLogLevels() {

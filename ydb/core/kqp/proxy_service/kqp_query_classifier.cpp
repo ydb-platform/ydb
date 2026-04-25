@@ -233,48 +233,10 @@ private:
     mutable std::unordered_map<TString, bool> MemberNameCache;
 };
 
-class TFixedWmQueryClassifier : public IWmQueryClassifier {
-public:
-    TFixedWmQueryClassifier(TPreClassifyResult preResult, TPostClassifyResult postResult)
-        : PreResult(std::move(preResult))
-        , PostResult(std::move(postResult))
-        , PostCompileCalled(false)
-    {}
-
-    [[nodiscard]]
-    TPreClassifyResult PreCompileClassify() override {
-        return PreResult;
-    }
-
-    [[nodiscard]]
-    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder&) override {
-        PostCompileCalled = true;
-        return PostResult;
-    }
-
-    [[nodiscard]]
-    EState GetState() const override {
-        if (std::holds_alternative<TPendingCompilation>(PreResult)) {
-            return !PostCompileCalled ? EState::WaitCompile : EState::PostCompileDone;
-        }
-
-        return EState::PreCompileDone;
-    }
-
-private:
-    const TPreClassifyResult PreResult;
-    const TPostClassifyResult PostResult;
-    bool PostCompileCalled;
-};
-
 std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
                                                             TClassifierSnapshotPtr classifierSnapshot,
                                                             TClassifyContext context) {
     return std::make_shared<TWmQueryClassifier>(std::move(poolInfoSnapshot), std::move(classifierSnapshot), std::move(context));
-}
-
-std::shared_ptr<IWmQueryClassifier> CreateWmBypassClassifier() {
-    return std::make_shared<TFixedWmQueryClassifier>(IWmQueryClassifier::TBypass{}, IWmQueryClassifier::TBypass{});
 }
 
 } // namespace NKikimr::NKqp

@@ -1,0 +1,668 @@
+{
+    "call_center": {
+        "ClusterType": "s3",
+        "path": "ds/1/call_center/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                 ["cc_call_center_id", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_call_center_sk", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_city", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_class", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_closed_date_sk", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_company", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_company_name", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_country", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_county", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_division", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_division_name", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_employees", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_gmt_offset", ["OptionalType", ["DataType", "Double"]]],
+                 ["cc_hours", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_manager", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_market_manager", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_mkt_class", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_mkt_desc", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_mkt_id", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_name", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_open_date_sk", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_rec_end_date", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_rec_start_date", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_sq_ft", ["OptionalType", ["DataType", "Int32"]]],
+                 ["cc_state", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_street_name", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_street_number", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_street_type", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_suite_number", ["OptionalType", ["DataType", "String"]]],
+                 ["cc_tax_percentage", ["OptionalType", ["DataType", "Double"]]],
+                 ["cc_zip", ["OptionalType", ["DataType", "String"]]]
+            ]
+        ]
+    },
+    "catalog_page": {
+        "ClusterType": "s3",
+        "path": "ds/1/catalog_page/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["cp_catalog_number", ["OptionalType", ["DataType", "Int32"]]],
+                ["cp_catalog_page_id", ["OptionalType", ["DataType", "String"]]],
+                ["cp_catalog_page_number", ["OptionalType", ["DataType", "Int32"]]],
+                ["cp_catalog_page_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cp_department", ["OptionalType", ["DataType", "String"]]],
+                ["cp_description", ["OptionalType", ["DataType", "String"]]],
+                ["cp_end_date_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cp_start_date_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cp_type", ["OptionalType", ["DataType", "String"]]]
+            ]
+        ]
+    },
+    "catalog_returns": {
+        "ClusterType": "s3",
+        "path": "ds/1/catalog_returns/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["cr_call_center_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_catalog_page_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_fee", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_item_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_net_loss", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_order_number", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_reason_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_refunded_addr_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_refunded_cash", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_refunded_cdemo_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_refunded_customer_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_refunded_hdemo_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_return_amount", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_return_amt_inc_tax", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_return_quantity", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_return_ship_cost", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_return_tax", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_returned_date_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_returned_time_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_returning_addr_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_returning_cdemo_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_returning_customer_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_returning_hdemo_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_reversed_charge", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_ship_mode_sk", ["OptionalType", ["DataType", "Int32"]]],
+                ["cr_store_credit", ["OptionalType", ["DataType", "Double"]]],
+                ["cr_warehouse_sk", ["OptionalType", ["DataType", "Int32"]]]
+            ]
+        ]
+    },
+    "catalog_sales": {
+        "ClusterType": "s3",
+        "path": "ds/1/catalog_sales/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["cs_bill_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_bill_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_bill_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_bill_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_call_center_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_catalog_page_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_coupon_amt",["OptionalType",["DataType","Double"]]],
+                ["cs_ext_discount_amt",["OptionalType",["DataType","Double"]]],
+                ["cs_ext_list_price",["OptionalType",["DataType","Double"]]],
+                ["cs_ext_sales_price",["OptionalType",["DataType","Double"]]],
+                ["cs_ext_ship_cost",["OptionalType",["DataType","Double"]]],
+                ["cs_ext_tax",["OptionalType",["DataType","Double"]]],
+                ["cs_ext_wholesale_cost",["OptionalType",["DataType","Double"]]],
+                ["cs_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_list_price",["OptionalType",["DataType","Double"]]],
+                ["cs_net_paid",["OptionalType",["DataType","Double"]]],
+                ["cs_net_paid_inc_ship",["OptionalType",["DataType","Double"]]],
+                ["cs_net_paid_inc_ship_tax",["OptionalType",["DataType","Double"]]],
+                ["cs_net_paid_inc_tax",["OptionalType",["DataType","Double"]]],
+                ["cs_net_profit",["OptionalType",["DataType","Double"]]],
+                ["cs_order_number",["OptionalType",["DataType","Int32"]]],
+                ["cs_promo_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_quantity",["OptionalType",["DataType","Int32"]]],
+                ["cs_sales_price",["OptionalType",["DataType","Double"]]],
+                ["cs_ship_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_ship_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_ship_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_ship_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_ship_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_ship_mode_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_sold_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_sold_time_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_warehouse_sk",["OptionalType",["DataType","Int32"]]],
+                ["cs_wholesale_cost",["OptionalType",["DataType","Double"]]]
+            ]
+        ]
+    },
+    "customer": {
+        "ClusterType": "s3",
+        "path": "ds/1/customer/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["c_birth_country",["OptionalType",["DataType","String"]]],
+                ["c_birth_day",["OptionalType",["DataType","Int32"]]],
+                ["c_birth_month",["OptionalType",["DataType","Int32"]]],
+                ["c_birth_year",["OptionalType",["DataType","Int32"]]],
+                ["c_current_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["c_current_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["c_current_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["c_customer_id",["OptionalType",["DataType","String"]]],
+                ["c_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["c_email_address",["OptionalType",["DataType","String"]]],
+                ["c_first_name",["OptionalType",["DataType","String"]]],
+                ["c_first_sales_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["c_first_shipto_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["c_last_name",["OptionalType",["DataType","String"]]],
+                ["c_last_review_date",["OptionalType",["DataType","String"]]],
+                ["c_login",["OptionalType",["DataType","String"]]],
+                ["c_preferred_cust_flag",["OptionalType",["DataType","String"]]],
+                ["c_salutation",["OptionalType",["DataType","String"]]]            
+            ]
+        ]
+    },
+    "customer_address": {
+        "ClusterType": "s3",
+        "path": "ds/1/customer_address/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["ca_address_id",["OptionalType",["DataType","String"]]],
+                ["ca_address_sk",["OptionalType",["DataType","Int32"]]],
+                ["ca_city",["OptionalType",["DataType","String"]]],
+                ["ca_country",["OptionalType",["DataType","String"]]],
+                ["ca_county",["OptionalType",["DataType","String"]]],
+                ["ca_gmt_offset",["OptionalType",["DataType","Double"]]],
+                ["ca_location_type",["OptionalType",["DataType","String"]]],
+                ["ca_state",["OptionalType",["DataType","String"]]],
+                ["ca_street_name",["OptionalType",["DataType","String"]]],
+                ["ca_street_number",["OptionalType",["DataType","String"]]],
+                ["ca_street_type",["OptionalType",["DataType","String"]]],
+                ["ca_suite_number",["OptionalType",["DataType","String"]]],
+                ["ca_zip",["OptionalType",["DataType","String"]]]
+            ]
+        ]
+    },
+    "customer_demographics": {
+        "ClusterType": "s3",
+        "path": "ds/1/customer_demographics/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["cd_credit_rating",["OptionalType",["DataType","String"]]],
+                ["cd_demo_sk",["OptionalType",["DataType","Int32"]]],
+                ["cd_dep_college_count",["OptionalType",["DataType","Int32"]]],
+                ["cd_dep_count",["OptionalType",["DataType","Int32"]]],
+                ["cd_dep_employed_count",["OptionalType",["DataType","Int32"]]],
+                ["cd_education_status",["OptionalType",["DataType","String"]]],
+                ["cd_gender",["OptionalType",["DataType","String"]]],
+                ["cd_marital_status",["OptionalType",["DataType","String"]]],
+                ["cd_purchase_estimate",["OptionalType",["DataType","Int32"]]]
+            ]
+        ]
+    },
+    "date_dim": {
+        "ClusterType": "s3",
+        "path": "ds/1/date_dim/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["d_current_day",["OptionalType",["DataType","String"]]],
+                ["d_current_month",["OptionalType",["DataType","String"]]],
+                ["d_current_quarter",["OptionalType",["DataType","String"]]],
+                ["d_current_week",["OptionalType",["DataType","String"]]],
+                ["d_current_year",["OptionalType",["DataType","String"]]],
+                ["d_date",["OptionalType",["DataType","String"]]],
+                ["d_date_id",["OptionalType",["DataType","String"]]],
+                ["d_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["d_day_name",["OptionalType",["DataType","String"]]],
+                ["d_dom",["OptionalType",["DataType","Int32"]]],
+                ["d_dow",["OptionalType",["DataType","Int32"]]],
+                ["d_first_dom",["OptionalType",["DataType","Int32"]]],
+                ["d_following_holiday",["OptionalType",["DataType","String"]]],
+                ["d_fy_quarter_seq",["OptionalType",["DataType","Int32"]]],
+                ["d_fy_week_seq",["OptionalType",["DataType","Int32"]]],
+                ["d_fy_year",["OptionalType",["DataType","Int32"]]],
+                ["d_holiday",["OptionalType",["DataType","String"]]],
+                ["d_last_dom",["OptionalType",["DataType","Int32"]]],
+                ["d_month_seq",["OptionalType",["DataType","Int32"]]],
+                ["d_moy",["OptionalType",["DataType","Int32"]]],
+                ["d_qoy",["OptionalType",["DataType","Int32"]]],
+                ["d_quarter_name",["OptionalType",["DataType","String"]]],
+                ["d_quarter_seq",["OptionalType",["DataType","Int32"]]],
+                ["d_same_day_lq",["OptionalType",["DataType","Int32"]]],
+                ["d_same_day_ly",["OptionalType",["DataType","Int32"]]],
+                ["d_week_seq",["OptionalType",["DataType","Int32"]]],
+                ["d_weekend",["OptionalType",["DataType","String"]]],
+                ["d_year",["OptionalType",["DataType","Int32"]]]
+            ]
+        ]
+    },
+    "household_demographics": {
+        "ClusterType": "s3",
+        "path": "ds/1/household_demographics/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["hd_buy_potential",["OptionalType",["DataType","String"]]],
+                ["hd_demo_sk",["OptionalType",["DataType","Int32"]]],
+                ["hd_dep_count",["OptionalType",["DataType","Int32"]]],
+                ["hd_income_band_sk",["OptionalType",["DataType","Int32"]]],
+                ["hd_vehicle_count",["OptionalType",["DataType","Int32"]]]            
+            ]
+        ]
+    },
+    "income_band": {
+        "ClusterType": "s3",
+        "path": "ds/1/income_band/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["ib_income_band_sk",["OptionalType",["DataType","Int32"]]],
+                ["ib_lower_bound",["OptionalType",["DataType","Int32"]]],
+                ["ib_upper_bound",["OptionalType",["DataType","Int32"]]]                        
+            ]
+        ]
+    },
+    "inventory": {
+        "ClusterType": "s3",
+        "path": "ds/1/inventory/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["inv_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["inv_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["inv_quantity_on_hand",["OptionalType",["DataType","Int32"]]],
+                ["inv_warehouse_sk",["OptionalType",["DataType","Int32"]]]            
+            ]
+        ]
+    },
+    "item": {
+        "ClusterType": "s3",
+        "path": "ds/1/item/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["i_brand",["OptionalType",["DataType","String"]]],
+                ["i_brand_id",["OptionalType",["DataType","Int32"]]],
+                ["i_category",["OptionalType",["DataType","String"]]],
+                ["i_category_id",["OptionalType",["DataType","Int32"]]],
+                ["i_class",["OptionalType",["DataType","String"]]],
+                ["i_class_id",["OptionalType",["DataType","Int32"]]],
+                ["i_color",["OptionalType",["DataType","String"]]],
+                ["i_container",["OptionalType",["DataType","String"]]],
+                ["i_current_price",["OptionalType",["DataType","Double"]]],
+                ["i_formulation",["OptionalType",["DataType","String"]]],
+                ["i_item_desc",["OptionalType",["DataType","String"]]],
+                ["i_item_id",["OptionalType",["DataType","String"]]],
+                ["i_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["i_manager_id",["OptionalType",["DataType","Int32"]]],
+                ["i_manufact",["OptionalType",["DataType","String"]]],
+                ["i_manufact_id",["OptionalType",["DataType","Int32"]]],
+                ["i_product_name",["OptionalType",["DataType","String"]]],
+                ["i_rec_end_date",["OptionalType",["DataType","String"]]],
+                ["i_rec_start_date",["OptionalType",["DataType","String"]]],
+                ["i_size",["OptionalType",["DataType","String"]]],
+                ["i_units",["OptionalType",["DataType","String"]]],
+                ["i_wholesale_cost",["OptionalType",["DataType","Double"]]]            
+            ]
+        ]
+    },
+    "promotion": {
+        "ClusterType": "s3",
+        "path": "ds/1/promotion/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["p_channel_catalog",["OptionalType",["DataType","String"]]],
+                ["p_channel_demo",["OptionalType",["DataType","String"]]],
+                ["p_channel_details",["OptionalType",["DataType","String"]]],
+                ["p_channel_dmail",["OptionalType",["DataType","String"]]],
+                ["p_channel_email",["OptionalType",["DataType","String"]]],
+                ["p_channel_event",["OptionalType",["DataType","String"]]],
+                ["p_channel_press",["OptionalType",["DataType","String"]]],
+                ["p_channel_radio",["OptionalType",["DataType","String"]]],
+                ["p_channel_tv",["OptionalType",["DataType","String"]]],
+                ["p_cost",["OptionalType",["DataType","Double"]]],
+                ["p_discount_active",["OptionalType",["DataType","String"]]],
+                ["p_end_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["p_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["p_promo_id",["OptionalType",["DataType","String"]]],
+                ["p_promo_name",["OptionalType",["DataType","String"]]],
+                ["p_promo_sk",["OptionalType",["DataType","Int32"]]],
+                ["p_purpose",["OptionalType",["DataType","String"]]],
+                ["p_response_target",["OptionalType",["DataType","Int32"]]],
+                ["p_start_date_sk",["OptionalType",["DataType","Int32"]]]
+            ]
+        ]
+    },
+    "reason": {
+        "ClusterType": "s3",
+        "path": "ds/1/reason/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["r_reason_desc",["OptionalType",["DataType","String"]]],
+                ["r_reason_id",["OptionalType",["DataType","String"]]],
+                ["r_reason_sk",["OptionalType",["DataType","Int32"]]]            
+            ]
+        ]
+    },
+    "ship_mode": {
+        "ClusterType": "s3",
+        "path": "ds/1/ship_mode/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["sm_carrier",["OptionalType",["DataType","String"]]],
+                ["sm_code",["OptionalType",["DataType","String"]]],
+                ["sm_contract",["OptionalType",["DataType","String"]]],
+                ["sm_ship_mode_id",["OptionalType",["DataType","String"]]],
+                ["sm_ship_mode_sk",["OptionalType",["DataType","Int32"]]],
+                ["sm_type",["OptionalType",["DataType","String"]]]            
+            ]
+        ]
+    },
+    "store": {
+        "ClusterType": "s3",
+        "path": "ds/1/store/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["s_city",["OptionalType",["DataType","String"]]],
+                ["s_closed_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["s_company_id",["OptionalType",["DataType","Int32"]]],
+                ["s_company_name",["OptionalType",["DataType","String"]]],
+                ["s_country",["OptionalType",["DataType","String"]]],
+                ["s_county",["OptionalType",["DataType","String"]]],
+                ["s_division_id",["OptionalType",["DataType","Int32"]]],
+                ["s_division_name",["OptionalType",["DataType","String"]]],
+                ["s_floor_space",["OptionalType",["DataType","Int32"]]],
+                ["s_geography_class",["OptionalType",["DataType","String"]]],
+                ["s_gmt_offset",["OptionalType",["DataType","Double"]]],
+                ["s_hours",["OptionalType",["DataType","String"]]],
+                ["s_manager",["OptionalType",["DataType","String"]]],
+                ["s_market_desc",["OptionalType",["DataType","String"]]],
+                ["s_market_id",["OptionalType",["DataType","Int32"]]],
+                ["s_market_manager",["OptionalType",["DataType","String"]]],
+                ["s_number_employees",["OptionalType",["DataType","Int32"]]],
+                ["s_rec_end_date",["OptionalType",["DataType","String"]]],
+                ["s_rec_start_date",["OptionalType",["DataType","String"]]],
+                ["s_state",["OptionalType",["DataType","String"]]],
+                ["s_store_id",["OptionalType",["DataType","String"]]],
+                ["s_store_name",["OptionalType",["DataType","String"]]],
+                ["s_store_sk",["OptionalType",["DataType","Int32"]]],
+                ["s_street_name",["OptionalType",["DataType","String"]]],
+                ["s_street_number",["OptionalType",["DataType","String"]]],
+                ["s_street_type",["OptionalType",["DataType","String"]]],
+                ["s_suite_number",["OptionalType",["DataType","String"]]],
+                ["s_tax_precentage",["OptionalType",["DataType","Double"]]],
+                ["s_zip",["OptionalType",["DataType","String"]]]            
+            ]
+        ]
+    },
+    "store_returns": {
+        "ClusterType": "s3",
+        "path": "ds/1/store_returns/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["sr_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_fee",["OptionalType",["DataType","Double"]]],
+                ["sr_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_net_loss",["OptionalType",["DataType","Double"]]],
+                ["sr_reason_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_refunded_cash",["OptionalType",["DataType","Double"]]],
+                ["sr_return_amt",["OptionalType",["DataType","Double"]]],
+                ["sr_return_amt_inc_tax",["OptionalType",["DataType","Double"]]],
+                ["sr_return_quantity",["OptionalType",["DataType","Int32"]]],
+                ["sr_return_ship_cost",["OptionalType",["DataType","Double"]]],
+                ["sr_return_tax",["OptionalType",["DataType","Double"]]],
+                ["sr_return_time_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_returned_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_reversed_charge",["OptionalType",["DataType","Double"]]],
+                ["sr_store_credit",["OptionalType",["DataType","Double"]]],
+                ["sr_store_sk",["OptionalType",["DataType","Int32"]]],
+                ["sr_ticket_number",["OptionalType",["DataType","Int32"]]]            
+            ]
+        ]
+    },
+    "store_sales": {
+        "ClusterType": "s3",
+        "path": "ds/1/store_sales/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["ss_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_coupon_amt",["OptionalType",["DataType","Double"]]],
+                ["ss_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_ext_discount_amt",["OptionalType",["DataType","Double"]]],
+                ["ss_ext_list_price",["OptionalType",["DataType","Double"]]],
+                ["ss_ext_sales_price",["OptionalType",["DataType","Double"]]],
+                ["ss_ext_tax",["OptionalType",["DataType","Double"]]],
+                ["ss_ext_wholesale_cost",["OptionalType",["DataType","Double"]]],
+                ["ss_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_list_price",["OptionalType",["DataType","Double"]]],
+                ["ss_net_paid",["OptionalType",["DataType","Double"]]],
+                ["ss_net_paid_inc_tax",["OptionalType",["DataType","Double"]]],
+                ["ss_net_profit",["OptionalType",["DataType","Double"]]],
+                ["ss_promo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_quantity",["OptionalType",["DataType","Int32"]]],
+                ["ss_sales_price",["OptionalType",["DataType","Double"]]],
+                ["ss_sold_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_sold_time_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_store_sk",["OptionalType",["DataType","Int32"]]],
+                ["ss_ticket_number",["OptionalType",["DataType","Int32"]]],
+                ["ss_wholesale_cost",["OptionalType",["DataType","Double"]]]            
+            ]
+        ]
+    },
+    "time_dim": {
+        "ClusterType": "s3",
+        "path": "ds/1/time_dim/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["t_am_pm",["OptionalType",["DataType","String"]]],
+                ["t_hour",["OptionalType",["DataType","Int32"]]],
+                ["t_meal_time",["OptionalType",["DataType","String"]]],
+                ["t_minute",["OptionalType",["DataType","Int32"]]],
+                ["t_second",["OptionalType",["DataType","Int32"]]],
+                ["t_shift",["OptionalType",["DataType","String"]]],
+                ["t_sub_shift",["OptionalType",["DataType","String"]]],
+                ["t_time",["OptionalType",["DataType","Int32"]]],
+                ["t_time_id",["OptionalType",["DataType","String"]]],
+                ["t_time_sk",["OptionalType",["DataType","Int32"]]]            
+            ]
+        ]
+    },
+    "warehouse": {
+        "ClusterType": "s3",
+        "path": "ds/1/warehouse/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["w_city",["OptionalType",["DataType","String"]]],
+                ["w_country",["OptionalType",["DataType","String"]]],
+                ["w_county",["OptionalType",["DataType","String"]]],
+                ["w_gmt_offset",["OptionalType",["DataType","Double"]]],
+                ["w_state",["OptionalType",["DataType","String"]]],
+                ["w_street_name",["OptionalType",["DataType","String"]]],
+                ["w_street_number",["OptionalType",["DataType","String"]]],
+                ["w_street_type",["OptionalType",["DataType","String"]]],
+                ["w_suite_number",["OptionalType",["DataType","String"]]],
+                ["w_warehouse_id",["OptionalType",["DataType","String"]]],
+                ["w_warehouse_name",["OptionalType",["DataType","String"]]],
+                ["w_warehouse_sk",["OptionalType",["DataType","Int32"]]],
+                ["w_warehouse_sq_ft",["OptionalType",["DataType","Int32"]]],
+                ["w_zip",["OptionalType",["DataType","String"]]]            
+            ]
+        ]
+    },
+    "web_page": {
+        "ClusterType": "s3",
+        "path": "ds/1/web_page/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["wp_access_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["wp_autogen_flag",["OptionalType",["DataType","String"]]],
+                ["wp_char_count",["OptionalType",["DataType","Int32"]]],
+                ["wp_creation_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["wp_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["wp_image_count",["OptionalType",["DataType","Int32"]]],
+                ["wp_link_count",["OptionalType",["DataType","Int32"]]],
+                ["wp_max_ad_count",["OptionalType",["DataType","Int32"]]],
+                ["wp_rec_end_date",["OptionalType",["DataType","String"]]],
+                ["wp_rec_start_date",["OptionalType",["DataType","String"]]],
+                ["wp_type",["OptionalType",["DataType","String"]]],
+                ["wp_url",["OptionalType",["DataType","String"]]],
+                ["wp_web_page_id",["OptionalType",["DataType","String"]]],
+                ["wp_web_page_sk",["OptionalType",["DataType","Int32"]]]            
+            ]
+        ]
+    },
+    "web_returns": {
+        "ClusterType": "s3",
+        "path": "ds/1/web_returns/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["wr_account_credit",["OptionalType",["DataType","Double"]]],
+                ["wr_fee",["OptionalType",["DataType","Double"]]],
+                ["wr_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_net_loss",["OptionalType",["DataType","Double"]]],
+                ["wr_order_number",["OptionalType",["DataType","Int32"]]],
+                ["wr_reason_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_refunded_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_refunded_cash",["OptionalType",["DataType","Double"]]],
+                ["wr_refunded_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_refunded_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_refunded_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_return_amt",["OptionalType",["DataType","Double"]]],
+                ["wr_return_amt_inc_tax",["OptionalType",["DataType","Double"]]],
+                ["wr_return_quantity",["OptionalType",["DataType","Int32"]]],
+                ["wr_return_ship_cost",["OptionalType",["DataType","Double"]]],
+                ["wr_return_tax",["OptionalType",["DataType","Double"]]],
+                ["wr_returned_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_returned_time_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_returning_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_returning_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_returning_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_returning_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["wr_reversed_charge",["OptionalType",["DataType","Double"]]],
+                ["wr_web_page_sk",["OptionalType",["DataType","Int32"]]]            
+            ]
+        ]
+    },
+    "web_sales": {
+        "ClusterType": "s3",
+        "path": "ds/1/web_sales/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["ws_bill_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_bill_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_bill_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_bill_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_coupon_amt",["OptionalType",["DataType","Double"]]],
+                ["ws_ext_discount_amt",["OptionalType",["DataType","Double"]]],
+                ["ws_ext_list_price",["OptionalType",["DataType","Double"]]],
+                ["ws_ext_sales_price",["OptionalType",["DataType","Double"]]],
+                ["ws_ext_ship_cost",["OptionalType",["DataType","Double"]]],
+                ["ws_ext_tax",["OptionalType",["DataType","Double"]]],
+                ["ws_ext_wholesale_cost",["OptionalType",["DataType","Double"]]],
+                ["ws_item_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_list_price",["OptionalType",["DataType","Double"]]],
+                ["ws_net_paid",["OptionalType",["DataType","Double"]]],
+                ["ws_net_paid_inc_ship",["OptionalType",["DataType","Double"]]],
+                ["ws_net_paid_inc_ship_tax",["OptionalType",["DataType","Double"]]],
+                ["ws_net_paid_inc_tax",["OptionalType",["DataType","Double"]]],
+                ["ws_net_profit",["OptionalType",["DataType","Double"]]],
+                ["ws_order_number",["OptionalType",["DataType","Int32"]]],
+                ["ws_promo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_quantity",["OptionalType",["DataType","Int32"]]],
+                ["ws_sales_price",["OptionalType",["DataType","Double"]]],
+                ["ws_ship_addr_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_ship_cdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_ship_customer_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_ship_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_ship_hdemo_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_ship_mode_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_sold_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_sold_time_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_warehouse_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_web_page_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_web_site_sk",["OptionalType",["DataType","Int32"]]],
+                ["ws_wholesale_cost",["OptionalType",["DataType","Double"]]]            
+            ]
+        ]
+    },
+    "web_site": {
+        "ClusterType": "s3",
+        "path": "ds/1/web_site/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["web_city",["OptionalType",["DataType","String"]]],
+                ["web_class",["OptionalType",["DataType","String"]]],
+                ["web_close_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["web_company_id",["OptionalType",["DataType","Int32"]]],
+                ["web_company_name",["OptionalType",["DataType","String"]]],
+                ["web_country",["OptionalType",["DataType","String"]]],
+                ["web_county",["OptionalType",["DataType","String"]]],
+                ["web_gmt_offset",["OptionalType",["DataType","Double"]]],
+                ["web_manager",["OptionalType",["DataType","String"]]],
+                ["web_market_manager",["OptionalType",["DataType","String"]]],
+                ["web_mkt_class",["OptionalType",["DataType","String"]]],
+                ["web_mkt_desc",["OptionalType",["DataType","String"]]],
+                ["web_mkt_id",["OptionalType",["DataType","Int32"]]],
+                ["web_name",["OptionalType",["DataType","String"]]],
+                ["web_open_date_sk",["OptionalType",["DataType","Int32"]]],
+                ["web_rec_end_date",["OptionalType",["DataType","String"]]],
+                ["web_rec_start_date",["OptionalType",["DataType","String"]]],
+                ["web_site_id",["OptionalType",["DataType","String"]]],
+                ["web_site_sk",["OptionalType",["DataType","Int32"]]],
+                ["web_state",["OptionalType",["DataType","String"]]],
+                ["web_street_name",["OptionalType",["DataType","String"]]],
+                ["web_street_number",["OptionalType",["DataType","String"]]],
+                ["web_street_type",["OptionalType",["DataType","String"]]],
+                ["web_suite_number",["OptionalType",["DataType","String"]]],
+                ["web_tax_percentage",["OptionalType",["DataType","Double"]]],
+                ["web_zip",["OptionalType",["DataType","String"]]]            
+            ]
+        ]
+    }
+}
+

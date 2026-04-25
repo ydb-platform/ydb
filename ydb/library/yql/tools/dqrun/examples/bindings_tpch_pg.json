@@ -1,0 +1,144 @@
+{
+    "customer": {
+        "ClusterType": "s3",
+        "path": "h/1/customer/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["c_acctbal", ["PgType", "numeric"]],
+                ["c_address", ["PgType", "text"]],
+                ["c_comment", ["PgType", "text"]],
+                ["c_custkey", ["PgType", "int4"]],
+                ["c_mktsegment", ["PgType", "text"]],
+                ["c_name", ["PgType", "text"]],
+                ["c_nationkey", ["PgType", "int4"]],
+                ["c_phone", ["PgType", "text"]]
+            ]
+        ]
+    },
+    "lineitem": {
+        "ClusterType": "s3",
+        "path": "h/1/lineitem/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["l_comment", ["PgType", "text"]],
+                ["l_commitdate", ["PgType", "date"]],
+                ["l_discount", ["PgType", "numeric"]],
+                ["l_extendedprice", ["PgType", "numeric"]],
+                ["l_linenumber", ["PgType", "int4"]],
+                ["l_linestatus", ["PgType", "text"]], 
+                ["l_orderkey", ["PgType", "int4"]],
+                ["l_partkey", ["PgType", "int4"]],
+                ["l_quantity", ["PgType", "numeric"]],
+                ["l_receiptdate", ["PgType", "date"]],
+                ["l_returnflag", ["PgType", "text"]], 
+                ["l_shipdate", ["PgType", "date"]], 
+                ["l_shipinstruct", ["PgType", "text"]], 
+                ["l_shipmode", ["PgType", "text"]],
+                ["l_suppkey", ["PgType", "int4"]], 
+                ["l_tax", ["PgType", "numeric"]]
+            ]
+        ]
+    },
+    "nation": {
+        "ClusterType": "s3",
+        "path": "h/1/nation/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["n_comment", ["PgType", "text"]],
+                ["n_name", ["PgType", "text"]],
+                ["n_nationkey", ["PgType", "int4"]],
+                ["n_regionkey", ["PgType", "int4"]]
+            ]
+        ]
+    },
+    "orders": {
+        "ClusterType": "s3",
+        "path": "h/1/orders/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["o_clerk", ["PgType", "text"]],
+                ["o_comment", ["PgType", "text"]],
+                ["o_custkey", ["PgType", "int4"]],
+                ["o_orderdate", ["PgType", "date"]], 
+                ["o_orderkey", ["PgType", "int4"]],
+                ["o_orderpriority", ["PgType", "text"]], 
+                ["o_orderstatus", ["PgType", "text"]],
+                ["o_shippriority", ["PgType", "int4"]],
+                ["o_totalprice", ["PgType", "numeric"]]
+            ]
+        ]
+    },
+    "part": {
+        "ClusterType": "s3",
+        "path": "h/1/part/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["p_brand", ["PgType", "text"]],
+                ["p_comment", ["PgType", "text"]],
+                ["p_container", ["PgType", "text"]],
+                ["p_mfgr", ["PgType", "text"]], 
+                ["p_name", ["PgType", "text"]],
+                ["p_partkey", ["PgType", "int4"]],
+                ["p_retailprice", ["PgType", "numeric"]],
+                ["p_size", ["PgType", "int4"]], 
+                ["p_type", ["PgType", "text"]]
+            ]
+        ]
+    },
+    "partsupp": {
+        "ClusterType": "s3",
+        "path": "h/1/partsupp/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["ps_availqty", ["PgType", "int4"]],
+                ["ps_comment", ["PgType", "text"]],
+                ["ps_partkey", ["PgType", "int4"]], 
+                ["ps_suppkey", ["PgType", "int4"]],
+                ["ps_supplycost", ["PgType", "numeric"]]
+            ]
+        ]
+    },
+    "region": {
+        "ClusterType": "s3",
+        "path": "h/1/region/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["r_comment", ["PgType", "text"]],
+                ["r_name", ["PgType", "text"]],
+                ["r_regionkey", ["PgType", "int4"]]
+            ]
+        ]
+    },
+    "supplier": {
+        "ClusterType": "s3",
+        "path": "h/1/supplier/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "schema": [
+            "StructType", [
+                ["s_acctbal", ["PgType", "numeric"]],
+                ["s_address", ["PgType", "text"]],
+                ["s_comment", ["PgType", "text"]],
+                ["s_name", ["PgType", "text"]],
+                ["s_nationkey", ["PgType", "int4"]],
+                ["s_phone", ["PgType", "text"]],
+                ["s_suppkey", ["PgType", "int4"]]
+            ]
+        ]
+    }
+}
+

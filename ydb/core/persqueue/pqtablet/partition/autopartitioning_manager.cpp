@@ -60,7 +60,7 @@ public:
         Y_UNUSED(config);
     }
 
-    NPQ::TWriteStats GetWriteStats() override {
+    TAutopartitioningManagerSnapshot GetSnapshot() override {
         return {};
     }
 
@@ -102,7 +102,7 @@ public:
         auto key128 = NKikimr::NPQ::AsInt<TUint128>(key);
         auto now = TInstant::Now();
 
-        SumQuota->Update(delta, now);
+        SumMetric->Update(delta, now);
 
 #ifdef _win_
         NKikimr::NPQ::TUint128 sourceIdHash = decodedSourceId.size() > 0 ? (double)Hash(decodedSourceId) : 0.;
@@ -113,9 +113,9 @@ public:
             ? AsKeyBound(sourceIdHash)
             : "";
 
-        auto it = WrittenQuota.find(sourceIdHashStr);
-        if (it == WrittenQuota.end()) {
-            auto [i, _] = WrittenQuota.emplace(sourceIdHashStr, TSlidingWindow(TDuration::Minutes(1), 6));
+        auto it = PerSourceMetrics.find(sourceIdHashStr);
+        if (it == PerSourceMetrics.end()) {
+            auto [i, _] = PerSourceMetrics.emplace(sourceIdHashStr, TSlidingWindow(TDuration::Minutes(1), 6));
             it = i;
         }
 
@@ -134,7 +134,7 @@ public:
     }
 
     void CleanUp() override {
-        DoCleanUp(WrittenQuota);
+        DoCleanUp(PerSourceMetrics);
     }
 
     std::optional<TString> SplitBoundary() override {
@@ -144,7 +144,7 @@ public:
 
         CleanUp();
 
-        if (WrittenQuota.size() < 2) {
+        if (PerSourceMetrics.size() < 2) {
             return std::nullopt;
         }
 
@@ -172,7 +172,7 @@ public:
         }
 
         auto now = TInstant::Now();
-        const auto quotaSpeedUsagePercent = SumQuota->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / MaxQuotaPerSec;
+        const auto quotaSpeedUsagePercent = SumMetric->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / MaxQuotaPerSec;
         const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         const auto sourceIdCount = SourceIdCounter.Count(now - sourceIdWindow);
         auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
@@ -185,7 +185,7 @@ public:
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
         PQ_LOG_D("TPartition::CheckScaleStatus"
-            << " splitMergeAvgWriteBytes# " << SumQuota->GetValue()
+            << " splitMergeAvgWriteBytes# " << SumMetric->GetValue()
             << " quotaSpeedUsagePercent# " << quotaSpeedUsagePercent
             << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
             << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
@@ -209,22 +209,22 @@ public:
     }
 
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
-        if (config.GetPartitionStrategy().GetScaleThresholdSeconds() != SumQuota->GetDuration().Seconds()) {
+        if (config.GetPartitionStrategy().GetScaleThresholdSeconds() != SumMetric->GetDuration().Seconds()) {
             RecreateSumQuota();
         }
     }
 
-    NPQ::TWriteStats GetWriteStats() override {
+    TAutopartitioningManagerSnapshot GetSnapshot() override {
         return {
-            .WrittenBytes = GetWrittenBytes(),
-            .PartitioningKeysManagers = {
+            .PerSourceMetrics = GetSerializedMetrics(),
+            .KeysManagers = {
                 {Tag, KeysManager},
             },
         };
     }
 
     void RecreateSumQuota() {
-        SumQuota.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
+        SumMetric.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
     }
 
     void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) override {
@@ -253,11 +253,11 @@ private:
         return true;
     }
 
-    std::vector<std::pair<TString, ui64>> GetWrittenBytes() {
+    std::vector<std::pair<TString, ui64>> GetSerializedMetrics() {
         auto  now = TInstant::Now();
         std::vector<std::pair<TString, ui64>> result;
 
-        for (auto& [sourceIdHash, counter] : WrittenQuota) {
+        for (auto& [sourceIdHash, counter] : PerSourceMetrics) {
             counter.Update(now);
             if (counter.GetValue() > 0) {
                 result.emplace_back(sourceIdHash, counter.GetValue());
@@ -269,8 +269,8 @@ private:
     
     std::string GetSplitBoundaryBasedOnSourceIds() {
         std::vector<std::pair<TString, ui64>> sorted;
-        sorted.reserve(WrittenQuota.size());
-        for (const auto& [sourceIdHash, counter] : WrittenQuota) {
+        sorted.reserve(PerSourceMetrics.size());
+        for (const auto& [sourceIdHash, counter] : PerSourceMetrics) {
             sorted.emplace_back(sourceIdHash, counter.GetValue());
         }
 
@@ -339,9 +339,9 @@ private:
     const ui32 PartitionId;
     std::optional<NKikimrPQ::TPartitionKeyRange> KeyRange;
 
-    TMaybe<TSlidingWindow> SumQuota;
+    TMaybe<TSlidingWindow> SumMetric;
     // SourceIdHash -> SlidingWindow
-    std::unordered_map<TString, TSlidingWindow> WrittenQuota;
+    std::unordered_map<TString, TSlidingWindow> PerSourceMetrics;
     NPQ::TPartitioningKeysManager KeysManager;
     TLastCounter<TString> SourceIdCounter;
     TInstant LastCleanUp;
@@ -349,135 +349,132 @@ private:
 };
 
 class TStatefulAutopartitioningManager : public IAutopartitioningManager {
-    private:
-        static constexpr auto TAG_BYTES = "bytes";
-        static constexpr auto TAG_REQUESTS = "requests";
+private:
+    static constexpr auto TAG_BYTES = "bytes";
+    static constexpr auto TAG_REQUESTS = "requests";
 
-        enum class EState : ui8 {
-            NORMAL = 0,
-            SPLIT_BY_RPS = 1,
-            SPLIT_BY_BYTES = 2,
-            ANY_SPLIT = SPLIT_BY_RPS | SPLIT_BY_BYTES,
+    enum class EState : ui8 {
+        NORMAL = 0,
+        SPLIT_BY_RPS = 1,
+        SPLIT_BY_BYTES = 2,
+        ANY_SPLIT = SPLIT_BY_RPS | SPLIT_BY_BYTES,
+    };
+
+    void MoveTo(EState state) {
+        using TStateBits = std::underlying_type_t<EState>;
+        State = static_cast<EState>(static_cast<TStateBits>(State) | static_cast<TStateBits>(state));
+    }
+
+    void MoveFrom(EState state) {
+        using TStateBits = std::underlying_type_t<EState>;
+        if (IsInState(state)) {
+            State = static_cast<EState>(static_cast<TStateBits>(State) ^ static_cast<TStateBits>(state));
+        }
+    }
+
+    bool IsInState(EState state) {
+        using TStateBits = std::underlying_type_t<EState>;
+        return static_cast<TStateBits>(State) & static_cast<TStateBits>(state);
+    }
+
+    IAutopartitioningManager& GetAutopartitioningManager(const TString& tag) {
+        return *AutopartitioningManagers.at(tag);
+    }
+
+public:
+    TStatefulAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId) {
+        AutopartitioningManagers.emplace(
+            TAG_BYTES,
+            std::make_unique<TWindowedAutopartitioningManager>(
+                config,
+                partitionId,
+                config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
+                TAG_BYTES));
+        AutopartitioningManagers.emplace(
+            TAG_REQUESTS,
+            std::make_unique<TWindowedAutopartitioningManager>(
+                config,
+                partitionId,
+                config.GetPartitionConfig().GetWriteSpeedInRequestsPerSecond(),
+                TAG_REQUESTS));
+    }
+
+    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
+        for (auto& [tag, autopartitioningManager] : AutopartitioningManagers) {
+            autopartitioningManager->OnWrite(sourceId, size, key);
+        }
+    }
+
+    void CleanUp() override {
+        for (auto& [tag, autopartitioningManager] : AutopartitioningManagers) {
+            autopartitioningManager->CleanUp();
+        }
+    }
+
+    NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) override {
+        auto scaleStatusRps = GetAutopartitioningManager(TAG_REQUESTS).GetScaleStatus(currentState);
+        if (scaleStatusRps == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
+            MoveTo(EState::SPLIT_BY_RPS);
+        } else {
+            MoveFrom(EState::SPLIT_BY_RPS);
+        }
+
+        auto scaleStatusBytes = GetAutopartitioningManager(TAG_BYTES).GetScaleStatus(currentState);
+        if (scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
+            MoveTo(EState::SPLIT_BY_BYTES);
+        } else {
+            MoveFrom(EState::SPLIT_BY_BYTES);
+        }
+
+        return (scaleStatusRps == NKikimrPQ::EScaleStatus::NEED_SPLIT || scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_SPLIT) ?
+            NKikimrPQ::EScaleStatus::NEED_SPLIT :
+            NKikimrPQ::EScaleStatus::NORMAL;
+    }
+
+    std::optional<TString> SplitBoundary() override {
+        if (State == EState::NORMAL) {
+            return std::nullopt;
+        }
+
+        using TStateBits = std::underlying_type_t<EState>;
+        if ((static_cast<TStateBits>(State) & static_cast<TStateBits>(EState::SPLIT_BY_RPS)) != 0) {
+            return GetAutopartitioningManager(TAG_REQUESTS).SplitBoundary();
+        }
+
+        return GetAutopartitioningManager(TAG_BYTES).SplitBoundary();
+    }
+
+    TAutopartitioningManagerSnapshot GetSnapshot() override {
+        auto bytesAutopartitioningManagerSnapshot = GetAutopartitioningManager(TAG_BYTES).GetSnapshot();
+        auto requestsAutopartitioningManagerSnapshot = GetAutopartitioningManager(TAG_REQUESTS).GetSnapshot();
+
+        bytesAutopartitioningManagerSnapshot.KeysManagers.merge(
+            requestsAutopartitioningManagerSnapshot.KeysManagers);
+
+        return {
+            .PerSourceMetrics = std::move(bytesAutopartitioningManagerSnapshot.PerSourceMetrics),
+            .KeysManagers = std::move(bytesAutopartitioningManagerSnapshot.KeysManagers),
         };
+    }
 
-        void MoveTo(EState state) {
-            using TStateBits = std::underlying_type_t<EState>;
-            State = static_cast<EState>(static_cast<TStateBits>(State) | static_cast<TStateBits>(state));
+    void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) override {
+        auto it = AutopartitioningManagers.find(tag);
+        if (it == AutopartitioningManagers.end()) {
+            return;
         }
 
-        void MoveFrom(EState state) {
-            using TStateBits = std::underlying_type_t<EState>;
-            if (IsInState(state)) {
-                State = static_cast<EState>(static_cast<TStateBits>(State) ^ static_cast<TStateBits>(state));
-            }
+        it->second->AddKeysStats(tag, keysManager);
+    }
+
+    void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
+        for (auto& [_, autopartitioningManager] : AutopartitioningManagers) {
+            autopartitioningManager->UpdateConfig(config);
         }
+    }
 
-        bool IsInState(EState state) {
-            using TStateBits = std::underlying_type_t<EState>;
-            return static_cast<TStateBits>(State) & static_cast<TStateBits>(state);
-        }
-
-        IAutopartitioningManager& GetAutopartitioningManager(const TString& tag) {
-            return *AutopartitioningManagers.at(tag);
-        }
-
-    public:
-        TStatefulAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId)
-            : AutopartitioningManagers()
-        {
-            AutopartitioningManagers.emplace(
-                TAG_BYTES,
-                std::make_unique<TWindowedAutopartitioningManager>(
-                    config,
-                    partitionId,
-                    config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
-                    TAG_BYTES));
-            AutopartitioningManagers.emplace(
-                TAG_REQUESTS,
-                std::make_unique<TWindowedAutopartitioningManager>(
-                    config,
-                    partitionId,
-                    config.GetPartitionConfig().GetWriteSpeedInRequestsPerSecond(),
-                    TAG_REQUESTS));
-        }
-
-        void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
-            for (auto& [tag, autopartitioningManager] : AutopartitioningManagers) {
-                autopartitioningManager->OnWrite(sourceId, size, key);
-            }
-        }
-
-        void CleanUp() override {
-            for (auto& [tag, autopartitioningManager] : AutopartitioningManagers) {
-                autopartitioningManager->CleanUp();
-            }
-        }
-
-        NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) override {
-            auto scaleStatusRps = GetAutopartitioningManager(TAG_REQUESTS).GetScaleStatus(currentState);
-            if (scaleStatusRps == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-                MoveTo(EState::SPLIT_BY_RPS);
-            } else {
-                MoveFrom(EState::SPLIT_BY_RPS);
-            }
-
-            auto scaleStatusBytes = GetAutopartitioningManager(TAG_BYTES).GetScaleStatus(currentState);
-            if (scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-                MoveTo(EState::SPLIT_BY_BYTES);
-            } else {
-                MoveFrom(EState::SPLIT_BY_BYTES);
-            }
-
-            return (scaleStatusRps == NKikimrPQ::EScaleStatus::NEED_SPLIT || scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_SPLIT) ?
-                NKikimrPQ::EScaleStatus::NEED_SPLIT :
-                NKikimrPQ::EScaleStatus::NORMAL;
-        }
-
-        std::optional<TString> SplitBoundary() override {
-            if (State == EState::NORMAL) {
-                return std::nullopt;
-            }
-
-            using TStateBits = std::underlying_type_t<EState>;
-            if ((static_cast<TStateBits>(State) & static_cast<TStateBits>(EState::SPLIT_BY_RPS)) != 0) {
-                return GetAutopartitioningManager(TAG_REQUESTS).SplitBoundary();
-            }
-
-            return GetAutopartitioningManager(TAG_BYTES).SplitBoundary();
-        }
-
-        NPQ::TWriteStats GetWriteStats() override {
-            auto bytesStats = GetAutopartitioningManager(TAG_BYTES).GetWriteStats();
-            auto requestsStats = GetAutopartitioningManager(TAG_REQUESTS).GetWriteStats();
-            
-            bytesStats.PartitioningKeysManagers.insert(
-                requestsStats.PartitioningKeysManagers.begin(),
-                requestsStats.PartitioningKeysManagers.end());
-
-            return {
-                .WrittenBytes = std::move(bytesStats.WrittenBytes),
-                .PartitioningKeysManagers = std::move(bytesStats.PartitioningKeysManagers),
-            };
-        }
-
-        void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) override {
-            auto it = AutopartitioningManagers.find(tag);
-            if (it == AutopartitioningManagers.end()) {
-                return;
-            }
-
-            it->second->AddKeysStats(tag, keysManager);
-        }
-
-        void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
-            for (auto& [_, autopartitioningManager] : AutopartitioningManagers) {
-                autopartitioningManager->UpdateConfig(config);
-            }
-        }
-    
-    private:
-        std::unordered_map<TString, std::unique_ptr<IAutopartitioningManager>> AutopartitioningManagers;
-        EState State = EState::NORMAL;
+private:
+    std::unordered_map<TString, std::unique_ptr<IAutopartitioningManager>> AutopartitioningManagers;
+    EState State = EState::NORMAL;
 };
 
 class TSupportiveAutopartitioningManager : public IAutopartitioningManager {
@@ -505,7 +502,7 @@ public:
         AutopartitioningManager.UpdateConfig(config);
     }
 
-    NPQ::TWriteStats GetWriteStats() override {
+    TAutopartitioningManagerSnapshot GetSnapshot() override {
         return {};
     }
 

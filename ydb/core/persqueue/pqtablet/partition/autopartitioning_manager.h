@@ -18,6 +18,11 @@ class TPartitionId;
 
 using TUint128 = unsigned __int128;
 
+struct TAutopartitioningManagerSnapshot {
+    std::vector<std::pair<TString, ui64>> PerSourceMetrics;
+    std::unordered_map<TString, NPQ::TPartitioningKeysManager> KeysManagers;
+};
+
 class IAutopartitioningManager {
 public:
     virtual ~IAutopartitioningManager() = default;
@@ -28,7 +33,7 @@ public:
 
     virtual NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) = 0;
     virtual std::optional<TString> SplitBoundary() = 0;
-    virtual NPQ::TWriteStats GetWriteStats() = 0;
+    virtual TAutopartitioningManagerSnapshot GetSnapshot() = 0;
 
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;
 };

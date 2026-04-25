@@ -146,6 +146,7 @@ inline bool ConvertRequestedIndexToCreationConfig(
             if (nf.HasHashesCount()) desc->SetHashesCount(nf.GetHashesCount());
             if (nf.HasRecordsCount()) desc->SetRecordsCount(nf.GetRecordsCount());
             if (nf.HasCaseSensitive()) desc->SetCaseSensitive(nf.GetCaseSensitive());
+            if (nf.HasFalsePositiveProbability()) desc->SetFalsePositiveProbability(nf.GetFalsePositiveProbability());
             if (nf.HasDataExtractor()) {
                 *desc->MutableDataExtractor() = nf.GetDataExtractor();
             }

@@ -1047,10 +1047,17 @@ const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
     }
 
     for (const auto& child: Path.Base()->GetChildren()) {
-        auto name = child.first;
+        const TString& name = child.first;
 
         TPath childPath = Path.Child(name);
         if (childPath->IsTableIndex()) {
+            if (Path.SS->Indexes.contains(childPath.Base()->PathId)
+                && TTableIndexInfo::IsLocalIndex(Path.SS->Indexes.at(childPath.Base()->PathId)->Type))
+            {
+                // local indexes are scheme children and are included in the backup
+                // as part of the table schema, unlike global indexes.
+                continue;
+            }
             return Fail(status, TStringBuilder() << "path has indexes, request doesn't accept it");
         }
     }

@@ -9,6 +9,7 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <util/generic/hash_set.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
@@ -867,85 +868,15 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
         }
     }
 
-    for (const auto& index : schema.GetIndexes()) {
-        auto* tableIndex = out.add_indexes();
-        if (index.HasName()) {
-            tableIndex->set_name(index.GetName());
-        }
-        switch (index.Implementation_case()) {
-            case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
-                auto* bloomFilter = tableIndex->mutable_local_bloom_filter_index();
-                if (index.GetBloomFilter().HasFalsePositiveProbability()) {
-                    bloomFilter->set_false_positive_probability(index.GetBloomFilter().GetFalsePositiveProbability());
-                }
-                for (ui32 colId : index.GetBloomFilter().GetColumnIds()) {
-                    bool found = false;
-                    for (const auto& column : schema.GetColumns()) {
-                        if (column.GetId() == colId) {
-                            tableIndex->add_index_columns(column.GetName());
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        ythrow yexception() << "column id " << colId << " not found in schema for index " << index.GetName();
-                    }
-                }
-                break;
-            }
-            case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
-                auto* bloomNgramFilter = tableIndex->mutable_local_bloom_ngram_filter_index();
-                if (index.GetBloomNGrammFilter().HasNGrammSize()) {
-                    bloomNgramFilter->set_ngram_size(index.GetBloomNGrammFilter().GetNGrammSize());
-                }
-                if (index.GetBloomNGrammFilter().HasHashesCount()) {
-                    bloomNgramFilter->set_hashes_count(index.GetBloomNGrammFilter().GetHashesCount());
-                }
-                if (index.GetBloomNGrammFilter().HasFilterSizeBytes()) {
-                    bloomNgramFilter->set_filter_size_bytes(index.GetBloomNGrammFilter().GetFilterSizeBytes());
-                }
-                if (index.GetBloomNGrammFilter().HasRecordsCount()) {
-                    bloomNgramFilter->set_records_count(index.GetBloomNGrammFilter().GetRecordsCount());
-                }
-                if (index.GetBloomNGrammFilter().HasCaseSensitive()) {
-                    bloomNgramFilter->set_case_sensitive(index.GetBloomNGrammFilter().GetCaseSensitive());
-                }
-                if (index.GetBloomNGrammFilter().HasColumnId()) {
-                    ui32 colId = index.GetBloomNGrammFilter().GetColumnId();
-                    bool found = false;
-                    for (const auto& column : schema.GetColumns()) {
-                        if (column.GetId() == colId) {
-                            tableIndex->add_index_columns(column.GetName());
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        ythrow yexception() << "column id " << colId << " not found in schema for index " << index.GetName();
-                    }
-                }
-                break;
-            }
-            case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
-            case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch:
-            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex:
-            case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
-                break;
-        }
-    }
-
     out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
 }
 
-void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
-    FillColumnDescriptionImpl(out, in);
-}
+namespace {
 
-void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
-    FillColumnDescriptionImpl(out, in);
-}
-
-void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+template <bool kSetDescribeIndexStatus, typename TOut>
+void FillColumnTableIndexesFromOlapColumnSchema(
+    TOut& out, const NKikimrSchemeOp::TColumnTableDescription& in)
+{
     const auto& schema = in.GetSchema();
     THashMap<ui32, TString> idToName;
     idToName.reserve(schema.ColumnsSize());
@@ -980,6 +911,9 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 }
 
                 auto* ydbIndex = out.add_indexes();
+                if constexpr (kSetDescribeIndexStatus) {
+                    ydbIndex->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+                }
                 ydbIndex->set_name(olapIndex.GetName());
                 for (auto&& colId : bloom.GetColumnIds()) {
                     ydbIndex->add_index_columns(idToName.at(colId));
@@ -995,6 +929,9 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
                 const auto& ngram = olapIndex.GetBloomNGrammFilter();
                 auto* ydbIndex = out.add_indexes();
+                if constexpr (kSetDescribeIndexStatus) {
+                    ydbIndex->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+                }
                 ydbIndex->set_name(olapIndex.GetName());
                 if (ngram.HasColumnId()) {
                     const auto it = idToName.find(ngram.GetColumnId());
@@ -1033,6 +970,22 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 break;
         }
     }
+}
+
+} // namespace
+
+void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
+    FillColumnTableIndexesFromOlapColumnSchema<true>(out, in);
+}
+
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
+    FillColumnTableIndexesFromOlapColumnSchema<false>(out, in);
+}
+
+void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnTableIndexesFromOlapColumnSchema<false>(out, in);
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,

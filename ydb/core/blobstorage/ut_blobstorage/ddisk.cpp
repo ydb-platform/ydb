@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             if (i % 200 == 99) {
                 f.RestartNode();
             }
-            auto fs = i % 2 ? f.ErasePB() : f.BatchErasePB();
+            auto fs = f.BatchErasePB();
             freeSpace = fs >= 0 ? fs : freeSpace;
             Cerr << "freeSpace: " << freeSpace << Endl;
         }

@@ -2,8 +2,6 @@ LIBRARY()
 
 SRCS(
     compute_actor.cpp
-    dummy_lock.cpp
-    dynamic_nameserver.cpp
     events.cpp
     executer_actor.cpp
     execution_helpers.cpp

@@ -5,6 +5,7 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins
     yql/essentials/utils
     ydb/library/yql/dq/runtime
+    ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/counters
 )
 

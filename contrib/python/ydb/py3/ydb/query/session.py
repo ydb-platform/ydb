@@ -136,8 +136,33 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
             except Exception:
                 pass
 
-    def _on_execute_stream_error(self, e: Exception) -> None:
-        if isinstance(e, issues.DeadlineExceed):
+    def _on_execute_stream_error(self, e: BaseException) -> None:
+        # The execute stream is a single gRPC call that carries all of a
+        # query's response parts. If any of these errors surface while reading
+        # it, the server-side stream is either known-dead (BadSession,
+        # ConnectionError, DeadlineExceed) or undrained and un-resumable
+        # (SessionBusy: server thinks this session still has the previous
+        # query running; Cancelled: the call has been torn down mid-flight),
+        # which means a subsequent query on the same session can race the
+        # stragglers and get a spurious SessionBusy back. Drop the session so
+        # the pool creates a fresh one on the next acquire.
+        #
+        # Accepts BaseException so that asyncio.CancelledError (not an
+        # issues.Error subclass) — the case documented in the bug report —
+        # also invalidates here.
+        if isinstance(e, issues.Error):
+            if isinstance(
+                e,
+                (
+                    issues.DeadlineExceed,
+                    issues.SessionBusy,
+                    issues.BadSession,
+                    issues.ConnectionError,
+                    issues.Cancelled,
+                ),
+            ):
+                self._invalidate()
+        else:
             self._invalidate()
 
     # Overloads for _create_call

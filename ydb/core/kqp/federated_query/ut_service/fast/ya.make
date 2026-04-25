@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/federated_query)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     ydb/core/kqp/federated_query

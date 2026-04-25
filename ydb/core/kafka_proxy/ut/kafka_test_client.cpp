@@ -276,7 +276,7 @@ void TKafkaTestClient::WaitRebalance(TString& memberId, ui64 generationId, TStri
         heartbeatStatus = Heartbeat(memberId, generationId, groupId)->ErrorCode;
     } while (heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-    UNIT_ASSERT_VALUES_EQUAL(heartbeatStatus, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
+    UNIT_ASSERT(heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
 }
 
 TReadInfo TKafkaTestClient::JoinAndSyncGroupAndWaitPartitions(std::vector<TString>& topics, TString& groupId, ui32 expectedPartitionsCount, TString& protocolName, ui32 totalPartitionsCount, ui32 hartbeatTimeout) {

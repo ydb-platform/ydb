@@ -1,10 +1,10 @@
 UNITTEST_FOR(ydb/core/blobstorage)
 
 FORK_SUBTESTS()
-
 SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
+REQUIREMENTS(ram:16 cpu:4)
 
 SRCS(
     defaults.h

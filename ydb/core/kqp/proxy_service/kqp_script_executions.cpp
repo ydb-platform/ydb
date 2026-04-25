@@ -4204,6 +4204,10 @@ public:
             WHERE database = $database AND execution_id = $execution_id;
         )";
 
+        if (Request.CancelledByUser) {
+            RetryState.ClearRetryPolicyMapping();
+        }
+
         TInstant retryDeadline = TInstant::Now();
         ELeaseState leaseState = ELeaseState::ScriptFinalizing;
         if (!Response->ApplicateScriptExternalEffectRequired) {

@@ -282,13 +282,6 @@ public:
 
         if (!Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
-
-            // write {Prefix..., Parent} row to PrefixBuf:
-            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
-            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
-            pk.push_back(TCell::Make(Parent));
-
-            PrefixBuf->AddRow(pk, {});
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
@@ -434,6 +427,12 @@ protected:
                 // lets make single centroid for it
                 rows.resize(1);
             }
+            // Now we know that the prefix is correct, write {Prefix..., Parent} row to PrefixBuf
+            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
+            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
+            pk.push_back(TCell::Make(Parent));
+            PrefixBuf->AddRow(pk, {});
+            // Set clusters
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
             Clusters->SetRound(1);

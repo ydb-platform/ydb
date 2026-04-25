@@ -1797,6 +1797,78 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     //     auto result = runtime.WaitFuture(setNotNullFuture);
     //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     // }
+    Y_UNIT_TEST(UpsertSelectWithBigSerialMultiplePartitions) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/Source` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4,
+                    UNIFORM_PARTITIONS = 4
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/Target` (
+                    Id BigSerial,
+                    Value String,
+                    PRIMARY KEY (Id)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/Source` (Key, Value) VALUES
+                    (1, "a"), (2, "b"), (3, "c"), (4, "d");
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/Target` (Value)
+                SELECT Value FROM `/Root/Source`;
+            )";
+            auto explainResult = session.ExecuteQuery(query, TTxControl::NoTx(),
+                TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            Cerr << "=== AST ===" << Endl;
+            Cerr << *explainResult.GetStats()->GetAst() << Endl;
+            Cerr << "=== Plan ===" << Endl;
+            Cerr << *explainResult.GetStats()->GetPlan() << Endl;
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                SELECT Value FROM `/Root/Target` ORDER BY Id;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4u);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

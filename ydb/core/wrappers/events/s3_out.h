@@ -66,6 +66,7 @@ void Out(IOutputStream& out, const Aws::S3::Model::CompletedPart& part);
 
 using TStringOutcome = Aws::Utils::Outcome<Aws::String, Aws::S3::S3Error>;
 void Out(IOutputStream& out, const TStringOutcome& outcome);
+void Out(IOutputStream& out, const Aws::S3::S3Error& error);
 
 } // NKikimr::NWrappers
 
@@ -206,6 +207,10 @@ Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::CompletedMultipartUpload, out, value)
 }
 
 Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::CompletedPart, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::S3Error, out, value) {
     NKikimr::NWrappers::Out(out, value);
 }
 

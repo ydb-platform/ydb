@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+REQUIREMENTS(cpu:2)
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -24,6 +25,8 @@ SRCS(
     kqp_sort_ut.cpp
     kqp_sqlin_ut.cpp
     kqp_union_ut.cpp
+    kqp_peephole_ut.cpp
+    kqp_constant_folding_ut.cpp
 )
 
 PEERDIR(

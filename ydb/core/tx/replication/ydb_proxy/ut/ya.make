@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/replication/ydb_proxy)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     ydb/core/tx/replication/ut_helpers

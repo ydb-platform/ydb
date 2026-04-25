@@ -1210,9 +1210,11 @@ ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
     return 0;
 }
 
-ui64 TPipeline::GetDataTxCompleteLag(ui64 timecastStep) const
+ui64 TPipeline::GetTxCompleteLag(ui64 timecastStep) const
 {
-    return GetTxCompleteLag(EOperationKind::DataTx, timecastStep);
+    return Max(
+        GetTxCompleteLag(EOperationKind::DataTx, timecastStep),
+        GetTxCompleteLag(EOperationKind::WriteTx, timecastStep));
 }
 
 ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const

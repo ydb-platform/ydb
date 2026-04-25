@@ -1,5 +1,5 @@
-#include "kqp_proxy_service.h"
 #include "kqp_proxy_service_impl.h"
+#include "kqp_proxy_service.h"
 #include "kqp_script_executions.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -1701,7 +1701,7 @@ private:
     }
 
     void Handle(TEvKqp::TEvListSessionsRequest::TPtr& ev) {
-        KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString());
+        KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString() << ", local sessions #" << LocalSessions->size());
 
         auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
 
@@ -1710,7 +1710,7 @@ private:
 
         auto startIt = LocalSessions->GetOrderedLowerBound(tenant, ev->Get()->Record.GetSessionIdStart());
         auto endIt = LocalSessions->GetOrderedEnd();
-        i32 freeSpace = ev->Get()->Record.GetFreeSpace();
+        i64 freeSpace = ev->Get()->Record.GetFreeSpace();
 
         TKqpSessionInfo::TFieldsMap fieldsMap(ev->Get()->Record.GetColumns());
 

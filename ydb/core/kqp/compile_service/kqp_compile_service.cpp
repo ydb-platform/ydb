@@ -367,6 +367,8 @@ private:
 
         bool enableParallelUnionConnectionsForExtend = TableServiceConfig.GetEnableParallelUnionAllConnectionsForExtend();
 
+        bool disableOlapBlocksOnColumnsLimit = TableServiceConfig.GetDisableOlapBlocksOnColumnsLimit();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -416,7 +418,8 @@ private:
             TableServiceConfig.GetEnableDqHashCombineByDefault() != enableDqHashCombineByDefault ||
             TableServiceConfig.GetFilterPushdownOverJoinOptionalSide() != enableFilterPushdownOverJoinOptionalSide ||
             TableServiceConfig.GetEnableBuildAggregationResultStages() != enableBuildAggregationResultStage ||
-            TableServiceConfig.GetEnableParallelUnionAllConnectionsForExtend() != enableParallelUnionConnectionsForExtend)
+            TableServiceConfig.GetEnableParallelUnionAllConnectionsForExtend() != enableParallelUnionConnectionsForExtend ||
+            TableServiceConfig.GetDisableOlapBlocksOnColumnsLimit() != disableOlapBlocksOnColumnsLimit)
         {
 
             QueryCache->Clear();

@@ -176,6 +176,7 @@ message TEphemeralInputFields {
     optional FailDomainKind FailDomainType = 9 [default = Rack];
     optional TDomainsConfig.TSecurityConfig SecurityConfig = 10;
     repeated TDomainsConfig.TStoragePoolType StoragePoolTypes = 11;
+    optional string DomainName = 12 [default = "Root"];
 
     enum FailDomainKind {
         Rack = 0;

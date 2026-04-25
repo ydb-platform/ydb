@@ -19,8 +19,17 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix)
-    : LogPrefix(logPrefix), Impl(logPrefix) {
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters)
+    : LogPrefix(logPrefix)
+    , Impl(logPrefix, counters)
+{
+}
+
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TDqComputeActorWatermarks& parent, bool)
+    : LogPrefix(parent.LogPrefix)
+    , Impl(parent.Impl, true)
+    , NotifyHandler(parent.NotifyHandler)
+{
 }
 
 void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {
@@ -34,7 +43,7 @@ void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId, TDuration idleT
 void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime)
 {
     LOG_D("Register " << (isChannel ? "channel" : "async input") << " " << inputId << ", idle timeout: " << idleTimeout);
-    auto registered = Impl.RegisterInput(std::make_pair(inputId, isChannel), systemTime, idleTimeout);
+    auto registered = Impl.RegisterInput(TInputKey {inputId, isChannel}, systemTime, idleTimeout);
     if (!registered) {
         LOG_E("Repeated registration " << inputId <<" " << (isChannel ? "channel" : "async input"));
     }
@@ -51,7 +60,7 @@ void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId, bool silent) 
 }
 
 void TDqComputeActorWatermarks::UnregisterInput(ui64 inputId, bool isChannel, bool silent) {
-    auto result = Impl.UnregisterInput(std::make_pair(inputId, isChannel));
+    auto result = Impl.UnregisterInput(TInputKey {inputId, isChannel});
     if (!result && !silent) {
         LOG_E("Unregistered " << (isChannel ? "input channel" : "async input") << " " << inputId << " was not found");
     }
@@ -70,9 +79,12 @@ bool TDqComputeActorWatermarks::NotifyInputWatermarkReceived(ui64 inputId, bool 
     if (MaxWatermark < watermark) {
         MaxWatermark = watermark;
     }
-    auto [nextWatermark, updated] = Impl.NotifyNewWatermark(std::make_pair(inputId, isChannel), watermark, systemTime);
+    auto [nextWatermark, updated] = Impl.NotifyNewWatermark(TInputKey {inputId, isChannel}, watermark, systemTime);
     if (nextWatermark) {
         PendingWatermark = nextWatermark;
+    }
+    if (updated && NotifyHandler) {
+        NotifyHandler();
     }
     return updated;
 }
@@ -118,13 +130,12 @@ TMaybe<TInstant> TDqComputeActorWatermarks::GetMaxWatermark() const {
     return MaxWatermark;
 }
 
-TMaybe<TInstant> TDqComputeActorWatermarks::PrepareIdlenessCheck() {
-    if (auto notifyTime = Impl.GetNextIdlenessCheckAt()) {
-        if (Impl.AddScheduledIdlenessCheck(*notifyTime)) {
-            return notifyTime;
-        }
-    }
-    return Nothing();
+TMaybe<TInstant> TDqComputeActorWatermarks::GetNextIdlenessCheckAt() const {
+    return Impl.GetNextIdlenessCheckAt();
+}
+
+bool TDqComputeActorWatermarks::AddScheduledIdlenessCheck(TInstant checkTime) {
+    return Impl.AddScheduledIdlenessCheck(checkTime);
 }
 
 bool TDqComputeActorWatermarks::ProcessIdlenessCheck(TInstant notifyTime) {
@@ -141,4 +152,29 @@ void TDqComputeActorWatermarks::SetLogPrefix(const TString& logPrefix) {
     LogPrefix = logPrefix;
 }
 
+void TDqComputeActorWatermarks::Out(IOutputStream& str) const {
+    Impl.Out(str);
+}
+
+void TDqComputeActorWatermarks::TransferInput(TDqComputeActorWatermarks& otherTracker, ui64 inputId, bool isChannel) {
+    Impl.TransferInput(otherTracker.Impl, TInputKey { inputId, isChannel });
+}
+
+TDuration TDqComputeActorWatermarks::GetMaxIdleTimeout() const {
+    return Impl.GetMaxIdleTimeout();
+}
+
+void TDqComputeActorWatermarks::SetNotifyHandler(TNotifyHandler notifyHandler) {
+    NotifyHandler = std::move(notifyHandler);
+}
 } // namespace NYql::NDq
+
+template<>
+void Out<NYql::NDq::NDqComputeActorWatermarksImpl::TInputKey>(IOutputStream& str, const NYql::NDq::NDqComputeActorWatermarksImpl::TInputKey& x) {
+    str << "[" << (x.IsChannel ? "Channel " : "Input ") << x.InputId << "]";
+}
+
+template<>
+void Out<NYql::NDq::TDqComputeActorWatermarks>(IOutputStream& str, const NYql::NDq::TDqComputeActorWatermarks& x) {
+    x.Out(str);
+}

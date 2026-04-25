@@ -19,6 +19,14 @@ bool ShouldRetry(const Aws::S3::S3Error& error) {
         return true;
     }
 
+    switch (error.GetResponseCode()) {
+        case Aws::Http::HttpResponseCode::REQUEST_NOT_MADE:
+        case Aws::Http::HttpResponseCode::BAD_GATEWAY:
+            return true;
+        default:
+            break;
+    }
+
     return false;
 }
 

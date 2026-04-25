@@ -4242,11 +4242,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         );
 
         Sleep(TDuration::Seconds(25));
+        {
+            auto errorCode = clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode;
+            UNIT_ASSERT(errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode,
-            static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)
-        );
 
         // LAST READER GETS ALL PARTITIONS
         clientA.JoinAndSyncGroupAndWaitPartitions(topics, groupId, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
@@ -4292,6 +4292,121 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto noMasterSyncResponse = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
             UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
         }
+    }
+
+    Y_UNIT_TEST(HeartbeatWithTTLGenerationsScenario) {
+        TInsecureTestServer testServer("1", false, true);
+
+        TString topicName = "/Root/topic-0";
+        ui64 totalPartitions = 24;
+        TString groupId = "consumer-0";
+
+        TString protocolType = "consumer";
+        TString protocolName = "range";
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient
+                .CreateTopic(
+                    topicName,
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .PartitioningSettings(totalPartitions, 100)
+                        .BeginAddConsumer(groupId).EndAddConsumer()
+                )
+                .ExtractValueSync();
+            UNIT_ASSERT_C(
+                result.IsSuccess(),
+                "CreateTopic failed, issues: " << result.GetIssues().ToString()
+            );
+        }
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+
+        {
+            auto rA = clientA.ApiVersions();
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                    }
+        {
+            auto rA = clientA.SaslHandshake("PLAIN");
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+        {
+            TString user = "ouruser@/Root";
+            TString pass = "ourUserPassword";
+            auto rA = clientA.SaslAuthenticate(user, pass);
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        std::vector<TString> topics = {topicName};
+        i32 heartbeatTimeout = 15000;
+        i32 rebalanceTimeout = 5000;
+        i32 illegalGeneration = 10001;
+
+        TRequestHeaderData headerAJoin = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TJoinGroupRequestData joinReq;
+        joinReq.GroupId = groupId;
+        joinReq.ProtocolType = protocolType;
+        joinReq.SessionTimeoutMs = heartbeatTimeout;
+        joinReq.RebalanceTimeoutMs = rebalanceTimeout;
+
+        NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
+        protocol.Name = protocolName;
+
+        TConsumerProtocolSubscription subscribtion;
+        for (auto& topic : topics) {
+            subscribtion.Topics.push_back(topic);
+        }
+        TKafkaVersion version = 3;
+        TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+        TKafkaWritable writable(buf);
+        writable << version;
+        subscribtion.Write(writable, version);
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+
+        joinReq.Protocols.push_back(protocol);
+
+        TJoinGroupRequestData joinReqA = joinReq;
+        joinReqA.GroupInstanceId = "instanceA";
+
+        clientA.WriteToSocket(headerAJoin, joinReqA);
+
+        auto joinRespA = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinRespA->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        const std::vector<TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments = clientA.MakeRangeAssignment(joinRespA, totalPartitions);
+
+        TRequestHeaderData hdrSyncA = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+
+        TSyncGroupRequestData syncReqA;
+        syncReqA.GroupId       = groupId;
+        syncReqA.ProtocolType  = protocolType;
+        syncReqA.ProtocolName  = protocolName;
+        syncReqA.GenerationId  = illegalGeneration;
+        syncReqA.MemberId      = joinRespA->MemberId.value();
+        syncReqA.Assignments = assignments;
+
+        clientA.WriteToSocket(hdrSyncA, syncReqA);
+
+        auto syncRespA = clientA.ReadResponse<TSyncGroupResponseData>(hdrSyncA);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncRespA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+        syncReqA.GenerationId  = joinRespA->GenerationId;
+        clientA.WriteToSocket(hdrSyncA, syncReqA);
+        auto syncRespA1 = clientA.ReadResponse<TSyncGroupResponseData>(hdrSyncA);
+        UNIT_ASSERT_VALUES_EQUAL(syncRespA1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(joinRespA->MemberId.value(),
+                             illegalGeneration,
+                             groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(joinRespA->MemberId.value(),
+                             joinRespA->GenerationId,
+                             groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
     }
 
     Y_UNIT_TEST(InitProducerId_withoutTransactionalIdShouldReturnRandomInt) {

@@ -177,6 +177,7 @@ namespace NActors {
         bool HasOwnSharedThread = false;
         ui16 MaxLocalQueueSize = 0;
         ui16 MinLocalQueueSize = 0;
+        bool SharedOnly = false;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
@@ -289,6 +290,8 @@ namespace NActors {
 
         ui64 TimePerMailboxTs() const final;
         ui32 EventsPerMailbox() const final;
+
+        bool IsSharedOnly() const;
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 

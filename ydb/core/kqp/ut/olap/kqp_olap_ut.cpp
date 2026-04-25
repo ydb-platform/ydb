@@ -1672,7 +1672,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
-
         auto insertRes = session2.ExecuteQuery(R"(
             INSERT INTO `/Root/foo` (a, b)  VALUES (1, 1);
             INSERT INTO `/Root/foo` (a, b)  VALUES (2, 11);
@@ -1703,6 +1702,106 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        // Columns limit 2 for tests.
+        settings.AppConfig.MutableTableServiceConfig()->SetDisableOlapBlocksOnColumnsLimit(2);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Uint32 NOT NULL,
+                b Uint32 NOT NULL,
+                c Uint32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/t1` (a, b, c) VALUES (1, 2, 3);
+            INSERT INTO `/Root/t1` (a, b, c) VALUES (2, 11, 3);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                select * from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+            R"(
+                select b, c, a from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+            R"(
+                select c, b from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+        };
+
+        std::vector<TString> results = {
+            R"([[2u;11u;[3u]]])",
+            R"([[11u;[3u];2u]])",
+            R"([[[3u];11u]])"
+       };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("BlocksAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(output, results[i]);
+        }
+
+        queries = {
+            R"(
+                select a from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+            R"(
+                select * from `/Root/t1` as t1 where t1.b > 10;
+            )",
+        };
+
+        results = {
+           R"([[2u]])",
+           R"([[2u;11u;[3u]]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("BlockAsStruct") != std::string::npos, TStringBuilder() << "Disabled blocks. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(output, results[i]);
+        }
+    }
+
+
     Y_UNIT_TEST(PushdownFilterMultiConsumersRead) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -1720,6 +1819,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CREATE TABLE `/Root/t1` (
                 a Int64	NOT NULL,
                 b Int32,
+                c Timestamp NOT NULL,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1728,6 +1828,24 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(res.IsSuccess());
 
         std::vector<TString> queries = {
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (cast(c as Timestamp?) > $some_time)
+            )",
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (just(c) > $some_time)
+            )",
             R"(
                 $sub = (select distinct (b) from `/Root/t1` where b > 10);
 

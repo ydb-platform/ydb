@@ -151,7 +151,14 @@ namespace NActors {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Trace, "pool[", i, "] is nullptr; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
-            if (ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire) == 0) {
+
+            bool adj = false;
+            if (CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, i)) {
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "ownerPoolId == poolId; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i);
+                adj = true;
+            }
+
+            if (ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire) == 0 && !adj) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "don't have leases; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
@@ -161,8 +168,7 @@ namespace NActors {
                 continue;
             }
 
-            if (CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, i)) {
-                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "ownerPoolId == poolId; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i);
+            if (adj) {
                 return i;
             }
 
@@ -185,7 +191,7 @@ namespace NActors {
     void TSharedExecutorPool::SwitchToPool(i16 poolId, NHPTimer::STime) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
         TlsThreadContext->ExecutionStats->UpdateThreadTime();
-        if (Threads[workerId].CurrentPoolId != poolId && Threads[workerId].CurrentPoolId != Threads[workerId].OwnerPoolId) {
+        if (Threads[workerId].CurrentPoolId != poolId && !CheckPoolAdjacency(PoolManager, Threads[workerId].OwnerPoolId, Threads[workerId].CurrentPoolId)) {
             ui64 slots = ForeignThreadSlots[Threads[workerId].CurrentPoolId].fetch_add(1, std::memory_order_acq_rel);
             EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Lease, "return lease; ownerPoolId == ", Threads[workerId].OwnerPoolId, " currentPoolId == ", Threads[workerId].CurrentPoolId, " poolId = ", poolId, " slots == ", slots, " -> ", slots + 1);
         }
@@ -225,9 +231,9 @@ namespace NActors {
                 } else {
                     EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "no mailbox and need to find new pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool);
                     TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
-                    if (thread.CurrentPoolId != thread.OwnerPoolId) {
+                    if (!adjacentPool) {
                         thread.AdjacentPoolId = NextAdjacentPool(PoolManager, thread.OwnerPoolId, thread.AdjacentPoolId);
-                        SwitchToPool(thread.OwnerPoolId, hpnow);
+                        SwitchToPool(thread.AdjacentPoolId, hpnow);
                         continue;
                     }
                 }

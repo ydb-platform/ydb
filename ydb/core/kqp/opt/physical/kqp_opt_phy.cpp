@@ -49,6 +49,7 @@ public:
         AddHandler(0, &TDqStage::Match, HNDL(ApplyVectorTopKToStageWithSource));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
+        AddHandler(0, &TCoTake::Match, HNDL(DisableOlapBlocks));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
@@ -283,6 +284,12 @@ protected:
     TMaybeNode<TExprBase> PushOlapProjections(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapProjections(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapProjections", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> DisableOlapBlocks(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpDisableOlapBlocksOnLimit(node, TypesCtx, KqpCtx.Config->GetDisableOlapBlocksOnColumnsLimit());
+        DumpAppliedRule("DisableOlapBlocksOnLimit", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

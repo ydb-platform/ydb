@@ -59,12 +59,12 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TAct
 
 void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
     if (transaction)
-        static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
+        Executor()->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
 
 ui64 TTabletExecutedFlat::Enqueue(TAutoPtr<ITransaction> transaction) {
     if (transaction) {
-        return static_cast<TExecutor*>(Executor())->Enqueue(transaction);
+        return Executor()->Enqueue(transaction);
     } else {
         return 0;
     }
@@ -76,14 +76,14 @@ ui64 TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
 
 ui64 TTabletExecutedFlat::EnqueueLowPriority(TAutoPtr<ITransaction> transaction) {
     if (transaction) {
-        return static_cast<TExecutor*>(Executor())->EnqueueLowPriority(transaction);
+        return Executor()->EnqueueLowPriority(transaction);
     } else {
         return 0;
     }
 }
 
 const NTable::TScheme& TTabletExecutedFlat::Scheme() const {
-    return static_cast<TExecutor*>(Executor())->Scheme();
+    return Executor()->Scheme();
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
@@ -97,7 +97,8 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorConte
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) {
-    Executor()->Restored(ev, ExecutorCtx(ctx));
+    if (Executor())
+        Executor()->Restored(ev, ExecutorCtx(ctx));
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) {
@@ -107,11 +108,13 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorCont
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFUpdate::TPtr &ev) {
-    Executor()->FollowerUpdate(std::move(ev->Get()->Update));
+    if (Executor())
+        Executor()->FollowerUpdate(std::move(ev->Get()->Update));
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFAuxUpdate::TPtr &ev) {
-    Executor()->FollowerAuxUpdate(std::move(ev->Get()->AuxUpdate));
+    if (Executor())
+        Executor()->FollowerAuxUpdate(std::move(ev->Get()->AuxUpdate));
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvNewFollowerAttached::TPtr &ev) {
@@ -132,7 +135,8 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerSyncComplete::TPtr &ev) {
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerGcApplied::TPtr &ev) {
     auto *msg = ev->Get();
-    Executor()->FollowerGcApplied(msg->Step, msg->FollowerSyncDelay);
+    if (Executor())
+        Executor()->FollowerGcApplied(msg->Step, msg->FollowerSyncDelay);
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
@@ -201,10 +205,12 @@ void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &
 }
 
 void TTabletExecutedFlat::ReportStartTime() {
-    TDuration startTime = TAppData::TimeProvider->Now() - StartTime0;
-    auto* counters = Executor()->GetCounters();
-    if (counters) {
-        counters->Simple()[TExecutorCounters::TABLET_LAST_START_TIME_US].Set(startTime.MicroSeconds());
+    if (Executor()) {
+        TDuration startTime = TAppData::TimeProvider->Now() - StartTime0;
+        auto* counters = Executor()->GetCounters();
+        if (counters) {
+            counters->Simple()[TExecutorCounters::TABLET_LAST_START_TIME_US].Set(startTime.MicroSeconds());
+        }
     }
 }
 
@@ -221,6 +227,10 @@ void TTabletExecutedFlat::Detach(const TActorContext &ctx) {
     Executor0 = nullptr;
     ctx.Send(Tablet(), new TEvents::TEvPoison());
     OnDetach(ctx);
+}
+
+void TTabletExecutedFlat::SetExternalExecutor(IExecutor* executor) {
+    Executor0 = executor;
 }
 
 bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
@@ -241,13 +251,13 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     if (path == "/app") {
         OnRenderAppHtmlPage(ev, ctx);
         return;
-    } else if (path == "/executorInternals") {
+    } else if (path == "/executorInternals" && Executor()) {
         Executor()->RenderHtmlPage(ev);
         return;
-    } else if (path == "/counters") {
+    } else if (path == "/counters" && Executor()) {
         Executor()->RenderHtmlCounters(ev);
         return;
-    } else if (path == "/db") {
+    } else if (path == "/db" && Executor()) {
         Executor()->RenderHtmlDb(ev, ExecutorCtx(ctx));
         return;
     } else {
@@ -260,14 +270,25 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << "Uptime: " << uptime.ToString(); }
             }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()); }
+            TString bootType = "";
+            if (Info()->BootType == ETabletBootType::Recovery) {
+                bootType = TStringBuilder() << " (" << Info()->BootType << ")";
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower() ? Sprintf(" Follower %u", Executor()->GetStats().FollowerId) : " Leader"); }
+                DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()) << bootType; }
+            }
+            TString leaderFollower = " Leader";
+            if (Executor() && Executor()->GetStats().IsFollower()) {
+                leaderFollower = Sprintf(" Follower %u", Executor()->GetStats().FollowerId);
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}
+                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << leaderFollower; }
+            }
+
+            if (Executor()) {
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}
+                }
             }
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") { str << "Tenant id: " << Info()->TenantPathId; }
@@ -279,15 +300,18 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 }
             }
 
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/counters?" << queryString << "\">Counters</a>"; }
+            if (Executor()) {
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/counters?" << queryString << "\">Counters</a>"; }
+                }
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
+                }
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
+                }
             }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
-            }
+
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << "<a href=\"tablets?SsId=" << TabletID() << "\">State Storage</a>";}
             }
@@ -302,7 +326,8 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
 }
 
 void TTabletExecutedFlat::HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev) {
-    Executor()->GetTabletCounters(ev);
+    if (Executor())
+        Executor()->GetTabletCounters(ev);
 }
 
 bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const TActorIdentity& id) {

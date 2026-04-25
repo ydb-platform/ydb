@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class TestListingBatching(SolomonReadingTestBase):
+    @classmethod
+    def setup_class(cls):
+        super().setup_class("listing_batching")
+
     def check_full_listing_result(self, result_set, error):
         if error is not None:
             return False, error
@@ -16,7 +20,7 @@ class TestListingBatching(SolomonReadingTestBase):
             rows.extend(result.rows)
 
         total_size, first_label_size = self.listing_batching_metrics_sizes[0], self.listing_batching_metrics_sizes[1]
-        if (len(rows) != total_size):
+        if len(rows) != total_size:
             return False, f"Result size differs from expected: have {len(rows)}, should be {total_size}"
 
         test_labels = []

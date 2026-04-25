@@ -126,7 +126,7 @@ message TRlPath {
 }
 
 message TComputeRuntimeSettings {
-    optional uint32 TimeoutMs = 1;
+    optional uint64 TimeoutMs = 1;
 
     enum EExecType {
         UNSPECIFIED = 0;

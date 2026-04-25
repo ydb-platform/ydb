@@ -847,6 +847,7 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
     auto idleTimeoutUs = // TODO remove fallback
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
@@ -854,7 +855,8 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
         lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleTimeoutUs));
+            TDuration::MicroSeconds(idleTimeoutUs),
+            Metrics.Counters ? Metrics.Source : nullptr);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -1289,6 +1291,11 @@ TString TDqPqRdReadActor::GetInternalState() {
         for (const auto partitionId : sessionInfo.HasPendingData) {
             str << " " << partitionId;
         }
+        str << "\n";
+    }
+    if (Parent->WatermarkTracker) {
+        str << "WatermarksTracker:";
+        Parent->WatermarkTracker->Out(str);
         str << "\n";
     }
     return str.Str();

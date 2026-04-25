@@ -346,4 +346,20 @@ TVector<TPathId> SyncChildIndexVersions(
     NIceDb::TNiceDb& db,
     bool skipPlannedToDrop = false);
 
+// Syncs the parent index's AlterVersion with the impl-table's AlterVersion
+// and bumps the grandparent main table's DirAlterVersion so scheme-board
+// clients see a fresh GeneralVersion on the parent describe.
+// Parameters:
+//   - implTablePath: path element for the impl table (child of a TableIndex)
+//   - table: the impl table's TTableInfo (after version bump)
+//   - operationId: for PublishToSchemeBoard
+//   - context: operation context
+//   - db: database for persistence
+void SyncParentIndexVersion(
+    TPathElement::TPtr implTablePath,
+    TTableInfo::TPtr table,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db);
+
 } // namespace NKikimr::NSchemeShard::NTableIndexVersion

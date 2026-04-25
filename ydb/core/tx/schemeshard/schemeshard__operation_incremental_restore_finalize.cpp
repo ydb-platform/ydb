@@ -267,7 +267,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             LOG_I("SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
             
             NIceDb::TNiceDb db(context.GetDB());
-            THashSet<TPathId> publishedMainTables;
 
             // Iterate through all target table paths and finalize their alters
             for (const auto& tablePath : finalize.GetTargetTablePaths()) {
@@ -299,17 +298,16 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
-                // Store target version BEFORE calling FinishAlter (which resets AlterData)
-                ui64 coordVersion = table->AlterData->AlterVersion;
-
                 // Finalize the alter - this commits AlterData to the main table state
                 LOG_I("SyncIndexSchemaVersions: Finalizing ALTER for table " << implTablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
 
+                // Store target version BEFORE calling FinishAlter (which resets AlterData)
+                ui64 coordVersion = table->AlterData->AlterVersion;
+
                 table->FinishAlter();
                 context.SS->PersistTableAltered(db, implTablePathId, table);
 
-                // Clear describe path caches and publish to scheme board (cascade to ancestors)
                 context.SS->ClearDescribePathCaches(path.Base());
                 context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, implTablePathId, context.SS);
 
@@ -320,36 +318,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 if (indexPath.IsResolved() && indexPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
                     TPathId indexPathId = indexPath.Base()->PathId;
                     if (context.SS->Indexes.contains(indexPathId)) {
-                        auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
-
-                        // Use the coordinated version stored before FinishAlter
-                        ui64 targetVersion = coordVersion;
-
-                        if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
-                            auto index = context.SS->Indexes[indexPathId];
-                            index->AlterVersion = targetVersion;
-                            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
-                                index->AlterData->AlterVersion = targetVersion;
-                                context.SS->PersistTableIndexAlterData(db, indexPathId);
-                            }
-                            context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
-
-                            LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
-                                  << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
-
-                            context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, indexPathId, context.SS);
-
-                            TPath mainTablePath = indexPath.Parent();
-                            if (mainTablePath.IsResolved() && mainTablePath.Base()->PathType == NKikimrSchemeOp::EPathTypeTable) {
-                                TPathId mainTablePathId = mainTablePath.Base()->PathId;
-                                if (!publishedMainTables.contains(mainTablePathId)) {
-                                    publishedMainTables.insert(mainTablePathId);
-                                    context.SS->ClearDescribePathCaches(mainTablePath.Base());
-                                    context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, mainTablePathId, context.SS);
-                                    LOG_I("SyncIndexSchemaVersions: Published main table: " << mainTablePathId);
-                                }
-                            }
-                        }
+                        auto index = context.SS->Indexes[indexPathId];
+                        NTableIndexVersion::SyncParentIndexVersion(
+                            path.Base(), table, OperationId, context, db);
+                        LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated to "
+                              << context.SS->Indexes[indexPathId]->AlterVersion
+                              << " (coordVersion=" << coordVersion << ")");
+                        Y_UNUSED(index);
                     }
                 }
             }

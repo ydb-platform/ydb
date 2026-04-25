@@ -1407,4 +1407,52 @@ TVector<TPathId> SyncChildIndexVersions(
     return publishedIndexes;
 }
 
+void SyncParentIndexVersion(
+    TPathElement::TPtr implTablePath,
+    TTableInfo::TPtr table,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db)
+{
+    if (!implTablePath->ParentPathId) {
+        return;
+    }
+    if (!context.SS->PathsById.contains(implTablePath->ParentPathId)) {
+        return;
+    }
+    auto indexPath = context.SS->PathsById.at(implTablePath->ParentPathId);
+    if (!indexPath->IsTableIndex()) {
+        return;
+    }
+    if (!context.SS->Indexes.contains(implTablePath->ParentPathId)) {
+        return;
+    }
+    const TPathId indexPathId = implTablePath->ParentPathId;
+    auto index = context.SS->Indexes.at(indexPathId);
+    if (index->AlterVersion < table->AlterVersion) {
+        index->AlterVersion = table->AlterVersion;
+        if (index->AlterData && index->AlterData->AlterVersion < table->AlterVersion) {
+            index->AlterData->AlterVersion = table->AlterVersion;
+            context.SS->PersistTableIndexAlterData(db, indexPathId);
+        }
+        context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
+    }
+
+    ++indexPath->DirAlterVersion;
+    context.SS->PersistPathDirAlterVersion(db, indexPath);
+    context.SS->ClearDescribePathCaches(indexPath);
+    context.OnComplete.PublishToSchemeBoard(operationId, indexPathId);
+
+    const TPathId mainTablePathId = indexPath->ParentPathId;
+    if (mainTablePathId && context.SS->PathsById.contains(mainTablePathId)) {
+        auto mainTablePath = context.SS->PathsById.at(mainTablePathId);
+        if (mainTablePath->IsTable()) {
+            ++mainTablePath->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, mainTablePath);
+            context.SS->ClearDescribePathCaches(mainTablePath);
+            context.OnComplete.PublishToSchemeBoard(operationId, mainTablePathId);
+        }
+    }
+}
+
 }  // NKikimr::NSchemeShard::NTableIndexVersion

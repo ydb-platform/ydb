@@ -125,56 +125,13 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     table->AlterVersion += 1;
     context.SS->PersistTableAlterVersion(db, pathId, table);
-    context.SS->ClearDescribePathCaches(path);
 
     // If the table is an indexImplTable (parent is a TableIndex), keep the
-    // parent index's AlterVersion in sync with the impl table AND bump the
-    // grandparent main table's AlterVersion so its GeneralVersion advances.
-    // Without this, the main table's scheme-board entry gets republished with
-    // the same GeneralVersion as before, scheme-cache clients do not evict the
-    // stale entry, and KQP sees:
-    //   T.TableIndexes[idx].SchemaVersion (stale) != implTable.SchemaVersion (fresh)
-    // producing "schema version mismatch during metadata loading".
-    if (path->ParentPathId && context.SS->PathsById.contains(path->ParentPathId)) {
-        auto indexPath = context.SS->PathsById.at(path->ParentPathId);
-        if (indexPath->IsTableIndex() && context.SS->Indexes.contains(path->ParentPathId)) {
-            const TPathId indexPathId = path->ParentPathId;
-            auto index = context.SS->Indexes.at(indexPathId);
-            if (index->AlterVersion < table->AlterVersion) {
-                index->AlterVersion = table->AlterVersion;
-                if (index->AlterData && index->AlterData->AlterVersion < table->AlterVersion) {
-                    index->AlterData->AlterVersion = table->AlterVersion;
-                    context.SS->PersistTableIndexAlterData(db, indexPathId);
-                }
-                context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
-            }
+    // parent index's AlterVersion in sync with the impl table and bump the
+    // grandparent main table's DirAlterVersion so its GeneralVersion advances.
+    NTableIndexVersion::SyncParentIndexVersion(path, table, OperationId, context, db);
 
-            // Advance the parent index's DirAlterVersion (ChildrenVersion
-            // component of GeneralVersion) so its scheme-board describe is
-            // recognised as a new version on republish.
-            ++indexPath->DirAlterVersion;
-            context.SS->PersistPathDirAlterVersion(db, indexPath);
-            context.SS->ClearDescribePathCaches(indexPath);
-
-            // Also advance the main table's DirAlterVersion (ChildrenVersion
-            // component of GeneralVersion) so scheme-cache clients see a new
-            // version for the table path and evict the stale cached describe
-            // (which embedded the old index SchemaVersion).
-            // We bump DirAlterVersion rather than AlterVersion because
-            // AlterVersion changes trigger schema-change transactions to
-            // datashards; DirAlterVersion is purely a descriptor-staleness
-            // counter that does not affect datashard schema negotiations.
-            const TPathId mainTablePathId = indexPath->ParentPathId;
-            if (mainTablePathId && context.SS->PathsById.contains(mainTablePathId)) {
-                auto mainTablePath = context.SS->PathsById.at(mainTablePathId);
-                if (mainTablePath->IsTable()) {
-                    ++mainTablePath->DirAlterVersion;
-                    context.SS->PersistPathDirAlterVersion(db, mainTablePath);
-                    context.SS->ClearDescribePathCaches(mainTablePath);
-                }
-            }
-        }
-    }
+    context.SS->ClearDescribePathCaches(path);
 
     // Cascade publication republishes this path together with all its ancestors
     // up to the domain root, so that parent describes (which embed child

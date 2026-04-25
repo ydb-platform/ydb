@@ -228,22 +228,8 @@ public:
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
 
-        if (path->ParentPathId && context.SS->PathsById.contains(path->ParentPathId)) {
-            auto dstParentPath = context.SS->PathsById.at(path->ParentPathId);
-            if (dstParentPath->IsTableIndex() && context.SS->Indexes.contains(path->ParentPathId)) {
-                auto dstIndex = context.SS->Indexes.at(path->ParentPathId);
-                if (dstIndex->AlterVersion < table->AlterVersion) {
-                    dstIndex->AlterVersion = table->AlterVersion;
-                    if (dstIndex->AlterData && dstIndex->AlterData->AlterVersion < table->AlterVersion) {
-                        dstIndex->AlterData->AlterVersion = table->AlterVersion;
-                        context.SS->PersistTableIndexAlterData(db, path->ParentPathId);
-                    }
-                    context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
-                    context.SS->ClearDescribePathCaches(dstParentPath);
-                    context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->ParentPathId, context.SS);
-                }
-            }
-        }
+        // If the dst impl table's parent is a TableIndex, sync the index version.
+        NTableIndexVersion::SyncParentIndexVersion(path, table, OperationId, context, db);
 
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
@@ -299,51 +285,14 @@ public:
                 srcTable->AlterVersion += 1;
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
 
-                TPathId parentPathId = srcPath->ParentPathId;
-                if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
-                    auto parentPath = context.SS->PathsById.at(parentPathId);
-                    if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, parentPathId);
-                        auto index = context.SS->Indexes.at(parentPathId);
-                        if (index->AlterVersion < srcTable->AlterVersion) {
-                            index->AlterVersion = srcTable->AlterVersion;
-                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
-                                index->AlterData->AlterVersion = srcTable->AlterVersion;
-                                context.SS->PersistTableIndexAlterData(db, parentPathId);
-                            }
-                            context.SS->PersistTableIndexAlterVersion(db, parentPathId, index);
-                            context.SS->ClearDescribePathCaches(parentPath);
-                            context.OnComplete.PublishToSchemeBoard(OperationId, parentPathId);
-                        }
-                    }
-                }
+                // Sync parent index version if srcPath is an impl table.
+                NTableIndexVersion::SyncParentIndexVersion(srcPath, srcTable, OperationId, context, db);
 
-                for (const auto& [childName, childPathId] : srcPath->GetChildren()) {
-                    if (!context.SS->PathsById.contains(childPathId)) {
-                        continue;
-                    }
-                    auto childPath = context.SS->PathsById.at(childPathId);
-                    if (!childPath->IsTableIndex() || childPath->Dropped()) {
-                        continue;
-                    }
-                    if (context.SS->Indexes.contains(childPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, childPathId);
-                        auto index = context.SS->Indexes.at(childPathId);
-                        if (index->AlterVersion < srcTable->AlterVersion) {
-                            index->AlterVersion = srcTable->AlterVersion;
-                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
-                                index->AlterData->AlterVersion = srcTable->AlterVersion;
-                                context.SS->PersistTableIndexAlterData(db, childPathId);
-                            }
-                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
-                            context.SS->ClearDescribePathCaches(childPath);
-                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
-                        }
-                    }
-                }
+                // Sync child index versions if srcPath is a main table.
+                NTableIndexVersion::SyncChildIndexVersions(srcPath, srcTable, srcTable->AlterVersion, OperationId, context, db);
             }
 
-            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
+            context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, srcPathId, context.SS);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
                 context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
